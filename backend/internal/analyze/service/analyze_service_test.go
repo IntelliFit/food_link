@@ -570,7 +570,7 @@ func TestResolveModelConfig(t *testing.T) {
 	assert.Equal(t, "gemini-3-flash-preview", m)
 }
 
-func TestAnalyzeService_SelectFoodImageModelUsesStableConfiguredTraffic(t *testing.T) {
+func TestAnalyzeService_SelectFoodImageModelKeepsOrdinaryOnGemini(t *testing.T) {
 	qwenClient := &mockLLMClient{}
 	svc := NewAnalyzeService(nil, &mockLLMClient{}, nil)
 	svc.gemini35Client = &mockLLMClient{}
@@ -578,7 +578,7 @@ func TestAnalyzeService_SelectFoodImageModelUsesStableConfiguredTraffic(t *testi
 
 	svc.ConfigureImageModelTraffic(100, 100)
 	assert.Equal(t, qwen38FlashModel, svc.SelectFoodImageModel(fastExecutionMode, "task-1"))
-	assert.Equal(t, qwen38FlashModel, svc.SelectFoodImageModel(defaultExecutionMode, "task-1"))
+	assert.Equal(t, gemini3FlashModel, svc.SelectFoodImageModel(defaultExecutionMode, "task-1"))
 	assert.Equal(t, gemini35FlashModel, svc.SelectFoodImageModel(precisionExecutionMode, "session-1"))
 
 	svc.ConfigureImageModelTraffic(0, 0)
@@ -730,10 +730,13 @@ func TestAnalyzeService_RunPrecisionJSONUsesSelectedQwenClient(t *testing.T) {
 	assert.Equal(t, 0, doubaoClient.calls)
 }
 
-func TestAnalyzeService_AnalyzeImageOrdinaryTrafficCanRouteToQwen(t *testing.T) {
-	geminiClient := &multiImageLLMClient{result: map[string]any{"description": "unexpected gemini", "items": []any{}}}
+func TestAnalyzeService_AnalyzeImageOrdinaryStaysOnGeminiWhenLegacyQwenTrafficIsConfigured(t *testing.T) {
+	geminiClient := &multiImageLLMClient{result: map[string]any{
+		"description": "gemini ordinary",
+		"items":       []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}},
+	}}
 	qwenClient := &multiImageLLMClient{result: map[string]any{
-		"description": "qwen ordinary",
+		"description": "unexpected qwen",
 		"items":       []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}},
 	}}
 	svc := NewAnalyzeService(nil, geminiClient, nil)
@@ -744,12 +747,12 @@ func TestAnalyzeService_AnalyzeImageOrdinaryTrafficCanRouteToQwen(t *testing.T) 
 	result, err := svc.Analyze(context.Background(), "user-1", AnalyzeInput{ImageURL: "https://example.com/rice.jpg"})
 
 	require.NoError(t, err)
-	assert.Equal(t, "qwen ordinary", result["description"])
-	require.Len(t, qwenClient.imageSetCalls, 1)
-	assert.Empty(t, geminiClient.imageSetCalls)
+	assert.Equal(t, "gemini ordinary", result["description"])
+	require.Len(t, geminiClient.imageSetCalls, 1)
+	assert.Empty(t, qwenClient.imageSetCalls)
 	meta := result["hybrid_review"].(map[string]any)
-	assert.Equal(t, "qwen", meta["base_provider"])
-	assert.Equal(t, qwen38FlashModel, meta["base_model"])
+	assert.Equal(t, "gemini", meta["base_provider"])
+	assert.Equal(t, gemini3FlashModel, meta["base_model"])
 }
 
 func TestParseLLMJSON(t *testing.T) {
@@ -1847,15 +1850,15 @@ func TestAnalyzeService_AnalyzeImageStandardUsesGemini3FlashDefault(t *testing.T
 	assert.Empty(t, doubaoClient.imageURL)
 }
 
-func TestAnalyzeService_AnalyzeImageCorrectionUsesQwen38FlashDefault(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageCorrectionUsesGemini3FlashDefault(t *testing.T) {
 	doubaoClient := &mockLLMClient{err: assert.AnError}
-	gemini3Client := &mockLLMClient{err: assert.AnError}
-	qwenClient := &multiImageLLMClient{result: map[string]any{
+	gemini3Client := &multiImageLLMClient{result: map[string]any{
 		"description": "纠错识别",
 		"items": []any{
 			map[string]any{"name": "龙宫果", "estimatedWeightGrams": 45.0},
 		},
 	}}
+	qwenClient := &multiImageLLMClient{err: assert.AnError}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureDashScopeLLMClient(qwenClient)
 	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
@@ -1869,13 +1872,13 @@ func TestAnalyzeService_AnalyzeImageCorrectionUsesQwen38FlashDefault(t *testing.
 
 	require.NoError(t, err)
 	assert.Equal(t, "纠错识别", result["description"])
-	assert.Equal(t, "qwen_db_first", result["food_image_strategy"])
+	assert.Equal(t, "gemini_db_first", result["food_image_strategy"])
 	meta := result["hybrid_review"].(map[string]any)
-	assert.Equal(t, "qwen", meta["base_provider"])
-	assert.Equal(t, qwen38FlashModel, meta["base_model"])
-	require.Len(t, qwenClient.imageSetCalls, 1)
+	assert.Equal(t, "gemini", meta["base_provider"])
+	assert.Equal(t, gemini3FlashModel, meta["base_model"])
+	require.Len(t, gemini3Client.imageSetCalls, 1)
+	assert.Empty(t, qwenClient.imageSetCalls)
 	assert.Equal(t, 0, doubaoClient.calls)
-	assert.Equal(t, 0, gemini3Client.calls)
 }
 
 func TestAnalyzeService_AnalyzeImagePrecisionCorrectionUsesGemini35Default(t *testing.T) {

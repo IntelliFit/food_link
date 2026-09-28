@@ -18,6 +18,7 @@ import {
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
 import { writePendingFriendInviteCode } from '../../../utils/pending-friend-invite'
+import { resolveInviteProfileTarget } from './invite-profile-target'
 
 import './index.scss'
 
@@ -90,12 +91,11 @@ function InviteFriendsPage() {
       setLoading(true)
       try {
         let nextProfile: FriendInviteProfile | null = null
-        if (routeFromUserId) {
-          nextProfile = await getFriendInviteProfile(routeFromUserId)
-        } else if (currentUserId) {
-          nextProfile = await getFriendInviteProfile(currentUserId)
-        } else if (routeInviteCode) {
-          nextProfile = await getFriendInviteProfileByCode(routeInviteCode)
+        const target = resolveInviteProfileTarget({ routeFromUserId, routeInviteCode, currentUserId })
+        if (target?.type === 'user_id') {
+          nextProfile = await getFriendInviteProfile(target.value)
+        } else if (target?.type === 'invite_code') {
+          nextProfile = await getFriendInviteProfileByCode(target.value)
         }
 
         if (!cancelled && nextProfile) {

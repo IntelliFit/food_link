@@ -1,0 +1,35 @@
+.weekly-recap { min-height: 100vh; padding: 42rpx 32rpx calc(44rpx + env(safe-area-inset-bottom)); box-sizing: border-box; background: #f5f5ed; color: #2d4131; }
+.weekly-recap button { border: 0; border-radius: 18rpx; font-size: 27rpx; &::after { border: 0; } }
+.weekly-recap__header { padding: 20rpx 8rpx 36rpx; }
+.weekly-recap__eyebrow { display: block; color: #718968; font-size: 24rpx; letter-spacing: 4rpx; }
+.weekly-recap__title { display: block; font-size: 44rpx; font-weight: 600; margin: 22rpx 0 14rpx; }
+.weekly-recap__date { font-size: 25rpx; color: #8b947e; }
+.weekly-recap__card { margin-bottom: 24rpx; padding: 32rpx; border-radius: 26rpx; background: #fff; border: 1rpx solid #e9ede3; }
+.weekly-recap__lead { display: block; font-size: 31rpx; line-height: 1.7; }
+.weekly-recap__note { display: block; margin-top: 10rpx; font-size: 25rpx; line-height: 1.7; color: #7b8876; }
+.weekly-recap__section-title { display: block; margin-bottom: 18rpx; font-size: 31rpx; font-weight: 600; }
+.weekly-recap__days { display: flex; justify-content: space-between; margin: 34rpx 0; }
+.weekly-recap__day { text-align: center; font-size: 21rpx; color: #a0aa98; view { margin: 12rpx 0; width: 54rpx; line-height: 54rpx; border-radius: 50%; background: #f1f4ec; font-size: 27rpx; } &.is-recorded view { background: #dfead5; color: #587543; } }
+.weekly-recap__metrics { display: flex; gap: 48rpx; > view { flex: 1; display: flex; flex-direction: column; gap: 12rpx; font-size: 23rpx; color: #87937d; } }
+.weekly-recap__number { font-size: 44rpx; color: #385439; font-weight: 600; text { font-size: 24rpx; font-weight: 400; } }
+.weekly-recap__footnote { display: block; margin-top: 24rpx; color: #909986; font-size: 22rpx; line-height: 1.6; }
+.weekly-recap__option { display: flex; align-items: center; justify-content: space-between; padding: 12rpx 0; font-size: 27rpx; switch { transform: scale(.85); transform-origin: right; } }
+.weekly-recap button.weekly-recap__primary { margin-top: 26rpx; background: #47734c; color: #fff; line-height: 86rpx; min-height: 86rpx; }
+.weekly-recap button.weekly-recap__secondary { margin-top: 24rpx; background: #edf3e5; color: #55724a; }
+.weekly-recap button.weekly-recap__text-button { background: transparent; color: #718767; margin-top: 16rpx; font-size: 25rpx; }
+.weekly-recap__photos { margin-top: 24rpx; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; }
+.weekly-recap__photo { position: relative; height: 170rpx; border-radius: 16rpx; overflow: hidden; border: 3rpx solid transparent; image { width: 100%; height: 100%; } text { position: absolute; right: 7rpx; top: 7rpx; border-radius: 50%; width: 36rpx; line-height: 36rpx; text-align: center; color: #fff; background: rgb(0 0 0 / 32%); } &.is-selected { border-color: #47734c; text { background: #47734c; } } }
+.weekly-recap__error { display: block; margin-top: 18rpx; font-size: 25rpx; color: #a15e48; line-height: 1.6; }
+.weekly-recap__skeleton { view { height: 240rpx; margin-bottom: 24rpx; border-radius: 26rpx; background: #e8ecdf; animation: recap-pulse 1.2s infinite alternate; } }
+.weekly-recap__spinner { margin: 24rpx auto; width: 30rpx; height: 30rpx; border: 4rpx solid #dce8d3; border-top-color: #47734c; border-radius: 50%; animation: recap-spin .8s linear infinite; &.is-light { border-color: rgb(255 255 255 / 35%); border-top-color: #fff; } }
+.weekly-recap__empty { padding: 80rpx 24rpx; text-align: center; line-height: 1.8; button { margin-top: 30rpx; } }
+.weekly-recap__preview { position: fixed; inset: 0; z-index: 1000; }
+.weekly-recap__preview-mask { position: absolute; inset: 0; background: rgb(0 0 0 / 45%); }
+.weekly-recap__preview-sheet { position: absolute; bottom: 0; left: 0; right: 0; background: #fff; border-radius: 26rpx 26rpx 0 0; padding: 24rpx 28rpx calc(24rpx + env(safe-area-inset-bottom)); }
+.weekly-recap__preview-heading { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20rpx; font-size: 29rpx; button { margin: 0; background: transparent; font-size: 25rpx; color: #67815a; } }
+.weekly-recap__preview-scroll { height: 65vh; image { display: block; width: 100%; } }
+.weekly-recap__preview-actions { display: flex; gap: 22rpx; margin-top: 20rpx; button { flex: 1; margin: 0 !important; } }
+.weekly-recap__canvas { position: fixed; left: -2000px; top: -2000px; width: 750px; height: 1380px; pointer-events: none; }
+.weekly-recap--dark { background: #17241c; color: #e2eadb; .weekly-recap__card, .weekly-recap__preview-sheet { background: #253329; border-color: #354737; } .weekly-recap__number { color: #d2e6c6; } .weekly-recap__day view { background: #304132; } .weekly-recap__skeleton view { background: #29392c; } }
+@keyframes recap-spin { to { transform: rotate(360deg); } }
+@keyframes recap-pulse { to { opacity: .4; } }

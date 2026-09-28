@@ -1501,7 +1501,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("feedback_bot.project_key", "foodlink")
 	v.SetDefault("feedback_bot.timeout_seconds", 5)
 	v.SetDefault("external.nutrition_embedding_enabled", false)
-	v.SetDefault("external.qwen38_ordinary_traffic_percent", 50)
+	v.SetDefault("external.qwen38_ordinary_traffic_percent", 0)
 	v.SetDefault("external.qwen38_precision_traffic_percent", 20)
 	v.SetDefault("external.openlux_base_url", "https://api.openlux.ai/v1")
 	v.SetDefault("external.openlux_ordinary_gemini_traffic_percent", 50)

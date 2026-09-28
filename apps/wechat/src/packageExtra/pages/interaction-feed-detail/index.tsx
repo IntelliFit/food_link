@@ -28,6 +28,7 @@ import { FeedReportSheet } from '../../../pages/community/components/FeedReportS
 import { FeedActionSheet, type FeedActionSheetAction } from '../../../pages/community/components/FeedActionSheet'
 import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
 import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
+import { FeedImageGrid } from '../../../pages/community/components/FeedImageGrid'
 import {
   extractManualFoodDisplayItems,
   shouldRenderManualFoodCards,
@@ -721,33 +722,7 @@ export function InteractionFeedDetailPage() {
   onItemClick={() => handleViewDetail(feedItem.record.id)}
 	                      />
 	                    )}
-                    {detailImagePaths.length === 1 ? (
-                      <View
-                        className='feed-image'
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          Taro.previewImage({ current: detailImagePaths[0], urls: detailImagePaths })
-                        }}
-                      >
-                        <Image src={detailImagePaths[0]} mode='aspectFit' className='feed-image-content' />
-                      </View>
-                    ) : null}
-                    {detailImagePaths.length > 1 && (
-                      <View className='feed-circle-post-images'>
-                        {detailImagePaths.map((url, idx) => (
-                          <View
-                            key={`detail-img-${idx}`}
-                            className='feed-circle-post-image-item'
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              Taro.previewImage({ current: url, urls: detailImagePaths })
-                            }}
-                          >
-                            <Image src={url} mode='aspectFit' className='feed-circle-post-image' />
-                          </View>
-                        ))}
-                      </View>
-                    )}
+                    {detailImagePaths.length > 0 && <FeedImageGrid urls={detailImagePaths} />}
                     {isManualRecord && manualFoodItems.length > 0 && (
                       <View className='feed-manual-foods-detail'>
                         <ManualFoodCards

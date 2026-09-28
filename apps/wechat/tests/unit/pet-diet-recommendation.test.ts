@@ -1,5 +1,6 @@
 import {
   classifyDietRecommendationIntent,
+  hasPaidMealRecommendation,
   inferMealType,
   isDietRecommendationQuestion,
   recommendationLocation,
@@ -7,9 +8,16 @@ import {
 } from '../../src/packageExtra/pages/pet-chat/index'
 
 describe('pet campus diet recommendation helpers', () => {
+  it('does not unlock a paid meal from a free clarification or unrelated paid chat', () => {
+    const base = { id: 'm', role: 'assistant' as const, content: '请补充位置' }
+    expect(hasPaidMealRecommendation([{ ...base, message_type: 'diet_recommendation', credits_charged: 0 }])).toBe(false)
+    expect(hasPaidMealRecommendation([{ ...base, message_type: 'analysis', credits_charged: 1 }])).toBe(false)
+    expect(hasPaidMealRecommendation([{ ...base, message_type: 'diet_recommendation', credits_charged: 1 }])).toBe(true)
+  })
   it('routes explicit campus meal requests to the structured recommendation flow', () => {
     expect(isDietRecommendationQuestion('我是北大学生，今天午餐吃什么？')).toBe(true)
     expect(isDietRecommendationQuestion('清华学生，推荐几个菜')).toBe(true)
+    expect(isDietRecommendationQuestion('附近有什么清淡的饭可以选？')).toBe(true)
     expect(isDietRecommendationQuestion('帮我看看最近一个月的饮食趋势')).toBe(false)
   })
 
@@ -21,6 +29,7 @@ describe('pet campus diet recommendation helpers', () => {
     expect(classifyDietRecommendationIntent('这三个菜各自热量是多少？', true)).toBe('context')
     expect(classifyDietRecommendationIntent('它们分别有多少蛋白质？', true)).toBe('context')
     expect(classifyDietRecommendationIntent('这些太贵了，20元以内最好', true)).toBe('refine')
+    expect(classifyDietRecommendationIntent('我刚健身完，不吃鸡肉', true)).toBe('refine')
     expect(classifyDietRecommendationIntent('重新推荐减脂餐，500大卡以下', true)).toBe('refine')
     expect(classifyDietRecommendationIntent('最近训练怎么安排？', true)).toBeNull()
     expect(classifyDietRecommendationIntent('还有什么训练建议？', true)).toBeNull()

@@ -318,12 +318,22 @@ type statsInsightGeneration struct {
 }
 
 type PetChatInput struct {
-	Question       string   `json:"question"`
-	Range          string   `json:"range"`
-	SessionID      string   `json:"session_id"`
-	NewSession     bool     `json:"new_session"`
-	EnableThinking bool     `json:"enable_thinking"`
-	ImageURLs      []string `json:"image_urls,omitempty"`
+	Location       *domain.DietLocation `json:"location,omitempty"`
+	Question       string               `json:"question"`
+	Range          string               `json:"range"`
+	SessionID      string               `json:"session_id"`
+	NewSession     bool                 `json:"new_session"`
+	EnableThinking bool                 `json:"enable_thinking"`
+	ImageURLs      []string             `json:"image_urls,omitempty"`
+	EntryContext   *PetChatEntryContext `json:"entry_context,omitempty"`
+}
+
+type PetChatEntryContext struct {
+	Source      string `json:"source"`
+	Date        string `json:"date"`
+	MealType    string `json:"meal_type"`
+	MealLabel   string `json:"meal_label,omitempty"`
+	BasicAdvice string `json:"basic_advice,omitempty"`
 }
 
 type PetChatEstimateResult struct {
@@ -1236,6 +1246,25 @@ func (s *StatsService) resolvePetChatSession(ctx context.Context, userID string,
 	if title == "" {
 		title = statsRangeLabel(comp.StatsRange) + "饮食分析"
 	}
+	meta := map[string]any{
+		"source":             "pet_chat",
+		"context_range":      comp.StatsRange,
+		"context_start_date": comp.StartDate,
+		"context_end_date":   comp.EndDate,
+	}
+	if input.EntryContext != nil && input.EntryContext.Source == "home_next_meal" {
+		mealKey := input.EntryContext.Date + ":" + input.EntryContext.MealType
+		meta["source"] = input.EntryContext.Source
+		meta["meal_key"] = mealKey
+		meta["entry_context"] = map[string]any{
+			"source":       input.EntryContext.Source,
+			"date":         input.EntryContext.Date,
+			"meal_type":    input.EntryContext.MealType,
+			"meal_label":   input.EntryContext.MealLabel,
+			"basic_advice": input.EntryContext.BasicAdvice,
+			"meal_key":     mealKey,
+		}
+	}
 	return s.repo.CreatePetChatSession(ctx, domain.PetChatSession{
 		UserID:             userID,
 		Title:              title,
@@ -1246,12 +1275,7 @@ func (s *StatsService) resolvePetChatSession(ctx context.Context, userID string,
 		ContextFingerprint: comp.DataFingerprint,
 		RecordedDays:       comp.RecordedDays,
 		LastQuestion:       question,
-		Meta: map[string]any{
-			"source":             "pet_chat",
-			"context_range":      comp.StatsRange,
-			"context_start_date": comp.StartDate,
-			"context_end_date":   comp.EndDate,
-		},
+		Meta:               meta,
 	})
 }
 
@@ -2511,6 +2535,10 @@ func (s *StatsService) normalizePetChatInput(input PetChatInput) (PetChatInput, 
 		return PetChatInput{}, err
 	}
 	input.ImageURLs = imageURLs
+	input.EntryContext = normalizePetChatEntryContext(input.EntryContext)
+	if input.Location != nil && !input.Location.Valid(time.Now()) {
+		return PetChatInput{}, &commonerrors.AppError{Code: 10002, Message: "定位已过期或无效，请重新获取当前位置", HTTPStatus: http.StatusBadRequest}
+	}
 	input.Question = normalizePetChatQuestion(input.Question)
 	if input.Question == "" && len(input.ImageURLs) > 0 {
 		input.Question = petChatDefaultImageQuestion
@@ -2519,6 +2547,27 @@ func (s *StatsService) normalizePetChatInput(input PetChatInput) (PetChatInput, 
 		return PetChatInput{}, &commonerrors.AppError{Code: 10002, Message: "question 不能为空", HTTPStatus: http.StatusBadRequest}
 	}
 	return input, nil
+}
+
+func normalizePetChatEntryContext(input *PetChatEntryContext) *PetChatEntryContext {
+	if input == nil || strings.TrimSpace(input.Source) != "home_next_meal" {
+		return nil
+	}
+	date := strings.TrimSpace(input.Date)
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		return nil
+	}
+	mealType := strings.TrimSpace(input.MealType)
+	if mealType != "breakfast" && mealType != "lunch" && mealType != "dinner" {
+		return nil
+	}
+	return &PetChatEntryContext{
+		Source:      "home_next_meal",
+		Date:        date,
+		MealType:    mealType,
+		MealLabel:   trimStatsRunes(strings.TrimSpace(input.MealLabel), 12),
+		BasicAdvice: trimStatsRunes(strings.TrimSpace(input.BasicAdvice), 80),
+	}
 }
 
 func normalizePetChatImageURLs(values []string, service *StatsService) ([]string, error) {

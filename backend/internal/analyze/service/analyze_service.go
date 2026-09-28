@@ -107,16 +107,15 @@ type AnalyzeService struct {
 	doubaoWebSearchClient        interface {
 		AnalyzeWithImagesWebSearch(context.Context, string, []string, DoubaoWebSearchOptions) (map[string]any, map[string]any, error)
 	}
-	imageProvider              string
-	users                      *authrepo.UserRepo
-	nutrition                  NutritionResolver
-	nutritionSemantic          NutritionSemanticRetriever
-	deepseek                   *DeepSeekNutritionEstimator
-	nutritionAI                nutritionFallbackEstimator
-	storage                    *storage.Client
-	webSearcher                WebSearcher
-	ordinaryQwenTrafficPercent int
-	ordinaryOpenLuxPercent     int
+	imageProvider          string
+	users                  *authrepo.UserRepo
+	nutrition              NutritionResolver
+	nutritionSemantic      NutritionSemanticRetriever
+	deepseek               *DeepSeekNutritionEstimator
+	nutritionAI            nutritionFallbackEstimator
+	storage                *storage.Client
+	webSearcher            WebSearcher
+	ordinaryOpenLuxPercent int
 }
 
 type NutritionResolver interface {
@@ -187,10 +186,10 @@ func (s *AnalyzeService) ConfigureImageProvider(provider string) {
 }
 
 func (s *AnalyzeService) ConfigureImageModelTraffic(ordinaryQwenPercent, precisionQwenPercent int) {
-	s.ordinaryQwenTrafficPercent = clampTrafficPercent(ordinaryQwenPercent)
-	logger.Info(context.Background(), "食物图片模型混合路由已配置",
-		slog.Int("qwen38_ordinary_traffic_percent", s.ordinaryQwenTrafficPercent),
+	logger.Info(context.Background(), "食物图片模型路由已配置",
+		slog.Int("qwen38_ordinary_traffic_percent_ignored", clampTrafficPercent(ordinaryQwenPercent)),
 		slog.Int("qwen38_precision_traffic_percent_ignored", clampTrafficPercent(precisionQwenPercent)),
+		slog.String("ordinary_primary_model", gemini3FlashModel),
 		slog.String("precision_primary_model", precisionGeminiFlashModel),
 	)
 }
@@ -237,9 +236,6 @@ func (s *AnalyzeService) SelectFoodImageModel(executionMode, routingKey string) 
 		return gemini35FlashModel
 	}
 	if mode == defaultExecutionMode || mode == standardWebSearchMode || isPackagedExperimentExecutionMode(mode) {
-		if s.dashscopeClient != nil && stableTrafficHit("ordinary", routingKey, s.ordinaryQwenTrafficPercent) {
-			return qwen38FlashModel
-		}
 		if s.openLuxGemini3Client != nil && stableTrafficHit("ordinary_gemini_openlux", routingKey, s.ordinaryOpenLuxPercent) {
 			return openLuxGemini3Route
 		}
@@ -2435,17 +2431,8 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	input.PreciseMicronutrients = true
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
-	isCorrection := len(input.CorrectionItems) > 0 || len(input.PreviousResult) > 0
 	if strings.TrimSpace(input.ModelName) == "" {
-		if isCorrection {
-			if isPrecisionLikeExecutionMode(executionMode) || executionMode == gemini35FlashExecutionMode || executionMode == gemini35GroupedExecutionMode {
-				input.ModelName = s.SelectFoodImageModel(executionMode, foodImageModelRoutingKey(userID, input))
-			} else {
-				input.ModelName = qwen38FlashModel
-			}
-		} else {
-			input.ModelName = s.SelectFoodImageModel(executionMode, foodImageModelRoutingKey(userID, input))
-		}
+		input.ModelName = s.SelectFoodImageModel(executionMode, foodImageModelRoutingKey(userID, input))
 	}
 
 	var user *authrepo.User

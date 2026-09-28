@@ -1,0 +1,111 @@
+[
+  {
+    "name": "减脂午餐优先高蛋白低脂",
+    "context": {"goal":"fat_loss","meal_type":"lunch","targets":{"calories":1800,"protein":100,"carbs":200,"fat":55},"remaining":{"calories":600,"protein":45,"carbs":70,"fat":15}},
+    "candidates": [
+      {"source":"public_food_library","source_id":"lean-chicken","title":"清蒸鸡胸饭","calories":520,"protein":42,"carbs":58,"fat":10,"price":18,"school_name":"示例大学","canteen_name":"一食堂","window_name":"轻食窗口","nutrition_basis":"library_record","items":[{"name":"鸡胸肉","amount":"150g"}]},
+      {"source":"public_food_library","source_id":"fried-pork","title":"炸猪排饭","calories":650,"protein":28,"carbs":75,"fat":30,"price":19,"school_name":"示例大学","canteen_name":"一食堂","nutrition_basis":"library_record","items":[{"name":"炸猪排","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"veg-noodle","title":"蔬菜拌面","calories":480,"protein":16,"carbs":85,"fat":12,"price":12,"school_name":"示例大学","canteen_name":"二食堂","nutrition_basis":"library_record","items":[{"name":"面条","amount":"1份"}]}
+    ],
+    "better": [{"score":"health_fit","left":"lean-chicken","right":"fried-pork"}],
+    "portfolio_count": 3
+  },
+  {
+    "name": "增肌午餐优先蛋白和碳水",
+    "context": {"goal":"muscle_gain","meal_type":"lunch","targets":{"calories":2600,"protein":150,"carbs":330,"fat":75},"remaining":{"calories":1000,"protein":65,"carbs":135,"fat":25}},
+    "candidates": [
+      {"source":"public_food_library","source_id":"beef-rice","title":"牛肉双拼饭","calories":820,"protein":55,"carbs":105,"fat":20,"price":25,"school_name":"示例大学","canteen_name":"训练餐厅","window_name":"牛肉窗口","nutrition_basis":"library_record","items":[{"name":"牛肉","amount":"180g"},{"name":"米饭","amount":"250g"}]},
+      {"source":"public_food_library","source_id":"small-salad","title":"蔬菜沙拉","calories":260,"protein":10,"carbs":25,"fat":12,"price":22,"school_name":"示例大学","canteen_name":"训练餐厅","nutrition_basis":"library_record","items":[{"name":"蔬菜","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"plain-noodle","title":"清汤面","calories":520,"protein":16,"carbs":96,"fat":8,"price":13,"school_name":"示例大学","canteen_name":"二食堂","nutrition_basis":"library_record","items":[{"name":"面条","amount":"1份"}]}
+    ],
+    "better": [{"score":"health_fit","left":"beef-rice","right":"small-salad"}],
+    "portfolio_count": 3
+  },
+  {
+    "name": "十五元预算是硬约束",
+    "context": {"goal":"maintain","meal_type":"dinner","targets":{"calories":2000,"protein":100,"carbs":240,"fat":60},"remaining":{"calories":650,"protein":35,"carbs":75,"fat":18},"constraints":{"max_price":15}},
+    "candidates": [
+      {"source":"public_food_library","source_id":"cheap-set","title":"鸡蛋豆腐套餐","calories":560,"protein":30,"carbs":65,"fat":18,"price":14,"school_name":"示例大学","canteen_name":"一食堂","nutrition_basis":"library_record","items":[{"name":"鸡蛋豆腐","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"expensive-set","title":"牛排套餐","calories":600,"protein":45,"carbs":55,"fat":20,"price":28,"school_name":"示例大学","canteen_name":"西餐厅","nutrition_basis":"library_record","items":[{"name":"牛排","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"unknown-price","title":"当日套餐","calories":580,"protein":32,"carbs":70,"fat":16,"price":0,"school_name":"示例大学","canteen_name":"二食堂","nutrition_basis":"library_record","items":[{"name":"套餐","amount":"1份"}]}
+    ],
+    "excluded": ["expensive-set","unknown-price"],
+    "portfolio_count": 1
+  },
+  {
+    "name": "花生过敏命中即排除",
+    "context": {"goal":"maintain","meal_type":"lunch","targets":{"calories":2000,"protein":100,"carbs":240,"fat":60},"remaining":{"calories":700,"protein":35,"carbs":85,"fat":20},"allergies":["花生"]},
+    "candidates": [
+      {"source":"public_food_library","source_id":"peanut-noodle","title":"花生酱拌面","calories":620,"protein":22,"carbs":82,"fat":24,"price":12,"school_name":"示例大学","canteen_name":"一食堂","nutrition_basis":"library_record","items":[{"name":"花生酱","amount":"20g"}]},
+      {"source":"public_food_library","source_id":"tomato-beef","title":"番茄牛肉面","calories":590,"protein":32,"carbs":78,"fat":16,"price":18,"school_name":"示例大学","canteen_name":"二食堂","nutrition_basis":"library_record","items":[{"name":"牛肉","amount":"100g"}]},
+      {"source":"public_food_library","source_id":"chicken-rice","title":"鸡肉米饭","calories":610,"protein":38,"carbs":72,"fat":18,"price":17,"school_name":"示例大学","canteen_name":"三食堂","nutrition_basis":"library_record","items":[{"name":"鸡肉","amount":"120g"}]}
+    ],
+    "excluded": ["peanut-noodle"],
+    "portfolio_count": 2
+  },
+  {
+    "name": "明确脂肪上限是硬约束",
+    "context": {"goal":"fat_loss","meal_type":"dinner","targets":{"calories":1800,"protein":110,"carbs":190,"fat":50},"remaining":{"calories":500,"protein":40,"carbs":55,"fat":8},"constraints":{"max_fat":12}},
+    "candidates": [
+      {"source":"public_food_library","source_id":"steamed-fish","title":"清蒸鱼配饭","calories":460,"protein":38,"carbs":52,"fat":10,"price":22,"school_name":"示例大学","canteen_name":"一食堂","nutrition_basis":"library_record","items":[{"name":"清蒸鱼","amount":"150g"}]},
+      {"source":"public_food_library","source_id":"braised-pork","title":"红烧肉盖饭","calories":680,"protein":24,"carbs":62,"fat":36,"price":20,"school_name":"示例大学","canteen_name":"一食堂","nutrition_basis":"library_record","items":[{"name":"红烧肉","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"tofu-set","title":"豆腐蔬菜套餐","calories":420,"protein":24,"carbs":50,"fat":11,"price":13,"school_name":"示例大学","canteen_name":"二食堂","nutrition_basis":"library_record","items":[{"name":"豆腐","amount":"1份"}]}
+    ],
+    "excluded": ["braised-pork"],
+    "portfolio_count": 2
+  },
+  {
+    "name": "营养相同时可信数据综合分更高",
+    "context": {"goal":"maintain","meal_type":"lunch","targets":{"calories":2000,"protein":100,"carbs":240,"fat":60},"remaining":{"calories":650,"protein":35,"carbs":80,"fat":20}},
+    "candidates": [
+      {"source":"public_food_library","source_id":"recorded","title":"鸡腿套餐A","calories":620,"protein":35,"carbs":75,"fat":20,"price":18,"school_name":"示例大学","canteen_name":"一食堂","window_name":"一号窗口","nutrition_basis":"library_record","items":[{"name":"鸡腿套餐","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"estimated","title":"鸡腿套餐B","calories":620,"protein":35,"carbs":75,"fat":20,"price":18,"school_name":"示例大学","canteen_name":"一食堂","window_name":"二号窗口","nutrition_basis":"library_estimate","uncertainty_level":"high","items":[{"name":"鸡腿套餐","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"labelled","title":"包装鸡肉饭","calories":620,"protein":35,"carbs":75,"fat":20,"price":19,"school_name":"示例大学","canteen_name":"便利店","window_name":"冷柜","nutrition_basis":"nutrition_label","items":[{"name":"包装鸡肉饭","amount":"1盒"}]}
+    ],
+    "better": [{"score":"balanced_utility","left":"recorded","right":"estimated"}],
+    "portfolio_count": 3
+  },
+  {
+    "name": "同营养条件下位置和价格提高可执行性",
+    "context": {"goal":"maintain","meal_type":"dinner","targets":{"calories":2000,"protein":100,"carbs":240,"fat":60},"remaining":{"calories":600,"protein":30,"carbs":70,"fat":18},"constraints":{"max_price":25}},
+    "candidates": [
+      {"source":"public_food_library","source_id":"easy","title":"近处鸡肉饭","calories":560,"protein":32,"carbs":66,"fat":16,"price":12,"school_name":"示例大学","canteen_name":"宿舍食堂","window_name":"一号窗口","nutrition_basis":"library_record","items":[{"name":"鸡肉饭","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"hard","title":"远处鸡肉饭","calories":560,"protein":32,"carbs":66,"fat":16,"price":24,"school_name":"示例大学","nutrition_basis":"library_record","items":[{"name":"鸡肉饭","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"middle","title":"普通鸡肉饭","calories":560,"protein":32,"carbs":66,"fat":16,"price":18,"school_name":"示例大学","canteen_name":"二食堂","nutrition_basis":"library_record","items":[{"name":"鸡肉饭","amount":"1份"}]}
+    ],
+    "better": [{"score":"adherence","left":"easy","right":"hard"}],
+    "portfolio_count": 3
+  },
+  {
+    "name": "蛋白质下限是硬约束",
+    "context": {"goal":"muscle_gain","meal_type":"dinner","targets":{"calories":2400,"protein":150,"carbs":300,"fat":70},"remaining":{"calories":800,"protein":60,"carbs":100,"fat":22},"constraints":{"min_protein":35}},
+    "candidates": [
+      {"source":"public_food_library","source_id":"double-chicken","title":"双鸡肉套餐","calories":720,"protein":58,"carbs":78,"fat":20,"price":24,"school_name":"示例大学","canteen_name":"一食堂","nutrition_basis":"library_record","items":[{"name":"鸡肉","amount":"200g"}]},
+      {"source":"public_food_library","source_id":"rice-only","title":"素炒饭","calories":650,"protein":14,"carbs":112,"fat":18,"price":10,"school_name":"示例大学","canteen_name":"一食堂","nutrition_basis":"library_record","items":[{"name":"炒饭","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"beef-noodle","title":"牛肉面","calories":680,"protein":38,"carbs":98,"fat":16,"price":18,"school_name":"示例大学","canteen_name":"二食堂","nutrition_basis":"library_record","items":[{"name":"牛肉面","amount":"1份"}]}
+    ],
+    "excluded": ["rice-only"],
+    "portfolio_count": 2
+  },
+  {
+    "name": "只有两个候选时不重复推荐",
+    "context": {"goal":"maintain","meal_type":"breakfast","targets":{"calories":2000,"protein":100,"carbs":240,"fat":60},"remaining":{"calories":1800,"protein":90,"carbs":210,"fat":55}},
+    "candidates": [
+      {"source":"public_food_library","source_id":"egg-milk","title":"鸡蛋牛奶早餐","calories":420,"protein":25,"carbs":42,"fat":17,"price":12,"school_name":"示例大学","canteen_name":"一食堂","nutrition_basis":"library_record","items":[{"name":"鸡蛋牛奶","amount":"1份"}]},
+      {"source":"public_food_library","source_id":"soy-bun","title":"豆浆包子","calories":450,"protein":18,"carbs":72,"fat":10,"price":8,"school_name":"示例大学","canteen_name":"二食堂","nutrition_basis":"library_record","items":[{"name":"豆浆包子","amount":"1份"}]}
+    ],
+    "portfolio_count": 2
+  },
+  {
+    "name": "缺少配料时保留但标记过敏证据不足",
+    "context": {"goal":"maintain","meal_type":"lunch","targets":{"calories":2000,"protein":100,"carbs":240,"fat":60},"remaining":{"calories":700,"protein":35,"carbs":85,"fat":20},"allergies":["坚果"]},
+    "candidates": [
+      {"source":"public_food_library","source_id":"unknown-ingredients","title":"今日盖饭","calories":600,"protein":30,"carbs":80,"fat":18,"price":15,"school_name":"示例大学","canteen_name":"一食堂","nutrition_basis":"library_estimate","uncertainty_level":"medium","items":[]},
+      {"source":"public_food_library","source_id":"known-chicken","title":"清蒸鸡肉饭","calories":590,"protein":38,"carbs":72,"fat":16,"price":18,"school_name":"示例大学","canteen_name":"二食堂","nutrition_basis":"library_record","items":[{"name":"鸡肉","amount":"150g"}]},
+      {"source":"public_food_library","source_id":"known-tofu","title":"番茄豆腐饭","calories":560,"protein":24,"carbs":76,"fat":15,"price":12,"school_name":"示例大学","canteen_name":"三食堂","nutrition_basis":"library_record","items":[{"name":"番茄豆腐","amount":"1份"}]}
+    ],
+    "missing_evidence": {"unknown-ingredients":"配料信息不足，无法完整核对过敏原"},
+    "better": [{"score":"balanced_utility","left":"known-chicken","right":"unknown-ingredients"}],
+    "portfolio_count": 3
+  }
+]

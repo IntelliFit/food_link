@@ -19,9 +19,34 @@ function openWithoutStacking(url: string): void {
   Taro.navigateTo({ url })
 }
 
-export function openPetChat(starterQuestion?: unknown): void {
-  const starter = typeof starterQuestion === 'string' ? starterQuestion.trim() : ''
-  const query = starter ? `?starter=${encodeURIComponent(starter)}` : ''
+export type PetChatHomeMealEntry = {
+  source: 'home_next_meal'
+  date: string
+  mealType: 'breakfast' | 'lunch' | 'dinner'
+  mealLabel: string
+  basicAdvice: string
+  starterQuestion: string
+}
+
+export function openPetChat(input?: unknown): void {
+  const context = input && typeof input === 'object' ? input as Partial<PetChatHomeMealEntry> : null
+  const starter = typeof input === 'string'
+    ? input.trim()
+    : String(context?.starterQuestion || '').trim()
+  const params: Array<[string, string]> = []
+  if (starter) params.push(['starter', starter])
+  if (context?.source === 'home_next_meal') {
+    params.push(
+      ['entry', context.source],
+      ['date', String(context.date || '').trim()],
+      ['meal_type', String(context.mealType || '').trim()],
+      ['meal_label', String(context.mealLabel || '').trim()],
+      ['advice', String(context.basicAdvice || '').trim()],
+    )
+  }
+  const query = params.length
+    ? `?${params.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&')}`
+    : ''
   openWithoutStacking(`${extraPkgUrl('/pages/pet-chat/index')}${query}`)
 }
 

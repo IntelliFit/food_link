@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -29,11 +30,37 @@ var (
 
 // baseDirs returns the shared cache/binary directories and a per-process runtime directory.
 func baseDirs(port int) (cacheDir, binDir, runtimeDir string) {
-	root := filepath.Join(os.TempDir(), "embedded-postgres-go")
+	root := filepath.Join(testTempDir(), "embedded-postgres-go")
 	cacheDir = filepath.Join(root, "cache")
 	binDir = filepath.Join(root, "bin")
 	runtimeDir = filepath.Join(root, fmt.Sprintf("pg-%d-%d", os.Getpid(), port))
 	return
+}
+
+func testTempDir() string {
+	for _, name := range []string{"FOODLINK_TEST_TMPDIR", "GOTMPDIR"} {
+		if dir := os.Getenv(name); filepath.IsAbs(dir) {
+			return dir
+		}
+	}
+
+	// go env -w settings are not inherited by the test executable.
+	goEnv := os.Getenv("GOENV")
+	if goEnv == "" {
+		if configDir, err := os.UserConfigDir(); err == nil {
+			goEnv = filepath.Join(configDir, "go", "env")
+		}
+	}
+	if goEnv != "" && goEnv != "off" {
+		if config, err := os.ReadFile(goEnv); err == nil {
+			for _, line := range strings.Split(string(config), "\n") {
+				if dir, ok := strings.CutPrefix(strings.TrimSpace(line), "GOTMPDIR="); ok && filepath.IsAbs(dir) {
+					return dir
+				}
+			}
+		}
+	}
+	return os.TempDir()
 }
 
 // ensureBinaries makes sure the shared Postgres binaries are extracted.

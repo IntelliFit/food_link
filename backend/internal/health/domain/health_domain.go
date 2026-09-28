@@ -219,6 +219,11 @@ type DietRecommendationScope struct {
 }
 
 type CampusDietSearchFilter struct {
+	ViewerID         string
+	Location         *DietLocation
+	RadiusKM         float64
+	MerchantOnly     bool
+	CampusOnly       bool
 	SchoolID         string
 	CampusID         string
 	Keyword          string
@@ -241,6 +246,10 @@ type DietRecommendationSchool struct {
 }
 
 type DietRecommendationCandidate struct {
+	DistanceKM              *float64                     `json:"distance_km,omitempty"`
+	LocationLevel           string                       `json:"location_level,omitempty"`
+	MerchantName            string                       `json:"merchant_name,omitempty"`
+	Address                 string                       `json:"address,omitempty"`
 	Source                  string                       `json:"source"`
 	SourceID                string                       `json:"source_id,omitempty"`
 	Title                   string                       `json:"title"`

@@ -51,4 +51,22 @@ describe('pet navigation', () => {
     expect(Taro.navigateBack).toHaveBeenCalledWith({ delta: 1 })
     expect(Taro.navigateTo).not.toHaveBeenCalled()
   })
+
+  it('opens pet chat with compact next-meal context', () => {
+    openPetChat({
+      source: 'home_next_meal',
+      date: '2026-09-26',
+      mealType: 'lunch',
+      mealLabel: '午餐',
+      basicAdvice: '优先补蛋白，搭配适量主食',
+      starterQuestion: '今天午餐吃什么？',
+    })
+
+    expect(Taro.navigateTo).toHaveBeenCalledWith({
+      url: expect.stringContaining('/packageExtra/pages/pet-chat/index?starter='),
+    })
+    const url = (Taro.navigateTo as jest.Mock).mock.calls[0][0].url as string
+    expect(decodeURIComponent(url)).toContain('entry=home_next_meal')
+    expect(decodeURIComponent(url)).toContain('advice=优先补蛋白，搭配适量主食')
+  })
 })

@@ -1435,6 +1435,115 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
+.next-meal-guidance {
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  min-height: 184rpx;
+  margin: 0 0 18rpx;
+  padding: 22rpx 24rpx 18rpx;
+  border: 1rpx solid rgb(92 184 150 / 22%);
+  border-radius: 24rpx;
+  background: linear-gradient(135deg, rgb(244 252 248 / 96%), rgb(255 255 255 / 92%));
+  box-shadow: 0 10rpx 26rpx rgb(47 143 111 / 8%);
+
+  &:active:not(.is-loading) {
+    transform: scale(0.99);
+    opacity: 0.92;
+  }
+}
+
+.next-meal-guidance__head,
+.next-meal-guidance__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.next-meal-guidance__kicker {
+  color: #28795c;
+  font-size: 23rpx;
+  line-height: 32rpx;
+  font-weight: 800;
+}
+
+.next-meal-guidance__badge {
+  flex-shrink: 0;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 12%);
+  color: #43876d;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 700;
+}
+
+.next-meal-guidance__title,
+.next-meal-guidance__detail {
+  display: block;
+}
+
+.next-meal-guidance__title {
+  margin-top: 8rpx;
+  color: #203b31;
+  font-size: 29rpx;
+  line-height: 40rpx;
+  font-weight: 900;
+}
+
+.next-meal-guidance__detail {
+  margin-top: 3rpx;
+  color: #687a72;
+  font-size: 23rpx;
+  line-height: 34rpx;
+}
+
+.next-meal-guidance__footer {
+  margin-top: 12rpx;
+  padding-top: 11rpx;
+  border-top: 1rpx solid rgb(92 184 150 / 13%);
+}
+
+.next-meal-guidance__cost {
+  color: #8a9891;
+  font-size: 20rpx;
+  line-height: 28rpx;
+}
+
+.next-meal-guidance__action {
+  color: #2f8f6f;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 800;
+}
+
+.next-meal-guidance__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  padding: 6rpx 0;
+}
+
+.next-meal-guidance__skeleton-short,
+.next-meal-guidance__skeleton-long,
+.next-meal-guidance__skeleton-medium {
+  height: 24rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, rgb(92 184 150 / 7%) 20%, rgb(92 184 150 / 19%) 50%, rgb(92 184 150 / 7%) 80%);
+  background-size: 200% 100%;
+  animation: next-meal-guidance-shimmer 1.25s ease-in-out infinite;
+}
+
+.next-meal-guidance__skeleton-short { width: 28%; }
+.next-meal-guidance__skeleton-long { width: 76%; height: 30rpx; }
+.next-meal-guidance__skeleton-medium { width: 58%; }
+
+@keyframes next-meal-guidance-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
 .home-reward-hint-swiper {
   position: relative;
   margin: -4rpx 0 12rpx;
@@ -6432,6 +6541,30 @@ button.poster-share-channel--btn {
 
 }
 
+.home-page--dark {
+  .next-meal-guidance {
+    border-color: rgb(112 196 149 / 16%);
+    background: linear-gradient(135deg, rgb(27 43 36 / 96%), rgb(24 35 31 / 92%));
+    box-shadow: none;
+  }
+
+  .next-meal-guidance__title {
+    color: #edf8f1;
+  }
+
+  .next-meal-guidance__detail {
+    color: rgb(225 239 229 / 64%);
+  }
+
+  .next-meal-guidance__footer {
+    border-top-color: rgb(112 196 149 / 12%);
+  }
+
+  .next-meal-guidance__cost {
+    color: rgb(154 215 188 / 52%);
+  }
+}
+
 @keyframes home-experience-stage-in {
   from {
     opacity: 0.35;
@@ -6443,3 +6576,9 @@ button.poster-share-channel--btn {
     transform: translateX(0);
   }
 }
+.home-layout-toolbar { display: flex; justify-content: space-between; align-items: center; min-height: 54rpx; margin: -6rpx 0 12rpx; color: #7c8982; font-size: 24rpx; }
+.home-layout-toolbar__edit { padding: 12rpx 0 12rpx 24rpx; }
+.home-social-inbox { display: flex; align-items: center; gap: 8rpx; padding: 10rpx 0; }
+.home-social-inbox__badge { min-width: 30rpx; text-align: center; padding: 1rpx 6rpx; border-radius: 14rpx; background: #e8f4ee; color: #35825b; }
+.home-supplement-module { margin: 0 0 24rpx; padding: 4rpx 24rpx 20rpx; border-radius: 24rpx; background: #fff; border: 1rpx solid #edf0ee; }
+.home-page--dark { .home-supplement-module { background: #202d26; border-color: #34463a; } .home-social-inbox__badge { background: #2b4837; color: #a6d3b2; } }

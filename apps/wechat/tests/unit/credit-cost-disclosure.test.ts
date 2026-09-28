@@ -27,7 +27,7 @@ describe('credit cost disclosure', () => {
     const source = readSource('packageExtra/pages/pet-chat/index.tsx')
     expect(source).toContain('estimatePetChat')
     expect(source).toContain('预计消耗 {estimatedCredits} 积分')
-    expect(source).toContain('onClick={() => setInput(text)}')
+    expect(source).toContain('onClick={() => homeMealContext ? appendHomeMealContext(text) : setInput(text)}')
   })
 
   it('matches the backend correction price for standard and precision modes', () => {

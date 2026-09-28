@@ -1,3 +1,5 @@
+import { WeeklyRecapEntry } from '../../components/WeeklyRecapEntry'
+import { resetSocialInbox } from '../../utils/social-inbox'
 import { View, Text, Image, Navigator } from '@tarojs/components'
 import * as React from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
@@ -562,11 +564,15 @@ function ProfilePage() {
               key.startsWith('temp_comments_') ||
               key.startsWith('record_manual_custom_foods_v1:') ||
               key.startsWith('home_experience_config_v1:') ||
-              key.startsWith('home_experience_config_v2:')
+              key.startsWith('home_experience_config_v2:') ||
+              key.startsWith('home_module_layout_v2:') ||
+              key.startsWith('home_check_in_snooze_v1:')
             ) {
               try { Taro.removeStorageSync(key) } catch (_) {}
             }
           })
+
+          resetSocialInbox()
 
           // 意见反馈诊断缓存
           clearRecentRequestTraces()
@@ -766,6 +772,8 @@ function ProfilePage() {
           </View>
         </View>
       )}
+
+      {isLoggedIn && <WeeklyRecapEntry />}
 
       {/* 功能列表（合并为单个白色卡片） */}
       <View className='profile-card list-card combined-list'>

@@ -1321,6 +1321,11 @@ export interface DietRecommendationFoodItem {
 }
 
 export interface DietRecommendationOption {
+  meal_components?: DietRecommendationOption[]
+  distance_km?: number
+  location_level?: 'food' | 'canteen' | 'campus' | 'school'
+  merchant_name?: string
+  address?: string
   title: string
   reason: string
   source?: string
@@ -1350,9 +1355,25 @@ export interface DietRecommendationOption {
   weight_method?: string
   weight_confidence?: number
   uncertainty_level?: string
+  decision_role?: 'health_goal' | 'easy_to_follow' | 'balanced_best' | string
+  decision_label?: string
+  decision_score?: number
+  decision_scores?: {
+    health_fit: number
+    adherence: number
+    confidence: number
+    risk_penalty: number
+    balanced_utility: number
+  }
+  decision_missing_evidence?: string[]
 }
 
 export interface DietRecommendationResult {
+  harness_version?: string
+  search_scope?: 'nearby' | 'school' | 'unknown'
+  context_summary?: string[]
+  data_notes?: string[]
+  needs_clarification?: boolean
   scene: DietRecommendationScene
   title: string
   summary: string
@@ -1363,6 +1384,7 @@ export interface DietRecommendationResult {
   ai_used?: boolean
   candidate_count?: number
   ai_rerank_count?: number
+  decision_engine_version?: string
   resolved_school?: {
     id: string
     name: string
@@ -1548,6 +1570,22 @@ export interface PetChatHistoryMessage {
   created_at?: string
 }
 
+export interface PetChatLocation {
+  latitude: number
+  longitude: number
+  accuracy_m?: number
+  captured_at: number
+  coordinate_type: 'gcj02'
+}
+
+export interface PetChatEntryContext {
+  source: 'home_next_meal'
+  date: string
+  meal_type: 'breakfast' | 'lunch' | 'dinner'
+  meal_label?: string
+  basic_advice?: string
+}
+
 export interface PetChatStreamMeta {
   session_id: string
   user_message_id?: string
@@ -1569,6 +1607,10 @@ export interface PetChatHistoryResponse {
     title?: string
     RangeType?: 'week' | 'month'
     range_type?: 'week' | 'month'
+    TotalCreditsCharged?: number
+    total_credits_charged?: number
+    Meta?: Record<string, any>
+    meta?: Record<string, any>
   }
   messages: PetChatHistoryMessage[]
 }
@@ -1581,6 +1623,8 @@ export interface PetChatSessionSummary {
   last_question?: string
   last_answer?: string
   last_message_at?: string
+  total_credits_charged?: number
+  meta?: Record<string, any>
   created_at?: string
   updated_at?: string
 }
@@ -4816,7 +4860,9 @@ export function streamGeneratePetChat(
   newSession = false,
   callbacks: StreamGeneratePetChatCallbacks,
   enableThinking = false,
-  imageUrls: string[] = []
+  imageUrls: string[] = [],
+  entryContext?: PetChatEntryContext,
+  location?: PetChatLocation,
 ): () => void {
   const token = getAccessToken()
   if (!token) {
@@ -4896,7 +4942,16 @@ export function streamGeneratePetChat(
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
       }),
-      data: { question, range, session_id: sessionId, new_session: newSession, enable_thinking: enableThinking, image_urls: imageUrls },
+      data: {
+        question,
+        range,
+        session_id: sessionId,
+        new_session: newSession,
+        enable_thinking: enableThinking,
+        image_urls: imageUrls,
+        entry_context: entryContext,
+        location,
+      },
       enableChunked: true,
       timeout: 180000,
       success: (res) => {
@@ -5352,6 +5407,7 @@ export async function publicRequest(
   }
   return res
 }
+
 
 /**
  * 调用后端API进行微信小程序登录
@@ -7973,7 +8029,7 @@ export async function bindMarketingQRUser(code: string, visitorId: string): Prom
   })
 }
 
-export type PublicFoodLibraryType = 'common' | 'campus'
+export type PublicFoodLibraryType = 'common' | 'campus' | 'merchant'
 
 /** 公共食物库条目 */
 export interface PublicFoodLibraryItem {

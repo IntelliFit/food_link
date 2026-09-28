@@ -1,4 +1,6 @@
-import { View, Text, ScrollView, Image, Input, Button, Swiper, SwiperItem } from '@tarojs/components'
+import { useSocialInbox } from '../../hooks/useSocialInbox'
+import { refreshSocialInbox } from '../../utils/social-inbox'
+import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 
@@ -7,7 +9,6 @@ import {
   friendSearch,
   friendBlockUser,
   friendSendRequest,
-  friendGetRequests,
   friendGetList,
   friendCleanupDuplicates,
   communityGetFeed,
@@ -17,20 +18,17 @@ import {
   communityGetComments,
   communityGetFeedContext,
   communityGetCommentTasks,
-  communityGetNotifications,
   communityPostComment,
   communityDeleteComment,
   communityGetCheckinLeaderboard,
   communityGetFoodNutrientLeaderboard,
   communityHideFeed,
-  getUnreadMessageCount,
   deleteCirclePost,
   deleteFoodRecord,
   deleteExerciseLog,
   deletePublicFoodLibraryItem,
   showUnifiedApiError,
   type FriendSearchUser,
-  type FriendRequestItem,
   type FriendListItem,
   type CommunityFeedItem,
   type CommunityFeedSortBy,
@@ -54,6 +52,7 @@ import { ManualFoodCards } from './components/ManualFoodCards'
 import { ExerciseActivityCards, hasExerciseActivityCards } from './components/ExerciseActivityCards'
 import { FeedReportSheet } from './components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedActionSheet'
+import { FeedImageGrid } from './components/FeedImageGrid'
 
 import { IconTrendingUp } from '../../components/iconfont'
 
@@ -167,7 +166,6 @@ function removeCommentSubtreeFromList(comments: FeedCommentItem[], rootId: strin
 const CACHE_KEYS = {
   FEED: 'community_feed_cache',
   FRIENDS: 'community_friends_cache',
-  REQUESTS: 'community_requests_cache',
   FEED_TIMESTAMP: 'community_feed_timestamp',
   FRIENDS_TIMESTAMP: 'community_friends_timestamp',
   FEED_FILTERS: 'community_feed_filters_v4',
@@ -386,7 +384,6 @@ function CommunityPage() {
   }, [scheme])
 
   const [friends, setFriends] = useState<FriendListItem[]>([])
-  const [requests, setRequests] = useState<FriendRequestItem[]>([])
   const [feedList, setFeedList] = useState<CommunityFeedItem[]>([])
   const feedListRef = useRef<CommunityFeedItem[]>([])
   const feedCursorRef = useRef<LatestFeedCursor | null>(null)
@@ -425,8 +422,9 @@ function CommunityPage() {
     signature: '',
     timestamp: 0
   })
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
-  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
+  const socialInbox = useSocialInbox()
+  const unreadNotificationCount = socialInbox.interactions
+  const unreadMessageCount = socialInbox.messages
   const [feedScrollIntoView, setFeedScrollIntoView] = useState('')
   /** 动态卡片内评论：超过 3 条时默认只展示 2 条，点此展开/收起（仿微信朋友圈） */
   const [feedCommentPreviewExpanded, setFeedCommentPreviewExpanded] = useState<Record<string, boolean>>({})
@@ -490,7 +488,6 @@ function CommunityPage() {
   const [feedActionSheet, setFeedActionSheet] = useState<{ item: CommunityFeedItem; mode: 'manage' | 'report' } | null>(null)
   const [reportMaskTarget, setReportMaskTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
   const [feedTextExpanded, setFeedTextExpanded] = useState<Record<string, boolean>>({})
-  const [feedImageIndices, setFeedImageIndices] = useState<Record<string, number>>({})
   const pendingNotificationNavigationRef = useRef(false)
   const feedScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipNextFilterRefreshRef = useRef(true)
@@ -545,32 +542,6 @@ function CommunityPage() {
     }
   }, [])
 
-  const loadInteractionNotificationsBadge = useCallback(async () => {
-    if (!getAccessToken()) {
-      setUnreadNotificationCount(0)
-      return
-    }
-    try {
-      const res = await communityGetNotifications(20)
-      setUnreadNotificationCount(res.unread_count || 0)
-    } catch (e) {
-      console.error('加载互动消息失败:', e)
-    }
-  }, [])
-
-  const loadUnreadMessageCount = useCallback(async () => {
-    if (!getAccessToken()) {
-      setUnreadMessageCount(0)
-      return
-    }
-    try {
-      const res = await getUnreadMessageCount()
-      setUnreadMessageCount(res.count || 0)
-    } catch (e) {
-      console.error('加载私信未读数失败:', e)
-    }
-  }, [])
-
   /**
    * 从缓存加载数据（立即展示，无等待）
    */
@@ -579,7 +550,6 @@ function CommunityPage() {
       const feedCacheFromCurrentSession = isCommunityFeedCacheFromCurrentSession()
       const cachedFeed = Taro.getStorageSync(CACHE_KEYS.FEED)
       const cachedFriends = Taro.getStorageSync(CACHE_KEYS.FRIENDS)
-      const cachedRequests = Taro.getStorageSync(CACHE_KEYS.REQUESTS)
       const cachedFeedFilters = Taro.getStorageSync(CACHE_KEYS.FEED_FILTERS)
 
       let hasCache = false
@@ -634,17 +604,6 @@ function CommunityPage() {
         }
       }
 
-      if (cachedRequests) {
-        try {
-          const parsed = JSON.parse(cachedRequests)
-          if (Array.isArray(parsed)) {
-            setRequests(parsed)
-          }
-        } catch (e) {
-          console.error('解析请求缓存失败:', e)
-        }
-      }
-
       return hasCache
     } catch (e) {
       console.error('加载缓存失败:', e)
@@ -655,7 +614,7 @@ function CommunityPage() {
   /**
    * 保存数据到缓存
    */
-  const saveToCache = useCallback((feedData?: CommunityFeedItem[], friendsData?: FriendListItem[], requestsData?: FriendRequestItem[]) => {
+  const saveToCache = useCallback((feedData?: CommunityFeedItem[], friendsData?: FriendListItem[]) => {
     try {
       if (feedData) {
         // 乐观评论未落库，不写入缓存，避免冷启动出现幽灵评论
@@ -684,9 +643,6 @@ function CommunityPage() {
       if (friendsData !== undefined) {
         Taro.setStorageSync(CACHE_KEYS.FRIENDS, JSON.stringify(friendsData))
         Taro.setStorageSync(CACHE_KEYS.FRIENDS_TIMESTAMP, Date.now().toString())
-      }
-      if (requestsData !== undefined) {
-        Taro.setStorageSync(CACHE_KEYS.REQUESTS, JSON.stringify(requestsData))
       }
     } catch (e) {
       console.error('保存缓存失败:', e)
@@ -809,23 +765,18 @@ function CommunityPage() {
     })
   }, [getTempCommentsKey])
 
-  const loadFriendsAndRequests = useCallback(async (silent = false) => {
+  const loadFriends = useCallback(async (silent = false) => {
     if (!getAccessToken()) return
     if (!silent) setLoadingFriends(true)
     try {
       // 先清理可能存在的重复好友记录
       await friendCleanupDuplicates().catch(() => { })
 
-      const [listRes, reqRes] = await Promise.all([
-        friendGetList(),
-        friendGetRequests()
-      ])
+      const listRes = await friendGetList()
 
       const friendsList = listRes.list || []
-      const requestsList = reqRes.list || []
 
       setFriends(friendsList)
-      setRequests(requestsList)
       setPriorityAuthorIds((prev) => {
         const allowed = prev.filter((id) => friendsList.some((friend) => friend.id === id))
         if (allowed.length !== prev.length) {
@@ -835,7 +786,7 @@ function CommunityPage() {
       })
 
       // 保存到缓存
-      saveToCache(undefined, friendsList, requestsList)
+      saveToCache(undefined, friendsList)
 
       // 更新刷新时间
       lastFriendsRefreshTime.current = Date.now()
@@ -845,25 +796,6 @@ function CommunityPage() {
       }
     } finally {
       if (!silent) setLoadingFriends(false)
-    }
-  }, [saveToCache])
-
-  /**
-   * 仅同步「收到的待处理好友申请」列表（轻量），每次进入圈子页调用，
-   * 避免好友页处理完后仍沿用 5 分钟缓存导致角标不消失。
-   */
-  const syncPendingFriendRequests = useCallback(async () => {
-    if (!getAccessToken()) {
-      setRequests([])
-      return
-    }
-    try {
-      const reqRes = await friendGetRequests()
-      const requestsList = reqRes.list || []
-      setRequests(requestsList)
-      saveToCache(undefined, undefined, requestsList)
-    } catch (e) {
-      console.error('同步好友申请失败:', e)
     }
   }, [saveToCache])
 
@@ -1012,13 +944,12 @@ function CommunityPage() {
     setRefreshing(true)
     const tasks: Promise<void>[] = [refreshFeed(false, true)]
     if (getAccessToken()) {
-      tasks.push(loadFriendsAndRequests(false))
+      tasks.push(loadFriends(false))
       tasks.push(loadRankingPreview(false))
-      tasks.push(loadInteractionNotificationsBadge())
-      tasks.push(loadUnreadMessageCount())
+      tasks.push(refreshSocialInbox(true).then(() => undefined))
     }
     Promise.all(tasks)
-  }, [loadFriendsAndRequests, refreshFeed, loadRankingPreview, loadInteractionNotificationsBadge, loadUnreadMessageCount])
+  }, [loadFriends, refreshFeed, loadRankingPreview])
 
   // 评论栏弹出后延迟聚焦，等滑入动画完成
   useEffect(() => {
@@ -1164,22 +1095,14 @@ function CommunityPage() {
     )
 
     if (token) {
-      // Feed 是首屏关键请求。排行榜、消息角标和好友申请稍后再拉，
+      // Feed 是首屏关键请求。排行榜稍后再拉，未读角标由 useSocialInbox 延迟刷新。
       // 避免与 Feed/好友列表同时抢占后端仅 10 个数据库连接。
       setTimeout(() => {
         void loadRankingPreview(true)
-        void loadInteractionNotificationsBadge()
-        void loadUnreadMessageCount()
-        if (!needRefreshFriends) {
-          void syncPendingFriendRequests()
-        }
       }, 300)
     } else {
       setLbPreviewTop([])
       setFoodRankingPreview([])
-      setUnreadNotificationCount(0)
-      setUnreadMessageCount(0)
-      setRequests([])
     }
 
     // 已有 Feed 时不再走下方冷启动，但仍需按需拉取好友（否则仅从缓存恢复 Feed 时会 early return，永远不请求 /api/friend/list）
@@ -1194,7 +1117,7 @@ function CommunityPage() {
           .catch((e) => console.error('同步临时评论状态失败:', e))
       }
       if (needRefreshFriends) {
-        loadFriendsAndRequests(true)
+        loadFriends(true)
       }
       if (now - lastFeedRefreshTime.current > CACHE_DURATION) {
         refreshFeed(true, false)
@@ -1214,11 +1137,11 @@ function CommunityPage() {
       if (hasCache || !isFirstLoad) {
         if (hasCache) setIsFirstLoad(false)
         if (needRefreshFeed) refreshFeed(true, false)
-        if (needRefreshFriends) loadFriendsAndRequests(true)
+        if (needRefreshFriends) loadFriends(true)
       } else {
         setShowSkeleton(true)
         refreshFeed(false, true)
-        if (token) loadFriendsAndRequests(false)
+        if (token) loadFriends(false)
         setIsFirstLoad(false)
       }
     }
@@ -2250,16 +2173,16 @@ function CommunityPage() {
                     className='friends-quick-cell'
                     onClick={() => {
                       const url =
-                        requests.length > 0 ? `${extraPkgUrl('/pages/friends/index')}?tab=received` : extraPkgUrl('/pages/friends/index')
+                        socialInbox.friendRequests > 0 ? `${extraPkgUrl('/pages/friends/index')}?tab=received` : extraPkgUrl('/pages/friends/index')
                       Taro.navigateTo({ url })
                     }}
                   >
                     <Text className='friends-quick-cell-icon iconfont icon-duoren' />
                     <Text className='friends-quick-cell-label'>好友管理</Text>
-                    {requests.length > 0 ? (
+                    {socialInbox.friendRequests > 0 ? (
                       <View className='friends-quick-cell-badge'>
                         <Text className='friends-quick-cell-badge-text'>
-                          {requests.length > 99 ? '99+' : String(requests.length)}
+                          {socialInbox.friendRequests > 99 ? '99+' : String(socialInbox.friendRequests)}
                         </Text>
                       </View>
                     ) : null}
@@ -2544,73 +2467,19 @@ function CommunityPage() {
                               />
                             )}
                             {feedImagePaths.length > 0 && !useManualFoodCards && !isCirclePost && (
-                              <View
-                                className={`feed-image ${feedImagePaths.length <= 1 ? 'feed-tap-to-detail' : ''}`}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (feedImagePaths.length <= 1) {
+                              <FeedImageGrid
+                                urls={feedImagePaths}
+                                onImageClick={(url, _index, urls) => {
+                                  if (urls.length === 1) {
                                     handleViewDetail(item)
+                                    return
                                   }
+                                  Taro.previewImage({ current: url, urls })
                                 }}
-                              >
-                                {feedImagePaths.length > 1 ? (
-                                  <>
-                                    <Swiper
-                                      className='feed-image-swiper'
-                                      circular
-                                      indicatorDots={false}
-                                      onChange={(e) => {
-                                        setFeedImageIndices(prev => ({ ...prev, [targetKey]: e.detail.current }))
-                                      }}
-                                      current={feedImageIndices[targetKey] || 0}
-                                    >
-                                      {feedImagePaths.map((path, index) => (
-                                        <SwiperItem key={`${targetKey}-swiper-${index}`} className='feed-image-swiper-item'>
-                                          <Image
-                                            src={path}
-                                            mode='aspectFit'
-                                            className='feed-image-swiper-image'
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              Taro.previewImage({ current: path, urls: feedImagePaths })
-                                            }}
-                                          />
-                                        </SwiperItem>
-                                      ))}
-                                    </Swiper>
-                                    <View className='feed-image-counter'>
-                                      <Text className='feed-image-counter-text'>
-                                        {(feedImageIndices[targetKey] || 0) + 1}/{feedImagePaths.length}
-                                      </Text>
-                                    </View>
-                                  </>
-                                ) : (
-                                  <Image
-                                    src={feedImagePaths[0] || ''}
-                                    mode='aspectFit'
-                                    className='feed-image-content'
-                                  />
-                                )}
-                              </View>
+                              />
                             )}
                             {isCirclePost && (item.record.image_paths || []).length > 0 && (
-                              <View className='feed-circle-post-images'>
-                                {(item.record.image_paths || []).map((url, idx) => (
-                                  <View
-                                    key={`${targetKey}-img-${idx}`}
-                                    className='feed-circle-post-image-item'
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      Taro.previewImage({
-                                        current: url,
-                                        urls: item.record.image_paths || []
-                                      })
-                                    }}
-                                  >
-                                    <Image src={url} mode='aspectFit' className='feed-circle-post-image' />
-                                  </View>
-                                ))}
-                              </View>
+                              <FeedImageGrid urls={item.record.image_paths || []} />
                             )}
                             {isCirclePost && (() => {
                               const n = item.record

@@ -2,6 +2,7 @@ import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
+import { restoreRiskFocusKeys } from './risk-focus-preference'
 import {
   getStatsSummary,
   generateStatsInsight,
@@ -588,13 +589,7 @@ function StatsPage() {
   }, [riskDetailModal.visible, riskPickerVisible])
   const [selectedRiskKeys, setSelectedRiskKeys] = useState<string[]>(() => {
     try {
-      const stored = Taro.getStorageSync(RISK_PREF_STORAGE_KEY)
-      if (Array.isArray(stored)) {
-        const cleaned = stored.map(item => String(item || '').trim()).filter(Boolean)
-        if (cleaned.length === 0) return DEFAULT_RISK_KEYS
-        const merged = Array.from(new Set([...DEFAULT_RISK_KEYS, ...cleaned]))
-        return merged
-      }
+      return restoreRiskFocusKeys(Taro.getStorageSync(RISK_PREF_STORAGE_KEY), DEFAULT_RISK_KEYS)
     } catch {
       // ignore
     }
@@ -883,6 +878,7 @@ function StatsPage() {
       for (let attempt = 0; attempt < 60; attempt++) {
         if (!statsPageVisibleRef.current) return
         const task = await getAnalyzeTask(pending.taskId)
+        if (!readPendingCustomFocusTasks().some(item => item.taskId === pending.taskId)) return
         if (task.status === 'done') {
           const card = customFocusCardFromTask(task)
           removePendingCustomFocusTask(pending.taskId)
@@ -955,29 +951,44 @@ function StatsPage() {
       return
     }
     setCustomFocusAdding(true)
+    let focusSaved = false
     try {
       const addRes = await addHealthFocus(label)
       mergeCustomFocusOptions(addRes.focuses)
       const focusId = addRes.focus_id || addRes.focuses.find(item => item.label === label)?.id
       if (!focusId) throw new Error('添加关注失败')
+      focusSaved = true
+      setCustomFocusInput('')
       const customKey = `custom:${focusId}`
-      setSelectedRiskKeys(prev => {
-        const next = prev.includes(customKey) ? prev : [...prev, customKey]
-        try {
-          Taro.setStorageSync(RISK_PREF_STORAGE_KEY, next)
-        } catch {
-          // ignore
-        }
-        return next
-      })
+      const showCustomFocus = () => {
+        setSelectedRiskKeys(prev => {
+          const next = prev.includes(customKey) ? prev : [...prev, customKey]
+          try {
+            Taro.setStorageSync(RISK_PREF_STORAGE_KEY, next)
+          } catch {
+            // ignore
+          }
+          return next
+        })
+      }
+      if (addRes.already_exists) {
+        showCustomFocus()
+        Taro.showToast({ title: '该关注已存在，已显示', icon: 'none' })
+        return
+      }
+      if (data?.health_index?.custom_focus_meta?.remaining_today === 0) {
+        Taro.showToast({ title: '关注已保存，明天可生成卡片', icon: 'none' })
+        return
+      }
       const genRes = await generateCustomFocusCard(range, focusId)
       if (genRes.status === 'done' && genRes.card) {
+        showCustomFocus()
         mergeCustomFocusCard(genRes.card)
-        setCustomFocusInput('')
         Taro.showToast({ title: 'AI 关注已添加', icon: 'success' })
         return
       }
       if (!genRes.task_id) throw new Error('服务器未返回后台任务编号')
+      showCustomFocus()
       const pendingTask: PendingCustomFocusTask = {
         taskId: genRes.task_id,
         range,
@@ -986,14 +997,13 @@ function StatsPage() {
         createdAt: Date.now(),
       }
       savePendingCustomFocusTask(pendingTask)
-      setCustomFocusInput('')
       Taro.showToast({
         title: '已开始生成，可离开此页',
         icon: 'none',
       })
       void pollCustomFocusTask(pendingTask)
     } catch (e: unknown) {
-      await showUnifiedApiError(e, '添加 AI 关注失败')
+      await showUnifiedApiError(e, focusSaved ? '关注已保存，卡片生成失败' : '添加 AI 关注失败')
     } finally {
       setCustomFocusAdding(false)
     }
@@ -1003,16 +1013,18 @@ function StatsPage() {
     if (!focusId) return
     try {
       await removeHealthFocus(focusId)
+      readPendingCustomFocusTasks()
+        .filter(task => task.focusId === focusId)
+        .forEach(task => removePendingCustomFocusTask(task.taskId))
       const customKey = `custom:${focusId}`
       setSelectedRiskKeys(prev => {
         const next = prev.filter(key => key !== customKey)
-        const normalized = next.length > 0 ? next : DEFAULT_RISK_KEYS
         try {
-          Taro.setStorageSync(RISK_PREF_STORAGE_KEY, normalized)
+          Taro.setStorageSync(RISK_PREF_STORAGE_KEY, next)
         } catch {
           // ignore
         }
-        return normalized
+        return next
       })
       setData(prev => {
         if (!prev?.health_index) return prev
@@ -1036,6 +1048,16 @@ function StatsPage() {
       await showUnifiedApiError(e, '移除关注失败')
     }
   }, [range])
+
+  const confirmRemoveCustomFocus = useCallback((focusId: string, title: string) => {
+    Taro.showModal({
+      title: '移除自定义关注',
+      content: `移除「${title}」后会释放一个名额，确定继续吗？`,
+      success: (res) => {
+        if (res.confirm) void handleRemoveCustomFocus(focusId)
+      },
+    })
+  }, [handleRemoveCustomFocus])
 
   const handleRefreshCustomFocus = useCallback(async (card: RiskCard) => {
     if (!card.is_custom || customFocusRefreshingKey) return
@@ -1273,6 +1295,7 @@ function StatsPage() {
     })
     return merged
   })()
+  const addedCustomFocusCount = allRiskOptions.filter(item => item.is_custom).length
 
   const selectedRiskItems = selectedRiskKeys
     .map(key => allRiskOptions.find(item => item.key === key))
@@ -1296,7 +1319,9 @@ function StatsPage() {
   const focusScoreHint = hasVisibleCustomFocus
     ? '按全部核心指标与自定义 AI 指标综合计算'
     : '按全部核心关注指标综合计算'
-  const selectedRiskSummary = selectedRiskItems.map(item => item.short).join('、')
+  const selectedRiskSummary = selectedRiskItems.length > 0
+    ? selectedRiskItems.map(item => item.short).join('、')
+    : '暂无，点下方指标即可显示'
   const topIssues = healthIndex?.top_issues ?? []
   const actionList = healthIndex?.action_list ?? []
   const toggleSection = (key: string) => {
@@ -1324,16 +1349,15 @@ function StatsPage() {
     setSelectedRiskKeys(prev => {
       const exists = prev.includes(riskKey)
       const next = exists ? prev.filter(item => item !== riskKey) : [...prev, riskKey]
-      const normalized = next.length > 0 ? next : [riskKey]
       try {
-        Taro.setStorageSync(RISK_PREF_STORAGE_KEY, normalized)
+        Taro.setStorageSync(RISK_PREF_STORAGE_KEY, next)
       } catch {
         // ignore
       }
       if (riskDetailModal.card?.key === riskKey && exists) {
         setRiskDetailModal(prev => ({ ...prev, card: null }))
       }
-      return normalized
+      return next
     })
   }
 
@@ -1466,6 +1490,9 @@ function StatsPage() {
             </View>
           ))}
         </View>
+        {visibleRiskCards.length === 0 ? (
+          <Text className='risk-focus-empty'>还没有显示的关注方向，点击“我的关注”选择。</Text>
+        ) : null}
 
         {riskPickerVisible ? (
           <View
@@ -1484,7 +1511,7 @@ function StatsPage() {
                   <Text className='risk-focus-modal-subtitle'>选择你想优先看的健康方向</Text>
                 </View>
                 <View className='risk-focus-modal-count'>
-                  <Text className='risk-focus-modal-count-text'>已选 {selectedRiskItems.length}</Text>
+                  <Text className='risk-focus-modal-count-text'>显示 {selectedRiskItems.length} 项</Text>
                 </View>
               </View>
               <Text className='risk-focus-modal-summary'>当前：{selectedRiskSummary}</Text>
@@ -1511,7 +1538,7 @@ function StatsPage() {
               </View>
               {customFocusMeta ? (
                 <Text className='risk-custom-focus-meta'>
-                  今日剩余 {customFocusMeta.remaining_today}/{customFocusMeta.daily_limit} 次 · 最多 {customFocusMeta.max_focuses} 个
+                  自定义关注 {addedCustomFocusCount}/{customFocusMeta.max_focuses} 个 · 今日可生成 {customFocusMeta.remaining_today}/{customFocusMeta.daily_limit} 次
                 </Text>
               ) : null}
               <View className='risk-picker-grid risk-picker-grid--modal'>
@@ -1522,26 +1549,38 @@ function StatsPage() {
                     <View
                       key={item.key}
                       className={`risk-picker-chip ${active ? 'active' : ''} ${item.is_custom ? 'is-custom' : ''}`}
-                      onClick={() => toggleRiskPreference(item.key)}
-                      onLongPress={() => {
-                        if (item.is_custom && focusId) {
-                          Taro.showModal({
-                            title: '移除自定义关注',
-                            content: `确定移除「${item.title}」吗？`,
-                            success: (res) => {
-                              if (res.confirm) void handleRemoveCustomFocus(focusId)
-                            },
-                          })
-                        }
+                      onClick={() => {
+                        if (!item.is_custom) toggleRiskPreference(item.key)
                       }}
                     >
                       <Text className='risk-picker-chip__title'>
                         {item.title}
                         {item.is_custom ? ' · AI' : ''}
                       </Text>
-                      <Text className='risk-picker-chip__action'>
-                        {item.is_custom ? (active ? '长按移除' : '点按添加') : (active ? '显示中' : '点按添加')}
-                      </Text>
+                      {item.is_custom ? (
+                        <View className='risk-picker-chip__controls'>
+                          <Text
+                            className='risk-picker-chip__action'
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleRiskPreference(item.key)
+                            }}
+                          >
+                            {active ? '隐藏卡片' : '显示卡片'}
+                          </Text>
+                          <Text
+                            className='risk-picker-chip__remove'
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (focusId) confirmRemoveCustomFocus(focusId, item.title)
+                            }}
+                          >
+                            移除关注
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text className='risk-picker-chip__action'>{active ? '点按隐藏' : '点按显示'}</Text>
+                      )}
                     </View>
                   )
                 })}

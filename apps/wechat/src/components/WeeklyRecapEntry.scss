@@ -1,0 +1,7 @@
+.weekly-recap-entry { margin: 20rpx 0 28rpx; display: flex; align-items: center; gap: 20rpx; padding: 26rpx; border: 1rpx solid #e4ece5; border-radius: 24rpx; background: #f7faf6; }
+.weekly-recap-entry__mark { flex: none; width: 66rpx; line-height: 74rpx; text-align: center; border-radius: 10rpx 18rpx 18rpx 10rpx; background: #e0ecdb; color: #4c704f; font-size: 30rpx; }
+.weekly-recap-entry__copy { flex: 1; }
+.weekly-recap-entry__title { display: block; font-size: 29rpx; font-weight: 600; color: #34553d; }
+.weekly-recap-entry__description { display: block; font-size: 23rpx; margin-top: 8rpx; color: #7d8b7e; }
+.weekly-recap-entry__arrow { color: #7d8b7e; font-size: 34rpx; }
+.home-page--dark, .profile-page--dark { .weekly-recap-entry { background: #233126; border-color: #354839; } .weekly-recap-entry__title { color: #e2eddf; } .weekly-recap-entry__mark { background: #374e37; color: #d4e6c9; } }

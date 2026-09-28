@@ -64,7 +64,8 @@ func TestAnalyzeImageQwenEmptyResultFallsBackToQwen36WithoutThinking(t *testing.
 			svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 			result, err := svc.Analyze(context.Background(), "user-empty-fallback", AnalyzeInput{
-				ImageURL: "https://example.com/meal.jpg",
+				ImageURL:  "https://example.com/meal.jpg",
+				ModelName: qwen38FlashModel,
 			})
 
 			require.NoError(t, err)
@@ -92,7 +93,8 @@ func TestAnalyzeImageQwen38AndQwen36EmptyResultReturnsError(t *testing.T) {
 	svc.ConfigureImageModelTraffic(100, 0)
 
 	result, err := svc.Analyze(context.Background(), "user-empty-failure", AnalyzeInput{
-		ImageURL: "https://example.com/meal.jpg",
+		ImageURL:  "https://example.com/meal.jpg",
+		ModelName: qwen38FlashModel,
 	})
 
 	require.Error(t, err)

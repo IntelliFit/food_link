@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"food_link/backend/internal/billing"
 	"food_link/backend/internal/health/domain"
 	"food_link/backend/pkg/config"
 
@@ -53,8 +54,8 @@ func TestCampusDietAgentFunctionCallingQueriesContextAndFiveRealFoods(t *testing
 		case 2:
 			writeCampusDietAgentTestToolCall(t, w, "call-search", "search_campus_foods", `{"max_calories":400,"sort_by":"protein_density","limit":20}`)
 		default:
-			selections := make([]map[string]any, 0, 5)
-			for _, candidate := range candidates[:5] {
+			selections := make([]map[string]any, 0, 3)
+			for _, candidate := range candidates[:3] {
 				selections = append(selections, map[string]any{"source_id": candidate.SourceID, "reason": "高蛋白且适合本餐目标"})
 			}
 			writeCampusDietAgentTestFinal(t, w, map[string]any{"answer": "已核对真实数据", "selections": selections})
@@ -68,7 +69,7 @@ func TestCampusDietAgentFunctionCallingQueriesContextAndFiveRealFoods(t *testing
 	result := svc.runCampusDietAgent(context.Background(), state)
 
 	require.True(t, result.AgentUsed)
-	require.Len(t, result.Recommendation.Recommendations, 5)
+	require.Len(t, result.Recommendation.Recommendations, 3)
 	assert.Equal(t, campusDietAgentModel, result.Recommendation.GeneratedBy)
 	assert.Equal(t, 2, result.ToolCount)
 	for _, option := range result.Recommendation.Recommendations {
@@ -107,10 +108,13 @@ func TestCampusDietAgentReservesLastRoundForFinalAnswer(t *testing.T) {
 			writeCampusDietAgentTestToolCall(t, w, "call-search", "search_campus_foods", `{"limit":20}`)
 		case 3:
 			writeCampusDietAgentTestToolCall(t, w, "call-details", "get_campus_food_details", `{"source_ids":["food-1","food-2","food-3","food-4","food-5"]}`)
+		case 4, 5:
+			writeCampusDietAgentTestToolCall(t, w, fmt.Sprintf("call-compare-%d", call), "compare_campus_foods", `{"source_ids":["food-1","food-2"]}`)
 		default:
 			assert.Equal(t, "none", body["tool_choice"])
-			selections := make([]map[string]any, 0, 5)
-			for _, candidate := range candidates {
+			assert.NotContains(t, body, "tools")
+			selections := make([]map[string]any, 0, 3)
+			for _, candidate := range candidates[:3] {
 				selections = append(selections, map[string]any{"source_id": candidate.SourceID, "reason": "已核对"})
 			}
 			writeCampusDietAgentTestFinal(t, w, map[string]any{"answer": "完成最终解读", "selections": selections})
@@ -123,9 +127,9 @@ func TestCampusDietAgentReservesLastRoundForFinalAnswer(t *testing.T) {
 	)
 
 	require.True(t, result.AgentUsed)
-	assert.Equal(t, 4, call)
+	assert.Equal(t, campusDietAgentMaxRounds, call)
 	assert.NotContains(t, result.Answer, "AI 解读暂不可用")
-	require.Len(t, result.Recommendation.Recommendations, 5)
+	require.Len(t, result.Recommendation.Recommendations, 3)
 }
 
 func TestGeneratePetChatStreamRoutesCampusQuestionThroughAgentSSEWithoutFoodRecords(t *testing.T) {
@@ -145,8 +149,8 @@ func TestGeneratePetChatStreamRoutesCampusQuestionThroughAgentSSEWithoutFoodReco
 		case 2:
 			writeCampusDietAgentTestToolCall(t, w, "call-search", "search_campus_foods", `{"limit":20}`)
 		default:
-			selections := make([]map[string]any, 0, 5)
-			for _, candidate := range candidates {
+			selections := make([]map[string]any, 0, 3)
+			for _, candidate := range candidates[:3] {
 				selections = append(selections, map[string]any{"source_id": candidate.SourceID, "reason": "符合当前目标"})
 			}
 			writeCampusDietAgentTestFinal(t, w, map[string]any{"answer": "已完成", "selections": selections})
@@ -155,7 +159,7 @@ func TestGeneratePetChatStreamRoutesCampusQuestionThroughAgentSSEWithoutFoodReco
 	defer server.Close()
 
 	chunks, err := newCampusDietAgentTestService(repo, server.URL).GeneratePetChatStream(context.Background(), "user-1", PetChatInput{
-		Question: "我是清华学生，今天午餐吃什么？", Range: "week", NewSession: true,
+		Question: "我可以在清华大学食堂吃饭，今天午餐吃什么？", Range: "week", NewSession: true,
 	})
 	require.NoError(t, err)
 	types := make([]string, 0, 12)
@@ -178,13 +182,46 @@ func TestGeneratePetChatStreamRoutesCampusQuestionThroughAgentSSEWithoutFoodReco
 	assert.Contains(t, types, "chunk")
 	assert.Equal(t, "done", types[len(types)-1])
 	require.NotNil(t, dietResult)
-	require.Len(t, dietResult.Recommendation.Recommendations, 5)
+	require.Len(t, dietResult.Recommendation.Recommendations, 3)
 	require.NotNil(t, doneMeta)
 	assert.Equal(t, 1, doneMeta.CreditsCharged)
 	require.Len(t, repo.petChatMessages, 2)
 	assert.Equal(t, "diet_recommendation", repo.petChatMessages[1].MessageType)
 	assert.Contains(t, repo.petChatMessages[1].Meta, "diet_recommendation")
 	assert.Contains(t, repo.petChatMessages[1].Meta, "agent_run")
+	assert.Contains(t, repo.petChatMessages[1].Meta, "diet_decision_event")
+	assert.Equal(t, dietDecisionEngineVersion, dietResult.Recommendation.DecisionEngineVersion)
+	assert.ElementsMatch(t, []string{dietDecisionRoleHealth, dietDecisionRoleEasy, dietDecisionRoleBalanced}, []string{
+		dietResult.Recommendation.Recommendations[0].DecisionRole,
+		dietResult.Recommendation.Recommendations[1].DecisionRole,
+		dietResult.Recommendation.Recommendations[2].DecisionRole,
+	})
+}
+
+func TestChargeCampusDietAgentChargesOnceForMealSession(t *testing.T) {
+	guard := &mockStatsCreditGuard{}
+	svc := NewStatsService(&mockStatsRepo{}, nil)
+	svc.ConfigureCreditGuard(guard)
+	result := &CampusDietAgentResult{
+		AgentRunID:     "run-1",
+		AgentUsed:      true,
+		Recommendation: DietRecommendationResult{Recommendations: []DietRecommendationOption{{SourceID: "food-1"}}},
+		Usage:          billing.TokenUsage{InputTokens: 10, OutputTokens: 10, TotalTokens: 20},
+	}
+	mealContext := campusDietAgentMealContext{Date: "2026-09-26", MealType: "lunch"}
+
+	credits, status, _ := svc.chargeCampusDietAgent(context.Background(), "user-1", "session-1", result, false, mealContext)
+	assert.Equal(t, 1, credits)
+	assert.Equal(t, "campus_agent_fixed_credit", status)
+	require.Len(t, guard.sourceKeys, 1)
+	assert.Equal(t, "campus_diet_agent_meal:2026-09-26:lunch", guard.sourceKeys[0])
+
+	credits, status, pricing := svc.chargeCampusDietAgent(context.Background(), "user-1", "session-1", result, true, mealContext)
+	assert.Equal(t, 0, credits)
+	assert.Equal(t, "meal_session_included", status)
+	require.NotNil(t, pricing)
+	assert.Equal(t, 0, pricing.CreditsCharged)
+	assert.Len(t, guard.sourceKeys, 1)
 }
 
 func TestCampusDietAgentFactsFollowUpUsesExactActiveFoodValues(t *testing.T) {
@@ -253,9 +290,9 @@ func TestCampusDietAgentDatabaseFallbackHandlesFourTurnConstraintRefinement(t *t
 	svc := NewStatsService(repo, nil)
 
 	first := runCampusDietAgentStreamTurn(t, svc, PetChatInput{
-		Question: "我是清华大学的学生，今天想增肌，推荐一些增肌餐", Range: "week", NewSession: true,
+		Question: "我可以在清华大学食堂吃饭，今天想增肌，推荐一些增肌餐", Range: "week", NewSession: true,
 	})
-	require.Len(t, first.Recommendation.Recommendations, 5)
+	require.Len(t, first.Recommendation.Recommendations, 3)
 	assert.False(t, first.AgentUsed)
 	assertCampusDietOptionsMatch(t, first.Recommendation.Recommendations, func(option DietRecommendationOption) bool {
 		return option.Calories <= 1200
@@ -265,7 +302,7 @@ func TestCampusDietAgentDatabaseFallbackHandlesFourTurnConstraintRefinement(t *t
 	second := runCampusDietAgentStreamTurn(t, svc, PetChatInput{
 		Question: "你推荐这些价格太贵了，我需要更便宜的，20元以内最好", Range: "week", SessionID: "session-diet",
 	})
-	require.Len(t, second.Recommendation.Recommendations, 5)
+	require.Len(t, second.Recommendation.Recommendations, 3)
 	assertCampusDietOptionsMatch(t, second.Recommendation.Recommendations, func(option DietRecommendationOption) bool {
 		return option.Price > 0 && option.Price <= 20
 	})
@@ -279,7 +316,7 @@ func TestCampusDietAgentDatabaseFallbackHandlesFourTurnConstraintRefinement(t *t
 	third := runCampusDietAgentStreamTurn(t, svc, PetChatInput{
 		Question: "假如我想减脂呢？重新推荐500大卡以下的餐", Range: "week", SessionID: "session-diet",
 	})
-	require.Len(t, third.Recommendation.Recommendations, 5)
+	require.Len(t, third.Recommendation.Recommendations, 3)
 	assertCampusDietOptionsMatch(t, third.Recommendation.Recommendations, func(option DietRecommendationOption) bool {
 		return option.Calories <= 500 && option.Price > 0 && option.Price <= 20
 	})
@@ -295,7 +332,7 @@ func TestCampusDietAgentDatabaseFallbackHandlesFourTurnConstraintRefinement(t *t
 	fourth := runCampusDietAgentStreamTurn(t, svc, PetChatInput{
 		Question: "换一批", Range: "week", SessionID: "session-diet",
 	})
-	require.Len(t, fourth.Recommendation.Recommendations, 5)
+	require.Len(t, fourth.Recommendation.Recommendations, 3)
 	assertCampusDietOptionsMatch(t, fourth.Recommendation.Recommendations, func(option DietRecommendationOption) bool {
 		return option.Calories <= 500 && option.Price > 0 && option.Price <= 20
 	})
@@ -336,11 +373,11 @@ func TestCampusDietAgentRejectsInventedSourceIDAndMakesFallbackFree(t *testing.T
 	result := svc.runCampusDietAgent(context.Background(), newCampusDietAgentTestState("initial", nil))
 	require.False(t, result.AgentUsed)
 	assert.Equal(t, "invalid_model_selection", result.FallbackReason)
-	require.Len(t, result.Recommendation.Recommendations, 5)
+	require.Len(t, result.Recommendation.Recommendations, 3)
 	for _, option := range result.Recommendation.Recommendations {
 		assert.NotEqual(t, "invented-id", option.SourceID)
 	}
-	credits, status, pricing := svc.chargeCampusDietAgent(context.Background(), "user-1", "session-1", result)
+	credits, status, pricing := svc.chargeCampusDietAgent(context.Background(), "user-1", "session-1", result, false, campusDietAgentMealContext{})
 	assert.Zero(t, credits)
 	assert.Equal(t, "free_database_fallback", status)
 	assert.Nil(t, pricing)
@@ -362,7 +399,7 @@ func TestCampusDietAgentDeadlineStillReturnsDatabaseFallbackWithinReservedWindow
 	result := NewStatsService(repo, nil).campusDietAgentFallback(ctx, state, "model_timeout")
 
 	require.False(t, result.AgentUsed)
-	require.Len(t, result.Recommendation.Recommendations, 5)
+	require.Len(t, result.Recommendation.Recommendations, 3)
 	assert.Equal(t, "model_timeout", result.FallbackReason)
 	assert.Contains(t, result.Answer, "AI 解读暂不可用")
 }
@@ -379,7 +416,10 @@ func newCampusDietAgentTestService(repo *mockStatsRepo, baseURL string) *StatsSe
 func newCampusDietAgentTestState(intent string, active *DietRecommendationResult) *campusDietAgentRunState {
 	school := domain.DietRecommendationSchool{ID: "school-tsinghua", Name: "清华大学"}
 	return &campusDietAgentRunState{
-		RunID: "agent-run-test", UserID: "user-1", Question: "我是清华学生，今天吃什么",
+		// These legacy tool/selection tests assume a usable campus. Unknown
+		// access and identity-only inputs are covered separately by policy tests.
+		Constraints: CampusDietRecommendationConstraints{AllowedSchoolIDs: []string{"school-tsinghua"}},
+		RunID:       "agent-run-test", UserID: "user-1", Question: "我是清华学生，今天吃什么",
 		Intent: intent, School: school, ActiveResult: active,
 		ActiveSourceIDs: recommendationSourceIDsFromResult(active),
 		Candidates:      map[string]DietRecommendationCandidate{},
@@ -390,7 +430,7 @@ func campusDietAgentTestCandidates(count int) []domain.DietRecommendationCandida
 	result := make([]domain.DietRecommendationCandidate, 0, count)
 	for index := 0; index < count; index++ {
 		result = append(result, campusDietAgentTestCandidate(
-			fmt.Sprintf("food-%d", index+1), fmt.Sprintf("真实校园菜%d", index+1), 280+float64(index*20), 30+float64(index),
+			fmt.Sprintf("food-%d", index+1), fmt.Sprintf("真实校园牛肉饭%d", index+1), 280+float64(index*20), 30+float64(index),
 		))
 	}
 	return result
@@ -426,7 +466,7 @@ func campusDietAgentMultiTurnCandidates() []domain.DietRecommendationCandidate {
 	for _, item := range groups {
 		for index := 1; index <= 5; index++ {
 			candidate := campusDietAgentTestCandidate(
-				fmt.Sprintf("%s-%d", item.prefix, index), fmt.Sprintf("%s菜%d", item.prefix, index), item.calories, item.protein,
+				fmt.Sprintf("%s-%d", item.prefix, index), fmt.Sprintf("%s牛肉饭%d", item.prefix, index), item.calories, item.protein,
 			)
 			candidate.Fat = item.fat
 			candidate.Price = item.price

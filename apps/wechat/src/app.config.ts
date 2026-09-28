@@ -84,6 +84,7 @@ export default defineAppConfig({
   darkmode: false,
   pages: mainPages,
   subpackages: [
+    { root: 'packageRecap', name: 'recap', pages: ['pages/recap/index'] },
     {
       root: 'packageExtra',
       name: 'extra',

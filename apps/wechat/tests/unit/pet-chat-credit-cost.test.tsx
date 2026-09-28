@@ -24,6 +24,7 @@ jest.mock('../../src/utils/api', () => ({
 
 jest.mock('../../src/utils/weapp-privacy', () => ({
   chooseImageWithPrivacy: jest.fn(),
+  ensureWeappPrivacyAuthorized: jest.fn(() => Promise.resolve()),
   isPrivacyAuthorizeError: jest.fn(() => false),
   showPrivacyAuthorizeFailure: jest.fn(),
 }))
@@ -55,6 +56,22 @@ describe('pet chat credit cost', () => {
     jest.useRealTimers()
   })
 
+  it('gets location only after a tap and passes it into the recommendation request', async () => {
+    const locate = jest.fn().mockResolvedValue({ latitude: 40, longitude: 116, accuracy: 30 })
+    ;(Taro as unknown as { getLocation: jest.Mock }).getLocation = locate
+    render(<PetChatPage />)
+    expect(locate).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.click(screen.getByText('使用当前位置'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(locate).toHaveBeenCalledWith({ type: 'gcj02' })
+    expect(screen.getByText('已使用当前位置 · 更新')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('发送'))
+    expect((streamGeneratePetChat as jest.Mock).mock.calls[0][8]).toEqual(expect.objectContaining({ latitude: 40, longitude: 116, coordinate_type: 'gcj02' }))
+  })
+
   it('fills a quick question, shows its estimate, then allows sending', async () => {
     render(<PetChatPage />)
 
@@ -80,6 +97,8 @@ describe('pet chat credit cost', () => {
       expect.any(Object),
       false,
       [],
+      undefined,
+      undefined,
     )
   })
 
@@ -105,6 +124,8 @@ describe('pet chat credit cost', () => {
       expect.any(Object),
       true,
       [],
+      undefined,
+      undefined,
     )
   })
 
@@ -144,10 +165,12 @@ describe('pet chat credit cost', () => {
       expect.any(Object),
       false,
       ['https://cdn-food-images.example.com/pet-chat/meal.jpg'],
+      undefined,
+      undefined,
     )
   })
 
-  it('renders Agent progress and five evidence-backed campus cards from the unified stream', async () => {
+  it('renders Agent progress and three decision-engine campus choices from the unified stream', async () => {
     render(<PetChatPage />)
 
     fireEvent.click(screen.getByText('今天吃什么'))
@@ -155,7 +178,9 @@ describe('pet chat credit cost', () => {
     fireEvent.click(screen.getByText('发送'))
 
     const callbacks = (streamGeneratePetChat as jest.Mock).mock.calls[0][4]
-    const recommendations = Array.from({ length: 5 }, (_, index) => ({
+    const decisionRoles = ['health_goal', 'easy_to_follow', 'balanced_best'] as const
+    const decisionLabels = ['最符合健康目标', '最容易坚持', '综合最优']
+    const recommendations = Array.from({ length: 3 }, (_, index) => ({
       title: `校园菜${index + 1}`,
       reason: '由 Agent 根据真实工具结果选择',
       source: 'public_food_library',
@@ -172,6 +197,9 @@ describe('pet chat credit cost', () => {
       nutrition_basis: index === 0 ? 'library_estimate' : 'library_record',
       weight_method: index === 0 ? 'visual_estimate' : undefined,
       weight_confidence: index === 0 ? 0.68 : undefined,
+      decision_role: decisionRoles[index],
+      decision_label: decisionLabels[index],
+      decision_score: 92 - index * 3,
     }))
 
     await act(async () => {
@@ -191,6 +219,7 @@ describe('pet chat credit cost', () => {
           generated_by: 'qwen3.8-flash',
           ai_used: true,
           ai_rerank_count: 20,
+          decision_engine_version: 'foodlink-diet-decision-v1',
           resolved_school: { id: 'thu-id', name: '清华大学' },
         },
       })
@@ -198,10 +227,82 @@ describe('pet chat credit cost', () => {
       callbacks.onDone({ session_id: 'session-campus' })
     })
 
-    expect(screen.getByText('真实校园食物库 · Agent 工具核对 20 道')).toBeInTheDocument()
+    expect(screen.getByText('真实校园食物库 · 决策引擎选择 · AI 负责解释')).toBeInTheDocument()
     expect(screen.getByText('校园菜1')).toBeInTheDocument()
-    expect(screen.getByText('校园菜5')).toBeInTheDocument()
+    expect(screen.getByText('校园菜3')).toBeInTheDocument()
+    expect(screen.getByText('最符合健康目标')).toBeInTheDocument()
+    expect(screen.getByText('最容易坚持')).toBeInTheDocument()
+    expect(screen.getByText('综合最优')).toBeInTheDocument()
+    expect(screen.getByText('该取向匹配度 92 分')).toBeInTheDocument()
     expect(screen.getByText('≈286 kcal')).toBeInTheDocument()
     expect(screen.getByText('库内估算 · 份量 183g · 视觉估重 · 置信度 68%')).toBeInTheDocument()
+  })
+
+  it('opens the selected original food from a composed meal and handles cancellation', async () => {
+    const choose = jest.fn().mockResolvedValue({ tapIndex: 1 })
+    ;(Taro as unknown as { showActionSheet: jest.Mock }).showActionSheet = choose
+    render(<PetChatPage />)
+    fireEvent.click(screen.getByText('今天吃什么'))
+    fireEvent.click(screen.getByText('发送'))
+    const callbacks = (streamGeneratePetChat as jest.Mock).mock.calls[0][4]
+    const components = [
+      { title: '蒸鸡肉', source: 'public_food_library', source_id: 'meat', price: 12, price_unit: '元/份', is_campus_food: true },
+      { title: '米饭', source: 'public_food_library', source_id: 'rice', price: 2, price_unit: '元/份', is_campus_food: true },
+    ]
+    await act(async () => {
+      callbacks.onDietResult({ recommendation: {
+        scene: 'eat_out', title: '整餐建议', summary: '按记录份量合计', generated_by: 'qwen3.8-flash', ai_used: true,
+        calorie_remaining: 600, macro_gaps: { calories: 600, protein: 40, carbs: 80, fat: 20 },
+        recommendations: [{ title: '蒸鸡肉 + 米饭', source: 'meal_plan', source_id: 'meal:test', calories: 440,
+          protein: 34, carbs: 50, fat: 12, price: 14, price_unit: '元/餐', items: [], meal_components: components }],
+      } })
+      callbacks.onDone({ session_id: 'composed-meal-session' })
+    })
+    await act(async () => { fireEvent.click(screen.getByText(/查看组合中的菜品/)) })
+    expect(choose).toHaveBeenCalledWith({ itemList: ['蒸鸡肉', '米饭'] })
+    expect(Taro.navigateTo).toHaveBeenCalledWith({ url: '/packageExtra/pages/food-library-detail/index?id=rice&scene=campus' })
+    ;(Taro.navigateTo as jest.Mock).mockClear()
+    choose.mockRejectedValueOnce(new Error('cancel'))
+    await act(async () => { fireEvent.click(screen.getByText(/查看组合中的菜品/)) })
+    expect(Taro.navigateTo).not.toHaveBeenCalled()
+  })
+
+  it('keeps the home meal advice visible and appends a training context before sending', () => {
+    ;(Taro.useLoad as jest.Mock).mockImplementation((callback: (options: Record<string, string>) => void) => callback({
+      entry: 'home_next_meal',
+      date: '2026-09-26',
+      meal_type: 'lunch',
+      meal_label: encodeURIComponent('午餐'),
+      advice: encodeURIComponent('优先补蛋白，搭配适量主食'),
+      starter: encodeURIComponent('今天午餐吃什么？'),
+    }))
+
+    render(<PetChatPage />)
+
+    expect(screen.getByText('来自首页 · 下一餐建议')).toBeInTheDocument()
+    expect(screen.getByText('基础建议：优先补蛋白，搭配适量主食')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('宠物头像')).toHaveLength(1)
+
+    fireEvent.click(screen.getByText('刚训练完'))
+    expect(screen.getByRole('textbox')).toHaveValue('今天午餐吃什么？ 补充：刚训练完')
+    fireEvent.click(screen.getByText('发送'))
+
+    expect(streamGeneratePetChat).toHaveBeenCalledWith(
+      '今天午餐吃什么？ 补充：刚训练完',
+      'week',
+      '',
+      true,
+      expect.any(Object),
+      false,
+      [],
+      {
+        source: 'home_next_meal',
+        date: '2026-09-26',
+        meal_type: 'lunch',
+        meal_label: '午餐',
+        basic_advice: '优先补蛋白，搭配适量主食',
+      },
+      undefined,
+    )
   })
 })

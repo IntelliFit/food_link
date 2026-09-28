@@ -882,6 +882,36 @@ func TestStatsService_NormalizePetChatInputAcceptsOwnedImageAndDefaultsQuestion(
 	assert.Equal(t, []string{"https://cdn-food-images.example.com/uploads/user-1/meal.jpg"}, input.ImageURLs)
 }
 
+func TestStatsService_NormalizePetChatInputKeepsValidHomeMealContext(t *testing.T) {
+	svc := &StatsService{}
+	input, err := svc.normalizePetChatInput(PetChatInput{
+		Question: "今天午餐吃什么？",
+		EntryContext: &PetChatEntryContext{
+			Source: "home_next_meal", Date: "2026-09-26", MealType: "lunch",
+			MealLabel: "午餐", BasicAdvice: "优先补蛋白，搭配适量主食",
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, input.EntryContext)
+	assert.Equal(t, "2026-09-26:lunch", input.EntryContext.Date+":"+input.EntryContext.MealType)
+}
+
+func TestStatsService_ResolvePetChatSessionStoresHomeMealKey(t *testing.T) {
+	svc := NewStatsService(&mockStatsRepo{}, nil)
+	session, err := svc.resolvePetChatSession(context.Background(), "u1", PetChatInput{
+		NewSession: true,
+		EntryContext: &PetChatEntryContext{
+			Source: "home_next_meal", Date: "2026-09-26", MealType: "lunch",
+			MealLabel: "午餐", BasicAdvice: "优先补蛋白",
+		},
+	}, &statsComputation{StatsRange: "week"}, "今天午餐吃什么？")
+
+	require.NoError(t, err)
+	assert.Equal(t, "2026-09-26:lunch", session.Meta["meal_key"])
+	assert.Equal(t, "home_next_meal", session.Meta["source"])
+}
+
 func TestStatsService_NormalizePetChatInputRejectsForeignImage(t *testing.T) {
 	svc := NewStatsService(&mockStatsRepo{}, &mockBodyMetricsProvider{}, &config.Config{
 		Storage: config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn-food-images.example.com"},
@@ -1325,7 +1355,11 @@ func TestStatsService_GenerateDietRecommendationUsesCandidatesFallback(t *testin
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "rule_fallback", result.GeneratedBy)
-	assert.Len(t, result.Recommendations, 5)
+	assert.Len(t, result.Recommendations, 3)
+	assert.Equal(t, dietDecisionEngineVersion, result.DecisionEngineVersion)
+	assert.Equal(t, dietDecisionRoleHealth, result.Recommendations[0].DecisionRole)
+	assert.Equal(t, dietDecisionRoleEasy, result.Recommendations[1].DecisionRole)
+	assert.Equal(t, dietDecisionRoleBalanced, result.Recommendations[2].DecisionRole)
 	assert.NotEmpty(t, result.Recommendations[0].Source)
 	assert.NotEmpty(t, result.Recommendations[0].Items[0].Source)
 }

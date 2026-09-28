@@ -67,14 +67,14 @@ func TestCampusDietAgentLiveFourTurnTsinghuaConversation(t *testing.T) {
 	}
 
 	first := runTurn("我是清华大学的学生，今天想增肌，推荐一些增肌餐")
-	require.Len(t, first.Recommendation.Recommendations, 5)
+	require.Len(t, first.Recommendation.Recommendations, 3)
 	assertCampusDietOptionsMatch(t, first.Recommendation.Recommendations, func(option DietRecommendationOption) bool {
 		return option.Calories <= 1200
 	})
 	firstIDs := recommendationSourceIDsFromResult(&first.Recommendation)
 
 	second := runTurn("这些价格太贵了，我需要更便宜的，20元以内最好")
-	require.Len(t, second.Recommendation.Recommendations, 5)
+	require.Len(t, second.Recommendation.Recommendations, 3)
 	assertCampusDietOptionsMatch(t, second.Recommendation.Recommendations, func(option DietRecommendationOption) bool {
 		return option.Price > 0 && option.Price <= 20 && campusDietLiveOptionHasComparableMealPrice(option)
 	})
@@ -82,7 +82,7 @@ func TestCampusDietAgentLiveFourTurnTsinghuaConversation(t *testing.T) {
 	assertNoCampusDietIDOverlap(t, firstIDs, secondIDs)
 
 	third := runTurn("假如我想减脂呢？重新推荐500大卡以下的餐")
-	require.Len(t, third.Recommendation.Recommendations, 5)
+	require.Len(t, third.Recommendation.Recommendations, 3)
 	assertCampusDietOptionsMatch(t, third.Recommendation.Recommendations, func(option DietRecommendationOption) bool {
 		return option.Price > 0 && option.Price <= 20 && option.Calories <= 500 && campusDietLiveOptionHasComparableMealPrice(option)
 	})
@@ -90,7 +90,7 @@ func TestCampusDietAgentLiveFourTurnTsinghuaConversation(t *testing.T) {
 	assertNoCampusDietIDOverlap(t, secondIDs, thirdIDs)
 
 	fourth := runTurn("换一批，继续保持刚才的条件")
-	require.Len(t, fourth.Recommendation.Recommendations, 5)
+	require.Len(t, fourth.Recommendation.Recommendations, 3)
 	assertCampusDietOptionsMatch(t, fourth.Recommendation.Recommendations, func(option DietRecommendationOption) bool {
 		return option.Price > 0 && option.Price <= 20 && option.Calories <= 500 && campusDietLiveOptionHasComparableMealPrice(option)
 	})

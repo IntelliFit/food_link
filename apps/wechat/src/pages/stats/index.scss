@@ -796,6 +796,17 @@ $stats-blue-soft: #7aa9ce;
   gap: 20rpx;
 }
 
+.risk-focus-empty {
+  display: block;
+  margin: 0 32rpx 28rpx;
+  padding: 24rpx;
+  border-radius: 20rpx;
+  background: #f8fafc;
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #64748b;
+}
+
 .risk-manage-card {
   .card-title {
     font-size: 30rpx;
@@ -878,6 +889,26 @@ $stats-blue-soft: #7aa9ce;
 .risk-picker-chip.active .risk-picker-chip__action {
   color: #2f7f62;
   font-weight: 600;
+}
+
+.risk-picker-chip__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-top: 8rpx;
+}
+
+.risk-picker-chip__controls .risk-picker-chip__action {
+  margin-top: 0;
+}
+
+.risk-picker-chip__remove {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 600;
+  color: #b45348;
 }
 
 .risk-focus-modal {

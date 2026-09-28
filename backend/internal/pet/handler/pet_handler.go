@@ -12,6 +12,7 @@ import (
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
+	healthdomain "food_link/backend/internal/health/domain"
 	healthservice "food_link/backend/internal/health/service"
 	"food_link/backend/internal/pet/service"
 	"food_link/backend/pkg/logger"
@@ -189,12 +190,14 @@ func (h *PetHandler) CustomizePixelAvatar(c *gin.Context) {
 }
 
 type petChatRequest struct {
-	Question       string   `json:"question"`
-	Range          string   `json:"range"`
-	SessionID      string   `json:"session_id"`
-	NewSession     bool     `json:"new_session"`
-	EnableThinking bool     `json:"enable_thinking"`
-	ImageURLs      []string `json:"image_urls"`
+	Location       *healthdomain.DietLocation         `json:"location,omitempty"`
+	EntryContext   *healthservice.PetChatEntryContext `json:"entry_context,omitempty"`
+	Question       string                             `json:"question"`
+	Range          string                             `json:"range"`
+	SessionID      string                             `json:"session_id"`
+	NewSession     bool                               `json:"new_session"`
+	EnableThinking bool                               `json:"enable_thinking"`
+	ImageURLs      []string                           `json:"image_urls"`
 }
 
 type petChatAppendRequest struct {
@@ -225,6 +228,7 @@ func (h *PetHandler) EstimateChat(c *gin.Context) {
 		slog.Bool("enable_thinking", req.EnableThinking),
 	)
 	data, err := h.chat.EstimatePetChat(c.Request.Context(), userID, healthservice.PetChatInput{
+		Location: req.Location, EntryContext: req.EntryContext,
 		Question:       strings.TrimSpace(req.Question),
 		Range:          strings.TrimSpace(req.Range),
 		EnableThinking: req.EnableThinking,
@@ -267,6 +271,7 @@ func (h *PetHandler) Chat(c *gin.Context) {
 		slog.Bool("enable_thinking", req.EnableThinking),
 	)
 	data, err := h.chat.GeneratePetChat(c.Request.Context(), userID, healthservice.PetChatInput{
+		Location: req.Location, EntryContext: req.EntryContext,
 		Question:       strings.TrimSpace(req.Question),
 		Range:          strings.TrimSpace(req.Range),
 		SessionID:      strings.TrimSpace(req.SessionID),
@@ -311,6 +316,7 @@ func (h *PetHandler) ChatStream(c *gin.Context) {
 		slog.Bool("enable_thinking", req.EnableThinking),
 	)
 	chunkChan, err := h.chat.GeneratePetChatStream(c.Request.Context(), userID, healthservice.PetChatInput{
+		Location: req.Location, EntryContext: req.EntryContext,
 		Question:       strings.TrimSpace(req.Question),
 		Range:          strings.TrimSpace(req.Range),
 		SessionID:      strings.TrimSpace(req.SessionID),

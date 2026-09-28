@@ -119,6 +119,12 @@ import {
   type MealPosterSharePayload,
 } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
+import { FloatingPetEntry } from '../../components/FloatingPetEntry'
+import { WeeklyRecapEntry } from '../../components/WeeklyRecapEntry'
+import { useSocialInbox } from '../../hooks/useSocialInbox'
+import { socialInboxTotal } from '../../utils/social-inbox'
+import { HomeModule, HomeModuleManager } from './components/HomeModuleManager'
+import { homeLayoutOwner, homeModuleLocks, readHomeModuleLayout, saveHomeModuleLayout } from './utils/home-module-layout'
 import { PetAvatar } from '../../components/PetAvatar'
 import { isHealthProfileReminderSnoozed, snoozeHealthProfileReminder } from '../../utils/health-profile-reminder'
 import {
@@ -130,6 +136,7 @@ import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../utils/pet-events'
 import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
 import { openPetChat } from '../../utils/pet-navigation'
+import { inferDefaultMealTypeFromLocalTime } from '../../utils/infer-default-meal-type'
 import {
   ANALYZE_TASK_REMINDER_CHANGED_EVENT,
   ANALYZE_TASK_REMINDER_OPEN_KEY,
@@ -146,6 +153,11 @@ import {
   normalizeHiddenMicronutrientKeys,
   type HomeMicronutrientKey,
 } from './utils/micronutrientPreferences'
+import {
+  buildNextMealGuidance,
+  nextMealLabel,
+  normalizeNextMainMeal,
+} from './utils/next-meal-guidance'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
@@ -158,7 +170,6 @@ const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
-const HOME_PET_MEAL_PROMPT_SEEN_KEY = 'home_pet_meal_prompt_seen_v1'
 const CANVAS_ICON_FONT_SOURCE = __ICON_CDN_BASE_URL__
   ? `url("${__ICON_CDN_BASE_URL__.replace(/\/+$/, '')}/iconfont.ttf")`
   : ''
@@ -203,30 +214,6 @@ function getLastHomeSelectedDate(fallback: string): string {
     if (isValidHomeDate(stored)) return stored
   } catch (_) {}
   return isValidHomeDate(fallback) ? fallback : formatDateKey(new Date())
-}
-
-function homeMealPromptSeenKey(date: string, mealType: string): string {
-  const userID = String(Taro.getStorageSync('user_id') || '').trim()
-  return `${userID || 'guest'}:${date}:${mealType}`
-}
-
-function hasSeenHomeMealPrompt(date: string, mealType: string): boolean {
-  try {
-    const stored = Taro.getStorageSync(HOME_PET_MEAL_PROMPT_SEEN_KEY)
-    return Boolean(stored && typeof stored === 'object' && stored[homeMealPromptSeenKey(date, mealType)] === true)
-  } catch (_) {
-    return false
-  }
-}
-
-function markHomeMealPromptSeen(date: string, mealType: string): void {
-  try {
-    const current = Taro.getStorageSync(HOME_PET_MEAL_PROMPT_SEEN_KEY)
-    const next = current && typeof current === 'object' ? { ...current } : {}
-    next[homeMealPromptSeenKey(date, mealType)] = true
-    const entries = Object.entries(next).slice(-30)
-    Taro.setStorageSync(HOME_PET_MEAL_PROMPT_SEEN_KEY, Object.fromEntries(entries))
-  } catch (_) {}
 }
 
 function getTodayLocalDateKey(): string {
@@ -864,6 +851,12 @@ const MACRO_CONFIGS: Array<{
 function IndexPage() {
   const { scheme } = useAppColorScheme()
   const [homeExperienceConfig, setHomeExperienceConfig] = React.useState(getStoredHomeExperienceConfig)
+  const [moduleLayout, setModuleLayout] = React.useState(readHomeModuleLayout)
+  const [showHomeModuleManager, setShowHomeModuleManager] = React.useState(false)
+  const moduleOwner = React.useRef(homeLayoutOwner())
+  const socialInbox = useSocialInbox()
+  useDidShow(() => { setModuleLayout(readHomeModuleLayout()); setShowHomeModuleManager(false) })
+  useDidHide(() => setShowHomeModuleManager(false))
   const [hiddenMicronutrientKeys, setHiddenMicronutrientKeys] = React.useState<HomeMicronutrientKey[]>(getStoredHiddenMicronutrientKeys)
   const initialSelectedDate = formatDateKey(new Date())
   const initialHomeSelectedDate = initialSelectedDate
@@ -1009,8 +1002,12 @@ function IndexPage() {
 
   const promptLoginCheckIn = React.useCallback(async (center: RewardCenterResponse | null) => {
     const checkIn = center?.check_in
-    if (!checkIn || checkIn.claimed_today || promptedLoginCheckInDateRef.current === checkIn.today) return
-    promptedLoginCheckInDateRef.current = checkIn.today
+    if (!checkIn || checkIn.claimed_today) return
+    const token = getAccessToken()
+    const snoozeKey = `home_check_in_snooze_v1:${homeLayoutOwner()}`
+    const promptKey = `${homeLayoutOwner()}:${checkIn.today}`
+    if (promptedLoginCheckInDateRef.current === promptKey || Taro.getStorageSync(snoozeKey) === checkIn.today) return
+    promptedLoginCheckInDateRef.current = promptKey
     const { confirm } = await Taro.showModal({
       title: '每日签到',
       content: `连续签到第 ${checkIn.streak_days} 天，今天可领取 ${checkIn.reward_amount} 积分。断签后会从第 1 天重新计算。`,
@@ -1018,7 +1015,8 @@ function IndexPage() {
       cancelText: '稍后再签',
       confirmColor: '#0fb47c',
     })
-    if (!confirm) return
+    if (getAccessToken() !== token) return
+    if (!confirm) { try { Taro.setStorageSync(snoozeKey, checkIn.today) } catch { /* This visit still stays quiet. */ } return }
     try {
       const result = await claimLoginCheckIn()
       Taro.showToast({ title: `签到成功，+${result.reward_amount}积分`, icon: 'success' })
@@ -1055,7 +1053,7 @@ function IndexPage() {
   const [mealActionRecord, setMealActionRecord] = React.useState<FoodRecord | null>(null)
   const mealFavoriteInFlightRef = React.useRef(false)
   const [showRecordEditModal, setShowRecordEditModal] = React.useState(false)
-  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide
+  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || showHomeModuleManager
   const [showRecordPosterModal, setShowRecordPosterModal] = React.useState(false)
   /** 同一餐次多条记录时的选择面板 */
   const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = React.useState(false)
@@ -2519,6 +2517,37 @@ function IndexPage() {
   const fatTargetRaw = normalizeDisplayNumber(intakeData.macros.fat.target)
   const fatRingPct = Math.min(100, calculateProgressPercent(fatCur, fatTargetRaw))
 
+  const nextMealType = normalizeNextMainMeal(
+    petSummary?.meal_prompt?.meal_type || inferDefaultMealTypeFromLocalTime()
+  )
+  const nextMealName = nextMealLabel(nextMealType)
+  const nextMealGuidance = React.useMemo(() => buildNextMealGuidance({
+    calories: { current: totalCurrent, target: totalTarget },
+    protein: { current: proteinCur, target: proteinTargetRaw },
+    carbs: { current: carbsCur, target: carbsTargetRaw },
+    fat: { current: fatCur, target: fatTargetRaw },
+  }), [
+    carbsCur,
+    carbsTargetRaw,
+    fatCur,
+    fatTargetRaw,
+    proteinCur,
+    proteinTargetRaw,
+    totalCurrent,
+    totalTarget,
+  ])
+  const showNextMealGuidance = !isGuest && isTodayRecordDate(selectedDate)
+  const openNextMealGuidance = React.useCallback(() => {
+    openPetChat({
+      source: 'home_next_meal',
+      date: selectedDate,
+      mealType: nextMealType,
+      mealLabel: nextMealName,
+      basicAdvice: nextMealGuidance.title,
+      starterQuestion: `今天${nextMealName}吃什么？请按“${nextMealGuidance.title}”先给我一个具体方案，我还可以补充训练和用餐场景。`,
+    })
+  }, [nextMealGuidance.title, nextMealName, nextMealType, selectedDate])
+
   const waterDraftMl = parseCompleteNumber(waterInput)
   const showWaterAddFooter =
     waterInputFocused || (waterDraftMl != null && waterDraftMl > 0)
@@ -2678,30 +2707,7 @@ function IndexPage() {
     return undefined
   }, [analyzeReminder])
 
-  const petMealReminder = React.useMemo(() => {
-    const prompt = petSummary?.meal_prompt
-    if (!prompt || petHidden || !getAccessToken()) return undefined
-    if (hasSeenHomeMealPrompt(selectedDate, prompt.meal_type)) return undefined
-    return {
-      text: prompt.text,
-      tone: 'meal' as const,
-      starterQuestion: prompt.starter_question,
-      mealType: prompt.meal_type,
-    }
-  }, [petHidden, petSummary?.meal_prompt, selectedDate])
-
-  const petReminder = petAnalyzeReminder || petMealReminder
-
-  React.useEffect(() => {
-    if (petAnalyzeReminder || !petMealReminder) return
-    markHomeMealPromptSeen(selectedDate, petMealReminder.mealType)
-  }, [petAnalyzeReminder, petMealReminder, selectedDate])
-
   const handlePetAnalyzeReminderPress = React.useCallback(() => {
-    if (!petAnalyzeReminder && petMealReminder) {
-      openPetChat(petMealReminder.starterQuestion)
-      return
-    }
     if (!analyzeReminder.taskId) {
       openPetChat()
       return
@@ -2714,7 +2720,7 @@ function IndexPage() {
     void openAnalyzeTaskFromReminder(analyzeReminder.taskId).finally(() => {
       setTimeout(() => void refreshAnalyzeReminder(), 600)
     })
-  }, [analyzeReminder.kind, analyzeReminder.taskId, petAnalyzeReminder, petMealReminder, refreshAnalyzeReminder])
+  }, [analyzeReminder.kind, analyzeReminder.taskId, refreshAnalyzeReminder])
 
   const handleShareDailyPosterImage = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -3064,6 +3070,7 @@ function IndexPage() {
   }, [homeExperienceConfig.mode])
 
   const isWellnessMode = homeExperienceConfig.mode === 'wellness'
+  const moduleLocks = homeModuleLocks(supplementSummary.planned_count > 0, expirySummary.items.some(item => ['overdue', 'today', 'soon'].includes(item.urgency_level)))
 
   return (
     <View
@@ -3093,9 +3100,14 @@ function IndexPage() {
             />
           )}
           onPetPress={openPetChat}
-          petReminder={petReminder}
+          petReminder={petAnalyzeReminder}
           onPetReminderPress={handlePetAnalyzeReminderPress}
         />
+
+        <View className='home-layout-toolbar'>
+          {!isGuest && socialInboxTotal(socialInbox) > 0 ? <View className='home-social-inbox' role='button' onClick={() => void Taro.switchTab({ url: '/pages/community/index' })}><Text>圈子</Text><Text className='home-social-inbox__badge'>{socialInboxTotal(socialInbox) > 99 ? '99+' : socialInboxTotal(socialInbox)}</Text><Text>条提醒 ›</Text></View> : <View />}
+          <View className='home-layout-toolbar__edit' role='button' onClick={() => { moduleOwner.current = homeLayoutOwner(); setShowHomeModuleManager(true) }}><Text>整理首页</Text></View>
+        </View>
 
         {!getAccessToken() && (
           <View
@@ -3155,9 +3167,41 @@ function IndexPage() {
 
         <View
           key={homeExperienceConfig.mode}
-          className={`home-experience-stage home-experience-stage--${homeExperienceConfig.mode}`}
+          className={`home-experience-stage home-module-list home-experience-stage--${homeExperienceConfig.mode}`}
         >
 
+        <HomeModule id='nextMeal' layout={moduleLayout} locks={moduleLocks}>
+        {showNextMealGuidance && (
+          <View
+            className={`next-meal-guidance${dashboardBusy ? ' is-loading' : ''}`}
+            onClick={dashboardBusy ? undefined : openNextMealGuidance}
+          >
+            {dashboardBusy ? (
+              <View className='next-meal-guidance__skeleton' aria-label='正在准备下一餐建议'>
+                <View className='next-meal-guidance__skeleton-short' />
+                <View className='next-meal-guidance__skeleton-long' />
+                <View className='next-meal-guidance__skeleton-medium' />
+              </View>
+            ) : (
+              <>
+                <View className='next-meal-guidance__head'>
+                  <Text className='next-meal-guidance__kicker'>下一餐 · {nextMealName}</Text>
+                  <Text className='next-meal-guidance__badge'>基础建议</Text>
+                </View>
+                <Text className='next-meal-guidance__title'>{nextMealGuidance.title}</Text>
+                <Text className='next-meal-guidance__detail'>{nextMealGuidance.detail}</Text>
+                <View className='next-meal-guidance__footer'>
+                  <Text className='next-meal-guidance__cost'>具体方案 1 积分</Text>
+                  <Text className='next-meal-guidance__action'>查看并调整 ›</Text>
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        </HomeModule>
+
+        <HomeModule id='diet' layout={moduleLayout} locks={moduleLocks}>
         {/* 养生模式使用表盘；均衡模式保留横向热量卡。两者复用同一份营养数据。 */}
         {isWellnessMode ? (
           <View className='wellness-overview-card home-experience-card'>
@@ -3218,14 +3262,6 @@ function IndexPage() {
                 </View>
               </View>
             </View>
-
-            {!dashboardBusy && !isGuest && (
-              <TodaySupplementsSection
-                summary={supplementSummary}
-                canQuickRecord={isTodayRecordDate(selectedDate)}
-                onRecorded={setSupplementSummary}
-              />
-            )}
 
             <View className={`nutrition-expand-shell wellness-nutrition-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
               <View className='nutrition-expand-main' onClick={() => setNutritionExpanded((value) => !value)}>
@@ -3309,14 +3345,6 @@ function IndexPage() {
               />
             </View>
           </View>
-
-          {!dashboardBusy && !isGuest && (
-            <TodaySupplementsSection
-              summary={supplementSummary}
-              canQuickRecord={isTodayRecordDate(selectedDate)}
-              onRecorded={setSupplementSummary}
-            />
-          )}
 
           <View className={`nutrition-expand-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
             <View
@@ -3412,6 +3440,13 @@ function IndexPage() {
         </View>
         )}
 
+        </HomeModule>
+
+        <HomeModule id='supplements' layout={moduleLayout} locks={moduleLocks}>
+        {!dashboardBusy && !isGuest && <View className='home-supplement-module'><TodaySupplementsSection summary={supplementSummary} canQuickRecord={isTodayRecordDate(selectedDate)} onRecorded={setSupplementSummary} /></View>}
+        </HomeModule>
+
+        <HomeModule id='rewards' layout={moduleLayout} locks={moduleLocks}>
         {showRewardHint && (
           <View className='home-reward-hint-swiper'>
             <Swiper
@@ -3463,6 +3498,9 @@ function IndexPage() {
           </View>
         )}
 
+        </HomeModule>
+
+        <HomeModule id='body' layout={moduleLayout} locks={moduleLocks}>
         {/* 体重/喝水状态卡片 */}
         <View className='body-status-section home-experience-card'>
           {/* 体重卡片 */}
@@ -3563,6 +3601,9 @@ function IndexPage() {
           </View>
         </View>
 
+        </HomeModule>
+
+        <HomeModule id='meals' layout={moduleLayout} locks={moduleLocks}>
         {/* 今日餐食区域 */}
         <View className='meals-section home-experience-card'>
           <View className='section-header'>
@@ -3721,6 +3762,9 @@ function IndexPage() {
           </View>
         </View>
 
+        </HomeModule>
+
+        <HomeModule id='expiry' layout={moduleLayout} locks={moduleLocks}>
         {/* 食物保质期：快到期提醒（数据来自首页 dashboard） */}
         {showFoodExpiryBlock && (
           <View className='expiry-section home-experience-card'>
@@ -3808,8 +3852,14 @@ function IndexPage() {
           </View>
         )}
 
+        </HomeModule>
+
+        <HomeModule id='recap' layout={moduleLayout} locks={moduleLocks}>
+        {!isGuest && <WeeklyRecapEntry />}
+        </HomeModule>
+
         {/* 查看统计入口 */}
-        <View className='home-experience-card'>
+        <View className='home-experience-card' style={{ order: 100 }}>
           <StatsEntry onClick={openDayRecordForSelectedDate} />
         </View>
 
@@ -3818,6 +3868,16 @@ function IndexPage() {
         {/* 底部留白 */}
         <View className='bottom-spacer' />
       </View>
+
+      {showHomeModuleManager && <HomeModuleManager layout={moduleLayout} locks={moduleLocks} onClose={() => setShowHomeModuleManager(false)} onSave={next => {
+        if (moduleOwner.current !== homeLayoutOwner()) { setModuleLayout(readHomeModuleLayout()); setShowHomeModuleManager(false); return }
+        try { setModuleLayout(saveHomeModuleLayout(next)); setShowHomeModuleManager(false) }
+        catch { void Taro.showToast({ title: '布局未能保存，请重试', icon: 'none' }) }
+      }}
+      />}
+      {!petHidden && !isGuest && <FloatingPetEntry pet={petSummary?.pet} mood={petMood} state={petState} reminder={petAnalyzeReminder} onReminderPress={handlePetAnalyzeReminderPress}
+        suppressed={homePageScrollLocked || showTargetEditor || showWeightEditor || showWaterEditor || showRecordMenu || showDailyPosterModal || showRecordPosterModal || mealActionSheetVisible || mealRecordsDialogVisible}
+      />}
 
       {/* 目标编辑弹窗 */}
       <TargetEditor

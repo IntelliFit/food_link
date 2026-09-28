@@ -9,7 +9,6 @@ import (
 	"math"
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -61,64 +60,89 @@ type DietRecommendationMeal struct {
 }
 
 type DietRecommendationResult struct {
-	Scene              string                               `json:"scene"`
-	Title              string                               `json:"title"`
-	Summary            string                               `json:"summary"`
-	CalorieRemaining   float64                              `json:"calorie_remaining"`
-	MacroGaps          DietRecommendationMacro              `json:"macro_gaps"`
-	Recommendations    []DietRecommendationOption           `json:"recommendations"`
-	GeneratedBy        string                               `json:"generated_by"`
-	ResolvedSchool     *domain.DietRecommendationSchool     `json:"resolved_school,omitempty"`
-	CampusID           string                               `json:"campus_id,omitempty"`
-	CampusName         string                               `json:"campus_name,omitempty"`
-	AIUsed             bool                                 `json:"ai_used"`
-	CandidateCount     int                                  `json:"candidate_count,omitempty"`
-	AIRerankCount      int                                  `json:"ai_rerank_count,omitempty"`
-	SessionID          string                               `json:"session_id,omitempty"`
-	UserMessageID      string                               `json:"user_message_id,omitempty"`
-	AssistantMessageID string                               `json:"assistant_message_id,omitempty"`
-	AgentConstraints   *CampusDietRecommendationConstraints `json:"agent_constraints,omitempty"`
+	HarnessVersion        string                               `json:"harness_version,omitempty"`
+	SearchScope           string                               `json:"search_scope,omitempty"`
+	ContextSummary        []string                             `json:"context_summary,omitempty"`
+	DataNotes             []string                             `json:"data_notes,omitempty"`
+	NeedsClarification    bool                                 `json:"needs_clarification,omitempty"`
+	Scene                 string                               `json:"scene"`
+	Title                 string                               `json:"title"`
+	Summary               string                               `json:"summary"`
+	CalorieRemaining      float64                              `json:"calorie_remaining"`
+	MacroGaps             DietRecommendationMacro              `json:"macro_gaps"`
+	Recommendations       []DietRecommendationOption           `json:"recommendations"`
+	GeneratedBy           string                               `json:"generated_by"`
+	ResolvedSchool        *domain.DietRecommendationSchool     `json:"resolved_school,omitempty"`
+	CampusID              string                               `json:"campus_id,omitempty"`
+	CampusName            string                               `json:"campus_name,omitempty"`
+	AIUsed                bool                                 `json:"ai_used"`
+	CandidateCount        int                                  `json:"candidate_count,omitempty"`
+	AIRerankCount         int                                  `json:"ai_rerank_count,omitempty"`
+	SessionID             string                               `json:"session_id,omitempty"`
+	UserMessageID         string                               `json:"user_message_id,omitempty"`
+	AssistantMessageID    string                               `json:"assistant_message_id,omitempty"`
+	AgentConstraints      *CampusDietRecommendationConstraints `json:"agent_constraints,omitempty"`
+	DecisionEngineVersion string                               `json:"decision_engine_version,omitempty"`
 }
 
 type CampusDietRecommendationConstraints struct {
-	Goal        string   `json:"goal,omitempty"`
-	MaxCalories *float64 `json:"max_calories,omitempty"`
-	MaxPrice    *float64 `json:"max_price,omitempty"`
-	MinProtein  *float64 `json:"min_protein,omitempty"`
-	MaxFat      *float64 `json:"max_fat,omitempty"`
-	SortBy      string   `json:"sort_by,omitempty"`
+	AllowedSchoolIDs   []string                         `json:"allowed_school_ids,omitempty"`
+	PendingSchool      *domain.DietRecommendationSchool `json:"pending_school,omitempty"`
+	CampusAccessDenied bool                             `json:"campus_access_denied,omitempty"`
+	CompleteMeal       bool                             `json:"complete_meal,omitempty"`
+	MealType           string                           `json:"meal_type,omitempty"`
+	AvoidFoods         []string                         `json:"avoid_foods,omitempty"`
+	PreferFoods        []string                         `json:"prefer_foods,omitempty"`
+	Scene              string                           `json:"scene,omitempty"`
+	RadiusKM           float64                          `json:"radius_km,omitempty"`
+	Goal               string                           `json:"goal,omitempty"`
+	MaxCalories        *float64                         `json:"max_calories,omitempty"`
+	MaxPrice           *float64                         `json:"max_price,omitempty"`
+	MinProtein         *float64                         `json:"min_protein,omitempty"`
+	MaxFat             *float64                         `json:"max_fat,omitempty"`
+	SortBy             string                           `json:"sort_by,omitempty"`
 }
 
 type DietRecommendationOption struct {
-	Title                   string                       `json:"title"`
-	Reason                  string                       `json:"reason"`
-	Source                  string                       `json:"source,omitempty"`
-	SourceID                string                       `json:"source_id,omitempty"`
-	Calories                float64                      `json:"calories"`
-	Protein                 float64                      `json:"protein"`
-	Carbs                   float64                      `json:"carbs"`
-	Fat                     float64                      `json:"fat"`
-	Items                   []DietRecommendationFoodItem `json:"items"`
-	Tips                    []string                     `json:"tips"`
-	Alternatives            []string                     `json:"alternatives"`
-	IsCampusFood            bool                         `json:"is_campus_food,omitempty"`
-	SchoolID                string                       `json:"school_id,omitempty"`
-	SchoolName              string                       `json:"school_name,omitempty"`
-	CampusID                string                       `json:"campus_id,omitempty"`
-	CampusName              string                       `json:"campus_name,omitempty"`
-	CanteenID               string                       `json:"canteen_id,omitempty"`
-	CanteenName             string                       `json:"canteen_name,omitempty"`
-	WindowID                string                       `json:"window_id,omitempty"`
-	WindowName              string                       `json:"window_name,omitempty"`
-	Floor                   string                       `json:"floor,omitempty"`
-	Price                   float64                      `json:"price,omitempty"`
-	PriceUnit               string                       `json:"price_unit,omitempty"`
-	ImagePath               string                       `json:"image_path,omitempty"`
-	NutritionBasis          string                       `json:"nutrition_basis,omitempty"`
-	NutritionSourceCategory string                       `json:"nutrition_source_category,omitempty"`
-	WeightMethod            string                       `json:"weight_method,omitempty"`
-	WeightConfidence        float64                      `json:"weight_confidence,omitempty"`
-	UncertaintyLevel        string                       `json:"uncertainty_level,omitempty"`
+	MealComponents          []DietRecommendationCandidate `json:"meal_components,omitempty"`
+	DistanceKM              *float64                      `json:"distance_km,omitempty"`
+	LocationLevel           string                        `json:"location_level,omitempty"`
+	MerchantName            string                        `json:"merchant_name,omitempty"`
+	Address                 string                        `json:"address,omitempty"`
+	Title                   string                        `json:"title"`
+	Reason                  string                        `json:"reason"`
+	Source                  string                        `json:"source,omitempty"`
+	SourceID                string                        `json:"source_id,omitempty"`
+	Calories                float64                       `json:"calories"`
+	Protein                 float64                       `json:"protein"`
+	Carbs                   float64                       `json:"carbs"`
+	Fat                     float64                       `json:"fat"`
+	Items                   []DietRecommendationFoodItem  `json:"items"`
+	Tips                    []string                      `json:"tips"`
+	Alternatives            []string                      `json:"alternatives"`
+	IsCampusFood            bool                          `json:"is_campus_food,omitempty"`
+	SchoolID                string                        `json:"school_id,omitempty"`
+	SchoolName              string                        `json:"school_name,omitempty"`
+	CampusID                string                        `json:"campus_id,omitempty"`
+	CampusName              string                        `json:"campus_name,omitempty"`
+	CanteenID               string                        `json:"canteen_id,omitempty"`
+	CanteenName             string                        `json:"canteen_name,omitempty"`
+	WindowID                string                        `json:"window_id,omitempty"`
+	WindowName              string                        `json:"window_name,omitempty"`
+	Floor                   string                        `json:"floor,omitempty"`
+	Price                   float64                       `json:"price,omitempty"`
+	PriceUnit               string                        `json:"price_unit,omitempty"`
+	ImagePath               string                        `json:"image_path,omitempty"`
+	NutritionBasis          string                        `json:"nutrition_basis,omitempty"`
+	NutritionSourceCategory string                        `json:"nutrition_source_category,omitempty"`
+	WeightMethod            string                        `json:"weight_method,omitempty"`
+	WeightConfidence        float64                       `json:"weight_confidence,omitempty"`
+	UncertaintyLevel        string                        `json:"uncertainty_level,omitempty"`
+	DecisionRole            string                        `json:"decision_role,omitempty"`
+	DecisionLabel           string                        `json:"decision_label,omitempty"`
+	DecisionScore           float64                       `json:"decision_score,omitempty"`
+	DecisionScores          *DietDecisionScorecard        `json:"decision_scores,omitempty"`
+	DecisionMissingEvidence []string                      `json:"decision_missing_evidence,omitempty"`
 }
 
 type DietRecommendationFoodItem = domain.DietRecommendationFoodItem
@@ -236,6 +260,12 @@ func (s *StatsService) persistDietRecommendationExchange(ctx context.Context, us
 	storedResult := *result
 	storedResult.UserMessageID = ""
 	storedResult.AssistantMessageID = ""
+	assistantMeta := map[string]any{
+		"diet_recommendation": storedResult,
+	}
+	if decisionMeta := dietDecisionPresentedMeta(&storedResult); decisionMeta != nil {
+		assistantMeta["diet_decision_event"] = decisionMeta
+	}
 	assistantMessage, err := s.repo.AddPetChatMessage(ctx, domain.PetChatMessage{
 		SessionID:      session.ID,
 		UserID:         userID,
@@ -244,9 +274,7 @@ func (s *StatsService) persistDietRecommendationExchange(ctx context.Context, us
 		MessageType:    "diet_recommendation",
 		RangeType:      "week",
 		CreditsCharged: creditCostDietRecommendation,
-		Meta: map[string]any{
-			"diet_recommendation": storedResult,
-		},
+		Meta:           assistantMeta,
 	})
 	if err != nil {
 		logger.Warn(ctx, "保存饮食推荐回复消息失败",
@@ -607,7 +635,17 @@ func (s *StatsService) generateCampusDietRecommendationWithAI(
 	if len(shortlist) == 0 {
 		return nil, fmt.Errorf("校园菜品候选为空")
 	}
-	prompt := buildCampusDietRecommendationPrompt(input, school, len(candidates), shortlist)
+	portfolio := selectDietDecisionPortfolio(dietDecisionContextFromInput(input), shortlist)
+	if len(portfolio) == 0 {
+		return nil, fmt.Errorf("校园菜品没有满足约束的决策候选")
+	}
+	finalists := make([]DietRecommendationCandidate, 0, len(portfolio))
+	portfolioByID := make(map[string]dietDecisionSelection, len(portfolio))
+	for _, selection := range portfolio {
+		finalists = append(finalists, selection.Eval.Candidate)
+		portfolioByID[selection.Eval.Candidate.SourceID] = selection
+	}
+	prompt := buildCampusDietRecommendationPrompt(input, school, len(candidates), finalists)
 	body := map[string]any{
 		"model": llm.Model,
 		"messages": []map[string]string{
@@ -653,35 +691,33 @@ func (s *StatsService) generateCampusDietRecommendationWithAI(
 		return nil, fmt.Errorf("校园饮食推荐模型 JSON 解析失败: %w", err)
 	}
 
-	byID := make(map[string]DietRecommendationCandidate, len(shortlist))
-	for _, candidate := range shortlist {
+	byID := make(map[string]DietRecommendationCandidate, len(finalists))
+	for _, candidate := range finalists {
 		byID[candidate.SourceID] = candidate
 	}
-	options := make([]DietRecommendationOption, 0, campusDietRecommendationSelectionLimit)
-	seen := map[string]bool{}
+	reasonsByID := make(map[string]campusDietRecommendationAISelection, len(ranked.Selections))
 	for _, selection := range ranked.Selections {
 		sourceID := strings.TrimSpace(selection.SourceID)
-		candidate, ok := byID[sourceID]
-		if !ok || seen[sourceID] {
+		if _, ok := byID[sourceID]; !ok {
 			continue
 		}
-		seen[sourceID] = true
-		options = append(options, campusDietRecommendationOption(candidate, selection.Reason, selection.Tip))
-		if len(options) >= campusDietRecommendationSelectionLimit {
-			break
-		}
+		reasonsByID[sourceID] = selection
 	}
-	expectedSelections := campusDietRecommendationSelectionLimit
-	if len(shortlist) < expectedSelections {
-		expectedSelections = len(shortlist)
+	if len(reasonsByID) != len(finalists) {
+		return nil, fmt.Errorf("校园饮食推荐模型只解释了 %d/%d 个决策引擎候选", len(reasonsByID), len(finalists))
 	}
-	if len(options) != expectedSelections {
-		return nil, fmt.Errorf("校园饮食推荐模型只返回 %d/%d 个有效真实菜品 ID", len(options), expectedSelections)
+	options := make([]DietRecommendationOption, 0, len(portfolio))
+	for _, selection := range portfolio {
+		candidate := selection.Eval.Candidate
+		explanation := reasonsByID[candidate.SourceID]
+		option := campusDietRecommendationOption(candidate, explanation.Reason, explanation.Tip)
+		decorateDietDecisionOption(&option, portfolioByID[candidate.SourceID])
+		options = append(options, option)
 	}
-	title := "AI 按你的目标选校园餐"
+	title := "饮食决策引擎为你选校园餐"
 	summary := trimStatsRunes(strings.TrimSpace(ranked.Summary), 120)
 	if summary == "" {
-		summary = fmt.Sprintf("已检索本校 %d 道真实菜品，并由 AI 比较最相关的 %d 道候选。", len(candidates), len(shortlist))
+		summary = fmt.Sprintf("已检索本校 %d 道真实菜品，由决策引擎选出 3 种取向，再由 AI 解释。", len(candidates))
 	}
 	switch input.FollowUpIntent {
 	case "more":
@@ -690,19 +726,20 @@ func (s *StatsService) generateCampusDietRecommendationWithAI(
 		title = "AI 重新比较刚才的选择"
 	}
 	result := &DietRecommendationResult{
-		Scene:            input.Scene,
-		Title:            title,
-		Summary:          summary,
-		CalorieRemaining: input.CalorieRemaining,
-		MacroGaps:        input.MacroGaps,
-		Recommendations:  options,
-		GeneratedBy:      llm.Model,
-		ResolvedSchool:   &school,
-		CampusID:         input.CampusID,
-		CampusName:       input.CampusName,
-		AIUsed:           true,
-		CandidateCount:   len(candidates),
-		AIRerankCount:    len(shortlist),
+		Scene:                 input.Scene,
+		Title:                 title,
+		Summary:               summary,
+		CalorieRemaining:      input.CalorieRemaining,
+		MacroGaps:             input.MacroGaps,
+		Recommendations:       options,
+		GeneratedBy:           llm.Model,
+		ResolvedSchool:        &school,
+		CampusID:              input.CampusID,
+		CampusName:            input.CampusName,
+		AIUsed:                true,
+		CandidateCount:        len(candidates),
+		AIRerankCount:         len(finalists),
+		DecisionEngineVersion: dietDecisionEngineVersion,
 	}
 	logger.Info(ctx, "校园饮食推荐大模型重排完成",
 		logger.UserID(userID),
@@ -710,7 +747,7 @@ func (s *StatsService) generateCampusDietRecommendationWithAI(
 		slog.String("school_name", school.Name),
 		slog.String("model", llm.Model),
 		slog.Int("candidate_count", len(candidates)),
-		slog.Int("ai_rerank_count", len(shortlist)),
+		slog.Int("ai_rerank_count", len(finalists)),
 		slog.Int("recommendation_count", len(options)),
 		slog.Int64("duration_ms", time.Since(startedAt).Milliseconds()),
 	)
@@ -746,7 +783,7 @@ func buildCampusDietRecommendationPrompt(input DietRecommendationInput, school d
 	if len(candidates) < selectionCount {
 		selectionCount = len(candidates)
 	}
-	return fmt.Sprintf(`你是食探小程序的校园餐食决策助手。系统已经从%s的 %d 道已发布真实菜品中，按本餐热量与营养相关性初筛出以下 %d 道候选。
+	return fmt.Sprintf(`你是食探小程序的校园餐解释助手。食探个体化饮食决策引擎已经从%s的 %d 道已发布真实菜品中，按营养目标、可执行性和数据可信度选出以下 %d 道候选。
 
 用户本轮原话：%s
 餐次：%s
@@ -756,7 +793,7 @@ func buildCampusDietRecommendationPrompt(input DietRecommendationInput, school d
 本餐营养缺口：蛋白质 %.1fg，碳水 %.1fg，脂肪 %.1fg
 真实候选 JSON：%s
 
-请综合理解用户本轮语义和营养缺口后排序。本轮明确说出的“减脂、增肌、清淡、高蛋白、便宜、某食堂”等要求，优先级高于长期目标；条件接近时尽量增加食堂和菜品类型的多样性。
+请结合用户本轮语义和营养缺口，分别解释这几道候选为什么可选。候选和顺序由决策引擎确定，你只负责解释，不得改选或重排。
 
 严格约束：
 1. 只能从候选 JSON 选择，source_id 必须逐字原样返回；禁止创造菜名、食堂、位置、价格或营养值。
@@ -988,43 +1025,45 @@ func dietRecommendationExcludedSourceIDs(input DietRecommendationInput) []string
 }
 
 func fallbackDietRecommendationFromCandidates(input DietRecommendationInput, generatedBy string, candidates []DietRecommendationCandidate) *DietRecommendationResult {
-	candidates = rankDietRecommendationCandidates(input, candidates)
-	options := make([]DietRecommendationOption, 0, 5)
-	for _, candidate := range candidates {
-		if len(options) >= 5 {
-			break
-		}
+	portfolio := selectDietDecisionPortfolio(dietDecisionContextFromInput(input), candidates)
+	options := make([]DietRecommendationOption, 0, len(portfolio))
+	for _, selection := range portfolio {
+		candidate := selection.Eval.Candidate
 		if strings.TrimSpace(candidate.Title) == "" || candidate.Calories <= 0 {
 			continue
 		}
 		option := DietRecommendationOption{
-			Title:        candidate.Title,
-			Reason:       "来自" + dietRecommendationSourceLabel(candidate.Source) + "，营养值更接近今天剩余目标。",
-			Source:       candidate.Source,
-			SourceID:     candidate.SourceID,
-			Calories:     candidate.Calories,
-			Protein:      candidate.Protein,
-			Carbs:        candidate.Carbs,
-			Fat:          candidate.Fat,
-			Items:        candidate.Items,
-			Tips:         []string{"可按饥饿程度微调份量。"},
-			IsCampusFood: candidate.IsCampusFood,
-			SchoolID:     candidate.SchoolID,
-			SchoolName:   candidate.SchoolName,
-			CampusID:     candidate.CampusID,
-			CampusName:   candidate.CampusName,
-			CanteenID:    candidate.CanteenID,
-			CanteenName:  candidate.CanteenName,
-			WindowID:     candidate.WindowID,
-			WindowName:   candidate.WindowName,
-			Floor:        candidate.Floor,
-			Price:        candidate.Price,
-			PriceUnit:    candidate.PriceUnit,
-			ImagePath:    candidate.ImagePath,
+			Title:                   candidate.Title,
+			Reason:                  selection.Reason,
+			Source:                  candidate.Source,
+			SourceID:                candidate.SourceID,
+			Calories:                candidate.Calories,
+			Protein:                 candidate.Protein,
+			Carbs:                   candidate.Carbs,
+			Fat:                     candidate.Fat,
+			Items:                   candidate.Items,
+			Tips:                    []string{"可按饥饿程度微调份量。"},
+			IsCampusFood:            candidate.IsCampusFood,
+			SchoolID:                candidate.SchoolID,
+			SchoolName:              candidate.SchoolName,
+			CampusID:                candidate.CampusID,
+			CampusName:              candidate.CampusName,
+			CanteenID:               candidate.CanteenID,
+			CanteenName:             candidate.CanteenName,
+			WindowID:                candidate.WindowID,
+			WindowName:              candidate.WindowName,
+			Floor:                   candidate.Floor,
+			Price:                   candidate.Price,
+			PriceUnit:               candidate.PriceUnit,
+			ImagePath:               candidate.ImagePath,
+			NutritionBasis:          candidate.NutritionBasis,
+			NutritionSourceCategory: candidate.NutritionSourceCategory,
+			WeightMethod:            candidate.WeightMethod,
+			WeightConfidence:        candidate.WeightConfidence,
+			UncertaintyLevel:        candidate.UncertaintyLevel,
 		}
 		if candidate.IsCampusFood {
 			location := strings.Join(compactDietStrings(candidate.SchoolName, candidate.CanteenName, candidate.Floor, candidate.WindowName), " · ")
-			option.Reason = "来自真实校园食堂数据，营养更接近你当前这餐的缺口。"
 			if location != "" {
 				option.Tips = []string{"位置：" + location}
 			}
@@ -1037,19 +1076,21 @@ func fallbackDietRecommendationFromCandidates(input DietRecommendationInput, gen
 				SourceID: candidate.SourceID,
 			}}
 		}
+		decorateDietDecisionOption(&option, selection)
 		options = append(options, option)
 	}
 	if len(options) == 0 {
 		return fallbackDietRecommendation(input, generatedBy, nil)
 	}
 	return &DietRecommendationResult{
-		Scene:            input.Scene,
-		Title:            "按今日缺口补一餐",
-		Summary:          "优先从已有食物数据中挑选，更贴近真实记录和营养值。",
-		CalorieRemaining: input.CalorieRemaining,
-		MacroGaps:        input.MacroGaps,
-		Recommendations:  options,
-		GeneratedBy:      generatedBy,
+		Scene:                 input.Scene,
+		Title:                 "食探个体化饮食决策",
+		Summary:               "从真实候选中分别给出健康目标、容易坚持和综合均衡三种选择。",
+		CalorieRemaining:      input.CalorieRemaining,
+		MacroGaps:             input.MacroGaps,
+		Recommendations:       options,
+		GeneratedBy:           generatedBy,
+		DecisionEngineVersion: dietDecisionEngineVersion,
 	}
 }
 
@@ -1147,52 +1188,20 @@ func normalizeDietRecommendationCandidates(candidates []DietRecommendationCandid
 }
 
 func rankDietRecommendationCandidates(input DietRecommendationInput, candidates []DietRecommendationCandidate) []DietRecommendationCandidate {
-	candidates = normalizeDietRecommendationCandidates(candidates)
-	sort.SliceStable(candidates, func(i, j int) bool {
-		return dietRecommendationCandidateScore(input, candidates[i]) > dietRecommendationCandidateScore(input, candidates[j])
-	})
-	return candidates
+	evaluations := rankDietDecisionEvaluations(dietDecisionContextFromInput(input), candidates)
+	ranked := make([]DietRecommendationCandidate, 0, len(evaluations))
+	for _, evaluation := range evaluations {
+		ranked = append(ranked, evaluation.Candidate)
+	}
+	return ranked
 }
 
 func dietRecommendationCandidateScore(input DietRecommendationInput, candidate DietRecommendationCandidate) float64 {
-	score := 1000.0
-	target := dietRecommendationMealCalorieTarget(input)
-	if target <= 0 {
-		target = candidate.Calories
+	evaluation := evaluateDietDecisionCandidate(dietDecisionContextFromInput(input), candidate)
+	if !evaluation.Feasible {
+		return -1000 - float64(len(evaluation.Violations))*100
 	}
-	score -= math.Abs(candidate.Calories-target) * 1.2
-	if input.MacroGaps.Protein > 15 {
-		score += candidate.Protein * 8
-	}
-	if input.MacroGaps.Fat <= 5 && candidate.Fat > 12 {
-		score -= candidate.Fat * 10
-	}
-	if input.Scene == "eat_out" && candidate.Source == "public_food_library" {
-		score += 120
-	}
-	if input.Scene == "cook_home" && candidate.Source == "food_nutrition_library" {
-		score += 80
-	}
-	if candidate.Source == "user_food_records" {
-		score += 60
-	}
-	goalContext := dietRecommendationGoalContext(input)
-	proteinDensity := candidate.Protein / math.Max(candidate.Calories, 1)
-	if strings.Contains(goalContext, "减脂") || strings.Contains(goalContext, "减肥") || strings.Contains(goalContext, "控脂") || strings.Contains(goalContext, "fat_loss") {
-		score += proteinDensity * 1200
-		score -= candidate.Fat * 3
-	}
-	if strings.Contains(goalContext, "增肌") || strings.Contains(goalContext, "长肌肉") || strings.Contains(goalContext, "muscle_gain") {
-		score += candidate.Protein * 12
-		score += candidate.Carbs * 1.2
-	}
-	if strings.Contains(goalContext, "高蛋白") || strings.Contains(goalContext, "补蛋白") {
-		score += candidate.Protein * 14
-	}
-	if strings.Contains(goalContext, "低脂") || strings.Contains(goalContext, "清淡") || strings.Contains(goalContext, "少油") {
-		score -= candidate.Fat * 8
-	}
-	return score
+	return evaluation.Scores.BalancedUtility
 }
 
 func dietRecommendationGoalContext(input DietRecommendationInput) string {

@@ -154,7 +154,7 @@ $community-border-soft: rgb(92 184 150 / 18%);
 
 // 已移除顶部 Divider，避免好友区上方出现白条
 
-// ========== 骨架屏样式（对齐 `.feed-card` 与 `.feed-image` 高度） ==========
+// ========== 骨架屏样式（按典型单图动态的内容高度预留） ==========
 // 单条好友动态卡片高度（rpx，约）：
 // - 卡 padding 上下 72 + 头区 约 112 + 可选标签/文案 0–120 + 图 384+24 + 营养行 约 80 + 操作区 约 88 + 可选评论 0–∞
 // 典型「有图」完整卡片约 760–920rpx；无图、无文案可低至约 280–420rpx。骨架按「有图 + 短文案」取上沿。
@@ -215,7 +215,7 @@ $community-border-soft: rgb(92 184 150 / 18%);
   margin-bottom: 24rpx;
 }
 
-// 与 `.feed-image` 固定高度 384rpx 一致
+// 图片加载前使用稳定的典型高度，真实图片会按原比例展示
 .skeleton-image {
   width: 100%;
   height: 384rpx;
@@ -1846,15 +1846,15 @@ $feed-body-font-size: 30rpx;
 }
 
 /* 食物描述与图片之间的间隔 */
-.feed-content+.feed-image {
+.feed-content + .feed-photo-grid {
   margin-top: 28rpx;
 }
 
-.feed-collapsible-text + .feed-image {
+.feed-collapsible-text + .feed-photo-grid {
   margin-top: 28rpx;
 }
 
-.feed-manual-foods + .feed-image {
+.feed-manual-foods + .feed-photo-grid {
   margin-top: 20rpx;
 }
 
@@ -1961,63 +1961,68 @@ $feed-body-font-size: 30rpx;
   }
 }
 
-.feed-image {
-  background: #111827;
-  border-radius: 8rpx;
-  height: 384rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+.feed-photo-grid {
+  display: grid;
+  width: 100%;
+  gap: 8rpx;
+  margin-top: 16rpx;
   margin-bottom: 20rpx;
-  position: relative;
-  overflow: hidden;
-  box-shadow: none;
 }
 
-.feed-image-content {
-  width: 100%;
-  height: 100%;
-  border-radius: 8rpx;
-}
-
-.feed-image-swiper {
-  width: 100%;
-  height: 100%;
-}
-
-.feed-image-swiper-item {
-  width: 100%;
-  height: 100%;
-}
-
-.feed-image-swiper-image {
-  width: 100%;
-  height: 100%;
+.feed-photo-grid.is-single {
   display: block;
+}
+
+.feed-photo-grid.is-two,
+.feed-photo-grid.is-four {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.feed-photo-grid.is-three-column {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.feed-photo-grid-item {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 8rpx;
+  background: #f1f5f9;
+}
+
+.feed-photo-grid.is-two .feed-photo-grid-item,
+.feed-photo-grid.is-four .feed-photo-grid-item {
+  height: 297rpx;
+}
+
+.feed-photo-grid.is-three-column .feed-photo-grid-item {
+  height: 195rpx;
+}
+
+.feed-photo-grid-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.feed-photo-grid.is-single .feed-photo-grid-image {
+  height: auto;
   border-radius: 8rpx;
 }
 
-.feed-image-counter {
+.feed-photo-grid-more {
   position: absolute;
-  bottom: 16rpx;
-  right: 16rpx;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(8rpx);
-  padding: 6rpx 16rpx;
-  border-radius: 200rpx;
-  z-index: 2;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  background: rgb(15 23 42 / 55%);
 }
 
-.feed-image-counter-text {
-  font-size: 22rpx;
-  font-weight: 600;
+.feed-photo-grid-more-text {
   color: #fff;
-  letter-spacing: 2rpx;
+  font-size: 42rpx;
+  font-weight: 600;
 }
 
 .image-placeholder {
@@ -2836,21 +2841,6 @@ $comment-body-font-size: 28rpx;
   font-size: 20rpx;
   font-weight: 600;
   line-height: 30rpx;
-}
-
-.feed-circle-post-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12rpx;
-  margin-top: 16rpx;
-}
-
-.feed-circle-post-image-item {
-  width: 220rpx;
-  height: 220rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-  background: #111827;
 }
 
 .feed-circle-post-image {

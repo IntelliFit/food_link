@@ -329,7 +329,7 @@ func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context,
 		return nil, "", &commonerrors.AppError{Code: 10002, Message: "请至少上传一张包装图片", HTTPStatus: 400}
 	}
 	normalizePackagedServingWeight(&input)
-	if input.KcalPer100g <= 0 && input.ProteinPer100g <= 0 && input.CarbsPer100g <= 0 && input.FatPer100g <= 0 {
+	if !packagedFoodInputHasUsableCoreNutrition(input) {
 		return nil, "", &commonerrors.AppError{Code: 10002, Message: "请至少填写热量或三大营养素", HTTPStatus: 400}
 	}
 	source := strings.TrimSpace(input.Source)
@@ -1626,6 +1626,22 @@ func PackagedExtractHasVerifiedZeroNutritionEvidence(result *PackagedProductExtr
 		result.EnergyUnitRaw,
 		result.NutritionBasisUnit,
 		flattenLabelEvidence(result.RawLabelPayload),
+	}, "\n"))
+}
+
+func packagedFoodInputHasUsableCoreNutrition(input PackagedFoodInput) bool {
+	if input.KcalPer100g > 0 || input.ProteinPer100g > 0 || input.CarbsPer100g > 0 || input.FatPer100g > 0 {
+		return true
+	}
+	if input.KcalPer100g != 0 || input.ProteinPer100g != 0 || input.CarbsPer100g != 0 || input.FatPer100g != 0 {
+		return false
+	}
+	return textHasVerifiedZeroNutritionEvidence(strings.Join([]string{
+		input.OCRRawText,
+		input.EnergyUnitRaw,
+		input.NutritionBasisUnit,
+		flattenLabelEvidence(input.RawLabelPayload),
+		flattenLabelEvidence(input.FieldConfidence),
 	}, "\n"))
 }
 

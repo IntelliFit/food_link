@@ -1,0 +1,7 @@
+.floating-pet-entry { position: fixed; right: 12rpx; bottom: calc(180rpx + env(safe-area-inset-bottom)); z-index: 90; display: flex; align-items: center; gap: 4rpx; }
+.floating-pet-entry__pet { display: flex; flex-direction: column; align-items: center; padding: 6rpx 8rpx; border-radius: 28rpx; background: rgb(255 255 255 / 95%); box-shadow: 0 6rpx 24rpx rgb(20 70 42 / 12%); color: #416352; font-size: 20rpx; }
+.floating-pet-entry__reminder { max-width: 280rpx; border: 1rpx solid #d9ece0; background: #fff; padding: 16rpx; border-radius: 20rpx; font-size: 24rpx; line-height: 1.5; color: #345643; }
+.floating-pet-entry__collapse, .floating-pet-entry__restore { color: #657b6e; width: 36rpx; min-height: 72rpx; display: flex; align-items: center; justify-content: center; font-size: 32rpx; }
+.floating-pet-entry__restore { width: 44rpx; border-radius: 20rpx 0 0 20rpx; background: #e6f2eb; }
+.floating-pet-entry.is-collapsed { right: 0; }
+.home-page--dark .floating-pet-entry { .floating-pet-entry__pet, .floating-pet-entry__reminder { background: #24392d; color: #e6f2eb; border-color: #365342; } }

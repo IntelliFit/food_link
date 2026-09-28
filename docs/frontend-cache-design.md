@@ -45,6 +45,8 @@
 | `food_link_dashboard_targets_v1` | 用户自定义摄入目标（卡路里、蛋白质、碳水、脂肪） | `pages/index` | `GET /api/user/dashboard-targets` / `PUT /api/user/dashboard-targets` (`getDashboardTargets` / `updateDashboardTargets`) | 服务端优先；若后端未部署独立接口（404），则 fallback 写入本地 storage，并回退到 `PUT /api/user/health-profile` 携带 `dashboard_targets`。 |
 | `home_poster_modal_visible` | 首页弹窗海报是否已展示（标记值 `'1'`） | `pages/index` | 无（纯本地标记） | 首次进入首页展示海报后写入，避免重复弹窗。 |
 | `showRecordMenuModal` | 首页记录菜单引导弹窗是否已展示 | `pages/index` | 无（纯本地标记） | 新用户首次进入首页后展示，点击后清除。 |
+| `home_module_layout_v2:<userId>` | 首页模块顺序与隐藏列表 | `pages/index` | 无（当前设备的用户偏好） | 按账号隔离，默认全部显示；饮食核心始终显示，有补剂计划或临期食物时对应提醒模块保持显示。整理面板点「完成」后保存，「取消」不保存；清除缓存会恢复默认布局。 |
+| `home_check_in_snooze_v1:<userId>` | 用户选择「稍后再签」的日期 | `pages/index` | 无（纯本地标记） | 仅当日不再弹签到提醒，不改变签到或积分；清除缓存会重置。 |
 
 **清理影响**：清除后首页会重新从服务端拉取 dashboard、体重饮水数据、摄入目标，弹窗标记重置（可能再次弹窗）。
 
@@ -56,7 +58,7 @@
 |---------|---------|---------|-------------|------|
 | `community_feed_cache` | Feed 列表数据（动态 + 评论） | `pages/community` | `GET /api/community/feed` (`communityGetFeed`) / `GET /api/community/public-feed` (`communityGetPublicFeed`) | 有效期 5 分钟。先读缓存渲染，同时发请求更新。 |
 | `community_friends_cache` | 好友列表 | `pages/community` | `GET /api/community/friends` (`communityGetFriends`) | 有效期 5 分钟。 |
-| `community_requests_cache` | 好友申请列表 | `pages/community` | `GET /api/community/friend-requests` (`communityGetFriendRequests`) | 有效期 5 分钟。 |
+| `community_requests_cache`（历史字段） | 旧版好友申请列表 | 旧版 `pages/community` | 旧版好友申请接口 | 圈子首页已改用账号隔离的共享内存计数，不再读写该字段；「清除缓存」仍移除遗留值。 |
 | `community_feed_timestamp` | Feed 缓存时间戳 | `pages/community` | 无（辅助标记） | 用于判断缓存是否过期（5 分钟）。 |
 | `community_friends_timestamp` | 好友列表缓存时间戳 | `pages/community` | 无（辅助标记） | 同上。 |
 | `community_feed_filters_v2` | Feed 筛选条件（作者范围、饮食目标、餐次类型、排序方式） | `pages/community` | 无（纯本地状态） | 用户选择的筛选条件持久化，下次进入自动恢复。 |
@@ -132,12 +134,15 @@
 | `analyze_waiting_record_count` | 识别记录 waiting_record 数量 | `pages/index`, `pages/profile`, `custom-tab-bar` | `GET /api/analyze/tasks/status-count` | 排队中/识别中的任务数量，用于 profile 页快捷入口数字 badge 和 tab-bar 展示。 |
 | `analyze_has_unseen_waiting_record` | 是否有未查看的 waiting_record | `pages/index`, `pages/profile`, `custom-tab-bar` | `GET /api/analyze/tasks/status-count` | 布尔值。基于后端 `last_seen_analyze_history_at` 判断是否有新记录。 |
 | `food_expiry_last_seen_date` | 用户上次查看食物保质期页面的日期 | `pages/index`, `pages/profile`, `packageExtra/pages/expiry` | 无（纯前端） | 格式 `YYYY-MM-DD`。当天看过食物保质期页面后，该板块不计入 badge。次日如有新的待处理食物，badge 重新显示。 |
+| `social-inbox`（内存，无 storage Key） | 互动未读、私信未读、收到的待处理好友申请数 | `pages/index`, `pages/community` | `communityGetNotifications(1)`、`getUnreadMessageCount()`、`friendGetRequests()` | 两个页面共享请求；显示页面后延迟 900ms 刷新，保持可见时每 60s 刷新，隐藏后停止轮询。会话切换、清缓存会清零并使旧请求失效；某个接口失败保留该项上次成功计数。 |
 
 **清理影响**：清除后所有 badge 计数重置，红点提醒恢复为最新服务端状态。
 
 ---
 
 ### 3.7 其他杂项缓存
+
+上周回顾（`packageRecap/pages/recap`）不建立本地书架或长期报告缓存。每次进入以北京时间的上一完整自然周重新读取日历和饮水汇总；餐照在用户点击选择后才从本人七天的饮食记录读取。既有列表接口每天最多返回最近 100 条，触及上限时界面明确提示照片范围；记录天数和连续天数来自完整日历，独立于照片数量。分享图片是临时文件，只有用户主动保存时才写入相册。
 
 | 缓存 Key | 存储内容 | 使用页面 | 关联后端接口 | 说明 |
 |---------|---------|---------|-------------|------|

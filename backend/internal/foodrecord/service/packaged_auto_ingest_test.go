@@ -6,6 +6,10 @@ import (
 	"testing"
 
 	commonerrors "food_link/backend/internal/common/errors"
+	"food_link/backend/internal/foodrecord/domain"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildPackagedProductExtractPromptTreatsImagesAsOneProduct(t *testing.T) {
@@ -79,6 +83,21 @@ func TestCreatePackagedFoodRejectsMissingSourceImage(t *testing.T) {
 	})
 	if appErr, ok := err.(*commonerrors.AppError); !ok || appErr.HTTPStatus != 400 || !strings.Contains(appErr.Message, "包装图片") {
 		t.Fatalf("missing image err=%#v want 400 packaged image AppError", err)
+	}
+}
+
+func TestCreatePackagedFoodRejectsUnverifiedZeroNutrition(t *testing.T) {
+	svc := NewFoodNutritionService(nil)
+	ctx := context.Background()
+
+	_, err := svc.CreatePackagedFood(ctx, PackagedFoodInput{
+		ProductName:     "未知零营养饮料",
+		SourceImageURLs: []string{"https://cdn.example.com/unknown-zero-drink.jpg"},
+		NetContentValue: 500,
+		NetContentUnit:  "ml",
+	})
+	if appErr, ok := err.(*commonerrors.AppError); !ok || appErr.HTTPStatus != 400 || !strings.Contains(appErr.Message, "热量或三大营养素") {
+		t.Fatalf("unverified zero nutrition err=%#v want 400 nutrition AppError", err)
 	}
 }
 
@@ -213,6 +232,33 @@ func TestEvaluatePackagedProductExtract_AllowsVerifiedZeroNutritionDrink(t *test
 	if !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
 		t.Fatal("expected verified zero nutrition evidence")
 	}
+}
+
+func TestTryAutoIngestPackagedProduct_AllowsVerifiedZeroNutritionDrink(t *testing.T) {
+	db, nutritionRepo := setupFoodNutritionTestDB(t)
+	require.NoError(t, db.AutoMigrate(&domain.PackagedFood{}, &domain.PackagedFoodAlias{}))
+	svc := NewFoodNutritionService(nutritionRepo)
+	result := verifiedZeroDrinkExtract()
+	result.Brand = "东方树叶"
+	result.ProductName = "东方树叶菊花普洱"
+	result.Barcode = "6921168562589"
+	result.SourceImageURLs = []string{
+		"https://cdn.example.com/oriental-leaf-front.jpg",
+		"https://cdn.example.com/oriental-leaf-label.jpg",
+	}
+
+	auto, food, err := svc.TryAutoIngestPackagedProduct(context.Background(), result)
+
+	require.NoError(t, err)
+	require.NotNil(t, auto)
+	require.NotNil(t, food)
+	assert.Equal(t, "ingested", auto.Status)
+	assert.Equal(t, "created", auto.UpsertAction)
+	assert.Equal(t, float64(0), food.KcalPer100g)
+	assert.Equal(t, float64(0), food.ProteinPer100g)
+	assert.Equal(t, float64(0), food.CarbsPer100g)
+	assert.Equal(t, float64(0), food.FatPer100g)
+	assert.True(t, PackagedFoodHasVerifiedZeroNutritionEvidence(food))
 }
 
 func TestEvaluatePackagedProductExtract_BlocksZeroNutritionWithoutEvidence(t *testing.T) {

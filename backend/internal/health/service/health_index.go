@@ -414,11 +414,11 @@ func computeHealthIndexWithMinimumRecordedDays(comp *statsComputation, statsRang
 		},
 		{
 			Key:     "longevity",
-			Title:   "长期状态趋势",
+			Title:   "近期饮食习惯",
 			Score:   longevityScore,
 			Tone:    scoreToTone(longevityScore),
-			Brief:   ifElseStr(surplusRate > 0.45, "重复性问题在拖分。", "长期趋势还能再修。"),
-			Summary: ifElseStr(surplusRate > 0.45, "拖累长期趋势的，不是某一顿，而是反复出现的超标和晚间集中。", "只要继续把主要问题控制住，这段时间的长期趋势还有往上修的空间。"),
+			Brief:   ifElseStr(surplusRate > 0.45, "多次超量拉低本期表现。", "本期饮食习惯较稳定。"),
+			Summary: ifElseStr(surplusRate > 0.45, "这段记录中反复超出消耗、晚间进食集中，拉低了饮食习惯分数；它不预测长期健康结果。", "这段记录的饮食习惯较稳定；分数只反映当前统计周期，不预测长期健康结果。"),
 			Basis:   fmt.Sprintf("已记录 %d 天，超出消耗 %d 天，睡前餐/夜间占比 %s。", recordedDays, surplusDays, formatPercent(dinnerPct)),
 			Action:  "先把重复出现的问题降频，比偶尔一次\"吃得特别完美\"更有用。",
 			Delta:   clampScore(ifElseFloat(surplusRate > 0.45, 10, 7) + ifElseFloat(recordedDays >= thresholdDays(statsRange), 3, 0)),
@@ -445,7 +445,7 @@ func computeHealthIndexWithMinimumRecordedDays(comp *statsComputation, statsRang
 		{Key: "cardio", Title: "心血管友好度", Short: "心血管"},
 		{Key: "weight", Title: "体重管理友好度", Short: "体重"},
 		{Key: "colorectal", Title: "肠道状态友好度", Short: "肠道"},
-		{Key: "longevity", Title: "长期状态趋势", Short: "长期"},
+		{Key: "longevity", Title: "近期饮食习惯", Short: "饮食习惯"},
 	}
 	if hasMicronutrientData {
 		allRiskOptions = append(allRiskOptions, RiskOption{Key: "micronutrient", Title: "微量营养充足度", Short: "微量营养"})

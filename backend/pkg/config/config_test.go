@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func writeTestConfig(t *testing.T, content string) string {
@@ -384,6 +386,15 @@ worker:
 	}
 	if cfg.External.OpenLuxPrecisionGeminiPercent != 80 {
 		t.Fatalf("expected precision OpenLux Gemini traffic 80, got %d", cfg.External.OpenLuxPrecisionGeminiPercent)
+	}
+}
+
+func TestDefaultOrdinaryQwenTrafficIsDisabled(t *testing.T) {
+	v := viper.New()
+	setDefaults(v)
+
+	if got := v.GetInt("external.qwen38_ordinary_traffic_percent"); got != 0 {
+		t.Fatalf("expected ordinary Qwen traffic to default to 0, got %d", got)
 	}
 }
 

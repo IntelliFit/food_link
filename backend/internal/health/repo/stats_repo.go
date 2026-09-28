@@ -223,11 +223,14 @@ type dietRecommendationRow struct {
 }
 
 func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domain.CampusDietSearchFilter) ([]domain.DietRecommendationCandidate, int64, error) {
+	if filter.Location != nil {
+		return r.searchNearbyDietCandidates(ctx, filter)
+	}
 	filter.SchoolID = strings.TrimSpace(filter.SchoolID)
 	if filter.SchoolID == "" {
 		return nil, 0, fmt.Errorf("school_id required")
 	}
-	if filter.Limit <= 0 || filter.Limit > 20 {
+	if filter.Limit <= 0 || filter.Limit > 100 {
 		filter.Limit = 20
 	}
 	if filter.Offset < 0 {

@@ -86,6 +86,14 @@ page {
   display: block;
 }
 
+.pet-chat-identity-subtitle {
+  display: block;
+  margin-top: 2rpx;
+  color: rgba(34, 111, 85, 0.58);
+  font-size: 20rpx;
+  line-height: 28rpx;
+}
+
 .pet-chat-identity-name {
   overflow: hidden;
   color: #193a30;
@@ -157,6 +165,55 @@ page {
 
 .pet-chat-history-button {
   min-width: 78rpx;
+}
+
+.pet-chat-home-context {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin: -8rpx 0 18rpx;
+  padding: 16rpx 18rpx;
+  border: 1rpx solid rgba(92, 184, 150, 0.18);
+  border-radius: 20rpx;
+  background: rgba(237, 248, 241, 0.88);
+  box-sizing: border-box;
+}
+
+.pet-chat-home-context__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.pet-chat-home-context__source,
+.pet-chat-home-context__advice {
+  display: block;
+}
+
+.pet-chat-home-context__source {
+  color: #2f8f6f;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 800;
+}
+
+.pet-chat-home-context__advice {
+  margin-top: 2rpx;
+  overflow: hidden;
+  color: #315044;
+  font-size: 22rpx;
+  line-height: 31rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pet-chat-home-context__status {
+  flex-shrink: 0;
+  color: rgba(34, 111, 85, 0.62);
+  font-size: 19rpx;
+  line-height: 28rpx;
+  font-weight: 700;
 }
 
 .pet-chat-scroll {
@@ -484,6 +541,27 @@ page {
   font-weight: 900;
 }
 
+.pet-chat-diet-card-role {
+  flex-shrink: 0;
+  padding: 3rpx 9rpx;
+  border-radius: 999rpx;
+  background: rgba(47, 143, 111, 0.1);
+  color: #2f8f6f;
+  font-size: 18rpx;
+  line-height: 26rpx;
+  font-weight: 900;
+
+  &.role-easy_to_follow {
+    background: rgba(208, 123, 45, 0.11);
+    color: #b96820;
+  }
+
+  &.role-balanced_best {
+    background: rgba(78, 103, 169, 0.11);
+    color: #4e67a9;
+  }
+}
+
 .pet-chat-diet-card-price {
   flex-shrink: 0;
   color: #d07b2d;
@@ -495,6 +573,7 @@ page {
 .pet-chat-diet-card-location,
 .pet-chat-diet-card-evidence,
 .pet-chat-diet-card-reason,
+.pet-chat-diet-card-score,
 .pet-chat-diet-card-link {
   display: block;
 }
@@ -530,6 +609,14 @@ page {
   color: rgba(35, 72, 60, 0.72);
   font-size: 22rpx;
   line-height: 32rpx;
+}
+
+.pet-chat-diet-card-score {
+  margin-top: 8rpx;
+  color: rgba(47, 143, 111, 0.88);
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 800;
 }
 
 .pet-chat-diet-card-link {
@@ -1051,6 +1138,23 @@ page {
     color: #edf8f1;
   }
 
+  .pet-chat-identity-subtitle {
+    color: rgba(154, 215, 188, 0.56);
+  }
+
+  .pet-chat-home-context {
+    border-color: rgba(112, 196, 149, 0.16);
+    background: rgba(24, 35, 31, 0.88);
+  }
+
+  .pet-chat-home-context__advice {
+    color: rgba(225, 239, 229, 0.8);
+  }
+
+  .pet-chat-home-context__status {
+    color: rgba(154, 215, 188, 0.58);
+  }
+
   .pet-chat-new-button,
   .pet-chat-bubble,
   .pet-chat-quick-chip,
@@ -1198,8 +1302,13 @@ page {
   .pet-chat-diet-context-source,
   .pet-chat-diet-card-macros,
   .pet-chat-diet-card-evidence,
-  .pet-chat-diet-card-reason {
+  .pet-chat-diet-card-reason,
+  .pet-chat-diet-card-score {
     color: rgba(225, 239, 229, 0.62);
+  }
+
+  .pet-chat-diet-card-role {
+    color: #8ed1ad;
   }
 }
 
@@ -1230,4 +1339,51 @@ page {
   to {
     transform: rotate(360deg);
   }
+}
+
+.pet-chat-location-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 12rpx 24rpx 4rpx;
+  font-size: 22rpx;
+}
+
+.pet-chat-location-button {
+  display: flex;
+  align-items: center;
+  min-height: 52rpx;
+  padding: 0 18rpx;
+  border-radius: 26rpx;
+  background: rgba(85, 167, 124, 0.12);
+  color: #438b65;
+}
+
+.pet-chat-location-hint,
+.pet-chat-location-clear,
+.pet-chat-diet-note {
+  color: #718078;
+  font-size: 22rpx;
+  line-height: 1.6;
+}
+
+.pet-chat-diet-note {
+  display: block;
+  margin: 12rpx 0;
+}
+
+.pet-chat-location-spinner {
+  width: 26rpx;
+  height: 26rpx;
+  border: 3rpx solid rgba(85, 167, 124, 0.22);
+  border-top-color: #55a77c;
+  border-radius: 50%;
+  animation: pet-chat-image-upload 0.8s linear infinite;
+}
+
+.pet-chat-page--dark {
+  .pet-chat-location-button { color: #9ad7bc; }
+  .pet-chat-location-hint,
+  .pet-chat-location-clear,
+  .pet-chat-diet-note { color: rgba(225, 239, 229, 0.65); }
 }
