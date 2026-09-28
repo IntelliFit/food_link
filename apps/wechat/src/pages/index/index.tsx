@@ -1,3 +1,4 @@
+import SleepCard from './components/SleepCard'
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button } from '@tarojs/components'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import * as React from 'react'
@@ -3601,6 +3602,10 @@ function IndexPage() {
           </View>
         </View>
 
+        </HomeModule>
+
+        <HomeModule id='sleep' layout={moduleLayout} locks={moduleLocks}>
+          <SleepCard key={`${selectedDate}:${isGuest}`} date={selectedDate} guest={isGuest} />
         </HomeModule>
 
         <HomeModule id='meals' layout={moduleLayout} locks={moduleLocks}>

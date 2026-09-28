@@ -1241,6 +1241,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("user_friends_friend_id_fkey", "user_friends", "friend_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_weight_records_user_id_fkey", "user_weight_records", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_water_logs_user_id_fkey", "user_water_logs", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("user_sleep_records_user_id_fkey", "user_sleep_records", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_body_metric_settings_user_id_fkey", "user_body_metric_settings", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_exercise_logs_user_id_fkey", "user_exercise_logs", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("exercise_energy_aliases_activity_id_fkey", "exercise_energy_aliases", "activity_id", "exercise_energy_library", "id", "CASCADE"),
@@ -3884,4 +3885,18 @@ BEGIN
     ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s) ON DELETE %s;
   END IF;
 END $$`, name, table, table, name, column, refTable, refColumn, onDelete)
+}
+
+// MigrateSleepRecords is an additive, repeatable migration for manual sleep records.
+func MigrateSleepRecords(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).AutoMigrate(&migrationdo.SleepRecordDO{}); err != nil {
+		return err
+	}
+	return db.WithContext(ctx).Exec(`DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_sleep_records_user_id_fkey' AND conrelid = 'user_sleep_records'::regclass) THEN
+ ALTER TABLE user_sleep_records ADD CONSTRAINT user_sleep_records_user_id_fkey FOREIGN KEY (user_id) REFERENCES weapp_user(id) ON DELETE CASCADE;
+ END IF; END $$`).Error
 }

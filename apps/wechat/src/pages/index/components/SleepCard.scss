@@ -1,0 +1,12 @@
+.sleep-card { margin-bottom: 24rpx; padding: 28rpx; border-radius: 28rpx; background: #fff; color: #283e38; }
+.sleep-card__heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22rpx; }
+.sleep-card__title { font-size: 30rpx; font-weight: 600; }
+.sleep-card__edit { color: #258666; font-size: 24rpx; padding: 8rpx 0 8rpx 20rpx; }
+.sleep-card__duration { font-size: 42rpx; font-weight: 600; margin-bottom: 14rpx; }
+.sleep-card__quality { margin-left: 20rpx; font-size: 24rpx; font-weight: 400; color: #6c7b75; }
+.sleep-card__muted, .sleep-card__note { display: block; font-size: 25rpx; line-height: 1.6; color: #78857e; }
+.sleep-card__note { margin-top: 12rpx; }
+.sleep-card__footnote { display: block; margin-top: 18rpx; color: #96a19a; font-size: 21rpx; }
+.sleep-card__skeleton { height: 72rpx; border-radius: 14rpx; background: #eef3f0; animation: sleep-shimmer 1.2s ease-in-out infinite alternate; }
+@keyframes sleep-shimmer { to { opacity: .4; } }
+.home-page--dark .sleep-card { background: #1c2822; color: #edf5ef; }

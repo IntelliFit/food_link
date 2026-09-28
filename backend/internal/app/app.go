@@ -368,6 +368,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Health module DI
 	exerciseRepo := healthrepo.NewExerciseRepo(db)
 	statsRepo := healthrepo.NewStatsRepo(db)
+	sleepHandler := healthhandler.NewSleepHandler(healthservice.NewSleepService(healthrepo.NewSleepRepo(db)))
 	bodyMetricsSvc := healthservice.NewBodyMetricsService(bodyMetricsRepo)
 	exerciseSvc := healthservice.NewExerciseService(exerciseRepo, cfg)
 	exerciseSvc.ConfigureTaskPublisher(taskQueue)
@@ -682,6 +683,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/community/search", authmw.RequireJWT(jwtSvc), searchHandler.Search)
 
 	// Health routes
+	engine.GET("/api/sleep-records/:date", authmw.RequireJWT(jwtSvc), sleepHandler.Handle)
+	engine.PUT("/api/sleep-records/:date", authmw.RequireJWT(jwtSvc), sleepHandler.Handle)
+	engine.DELETE("/api/sleep-records/:date", authmw.RequireJWT(jwtSvc), sleepHandler.Handle)
 	engine.GET("/api/body-metrics/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetBodyMetricsSummary)
 	engine.POST("/api/body-metrics/sync-local", authmw.RequireJWT(jwtSvc), healthHandler.SyncLocalBodyMetrics)
 	engine.POST("/api/body-metrics/water", authmw.RequireJWT(jwtSvc), healthHandler.SaveBodyWaterLog)

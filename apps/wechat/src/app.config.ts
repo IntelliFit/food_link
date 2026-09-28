@@ -67,6 +67,7 @@ const extraSubpackagePages = [
   'pages/follow-list/index',
   'pages/private-conversations/index',
   'pages/private-chat/index',
+  'pages/sleep-record/index',
   'pages/weight-record/index',
   'pages/weight-trend/index',
   'pages/water-record/index',

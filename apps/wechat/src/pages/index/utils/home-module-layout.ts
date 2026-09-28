@@ -6,6 +6,7 @@ export const HOME_MODULES = [
   { id: 'supplements', label: '今日补剂', description: '补剂计划和快捷记录' },
   { id: 'rewards', label: '精选功能', description: '积分任务和校园活动' },
   { id: 'body', label: '体重、喝水与运动', description: '体重趋势、饮水和运动记录' },
+  { id: 'sleep', label: '睡眠', description: '入睡、起床时间与主观睡眠感受' },
   { id: 'meals', label: '今日餐食', description: '已记录的餐食和营养明细' },
   { id: 'expiry', label: '食物保质期', description: '查看临期食物和保质期' },
   { id: 'recap', label: '上周回顾', description: '回看真实记录，留下一周的小结' },

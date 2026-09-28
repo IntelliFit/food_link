@@ -33,9 +33,10 @@ func main() {
 	onlyGrowthPerformanceIndexes := flag.Bool("only-growth-performance-indexes", false, "only create growth-sensitive feed, notification, and body-summary indexes")
 	onlyMarketingQR := flag.Bool("only-marketing-qr", false, "only add offline marketing QR attribution tables")
 	onlyCampusMapLocations := flag.Bool("only-campus-map-locations", false, "only add school, campus, and canteen coordinates used by the food map")
+	onlySleep := flag.Bool("only-sleep-records", false, "only add manual daily sleep records")
 	flag.Parse()
 	selectedOnlyModes := 0
-	for _, selected := range []bool{*onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -94,7 +95,9 @@ func main() {
 		return
 	}
 	var migrateErr error
-	if *onlyPapay {
+	if *onlySleep {
+		migrateErr = migration.MigrateSleepRecords(ctx, db, cfg.Database.Schema)
+	} else if *onlyPapay {
 		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionQuality {
 		migrateErr = migration.MigrateNutritionQuality(ctx, db, cfg.Database.Schema)

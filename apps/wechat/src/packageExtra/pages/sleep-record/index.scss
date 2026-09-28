@@ -1,0 +1,17 @@
+.sleep-editor { min-height: 100vh; box-sizing: border-box; padding: 36rpx 28rpx calc(48rpx + env(safe-area-inset-bottom)); background: #f3f6f4; color: #294138; }
+.sleep-editor__title { display: block; font-size: 40rpx; font-weight: 600; margin-bottom: 16rpx; }
+.sleep-editor__hint { display: block; color: #819087; font-size: 24rpx; line-height: 1.6; }
+.sleep-editor__card { margin: 24rpx 0; padding: 24rpx; border-radius: 24rpx; background: white; }
+.sleep-editor__row { display: flex; justify-content: space-between; padding: 26rpx 0; font-size: 28rpx; border-bottom: 1rpx solid #ecf1ed; }
+.sleep-editor__duration { display: block; color: #218160; margin: 24rpx 0 10rpx; font-size: 28rpx; }
+.sleep-editor__label { font-size: 28rpx; }
+.sleep-editor__optional { font-size: 22rpx; color: #95a098; margin-left: 12rpx; }
+.sleep-editor__qualities { display: flex; gap: 12rpx; margin-top: 24rpx; }
+.sleep-editor__quality { flex: 1; padding: 0; margin: 0; line-height: 72rpx; font-size: 25rpx; background: #f3f6f4; color: #60766a; border-radius: 16rpx; &::after { border: 0; } &.is-selected { background: #e0f4e9; color: #158257; } }
+.sleep-editor__note { width: 100%; height: 160rpx; box-sizing: border-box; font-size: 27rpx; line-height: 1.6; margin-top: 24rpx; }
+.sleep-editor__counter { display: block; text-align: right; font-size: 21rpx; color: #95a098; }
+.sleep-editor__save { background: #159b70; color: #fff; border-radius: 22rpx; line-height: 88rpx; font-size: 30rpx; margin-top: 32rpx; &::after { border: 0; } }
+.sleep-editor__delete { color: #a76058; background: transparent; font-size: 26rpx; margin-top: 18rpx; &::after { border: 0; } }
+.sleep-editor__skeleton { height: 480rpx; margin-top: 28rpx; border-radius: 24rpx; background: #e4ece7; animation: sleep-pulse 1.2s ease-in-out infinite alternate; }
+.sleep-editor__error { padding: 60rpx 0; color: #89715d; text-align: center; }
+@keyframes sleep-pulse { to { opacity: .4; } }

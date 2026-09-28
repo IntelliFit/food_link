@@ -2021,6 +2021,22 @@ type OpenAPIPaymentOrderDO struct {
 
 func (OpenAPIPaymentOrderDO) TableName() string { return "open_api_payment_orders" }
 
+// SleepRecordDO stores one user-reported main sleep period per wake-up day.
+type SleepRecordDO struct {
+	ID         string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID     string    `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_sleep_user_day,priority:1"`
+	RecordedOn time.Time `gorm:"column:recorded_on;type:date;not null;uniqueIndex:idx_sleep_user_day,priority:2"`
+	Bedtime    time.Time `gorm:"column:bedtime;type:timestamptz;not null;check:sleep_period_valid,wake_time >= bedtime + interval '1 minute' AND wake_time <= bedtime + interval '24 hours'"`
+	WakeTime   time.Time `gorm:"column:wake_time;type:timestamptz;not null;check:sleep_wake_day_valid,(wake_time AT TIME ZONE 'Asia/Shanghai')::date = recorded_on"`
+	Quality    string    `gorm:"column:quality;type:text;not null;default:'';check:sleep_quality_valid,quality IN ('','good','fair','poor')"`
+	Note       string    `gorm:"column:note;type:varchar(500);not null;default:''"`
+	Source     string    `gorm:"column:source;type:text;not null;default:'manual'"`
+	CreatedAt  time.Time `gorm:"column:created_at;type:timestamptz;not null;autoCreateTime"`
+	UpdatedAt  time.Time `gorm:"column:updated_at;type:timestamptz;not null;autoUpdateTime"`
+}
+
+func (SleepRecordDO) TableName() string { return "user_sleep_records" }
+
 func AllModels() []any {
 	return []any{
 		&UserDO{},
@@ -2082,6 +2098,7 @@ func AllModels() []any {
 		&BodyWeightRecordDO{},
 		&BodyWaterLogDO{},
 		&BodyMetricSettingsDO{},
+		&SleepRecordDO{},
 		&ExerciseLogDO{},
 		&ExerciseEnergyActivityDO{},
 		&ExerciseEnergyAliasDO{},
