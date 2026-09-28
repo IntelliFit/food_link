@@ -33,6 +33,7 @@ import './index.scss'
 const EXERCISE_PENDING_TASKS_KEY = 'exercise_pending_tasks_v1'
 
 const EXERCISE_QUICK_PRESETS: string[] = [
+  '深蹲 80kg × 4组 × 12次',
   '跑步30分钟',
   '游泳45分钟',
   '瑜伽1小时',
@@ -659,12 +660,12 @@ export default function ExerciseRecordPage() {
               </View>
             </View>
             <View className='exercise-precision-field'>
-              <Text className='exercise-precision-label'>动作时间或组次（选填）</Text>
+              <Text className='exercise-precision-label'>动作、重量、组数和次数（选填）</Text>
               <Textarea
                 className='exercise-precision-breakdown'
                 value={precisionBreakdown}
                 onInput={(e) => setPrecisionBreakdown(e.detail.value)}
-                placeholder='例如：深蹲 4×12、俯卧撑 4×10；或深蹲15分钟、俯卧撑10分钟'
+                placeholder='例如：深蹲 80kg × 4组 × 12次；俯卧撑 自重 × 4组 × 10次，也可补充各动作时长'
                 maxlength={1000}
                 autoHeight
                 showConfirmBar={false}
@@ -717,7 +718,7 @@ export default function ExerciseRecordPage() {
             className='chat-input'
             value={inputValue}
             onInput={(e) => setInputValue(e.detail.value)}
-            placeholder={selectedImagePath ? '补充描述（可选）' : '今天做了什么运动？'}
+            placeholder={selectedImagePath ? '可补充动作、重量、组数和次数' : '今天做了什么运动？力量训练记得写动作、重量、组数和次数'}
             placeholderClass='input-placeholder'
             maxlength={2000}
             autoHeight
