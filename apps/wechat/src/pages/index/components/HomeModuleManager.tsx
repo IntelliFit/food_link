@@ -22,7 +22,7 @@ export function HomeModuleManager({ layout, locks, onSave, onClose }: { layout: 
   return <View className='home-organizer' catchMove>
     <View className='home-organizer__mask' onClick={onClose} />
     <View className='home-organizer__sheet' role='dialog' aria-label='整理首页'>
-      <View className='home-organizer__heading'><Text>整理首页</Text><Button onClick={onClose}>取消</Button></View>
+      <View className='home-organizer__heading'><Text>整理首页</Text><Button className='home-organizer__button' onClick={onClose}>取消</Button></View>
       <Text className='home-organizer__hint'>拖动左侧手柄排序，开关控制显示。日期始终留在顶部。</Text>
       <ScrollView scrollY={!dragging} className='home-organizer__list'>
         {draft.order.map((id, index) => {
@@ -40,12 +40,12 @@ export function HomeModuleManager({ layout, locks, onSave, onClose }: { layout: 
               }} onTouchEnd={stop} onTouchCancel={stop}
             >≡</View>
             <View className='home-organizer__copy'><Text className='home-organizer__title'>{item.label}</Text><Text className='home-organizer__description'>{lock || item.description}</Text></View>
-            <View className='home-organizer__arrows'><Button disabled={index === 0} aria-label={`上移${item.label}`} onClick={() => move(id, -1)}>↑</Button><Button disabled={index === draft.order.length - 1} aria-label={`下移${item.label}`} onClick={() => move(id, 1)}>↓</Button></View>
-            <Switch checked={isHomeModuleVisible(draft, id, locks)} disabled={Boolean(lock)} color='#0fb47c' aria-label={`显示${item.label}`} onChange={event => setDraft(previous => ({ ...previous, hidden: event.detail.value ? previous.hidden.filter(key => key !== id) : [...previous.hidden.filter(key => key !== id), id] }))} />
+            <View className='home-organizer__arrows'><Button className='home-organizer__button' disabled={index === 0} aria-label={`上移${item.label}`} onClick={() => move(id, -1)}>↑</Button><Button className='home-organizer__button' disabled={index === draft.order.length - 1} aria-label={`下移${item.label}`} onClick={() => move(id, 1)}>↓</Button></View>
+            <Switch className='home-organizer__switch' checked={isHomeModuleVisible(draft, id, locks)} disabled={Boolean(lock)} color='#0fb47c' aria-label={`显示${item.label}`} onChange={event => setDraft(previous => ({ ...previous, hidden: event.detail.value ? previous.hidden.filter(key => key !== id) : [...previous.hidden.filter(key => key !== id), id] }))} />
           </View>
         })}
       </ScrollView>
-      <View className='home-organizer__footer'><Button className='home-organizer__reset' onClick={() => setDraft(defaultHomeModuleLayout())}>恢复默认</Button><Button className='home-organizer__save' onClick={() => onSave(draft)}>完成</Button></View>
+      <View className='home-organizer__footer'><Button className='home-organizer__button home-organizer__reset' onClick={() => setDraft(defaultHomeModuleLayout())}>恢复默认</Button><Button className='home-organizer__button home-organizer__save' onClick={() => onSave(draft)}>完成</Button></View>
     </View>
   </View>
 }

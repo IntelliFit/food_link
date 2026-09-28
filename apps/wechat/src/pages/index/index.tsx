@@ -1531,9 +1531,9 @@ function IndexPage() {
     }
   }, [])
 
-  /** 「今日小结」预览：自定义 tabBar 通过 storage 隐藏底栏（见 custom-tab-bar/updateHidden） */
+  /** 首页浮层打开时，自定义 tabBar 通过 storage 隐藏底栏。 */
   React.useEffect(() => {
-    if (showDailyPosterModal) {
+    if (showDailyPosterModal || showHomeModuleManager) {
       try {
         Taro.setStorageSync('home_poster_modal_visible', '1')
       } catch {
@@ -1553,7 +1553,7 @@ function IndexPage() {
         /* ignore */
       }
     }
-  }, [showDailyPosterModal])
+  }, [showDailyPosterModal, showHomeModuleManager])
 
   const refreshBodyMetrics = React.useCallback(async () => {
     if (!getAccessToken()) return
