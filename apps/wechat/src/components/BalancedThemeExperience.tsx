@@ -7,6 +7,7 @@ import { getBalancedThemeDefinition } from '../utils/balanced-theme'
 import { extraPkgUrl } from '../utils/subpackage-extra'
 import clarityFood from '../assets/balanced-themes/clarity-food.webp'
 import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
+import waterDrop from '../assets/balanced-themes/water-drop-v6.webp'
 import { BALANCED_SCENES, loadBalancedScenes } from '../utils/balanced-theme-scenes'
 import './BalancedThemeExperience.scss'
 
@@ -57,7 +58,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     return () => { active = false }
   }, [theme, wellness])
   if (wellness) return children ? <>{children}</> : null
-  const { miniatureGarden, miniatureDesk, miniatureSquare, picturebookDay, picturebookDesk, waterVessel, naturalLeaves, easternSoup, galleryCollage } = scenesReady ? BALANCED_SCENES : {} as Partial<typeof BALANCED_SCENES>
+  const { miniatureGarden, miniatureDesk, miniatureSquare, picturebookDay, picturebookDesk, waterVessel, waterRock, naturalLeaves, easternSoup, galleryCollage } = scenesReady ? BALANCED_SCENES : {} as Partial<typeof BALANCED_SCENES>
   const retryScene = () => { setSceneError(false); loadBalancedScenes().then(() => setScenesReady(true)).catch(() => setSceneError(true)) }
   const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}>场景未能打开，轻触重试</View>
   const definition = getBalancedThemeDefinition(theme)
@@ -72,12 +73,13 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const recipes = () => Taro.navigateTo({ url: extraPkgUrl('/pages/recipes/index') })
   const action = (id: string, text: string, detail: string, icon: string, onClick: () => void) => (
     <View id={`bt-action-${id}`} className={`bt-action bt-action--${id}`} role='button' aria-label={text} hoverClass='bt-action--pressed' onClick={onClick}>
+      {theme === 'way-of-water' && <Image className='bt-action__water-drop' src={waterDrop} mode='aspectFit' />}
       <Text className={`iconfont ${icon} bt-action__icon`} />
       <View className='bt-action__copy'><Text>{text}</Text>{detail && <Text>{detail}</Text>}</View>
       <Text className='iconfont icon-right bt-action__arrow' />
     </View>
   )
-  const masthead = <View className='bt-masthead'><View><Text className='bt-masthead__brand'>{surface !== 'home' || theme === 'modern-gallery' ? SURFACE_NAME[surface] : '食探'}</Text><Text className='bt-masthead__edition'>{definition.name}</Text></View><Text className='bt-masthead__date'>{date.replace(/-/g, '.')}</Text></View>
+  const masthead = <View className='bt-masthead'><View><Text className='bt-masthead__brand'>{theme !== 'way-of-water' && (surface !== 'home' || theme === 'modern-gallery') ? SURFACE_NAME[surface] : '食探'}</Text><Text className='bt-masthead__edition'>{definition.name}</Text></View><Text className='bt-masthead__date'>{date.replace(/-/g, '.')}</Text></View>
   const heading = <View className='bt-heading'><Text className='bt-heading__title'>{title}</Text><Text className='bt-heading__subtitle'>{PHILOSOPHY[theme]}</Text></View>
   const summary = <View className='bt-live-summary'>
     <View role='button' aria-label='查看当日餐食' onClick={meals}><Text>饮食记录</Text><Text>{value(home?.mealCount, ' 餐')}</Text></View>
@@ -88,11 +90,12 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   if (surface !== 'home') {
     const art = theme === 'miniature-world' ? (surface === 'profile' ? miniatureDesk : surface === 'community' ? miniatureSquare : miniatureGarden)
       : theme === 'picturebook-companion' ? picturebookDesk : theme === 'natural-symbiosis' ? naturalLeaves
-      : theme === 'eastern-salon' ? easternLandscape : theme === 'way-of-water' ? waterVessel
+      : theme === 'eastern-salon' ? easternLandscape : theme === 'way-of-water' ? waterRock
       : theme === 'modern-gallery' ? galleryCollage : undefined
     return <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
       {art && <Image className='bt-scene bt-scene--chapter' src={art} mode='aspectFill' />}
       <View className='bt-chapter-heading'>{masthead}{heading}</View>{sceneRetry}
+      {theme === 'way-of-water' && <Text className='bt-water-chapter-verse'>{surface === 'stats' ? '点滴汇聚，看见自己的节奏。' : surface === 'community' ? '不同的选择，也有回响。' : '每一次照顾自己，都留下痕迹。'}</Text>}
       {children && <View className='bt-integrated-content'>{children}</View>}
       {surface === 'community' && onPublish && <View className='bt-publish'>{action('publish', '分享我的一餐', '', 'icon-paizhao-xianxing', onPublish)}</View>}
     </View>
@@ -112,6 +115,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     </>}
     {theme === 'way-of-water' && <>
       {waterVessel && <Image className='bt-scene' src={waterVessel} mode='aspectFill' />}{masthead}{heading}
+      <View className='bt-water-today' role='button' aria-label='查看今日饮食记录' onClick={meals}><Text>今日食记</Text><Text>{value(home?.mealCount, ' 餐')}</Text><Text>{home?.authenticated ? '点此回看' : '从第一餐开始'}</Text></View>
       <Text className='bt-water-motto'>水无定形 · 因势而行</Text>
       <View className='bt-water-actions'>{action('record', '记录饮食', '', 'icon-paizhao-xianxing', record)}{action('water', '饮水', value(home?.waterMl, ' ml'), 'icon-drink', water)}{action('stats', '观其流变', '', 'icon-shangzhang', stats)}</View>
     </>}

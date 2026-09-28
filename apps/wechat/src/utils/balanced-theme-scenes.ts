@@ -8,6 +8,7 @@ export const BALANCED_SCENES = {
   picturebookDay: `${root}/picturebook-day-v4.webp`,
   picturebookDesk: `${root}/picturebook-desk-v4.webp`,
   waterVessel: `${root}/water-vessel-v4.webp`,
+  waterRock: `${root}/water-rock-v6.webp`,
   naturalLeaves: `${root}/natural-leaves-v4.webp`,
   easternSoup: `${root}/eastern-soup-v4.webp`,
   galleryCollage: `${root}/gallery-collage-v4.webp`,

@@ -1,0 +1,120 @@
+/* Water's own reading rhythm. All selectors are isolated from wellness and other themes. */
+.fl-balanced-theme--way-of-water {
+  --bt-page: #071016;
+  --bt-surface: #101c23;
+  --bt-surface-muted: #172830;
+  --bt-text: #e8eff0;
+  --bt-muted: #afc1c7;
+  --bt-border: #3c545e;
+  .home-page, .stats-page, .community-page, .profile-page { background: #071016 !important; }
+  .bt-experience--way-of-water {
+    padding: 38rpx 36rpx;
+    .bt-masthead__brand { font-family: 'Songti SC', STSong, SimSun, serif; font-weight: 400; font-size: 62rpx; letter-spacing: 8rpx; }
+    .bt-masthead__edition { color: #bed0d5; font-size: 23rpx; }
+    .bt-heading { margin-top: 40rpx; }
+    .bt-heading__title { font-size: 62rpx; letter-spacing: 6rpx; }
+    .bt-heading__subtitle { font-family: sans-serif; font-size: 25rpx; letter-spacing: 2rpx; }
+    .bt-action__water-drop { position: absolute; width: 104rpx; height: 104rpx; top: 0; left: calc(50% - 52rpx); pointer-events: none; }
+    &.bt-experience--home { height: 1080rpx; }
+    &.bt-experience--home .bt-scene { height: 920rpx; }
+    &.bt-experience--home::after { content: ''; position: absolute; z-index: 0; pointer-events: none; left: 0; right: 0; top: 760rpx; height: 165rpx; background: linear-gradient(transparent, #071016); }
+    .bt-water-today { position: absolute; right: 30rpx; top: 360rpx; max-width: 185rpx; padding: 18rpx; background: #071016c9; border-left: 1rpx solid #c08a59; }
+    .bt-water-today text { display: block; line-height: 1.8; font-size: 23rpx; color: #bbccd0; }
+    .bt-water-today text:nth-child(2) { color: #f0f4f2; font-size: 31rpx; }
+    .bt-water-motto { position: absolute; bottom: 32rpx; left: 36rpx; width: calc(100% - 72rpx); color: #c6d4d6; font-size: 24rpx; }
+    .bt-water-actions { position: absolute; left: 30rpx; right: 210rpx; bottom: 118rpx; gap: 10rpx; }
+    .bt-water-actions .bt-action { position: relative; padding: 0; padding-top: 118rpx; border: 0; background: transparent; min-width: 0; border-radius: 0; gap: 0; }
+    .bt-water-actions .bt-action__icon { position: absolute; top: 29rpx; font-size: 39rpx; left: calc(50% - 20rpx); }
+    .bt-water-actions .bt-action__copy { width: 100%; text-align: center; }
+    .bt-water-actions .bt-action__copy > text:first-child { font-size: 25rpx; font-weight: 400; white-space: nowrap; }
+    .bt-water-actions .bt-action__copy > text:nth-child(2) { font-size: 21rpx; color: #b7cbd0; }
+    .bt-water-actions .bt-action--pressed .bt-action__water-drop { transform: scale(.92); transition: transform 180ms ease-out; }
+    &:not(.bt-experience--home) { min-height: 360rpx; padding-bottom: 36rpx; margin-bottom: 0; }
+    &:not(.bt-experience--home) .bt-scene { opacity: 1; }
+    .bt-water-chapter-verse { display: block; margin-top: 26rpx; font-size: 24rpx; line-height: 1.8; color: #becbd0; }
+    .bt-chapter-heading, .bt-water-chapter-verse { max-width: 580rpx; }
+    .bt-publish { max-width: none; margin-top: 28rpx; }
+    .bt-publish .bt-action { background: transparent; border: 0; border-top: 1rpx solid #42555e; padding: 24rpx 0 0 100rpx; justify-content: flex-start; min-height: 98rpx; }
+    .bt-publish .bt-action__water-drop { left: 0; top: 10rpx; width: 80rpx; height: 80rpx; }
+    .bt-publish .bt-action__icon { position: absolute; left: 23rpx; top: 31rpx; font-size: 33rpx; }
+    .bt-publish .bt-action__copy { flex: 1; }
+    .bt-publish .bt-action__copy > text { font-size: 29rpx; font-weight: 400; }
+    .bt-publish .bt-action__arrow { display: block; }
+  }
+  /* The actual account lives in the scene, rather than inside another boxed panel. */
+  .bt-experience--profile .bt-integrated-content { margin-top: 50rpx; }
+  .bt-integrated-content .profile-header-section { padding: 10rpx 0 28rpx; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+  .profile-header-section .user-avatar-wrapper { border: 2rpx solid #a9c4ce; box-shadow: 0 0 0 8rpx #a5d0e218; }
+  .profile-header-section .user-name { font-family: 'Songti SC', STSong, SimSun, serif; font-weight: 400; font-size: 40rpx; }
+  .profile-header-section .profile-quick-actions { padding-top: 30rpx; border-top: 1rpx solid #56636a; }
+  .profile-section { margin: 0 12rpx; border: 0; border-radius: 0; border-bottom: 1rpx solid #364a54; background: transparent; box-shadow: none; }
+  .profile-section-heading { padding: 34rpx 8rpx; background: transparent; }
+  .profile-section-title { color: #edf2f3; font-size: 34rpx; font-weight: 400; font-family: 'Songti SC', STSong, SimSun, serif; letter-spacing: 3rpx; }
+  .profile-section-hint { color: #afc1c7; font-size: 24rpx; margin-top: 12rpx; }
+  .profile-card { background: transparent; border: 0; box-shadow: none; }
+  .list-item { background: transparent; border-bottom-color: #2d424c; }
+  .list-title { color: #edf2f3; }
+  .list-desc { color: #afc1c7; }
+  .list-icon { background: #172c35 !important; color: #d4e4e8 !important; border: 1rpx solid #617b84; border-radius: 50%; }
+  .list-icon .iconfont { color: #d4e4e8 !important; }
+  .greeting-title, .greeting-title-icon { color: #e8eff0; }
+  .greeting-subtitle { color: #afc1c7; }
+  .greeting-mode-toggle { background: #172c35; color: #e8eff0; border: 1rpx solid #617b84; }
+  .home-experience-stage { border: 0; padding: 12rpx 0; }
+  .balanced-theme-entry { border-radius: 8rpx; box-shadow: none; border-color: #3c545e; }
+  .balanced-theme-entry__title { font-weight: 500; }
+  .balanced-theme-entry__action { background: #172c35; border: 1rpx solid #6a8996; color: #e8eff0; }
+  /* Full-width photographs and editorial separators keep the feed quiet. */
+  .feed-card { padding: 28rpx 0; margin: 0; border: 0; border-bottom: 1rpx solid #3c515c; border-radius: 0; background: transparent; box-shadow: none; }
+  .feed-card .feed-image image { border-radius: 8rpx !important; }
+  .feed-card .feed-content { font-size: 29rpx; line-height: 1.9; letter-spacing: 1rpx; }
+  .feed-card .feed-author-name { font-weight: 500; }
+  .feed-card .post-time { color: #a8bdc5; }
+  .feed-card .feed-author-name, .feed-card .user-name, .feed-card .feed-content { color: #e8eff0; }
+  .social-menu__trigger, .social-menu__ball { background: #172c35; border: 1rpx solid #78949e; box-shadow: 0 4rpx 18rpx #0006; color: #e8eff0; }
+  .social-menu__trigger::after { background: #172c35; }
+  .social-menu__label { color: #e8eff0; background: #101c23; border: 1rpx solid #425762; }
+  .feed-filter-tabs, .feed-type-tabs { background: transparent; border-bottom: 1rpx solid #3c515c; }
+  .login-tip, .home-login-banner { background: #101c23; border: 1rpx solid #425762; box-shadow: none; border-radius: 8rpx; }
+  .home-login-banner-text { color: #b9ccd1; }
+  .home-login-banner-btn, .login-tip-btn { background: #263e49; border: 1rpx solid #6b8996; }
+  .stats-page--guest { overflow-y: auto; padding-bottom: 180rpx; }
+  .stats-card { background: #101c23; border: 0; border-top: 1rpx solid #3c515c; border-radius: 8rpx; box-shadow: none; }
+  .stats-card .card-title { font-weight: 500; letter-spacing: 2rpx; }
+  .stats-range-dropdown { border-radius: 0; border-width: 0 0 1rpx; }
+  .analysis-tabs-container { border: 0; border-bottom: 1rpx solid #40545e; border-radius: 0; background: transparent; }
+  .analysis-panel-control { background: transparent; border: 0; }
+  .analysis-panel-control .segment-item.active { color: #f1d0ad; background: transparent; border-bottom: 3rpx solid #c99b6d; border-radius: 0; }
+}
+
+.water-daily-flow {
+  width: 100%; box-sizing: border-box; margin: 0 0 32rpx; padding: 32rpx 10rpx; color: #e8eff0;
+  .water-daily-flow__heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12rpx; }
+  .water-daily-flow__heading > text:first-child { font: 36rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 4rpx; }
+  .water-daily-flow__heading > text + text, .water-daily-flow__hint { color: #afc1c7; font-size: 23rpx; }
+  .water-daily-flow__hint { display: block; margin: 16rpx 0 12rpx; }
+  .water-daily-flow__days { display: flex; padding: 24rpx 0; border-bottom: 1rpx solid #45616d; }
+  .water-daily-flow__day { flex: 1; min-width: 0; padding: 12rpx 0; text-align: center; border-bottom: 3rpx solid transparent; }
+  .water-daily-flow__orb { position: relative; width: 86rpx; height: 86rpx; max-width: 100%; margin: auto; }
+  .water-daily-flow__orb image { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .45; }
+  .water-daily-flow__orb text { position: relative; display: block; line-height: 86rpx; font-size: 21rpx; color: #bfccd0; }
+  .is-recorded .water-daily-flow__orb image { opacity: .85; }
+  .is-selected { border-bottom-color: #ddb182; }
+  .is-selected .water-daily-flow__orb image { opacity: 1; }
+  .is-selected .water-daily-flow__orb text, .is-selected .water-daily-flow__date { color: #f5cf9f; }
+  .water-daily-flow__day--pressed { opacity: .75; }
+  .water-daily-flow__date { display: block; margin-top: 16rpx; font-size: 23rpx; }
+  .water-daily-flow__detail { margin-top: 24rpx; padding: 28rpx; border-left: 2rpx solid #c49c73; background: #11232bbf; }
+  .water-daily-flow__detail-title { display: flex; align-items: baseline; gap: 22rpx; }
+  .water-daily-flow__detail-title > text:first-child { font-size: 36rpx; }
+  .water-daily-flow__detail-title > text + text { font-size: 23rpx; color: #afc1c7; }
+  .water-daily-flow__metrics { display: flex; gap: 32rpx; margin: 28rpx 0; }
+  .water-daily-flow__metrics > view { flex: 1; }
+  .water-daily-flow__metrics text { display: block; font-size: 24rpx; color: #afc1c7; }
+  .water-daily-flow__metrics text + text { margin-top: 12rpx; color: #e8eff0; font-size: 31rpx; }
+  .water-daily-flow__note { font-size: 23rpx; line-height: 1.8; color: #afc1c7; }
+  .water-daily-flow__record { margin-top: 22rpx; padding: 20rpx 0; font-size: 28rpx; color: #f1d0ad; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fl-balanced-theme--way-of-water .bt-action__water-drop { transition: none !important; }
+}
