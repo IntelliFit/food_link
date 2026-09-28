@@ -545,3 +545,10 @@ final result: blocked
 - Native runtime: four surfaces present; date selection and profile expand/collapse passed. Screenshot review caught background occlusion and stretched tree slice, both corrected.
 - Local screenshots: natural-symbiosis-stats and drawer/home captures, 224×488 simulator output; community checked separately. Account/feed captures stay local.
 - Status: full visual fidelity still blocked. Font/material detail and populated-data/device-size comparisons remain, despite functional checks. Do not label all eight themes visually complete.
+
+## 2026-09-28 V9 / 八主题动态识别特征
+- Implemented eight independent ambient-motion compositions: ruler, branch/shadow, ink mist, kinetic collage, parallax clouds, window light/motes, daylight disc, water-plane ripples.
+- Only balanced-mode scene layers animate; business content remains stable. Motion can be disabled from the theme picker, pauses when hidden, and respects reduced-motion CSS.
+- Verification: focused lifecycle/preference/scene tests passed. Native transform sampling and four-surface coverage are being recorded in the V9 runtime report. Screenshots alone are not evidence of motion.
+- Full fidelity/performance status: not certified. Need device frame-rate/energy measurements and high-resolution reference comparisons; remaining static-theme differences are still open.
+- V9 native result: 32 surfaces mounted/active, 8 distinct animations changed transform; pointer-events none. Static toggle verified play-state paused + frozen transform after fixing WXSS unsupported universal-child selectors. Tab-hidden inspection unavailable (old page destroyed), unit lifecycle coverage passes.

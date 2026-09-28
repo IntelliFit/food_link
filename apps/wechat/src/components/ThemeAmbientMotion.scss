@@ -1,0 +1,90 @@
+/* Each theme has its own motion vocabulary. Content never moves with the scenery. */
+.bt-experience .bt-ambient {
+  position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none;
+  > view, > image { position: absolute; pointer-events: none; }
+}
+
+/* Precise travel, then a deliberate stop: a typographic ruler, not floating particles. */
+.bt-ambient--clarity-order {
+  .bt-ambient__one { right: 14rpx; top: 16%; width: 1rpx; height: 66%; background: #1c241a28; }
+  .bt-ambient__two { right: 8rpx; top: 16%; width: 13rpx; height: 28rpx; background: #789638; animation: bt-ruler-travel 18s cubic-bezier(.65, 0, .35, 1) infinite; }
+  .bt-ambient__three { left: 0; bottom: 10%; width: 80rpx; height: 2rpx; background: #1b221b; opacity: .2; transform-origin: left; animation: bt-rule-measure 18s ease-in-out infinite; }
+}
+@keyframes bt-ruler-travel { 0%, 12%, 100% { transform: translateY(0); } 44%, 62% { transform: translateY(180rpx); } 80%, 90% { transform: translateY(80rpx); } }
+@keyframes bt-rule-measure { 0%, 100% { transform: scaleX(.5); } 45%, 65% { transform: scaleX(1.6); } }
+
+/* Foreground branch and a displaced soft shadow move about the same attachment point. */
+.bt-ambient--natural-symbiosis {
+  .bt-ambient__branch, .bt-ambient__branch-shadow { width: 270rpx; height: 270rpx; top: -42rpx; right: -74rpx; transform-origin: 95% 3%; animation: bt-branch-sway 13s ease-in-out infinite; }
+  .bt-ambient__branch { opacity: .78; }
+  .bt-ambient__branch-shadow { top: -12rpx; right: -54rpx; opacity: .09; filter: grayscale(1) brightness(.25) blur(3px); animation-delay: -.4s; }
+  .bt-ambient__sun { width: 110%; height: 75%; left: -45%; top: 15%; background: radial-gradient(ellipse, #fff2be38, transparent 68%); animation: bt-leaf-light 19s ease-in-out infinite; }
+}
+@keyframes bt-branch-sway { 0%, 100% { transform: rotate(-3deg); } 30% { transform: rotate(3.5deg); } 54% { transform: rotate(1deg); } 76% { transform: rotate(5deg); } }
+@keyframes bt-leaf-light { 0%, 100% { transform: translateX(-4%); opacity: .3; } 55% { transform: translateX(20%); opacity: .8; } }
+
+/* Mist rolls across the empty space of the landscape, never moving the scroll itself. */
+.bt-ambient--eastern-salon {
+  .bt-ambient__one, .bt-ambient__two { left: -35%; width: 145%; height: 190rpx; background: radial-gradient(ellipse, #f9f5e2ae, #f9f5e228 45%, transparent 72%); animation: bt-ink-mist 28s ease-in-out infinite; }
+  .bt-ambient__one { top: 34%; }
+  .bt-ambient__two { top: 64%; animation-duration: 37s; animation-delay: -17s; opacity: .55; }
+  .bt-ambient__three { right: -70rpx; bottom: 5%; width: 200rpx; height: 100rpx; background: radial-gradient(ellipse, #6c817529, transparent 70%); animation: bt-ink-mist 32s ease-in-out -8s infinite; }
+}
+@keyframes bt-ink-mist { 0%, 100% { transform: translateX(-10%) scaleY(.8); opacity: .25; } 50% { transform: translateX(22%) scaleY(1.25); opacity: .68; } }
+
+/* A restrained kinetic sculpture: each geometric plane has a different pivot. */
+.bt-ambient--modern-gallery {
+  .bt-ambient__one { right: -38rpx; top: 43%; width: 135rpx; height: 200rpx; background: #c6422f; opacity: .7; transform-origin: 10% 0; animation: bt-gallery-plane 17s ease-in-out infinite; }
+  .bt-ambient__two { left: -75rpx; bottom: 16%; width: 140rpx; height: 140rpx; border: 18rpx solid #3653a1; border-radius: 50%; opacity: .75; animation: bt-gallery-orbit 23s ease-in-out infinite; }
+  .bt-ambient__three { right: 14rpx; top: 34%; width: 78rpx; height: 2rpx; background: #d7b458; transform-origin: right; animation: bt-gallery-plane 21s ease-in-out -5s infinite; }
+}
+@keyframes bt-gallery-plane { 0%, 100% { transform: rotate(-12deg) translateY(0); } 50% { transform: rotate(9deg) translateY(14rpx); } }
+@keyframes bt-gallery-orbit { 0%, 100% { transform: translateY(-20rpx) rotate(-14deg); } 50% { transform: translateY(20rpx) rotate(15deg); } }
+
+/* Two cloud banks at different speeds establish the scale of the tiny garden. */
+.bt-ambient--miniature-world {
+  .bt-ambient__cloud--near { width: 460rpx; height: 154rpx; left: -90rpx; top: 18%; opacity: .57; animation: bt-cloud-near 32s ease-in-out infinite; }
+  .bt-ambient__cloud--far { width: 300rpx; height: 100rpx; right: -90rpx; top: 10%; opacity: .4; animation: bt-cloud-far 46s ease-in-out infinite; }
+  .bt-ambient__river-light { left: 31%; bottom: 17%; width: 38%; height: 32%; background: radial-gradient(ellipse, #d9fff11f, transparent 67%); animation: bt-river-glimmer 11s ease-in-out infinite; }
+}
+@keyframes bt-cloud-near { 0%, 100% { transform: translateX(-20%) translateY(0); } 50% { transform: translateX(68%) translateY(12rpx); } }
+@keyframes bt-cloud-far { 0%, 100% { transform: translateX(25%); } 50% { transform: translateX(-90%); } }
+@keyframes bt-river-glimmer { 0%, 100% { opacity: .3; transform: translateY(10rpx); } 50% { opacity: .9; transform: translateY(-18rpx); } }
+
+/* The kitchen window's morning light with just three slow motes, no confetti. */
+.bt-ambient--picturebook-companion {
+  .bt-ambient__one { left: -26%; top: 17%; width: 130%; height: 34%; background: linear-gradient(116deg, transparent 20%, #ffe6a82e 42%, #ffe6a808 58%, transparent 72%); animation: bt-window-light 26s ease-in-out infinite; }
+  .bt-ambient__two { left: -15%; top: 19%; width: 85%; height: 26%; background: linear-gradient(116deg, transparent 40%, #fff0c221 50%, transparent 58%); animation: bt-window-light 31s ease-in-out -9s infinite; }
+  .bt-ambient__mote { width: 4rpx; height: 4rpx; border-radius: 50%; background: #fce8bb; animation: bt-mote-rise 16s ease-in-out infinite; }
+  .bt-ambient__mote--a { left: 18%; top: 36%; }
+  .bt-ambient__mote--b { left: 32%; top: 44%; animation-delay: -6s; animation-duration: 21s; }
+  .bt-ambient__mote--c { left: 55%; top: 30%; animation-delay: -11s; animation-duration: 19s; }
+}
+@keyframes bt-window-light { 0%, 100% { opacity: .25; transform: translateX(-7%) rotate(-2deg); } 55% { opacity: .85; transform: translateX(8%) rotate(2deg); } }
+@keyframes bt-mote-rise { 0%, 100% { opacity: 0; transform: translate(0, 24rpx); } 35% { opacity: .55; } 72% { opacity: .2; transform: translate(28rpx, -70rpx); } 95% { opacity: 0; transform: translate(16rpx, -90rpx); } }
+
+/* Gentle daylight stays at the edge of the large-text layout. */
+.bt-ambient--clear-care {
+  .bt-ambient__one { width: 220rpx; height: 220rpx; right: -126rpx; top: 4%; border-radius: 50%; background: #edbb4529; animation: bt-care-daylight 24s ease-in-out infinite; }
+  .bt-ambient__two { width: 310rpx; height: 310rpx; right: -173rpx; top: 0; border: 1rpx solid #b79c4e38; border-radius: 50%; animation: bt-care-daylight 24s ease-in-out -3s infinite; }
+}
+@keyframes bt-care-daylight { 0%, 100% { transform: scale(.85); opacity: .5; } 50% { transform: scale(1.08); opacity: .9; } }
+
+/* Elliptical water rings expand in the plane of the pool, not toward the reader. */
+.bt-ambient--way-of-water {
+  .bt-ambient__one, .bt-ambient__two, .bt-ambient__three { left: 12%; top: 64%; width: 76%; height: 9%; border: 2rpx solid #cee7e7; border-radius: 50%; box-sizing: border-box; opacity: 0; animation: bt-water-ripple 12s cubic-bezier(.15, .35, .5, 1) infinite; }
+  .bt-ambient__two { animation-delay: -4s; }
+  .bt-ambient__three { animation-delay: -8s; border-color: #a8c5cb; }
+}
+@keyframes bt-water-ripple { 0% { transform: scale(.42); opacity: 0; } 16% { opacity: .34; } 80%, 100% { transform: scale(1.7); opacity: 0; } }
+
+/* Hide/show preserves the CSS timeline without any animation timer or setData loop. */
+.bt-experience.bt-motion--paused .bt-ambient { visibility: hidden; }
+.bt-experience.bt-motion--paused .bt-ambient > view,
+.bt-experience.bt-motion--paused .bt-ambient > image { animation-play-state: paused; }
+.bt-experience:not(.bt-experience--home) .bt-ambient { opacity: .65; }
+@media (prefers-reduced-motion: reduce) {
+  .bt-experience .bt-ambient { display: none; }
+  .bt-experience .bt-ambient > view,
+  .bt-experience .bt-ambient > image { animation: none !important; }
+}

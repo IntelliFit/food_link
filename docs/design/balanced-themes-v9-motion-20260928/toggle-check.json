@@ -1,0 +1,8 @@
+{
+  "disabled": true,
+  "playState": "paused",
+  "frozen": true,
+  "hidden": null,
+  "resumed": true,
+  "hiddenCheckNote": "Switching tabs destroyed the old automator page handle; native pause-on-hide inspection unavailable. Lifecycle pause/resume covered by unit tests."
+}

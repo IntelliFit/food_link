@@ -74,3 +74,11 @@
 .fl-balanced-theme--clear-care .balanced-theme-entry__action { min-width: 92rpx; padding: 18rpx 22rpx; font-size: 28rpx; text-align: center; }
 
 .fl-balanced-theme--way-of-water .balanced-theme-picker__mask { background: rgb(0 4 8 / 76%); }
+
+.balanced-theme-motion-setting { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; padding: 20rpx 30rpx; border-bottom: 1rpx solid var(--bt-border); color: var(--bt-text); background: var(--bt-surface); }
+.balanced-theme-motion-setting > view:first-child { flex: 1; min-width: 0; }
+.balanced-theme-motion-setting text { display: block; font-size: 28rpx; }
+.balanced-theme-motion-setting > view:first-child text + text { font-size: 22rpx; line-height: 1.6; margin-top: 6rpx; color: var(--bt-muted); }
+.balanced-theme-motion-toggle { flex-shrink: 0; padding: 18rpx 24rpx; border: 1rpx solid var(--bt-border); border-radius: 999rpx; background: var(--bt-surface-muted); }
+.balanced-theme-motion-toggle.is-on { background: var(--bt-accent); color: var(--bt-accent-text); border-color: var(--bt-accent); }
+.balanced-theme-option__motion { display: block; margin-top: 10rpx; font-size: 22rpx; letter-spacing: 2rpx; color: var(--bt-text); }

@@ -13,6 +13,8 @@ export const BALANCED_SCENES = {
   naturalRings: `${root}/natural-rings-v8.webp`,
   naturalDrawer: `${root}/natural-drawer-v8.webp`,
   naturalPaper: `${root}/natural-paper-v8.webp`,
+  motionBranch: `${root}/motion-branch-v9.webp`,
+  motionCloud: `${root}/motion-cloud-v9.webp`,
   easternSoup: `${root}/eastern-soup-v4.webp`,
   galleryCollage: `${root}/gallery-collage-v4.webp`,
 } as const

@@ -4,6 +4,8 @@ import * as React from 'react'
 import { useInkWellness } from './InkWellness'
 import { useBalancedTheme } from './BalancedThemeContext'
 import { ThemeChapterHeader } from './ThemeChapterHeader'
+import { ThemeAmbientMotion } from './ThemeAmbientMotion'
+import { useThemeMotion } from './ThemeMotion'
 import { getBalancedThemeDefinition } from '../utils/balanced-theme'
 import { extraPkgUrl } from '../utils/subpackage-extra'
 import clarityFood from '../assets/balanced-themes/clarity-food.webp'
@@ -49,6 +51,7 @@ const SURFACE_NAME = { home: '首页', stats: '分析', community: '圈子', pro
 export function BalancedThemeExperience({ surface, home, children, onRecord, onWater, onMeals, onPublish }: Props): React.ReactElement | null {
   const wellness = useInkWellness()
   const { theme } = useBalancedTheme()
+  const motion = useThemeMotion()
   const [scenesReady, setScenesReady] = React.useState(false)
   const [sceneError, setSceneError] = React.useState(false)
   React.useEffect(() => {
@@ -88,7 +91,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     <View role='button' aria-label='记录饮水' onClick={water}><Text>饮水</Text><Text>{value(home?.waterMl, ' ml')}</Text></View>
     <View role='button' aria-label='查看营养分析' onClick={stats}><Text>今日摄入</Text><Text>{value(home?.calories, ' kcal')}</Text></View>
   </View>
-  const rootClass = `bt-experience bt-experience--${theme} bt-experience--${surface}${children ? ' bt-experience--integrated' : ''}`
+  const rootClass = `bt-experience bt-experience--${theme} bt-experience--${surface}${children ? ' bt-experience--integrated' : ''}${motion.active ? ' bt-motion--active' : ' bt-motion--paused'}`
   if (surface !== 'home') {
     const art = theme === 'miniature-world' ? (surface === 'profile' ? miniatureDesk : surface === 'community' ? miniatureSquare : miniatureGarden)
       : theme === 'picturebook-companion' ? picturebookDesk
@@ -96,12 +99,13 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       : theme === 'modern-gallery' ? galleryCollage : undefined
     return <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
       {art && <Image className='bt-scene bt-scene--chapter' src={art} mode='aspectFill' />}
+      <ThemeAmbientMotion theme={theme} scenesReady={scenesReady} />
       <ThemeChapterHeader theme={theme} title={title} surfaceName={SURFACE_NAME[surface]} date={date.replace(/-/g, '.')} />{sceneRetry}
       {children && <View className='bt-integrated-content'>{children}</View>}
       {surface === 'community' && onPublish && <View className='bt-publish'>{action('publish', '分享我的一餐', '', 'icon-paizhao-xianxing', onPublish)}</View>}
     </View>
   }
-  return <View id='balanced-theme-experience-home' className={rootClass}>{sceneRetry}
+  return <View id='balanced-theme-experience-home' className={rootClass}>{sceneRetry}<ThemeAmbientMotion theme={theme} scenesReady={scenesReady} />
     {theme === 'miniature-world' && <>
       {miniatureGarden && <Image className='bt-scene' src={miniatureGarden} mode='aspectFill' />}{masthead}{heading}
       <View className='bt-garden-sign bt-garden-sign--meals'>{action('meals', '饮食花园', value(home?.mealCount, ' 餐 · 查看记录'), 'icon-foodshop', meals)}</View>

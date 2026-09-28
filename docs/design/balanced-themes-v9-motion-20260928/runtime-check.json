@@ -1,0 +1,226 @@
+[
+  {
+    "theme": "clarity-order",
+    "surface": "home",
+    "active": true,
+    "layer": true,
+    "animationName": "bt-ruler-travel",
+    "transformChanges": true,
+    "actionPresent": true,
+    "pointerEvents": "none"
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "stats",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "community",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "clarity-order",
+    "surface": "profile",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "home",
+    "active": true,
+    "layer": true,
+    "animationName": "bt-branch-sway",
+    "transformChanges": true,
+    "actionPresent": true,
+    "pointerEvents": "none"
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "stats",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "community",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "natural-symbiosis",
+    "surface": "profile",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "home",
+    "active": true,
+    "layer": true,
+    "animationName": "bt-ink-mist",
+    "transformChanges": true,
+    "actionPresent": true,
+    "pointerEvents": "none"
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "stats",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "community",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "eastern-salon",
+    "surface": "profile",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "home",
+    "active": true,
+    "layer": true,
+    "animationName": "bt-gallery-plane",
+    "transformChanges": true,
+    "actionPresent": true,
+    "pointerEvents": "none"
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "stats",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "community",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "modern-gallery",
+    "surface": "profile",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "home",
+    "active": true,
+    "layer": true,
+    "animationName": "bt-cloud-near",
+    "transformChanges": true,
+    "actionPresent": true,
+    "pointerEvents": "none"
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "stats",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "community",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "miniature-world",
+    "surface": "profile",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "home",
+    "active": true,
+    "layer": true,
+    "animationName": "bt-window-light",
+    "transformChanges": true,
+    "actionPresent": true,
+    "pointerEvents": "none"
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "stats",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "community",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "picturebook-companion",
+    "surface": "profile",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "clear-care",
+    "surface": "home",
+    "active": true,
+    "layer": true,
+    "animationName": "bt-care-daylight",
+    "transformChanges": true,
+    "actionPresent": true,
+    "pointerEvents": "none"
+  },
+  {
+    "theme": "clear-care",
+    "surface": "stats",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "clear-care",
+    "surface": "community",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "clear-care",
+    "surface": "profile",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "home",
+    "active": true,
+    "layer": true,
+    "animationName": "bt-water-ripple",
+    "transformChanges": true,
+    "actionPresent": true,
+    "pointerEvents": "none"
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "stats",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "community",
+    "active": true,
+    "layer": true
+  },
+  {
+    "theme": "way-of-water",
+    "surface": "profile",
+    "active": true,
+    "layer": true
+  }
+]
