@@ -101,7 +101,7 @@ For every passing group:
    - `test(scope): ...`
    - `docs(scope): ...`
    - `chore(scope): ...`
-5. Let the repository pre-commit hook run. Never bypass it with `--no-verify`.
+5. The repository has no pre-commit hook. Run the review plan's selected checks explicitly before publishing; do not repeat unrelated full suites for every commit.
 
 ### 6. Push and create the PR
 

@@ -23,7 +23,7 @@
 - 不要自行创建或切换到 `codex/*`、功能分支、实验分支或临时 worktree；只有用户明确要求隔离分支、Pull Request 或实验环境时才可例外。
 - 如果发现当前不在 `dev`，先保护未提交改动，再将其无损迁移回 `dev`；禁止使用强制 checkout、reset 或其他可能丢失、覆盖改动的方式。
 - `main` 只用于用户明确要求的正式发布、正式环境热修复或既定发布流程；不得把日常开发直接放在 `main`。
-- 直接在 `dev` 工作不取消代码审查、测试、`.husky/pre-commit` 和敏感文件检查门禁。
+- 直接在 `dev` 工作仍需按改动范围完成代码审查、必要测试和敏感文件检查；这些检查在发布前显式执行，不使用 Git hook 阻塞每次提交。
 
 ## 前端验证
 
@@ -51,11 +51,11 @@
   - 详细规范请参考 `.agents/skills/go-api-loadtest/SKILL.md`
 - **foodlink-pr-review**: 每个工作日下班前或用户要求审查/整理/提交 PR 时使用。相对 `origin/dev` 归组当天改动，拆分无关功能，执行两轴代码审查和相关测试；仅在无严重问题时生成规范提交并创建目标为 `dev` 的 Draft PR。发现 Blocker/High 问题时禁止提交、推送和建 PR，只输出问题报告。详见 `.agents/skills/foodlink-pr-review/SKILL.md`。
 
-### 提交前审查
+### 提交与发布检查
 
-- `.husky/pre-commit` 是所有提交的确定性质量门禁，不得使用 `--no-verify` 绕过。
-- 微信端改动执行 TypeScript、暂存文件 ESLint 和 Jest；Admin 改动执行构建；Go 改动执行 gofmt 检查和相关包测试；所有提交执行暂存 diff 与敏感文件检查。
-- Hook 只做确定性检查；功能归组、重复代码、回归影响和严重问题判断由 `foodlink-pr-review` 每日任务完成。
+- 仓库不配置 `pre-commit` 自动门禁，普通提交不得自动触发全量 TypeScript、Jest、Admin 构建或 Go 测试。
+- 发布前根据实际改动显式执行一次必要检查：微信端改动检查 TypeScript、相关 ESLint 和 Jest；Admin 改动执行构建；Go 改动执行 gofmt 和相关包测试；同时检查暂存 diff 与敏感文件。
+- 功能归组、重复代码、回归影响和严重问题判断由 `foodlink-pr-review` 完成；不要为了满足固定流程反复运行与改动无关的全量测试。
 
 ## 可用 SKILL（第一优先级）
 - Build production-ready Go backend services following DDD-layered architecture.
@@ -132,12 +132,11 @@
 ### 提交前清理
 
 - 提交代码前必须清理项目根目录下的临时文件
-- 已配置 git pre-commit hook 自动删除以下文件：
+- 手动检查并清理以下根目录临时文件：
   - `*.png` (调试截图)
   - `*.html` (预览文件)
   - `*.py` (调试脚本)
   - `*.js` (根目录下的临时 JS 文件，不包括 src/ 和 config/ 等子目录)
-- Hook 位置：`.husky/pre-commit`
 - 如需手动运行清理：`find . -maxdepth 1 -name "*.png" -o -name "*.html" -o -name "*.py" -o -name "*.js" -type f -delete`
 
 
