@@ -101,4 +101,9 @@
   .tr-care-tip { font-size: 30rpx; line-height: 1.8; display: block; margin-top: 26rpx; }
   .tr-record { background: #ffbd21; color: #102b19; font-size: 36rpx; font-weight: 700; border: 0; border-radius: 16rpx; }
 }
-.theme-review--way-of-water { padding: 0 12rpx 26rpx; .water-daily-flow { margin-bottom: 10rpx; } }
+.theme-review--way-of-water {
+  padding: 18rpx 28rpx 48rpx;
+  .water-daily-flow { margin-bottom: 0; }
+  .tr-chart { height: 370rpx; margin-top: 44rpx; }
+  .tr-caption { margin: 18rpx 0 34rpx; }
+}

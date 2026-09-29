@@ -106,32 +106,34 @@
 }
 
 .water-daily-flow {
-  width: 100%; box-sizing: border-box; margin: 0 0 32rpx; padding: 32rpx 10rpx; color: #e8eff0;
-  .water-daily-flow__heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12rpx; }
+  width: 100%; box-sizing: border-box; margin: 0 0 42rpx; padding: 40rpx 12rpx 0; color: #e8eff0;
+  .water-daily-flow__heading { display: flex; justify-content: space-between; align-items: center; gap: 24rpx; }
   .water-daily-flow__heading > text:first-child { font: 36rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 4rpx; }
-  .water-daily-flow__heading > text + text, .water-daily-flow__hint { color: #afc1c7; font-size: 23rpx; }
-  .water-daily-flow__hint { display: block; margin: 16rpx 0 12rpx; }
-  .water-daily-flow__days { display: flex; padding: 24rpx 0; border-bottom: 1rpx solid #45616d; }
-  .water-daily-flow__day { flex: 1; min-width: 0; padding: 12rpx 0; text-align: center; border-bottom: 3rpx solid transparent; }
-  .water-daily-flow__orb { position: relative; width: 86rpx; height: 86rpx; max-width: 100%; margin: auto; }
+  .water-daily-flow__heading > text + text { flex-shrink: 0; padding: 8rpx 16rpx; color: #b8c9ce; border: 1rpx solid #415b65; border-radius: 999rpx; background: #0d1e26; font-size: 21rpx; }
+  .water-daily-flow__hint { display: block; margin: 18rpx 0 30rpx; color: #91a8af; font-size: 22rpx; letter-spacing: 1rpx; }
+  .water-daily-flow__days { display: grid; grid-template-columns: repeat(8, 1fr); column-gap: 8rpx; row-gap: 26rpx; padding: 28rpx 8rpx 36rpx; border-top: 1rpx solid #293f49; border-bottom: 1rpx solid #45616d; }
+  .water-daily-flow__day { grid-column: span 2; min-width: 0; padding: 8rpx 0 16rpx; text-align: center; border-bottom: 3rpx solid transparent; }
+  .water-daily-flow__day:nth-child(5) { grid-column: 2 / span 2; }
+  .water-daily-flow__orb { position: relative; width: 104rpx; height: 104rpx; max-width: 100%; margin: auto; }
   .water-daily-flow__orb image { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .45; }
-  .water-daily-flow__orb text { position: relative; display: block; line-height: 86rpx; font-size: 21rpx; color: #bfccd0; }
+  .water-daily-flow__orb text { position: relative; display: block; line-height: 104rpx; font-size: 21rpx; color: #bfccd0; }
   .is-recorded .water-daily-flow__orb image { opacity: .85; }
   .is-selected { border-bottom-color: #ddb182; }
   .is-selected .water-daily-flow__orb image { opacity: 1; }
   .is-selected .water-daily-flow__orb text, .is-selected .water-daily-flow__date { color: #f5cf9f; }
   .water-daily-flow__day--pressed { opacity: .75; }
-  .water-daily-flow__date { display: block; margin-top: 16rpx; font-size: 23rpx; }
-  .water-daily-flow__detail { margin-top: 24rpx; padding: 28rpx; border-left: 2rpx solid #c49c73; background: #11232bbf; }
-  .water-daily-flow__detail-title { display: flex; align-items: baseline; gap: 22rpx; }
-  .water-daily-flow__detail-title > text:first-child { font-size: 36rpx; }
+  .water-daily-flow__date { display: block; margin-top: 18rpx; font-size: 22rpx; }
+  .water-daily-flow__detail { margin-top: 34rpx; padding: 36rpx 34rpx 32rpx; border-left: 2rpx solid #c49c73; border-radius: 0 16rpx 16rpx 0; background: linear-gradient(135deg, #122832e8, #0d2028e8); box-shadow: inset 0 1rpx 0 rgb(255 255 255 / 4%); }
+  .water-daily-flow__detail-title { display: flex; align-items: baseline; gap: 24rpx; padding-bottom: 6rpx; }
+  .water-daily-flow__detail-title > text:first-child { font-size: 38rpx; letter-spacing: 2rpx; }
   .water-daily-flow__detail-title > text + text { font-size: 23rpx; color: #afc1c7; }
-  .water-daily-flow__metrics { display: flex; gap: 32rpx; margin: 28rpx 0; }
-  .water-daily-flow__metrics > view { flex: 1; }
+  .water-daily-flow__metrics { display: flex; gap: 0; margin: 34rpx 0 30rpx; }
+  .water-daily-flow__metrics > view { flex: 1; min-width: 0; }
+  .water-daily-flow__metrics > view + view { margin-left: 34rpx; padding-left: 34rpx; border-left: 1rpx solid #38505a; }
   .water-daily-flow__metrics text { display: block; font-size: 24rpx; color: #afc1c7; }
-  .water-daily-flow__metrics text + text { margin-top: 12rpx; color: #e8eff0; font-size: 31rpx; }
-  .water-daily-flow__note { font-size: 23rpx; line-height: 1.8; color: #afc1c7; }
-  .water-daily-flow__record { margin-top: 22rpx; padding: 20rpx 0; font-size: 28rpx; color: #f1d0ad; }
+  .water-daily-flow__metrics text + text { margin-top: 14rpx; color: #e8eff0; font-size: 31rpx; }
+  .water-daily-flow__note { display: block; color: #afc1c7; font-size: 23rpx; line-height: 1.9; }
+  .water-daily-flow__record { margin-top: 28rpx; padding: 24rpx 0 4rpx; border-top: 1rpx solid #2f4751; color: #f1d0ad; font-size: 27rpx; }
 }
 @media (prefers-reduced-motion: reduce) {
   .fl-balanced-theme--way-of-water .bt-action__water-drop { transition: none !important; }
