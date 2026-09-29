@@ -1,5 +1,6 @@
 import { InkMasthead, useInkWellness } from '../../components/InkWellness'
 import { BalancedThemeExperience } from '../../components/BalancedThemeExperience'
+import { useBalancedTheme } from '../../components/BalancedThemeContext'
 import { View, Text, ScrollView, Image, Input, Button, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
@@ -379,6 +380,7 @@ function isCommunityFeedItem(value: CommunityFeedItem | CommunityFeedItem['recor
 
 function CommunityPage() {
   const ink = useInkWellness()
+  const { theme } = useBalancedTheme()
   const [inkRankingOpen, setInkRankingOpen] = useState(false)
   const { scheme } = useAppColorScheme()
   const socialInbox = useSocialInbox()
@@ -2050,6 +2052,10 @@ function CommunityPage() {
             }}
           >
             <BalancedThemeExperience surface='community' onPublish={() => void handlePublishPost()} />
+            {!ink && theme === 'way-of-water' && <View className='water-feed-tabs'>
+              {([{ key: 'priority', label: '关注' }, { key: 'public', label: '发现' }, { key: 'all', label: '附近' }] as const).map(tab => <View key={tab.key} role='button' className={`water-feed-tabs__tab${feedAuthorScope === tab.key ? ' is-active' : ''}`} onClick={() => { if (tab.key !== 'public' && !loggedIn) { redirectToLogin(); return }; setFeedAuthorScope(tab.key) }}><Text>{tab.label}</Text></View>)}
+              <Text className='water-feed-tabs__verse'>同一片水面，连着不同的生活</Text>
+            </View>}
             {ink && <>
               <InkMasthead title='烟火人间' subtitle='一餐一味，彼此相伴' />
               <View className='ink-feed-tabs'>

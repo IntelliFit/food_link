@@ -66,7 +66,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   // Scene clips live in the same lazy subpackage as the artwork. Mounting a video
   // before that package is ready makes the native player fail and retain the still fallback.
   const sceneVideo = scenesReady ? getThemeSceneVideo(theme, surface) : undefined
-  const { miniatureGarden, miniatureDesk, miniatureSquare, picturebookDay, picturebookDesk, waterVessel, waterRock, naturalLeaves, easternSoup, galleryCollage } = scenesReady ? BALANCED_SCENES : {} as Partial<typeof BALANCED_SCENES>
+  const { miniatureGarden, miniatureDesk, miniatureSquare, picturebookDay, picturebookDesk, waterVessel, waterRock, waterHome, waterStats, waterCommunity, waterProfile, naturalLeaves, easternSoup, galleryCollage } = scenesReady ? BALANCED_SCENES : {} as Partial<typeof BALANCED_SCENES>
   const retryScene = () => { setSceneError(false); loadBalancedScenes().then(() => setScenesReady(true)).catch(() => setSceneError(true)) }
   const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}>场景未能打开，轻触重试</View>
   const definition = getBalancedThemeDefinition(theme)
@@ -99,7 +99,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   if (surface !== 'home') {
     const art = theme === 'miniature-world' ? (surface === 'profile' ? miniatureDesk : surface === 'community' ? miniatureSquare : miniatureGarden)
       : theme === 'picturebook-companion' ? picturebookDesk
-      : theme === 'eastern-salon' ? easternLandscape : theme === 'way-of-water' ? waterRock
+      : theme === 'eastern-salon' ? easternLandscape : theme === 'way-of-water' ? ({ stats: waterStats, community: waterCommunity, profile: waterProfile } as const)[surface] || waterRock
       : theme === 'modern-gallery' ? galleryCollage : undefined
     return <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
       <ThemeSceneBackground
@@ -129,7 +129,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       <View className='bt-scene-footer'>{action('record', '记录这一餐', '把日常，写成自己的故事', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'way-of-water' && <>
-      <ThemeSceneBackground poster={waterVessel} src={sceneVideo} active={motion.active} />{masthead}{heading}
+      <ThemeSceneBackground poster={waterHome || waterVessel} src={sceneVideo} active={motion.active} />{masthead}{heading}
       <View className='bt-water-side-verse' aria-hidden><Text>饮食如水</Text><Text>汇于生命的长河</Text><Text>温柔而有力</Text></View>
       <View className='bt-water-console'>
         <View className='bt-water-overview'>

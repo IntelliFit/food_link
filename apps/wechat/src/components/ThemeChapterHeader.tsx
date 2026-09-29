@@ -21,6 +21,9 @@ export function ThemeChapterHeader({ theme, title, surfaceName, date }: Props) {
     case 'clear-care': return <View className={root}><View className='tc-imprint'><Text className='tc-brand'>食探</Text><Text className='tc-badge'>清朗关怀</Text></View><Text className='tc-title'>{title}</Text><Text className='tc-subtitle'>简单清晰，用得安心</Text></View>
     case 'way-of-water': {
       const copy = waterCopy[surfaceName] || { subtitle: '在流动中，找到自己的节奏。', marginal: '随形而行\n方能长久' }
+      if (surfaceName === '我的') return <View className={`${root} theme-chapter--water-profile`}>
+        <View className='tc-scroll-heading'><View><Text className='tc-title'>{title}</Text><Text className='tc-subtitle'>{copy.subtitle}</Text></View><Text className='tc-marginal'>{copy.marginal}</Text></View>
+      </View>
       return <View className={`${root} theme-chapter--water-${surfaceName}`}>
         <View className='tc-imprint'><View className='tc-water-brand'><Text className='tc-brand'>食探</Text><Text className='tc-water-edition'>水之道</Text></View><Text className='tc-date'>{date}</Text></View>
         <View className='tc-scroll-heading'><Text className='tc-title'>{title}</Text><Text className='tc-marginal'>{copy.marginal}</Text></View>

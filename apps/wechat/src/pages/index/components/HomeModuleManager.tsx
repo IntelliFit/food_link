@@ -107,7 +107,7 @@ export function HomeModuleFrame({ moduleId, label, editing, dragging, dragOffset
   return (
     <View
       id={`home-module-${moduleId}`}
-      className={`home-module-frame${editing ? ' is-editing' : ''}${dragging ? ' is-dragging' : ''}`}
+      className={`home-module-frame home-module-frame--${moduleId}${editing ? ' is-editing' : ''}${dragging ? ' is-dragging' : ''}`}
       style={{
         order: layoutOrder,
         ...(dragging ? { transform: `translate3d(0, ${dragOffsetY}px, 0) scale(1.018)` } : {}),
