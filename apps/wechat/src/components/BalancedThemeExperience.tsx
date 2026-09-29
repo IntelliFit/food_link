@@ -130,6 +130,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     </>}
     {theme === 'way-of-water' && <>
       <ThemeSceneBackground poster={waterVessel} src={sceneVideo} active={motion.active} />{masthead}{heading}
+      <View className='bt-water-side-verse' aria-hidden><Text>饮食如水</Text><Text>汇于生命的长河</Text><Text>温柔而有力</Text></View>
       <View className='bt-water-console'>
         <View className='bt-water-overview'>
           <View className='bt-water-metric' role='button' aria-label='查看今日饮食记录' hoverClass='bt-water-control--pressed' onClick={meals}>
