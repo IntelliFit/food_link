@@ -21,13 +21,28 @@ interface GreetingSectionProps {
     count?: number
   }
   onPetReminderPress?: () => void
+  compact?: boolean
 }
 
-export function GreetingSection({ current, target, date, onTarget, mode, onModeToggle, petAvatar, onPetPress, petReminder, onPetReminderPress }: GreetingSectionProps) {
+export function GreetingSection({ current, target, date, onTarget, mode, onModeToggle, petAvatar, onPetPress, petReminder, onPetReminderPress, compact = false }: GreetingSectionProps) {
   const { text, iconClass } = getGreeting()
   const isWellness = mode === 'wellness'
 
   if (isWellness) return <InkHomeHero current={current} target={target} date={date} onTarget={onTarget} onModeToggle={onModeToggle} reminder={petReminder?.text} onReminder={onPetReminderPress} />
+
+  if (compact && !petReminder) return (
+    <View className='greeting-section greeting-section--compact'>
+      <Text className='greeting-compact-label'>今日健康概览</Text>
+      <View
+        id='home-mode-toggle'
+        className={`greeting-mode-toggle greeting-mode-toggle--${mode}`}
+        onClick={onModeToggle}
+      >
+        <Text className='greeting-mode-toggle__label'>均衡</Text>
+        <Text className='greeting-mode-toggle__switch'>⇄</Text>
+      </View>
+    </View>
+  )
 
   return (
     <View className={`greeting-section${isWellness ? ' greeting-section--taiji' : ''}`}>

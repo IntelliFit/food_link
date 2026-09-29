@@ -5,13 +5,10 @@
   .theme-chapter--way-of-water .tc-title { font: 54rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 5rpx; }
   .theme-chapter--way-of-water .tc-marginal { font-size: 22rpx; color: #b5c6cb; }
   .theme-chapter--way-of-water .tc-subtitle { font-size: 24rpx; color: #c7d2d4; }
-  .bt-experience--home .bt-masthead__brand { font-size: 50rpx; }
-  .bt-experience--home .bt-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
-  .bt-experience--home .bt-heading__title { font-size: 54rpx; }
-  .bt-experience--home .bt-heading__subtitle { width: 175rpx; margin-top: 0; font-size: 22rpx; }
-  .bt-experience--home .bt-water-today { top: 335rpx; right: 28rpx; max-width: 170rpx; background: transparent; padding: 0 0 0 20rpx; }
-  .bt-experience--home .bt-water-today text:nth-child(4) { font-size: 30rpx; color: #ecf2f4; }
-  .bt-experience--home .bt-water-today text:nth-child(3) { margin-top: 30rpx; }
+  .bt-experience--home .bt-masthead__brand { font-size: 38rpx; }
+  .bt-experience--home .bt-heading { display: block; max-width: 470rpx; }
+  .bt-experience--home .bt-heading__title { font-size: 58rpx; }
+  .bt-experience--home .bt-heading__subtitle { width: auto; margin-top: 14rpx; font-size: 23rpx; }
   .bt-experience--profile .bt-integrated-content { margin-top: 60rpx; }
   .bt-experience--profile .user-card { display: flex; flex-direction: column; align-items: flex-start; gap: 30rpx; }
   .bt-experience--profile .user-info-main { width: 70%; }

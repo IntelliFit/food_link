@@ -8,27 +8,38 @@
   --bt-border: #3c545e;
   .home-page, .stats-page, .community-page, .profile-page { background: #071016 !important; }
   .bt-experience--way-of-water {
-    padding: 38rpx 36rpx;
-    .bt-masthead__brand { font-family: 'Songti SC', STSong, SimSun, serif; font-weight: 400; font-size: 62rpx; letter-spacing: 8rpx; }
-    .bt-masthead__edition { color: #bed0d5; font-size: 23rpx; }
-    .bt-heading { margin-top: 40rpx; }
-    .bt-heading__title { font-size: 62rpx; letter-spacing: 6rpx; }
-    .bt-heading__subtitle { font-family: sans-serif; font-size: 25rpx; letter-spacing: 2rpx; }
+    padding: 34rpx 36rpx;
+    .bt-masthead { align-items: flex-start; }
+    .bt-masthead__brand { display: inline-block; font-family: 'Songti SC', STSong, SimSun, serif; font-weight: 400; font-size: 38rpx; line-height: 1.2; letter-spacing: 7rpx; }
+    .bt-masthead__edition { display: inline-block; margin: 0 0 0 16rpx; padding-left: 17rpx; border-left: 1rpx solid #a6bdc57a; color: #bed0d5; font-size: 22rpx; line-height: 1.2; letter-spacing: 3rpx; }
+    .bt-masthead__date { padding-top: 6rpx; color: #aebfc4; font-size: 21rpx; letter-spacing: 2rpx; }
+    .bt-heading { margin-top: 42rpx; max-width: 520rpx; }
+    .bt-heading__title { font-size: 58rpx; line-height: 1.16; letter-spacing: 6rpx; }
+    .bt-heading__subtitle { margin-top: 14rpx; font-family: sans-serif; color: #c1d0d3; font-size: 23rpx; line-height: 1.55; letter-spacing: 2rpx; }
     .bt-action__water-drop { position: absolute; width: 104rpx; height: 104rpx; top: 0; left: calc(50% - 52rpx); pointer-events: none; }
-    &.bt-experience--home { height: 1080rpx; }
-    &.bt-experience--home .bt-scene { height: 920rpx; }
-    &.bt-experience--home::after { content: ''; position: absolute; z-index: 0; pointer-events: none; left: 0; right: 0; top: 760rpx; height: 165rpx; background: linear-gradient(transparent, #071016); }
-    .bt-water-today { position: absolute; right: 30rpx; top: 360rpx; max-width: 185rpx; padding: 18rpx; background: #071016c9; border-left: 1rpx solid #c08a59; }
-    .bt-water-today text { display: block; line-height: 1.8; font-size: 23rpx; color: #bbccd0; }
-    .bt-water-today text:nth-child(2) { color: #f0f4f2; font-size: 31rpx; }
-    .bt-water-motto { position: absolute; bottom: 32rpx; left: 36rpx; width: calc(100% - 72rpx); color: #c6d4d6; font-size: 24rpx; }
-    .bt-water-actions { position: absolute; left: 30rpx; right: 210rpx; bottom: 118rpx; gap: 10rpx; }
-    .bt-water-actions .bt-action { position: relative; padding: 0; padding-top: 118rpx; border: 0; background: transparent; min-width: 0; border-radius: 0; gap: 0; }
-    .bt-water-actions .bt-action__icon { position: absolute; top: 29rpx; font-size: 39rpx; left: calc(50% - 20rpx); }
-    .bt-water-actions .bt-action__copy { width: 100%; text-align: center; }
-    .bt-water-actions .bt-action__copy > text:first-child { font-size: 25rpx; font-weight: 400; white-space: nowrap; }
-    .bt-water-actions .bt-action__copy > text:nth-child(2) { font-size: 21rpx; color: #b7cbd0; }
-    .bt-water-actions .bt-action--pressed .bt-action__water-drop { transform: scale(.92); transition: transform 180ms ease-out; }
+    &.bt-experience--home { height: 1120rpx; }
+    &.bt-experience--home .bt-scene { height: 890rpx; }
+    &.bt-experience--home::before { content: ''; position: absolute; z-index: 0; pointer-events: none; inset: 0; background: linear-gradient(180deg, #06101770 0%, transparent 28%, transparent 57%, #071016 79%, #071016 100%); }
+    &.bt-experience--home::after { content: ''; position: absolute; z-index: 0; pointer-events: none; left: 36rpx; right: 36rpx; top: 665rpx; height: 1rpx; background: linear-gradient(90deg, transparent, #8faab35e 18%, #d4a16d8f 50%, #8faab35e 82%, transparent); }
+    .bt-water-console { position: absolute; z-index: 2; left: 36rpx; right: 36rpx; bottom: 32rpx; }
+    .bt-water-overview { display: flex; align-items: center; min-height: 105rpx; box-sizing: border-box; padding: 16rpx 24rpx; border: 1rpx solid #6d879166; border-radius: 18rpx; background: #0b1820e8; box-shadow: 0 16rpx 45rpx #0007; backdrop-filter: blur(14rpx); }
+    .bt-water-metric { position: relative; flex: 1; min-width: 0; padding: 5rpx 30rpx 5rpx 0; }
+    .bt-water-metric__label, .bt-water-metric__value { display: block; white-space: nowrap; }
+    .bt-water-metric__label { color: #99adb3; font-size: 21rpx; line-height: 1.5; letter-spacing: 2rpx; }
+    .bt-water-metric__value { margin-top: 5rpx; color: #eff5f5; font-size: 29rpx; line-height: 1.35; letter-spacing: 1rpx; }
+    .bt-water-overview__line { width: 1rpx; height: 50rpx; margin: 0 28rpx; background: #8ca2a94f; }
+    .bt-water-metric__arrow { position: absolute; right: 0; top: 35rpx; color: #9fb2b7; font-size: 19rpx; }
+    .bt-water-primary { display: flex; align-items: center; min-height: 104rpx; margin-top: 18rpx; box-sizing: border-box; padding: 18rpx 24rpx; border-radius: 18rpx; color: #10212a; background: linear-gradient(110deg, #dfe9e8 0%, #b8cfd2 54%, #d9b68f 112%); box-shadow: 0 14rpx 34rpx #0006; }
+    .bt-water-primary__icon { display: flex; flex-shrink: 0; width: 58rpx; height: 58rpx; align-items: center; justify-content: center; margin-right: 18rpx; border: 1rpx solid #15303c3d; border-radius: 50%; background: #ffffff70; }
+    .bt-water-primary__icon text { font-size: 30rpx; }
+    .bt-water-primary__copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4rpx; }
+    .bt-water-primary__copy text:first-child { font-size: 29rpx; font-weight: 600; letter-spacing: 2rpx; }
+    .bt-water-primary__copy text + text { color: #29414a; font-size: 21rpx; letter-spacing: 1rpx; }
+    .bt-water-primary__arrow { font-size: 22rpx; }
+    .bt-water-secondary { display: flex; align-items: center; min-height: 72rpx; margin-top: 4rpx; padding: 0 6rpx; color: #d5e0e2; border-bottom: 1rpx solid #334851; }
+    .bt-water-secondary > text:first-child { flex: 1; font-size: 25rpx; letter-spacing: 2rpx; }
+    .bt-water-secondary > text:last-child { font-size: 20rpx; }
+    .bt-water-control--pressed { opacity: .72; transform: scale(.985); }
     &:not(.bt-experience--home) { min-height: 360rpx; padding-bottom: 36rpx; margin-bottom: 0; }
     &:not(.bt-experience--home) .bt-scene { opacity: 1; }
     .bt-water-chapter-verse { display: block; margin-top: 26rpx; font-size: 24rpx; line-height: 1.8; color: #becbd0; }
@@ -60,6 +71,14 @@
   .greeting-title, .greeting-title-icon { color: #e8eff0; }
   .greeting-subtitle { color: #afc1c7; }
   .greeting-mode-toggle { background: #172c35; color: #e8eff0; border: 1rpx solid #617b84; }
+  .greeting-section--compact { margin: 0; padding: 24rpx 4rpx 18rpx; border-bottom: 1rpx solid #2f454e; }
+  .greeting-section--compact .greeting-compact-label { color: #dbe6e8; font: 29rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 3rpx; }
+  .greeting-section--compact .greeting-mode-toggle { min-height: 52rpx; margin: 0; background: transparent; border-color: #526c75; box-shadow: none; }
+  .pet-assistant-float.pet-assistant-float--playing { bottom: calc(690rpx + env(safe-area-inset-bottom)) !important; }
+  .pet-assistant-invitation { color: #dce8e9; border-color: #506a74; background: #0c1a22f2; box-shadow: 0 8rpx 28rpx #0006; }
+  .pet-assistant-bubble-tail { border-color: #506a74; background: #0c1a22; }
+  .pet-assistant-tuck { color: #8da4ab; }
+  .pet-assistant-daily-play { color: #cfdddf; border-color: #435c65; background: #10232be8; box-shadow: 0 6rpx 18rpx #0005; }
   .home-experience-stage { border: 0; padding: 12rpx 0; }
   .balanced-theme-entry { border-radius: 8rpx; box-shadow: none; border-color: #3c545e; }
   .balanced-theme-entry__title { font-weight: 500; }

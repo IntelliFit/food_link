@@ -3429,6 +3429,7 @@ function IndexPage() {
               onModeToggle={handleHomeExperienceModeToggle}
               petReminder={petHidden ? petReminder : undefined}
               onPetReminderPress={handlePetAnalyzeReminderPress}
+              compact={homeExperienceConfig.mode === 'balanced'}
             />
           </HomeModuleFrame>
         )}

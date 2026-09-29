@@ -124,9 +124,30 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     </>}
     {theme === 'way-of-water' && <>
       <ThemeSceneBackground poster={waterVessel} src={sceneVideo} active={motion.active} />{masthead}{heading}
-      <View className='bt-water-today' role='button' aria-label='查看今日饮食记录' onClick={meals}><Text>今日食记</Text><Text>{value(home?.mealCount, ' 餐')}</Text><Text>今日摄入</Text><Text>{value(home?.calories, ' kcal')}</Text><Text>{home?.authenticated ? '点此回看' : '从第一餐开始'}</Text></View>
-      <Text className='bt-water-motto'>水无定形 · 因势而行</Text>
-      <View className='bt-water-actions'>{action('record', '记录饮食', '', 'icon-paizhao-xianxing', record)}{action('water', '饮水', value(home?.waterMl, ' ml'), 'icon-drink', water)}{action('stats', '观其流变', '', 'icon-shangzhang', stats)}</View>
+      <View className='bt-water-console'>
+        <View className='bt-water-overview'>
+          <View className='bt-water-metric' role='button' aria-label='查看今日饮食记录' hoverClass='bt-water-control--pressed' onClick={meals}>
+            <Text className='bt-water-metric__label'>今日记录</Text>
+            <Text className='bt-water-metric__value'>{value(home?.mealCount, ' 餐')}</Text>
+            <Text className='iconfont icon-right bt-water-metric__arrow' />
+          </View>
+          <View className='bt-water-overview__line' />
+          <View className='bt-water-metric' role='button' aria-label='记录今日饮水' hoverClass='bt-water-control--pressed' onClick={water}>
+            <Text className='bt-water-metric__label'>今日饮水</Text>
+            <Text className='bt-water-metric__value'>{value(home?.waterMl, ' ml')}</Text>
+            <Text className='iconfont icon-right bt-water-metric__arrow' />
+          </View>
+        </View>
+        <View className='bt-water-primary' role='button' aria-label='记录这一餐' hoverClass='bt-water-control--pressed' onClick={record}>
+          <View className='bt-water-primary__icon'><Text className='iconfont icon-paizhao-xianxing' /></View>
+          <View className='bt-water-primary__copy'><Text>记录这一餐</Text><Text>让今天，有迹可循</Text></View>
+          <Text className='iconfont icon-right bt-water-primary__arrow' />
+        </View>
+        <View className='bt-water-secondary' role='button' aria-label='查看一周饮食变化' hoverClass='bt-water-control--pressed' onClick={stats}>
+          <Text>查看一周变化</Text>
+          <Text className='iconfont icon-right' />
+        </View>
+      </View>
     </>}
     {theme === 'natural-symbiosis' && <>
       <ThemeSceneBackground poster={naturalLeaves} src={sceneVideo} active={motion.active} />{masthead}{heading}
