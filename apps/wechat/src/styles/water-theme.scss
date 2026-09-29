@@ -284,9 +284,81 @@
   .stats-card { background: #101c23; border: 0; border-top: 1rpx solid #3c515c; border-radius: 8rpx; box-shadow: none; }
   .stats-card .card-title { font-weight: 500; letter-spacing: 2rpx; }
   .stats-range-dropdown { border-radius: 0; border-width: 0 0 1rpx; }
-  .analysis-tabs-container { border: 0; border-bottom: 1rpx solid #40545e; border-radius: 0; background: transparent; }
-  .analysis-panel-control { background: transparent; border: 0; }
-  .analysis-panel-control .segment-item.active { color: #f1d0ad; background: transparent; border-bottom: 3rpx solid #c99b6d; border-radius: 0; }
+
+  /* Analysis navigation and preview notices share the same water-glass system. */
+  .stats-page {
+    .analysis-tabs-container {
+      width: auto;
+      margin: 0 12rpx 22rpx;
+      padding: 8rpx;
+      border: 1rpx solid rgb(112 169 188 / 42%);
+      border-radius: 22rpx;
+      background: linear-gradient(145deg, rgb(18 45 58 / 96%), rgb(9 27 37 / 98%));
+      box-shadow: inset 0 1rpx 0 rgb(221 246 252 / 5%), 0 12rpx 30rpx rgb(0 0 0 / 24%);
+      box-sizing: border-box;
+    }
+    .analysis-panel-control {
+      gap: 6rpx;
+      padding: 0;
+      border: 0;
+      border-radius: 16rpx;
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+    .analysis-panel-control .segment-item {
+      min-height: 68rpx;
+      padding: 0 8rpx;
+      color: #91aab2;
+      border: 1rpx solid transparent;
+      border-radius: 15rpx;
+      font-size: 24rpx;
+      font-weight: 500;
+      line-height: 68rpx;
+      box-sizing: border-box;
+    }
+    .analysis-panel-control .segment-item.active {
+      color: #f3fafb !important;
+      border: 1rpx solid rgb(143 202 220 / 56%) !important;
+      border-radius: 15rpx !important;
+      background: linear-gradient(135deg, #326d82, #204c60) !important;
+      box-shadow: inset 0 1rpx 0 rgb(255 255 255 / 8%), 0 6rpx 18rpx rgb(3 15 22 / 36%) !important;
+    }
+    .analysis-panel-control .segment-item.active text { color: #f3fafb; }
+
+    .health-index-preview-card,
+    .health-index-preview-card.analysis-preview-card {
+      width: auto;
+      min-height: 112rpx;
+      margin: 0 12rpx 24rpx;
+      padding: 20rpx 22rpx;
+      gap: 16rpx;
+      border: 1rpx solid rgb(112 169 188 / 38%);
+      border-radius: 20rpx;
+      background: linear-gradient(145deg, rgb(16 42 54 / 96%), rgb(8 26 35 / 98%));
+      box-shadow: inset 0 1rpx 0 rgb(221 246 252 / 4%), 0 10rpx 26rpx rgb(0 0 0 / 22%);
+      box-sizing: border-box;
+    }
+    .health-index-preview-badge {
+      min-width: 68rpx;
+      height: 40rpx;
+      padding: 0 12rpx;
+      border: 1rpx solid #75b3c6;
+      background: #28596c;
+      box-sizing: border-box;
+    }
+    .health-index-preview-badge-text { color: #edf7f9; font-size: 21rpx; letter-spacing: 1rpx; }
+    .health-index-preview-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
+    .health-index-preview-title {
+      color: #e8f2f4;
+      font-size: 25rpx;
+      font-weight: 600;
+      line-height: 1.4;
+      letter-spacing: 1rpx;
+    }
+    .health-index-preview-desc { margin-top: 4rpx; color: #9db3ba; font-size: 20rpx; }
+    .health-index-preview-meta { color: #88a6af; font-size: 20rpx; }
+  }
 }
 
 .water-daily-flow {
