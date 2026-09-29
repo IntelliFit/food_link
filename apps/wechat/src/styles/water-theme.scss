@@ -171,7 +171,12 @@
 
     .home-calendar-module {
       overflow: hidden;
-      padding: 16rpx 18rpx 18rpx;
+      padding: 22rpx 4rpx 26rpx;
+      border-width: 1rpx 0;
+      border-radius: 0;
+      background: rgb(4 20 28 / 34%);
+      box-shadow: none;
+      backdrop-filter: blur(10rpx);
     }
 
     .date-selector-section { margin: 0; }
@@ -179,15 +184,18 @@
     .date-calendar-title__text,
     .date-calendar-title__arrow { color: #84b6c4; }
     .date-calendar-title__text { font-size: 23rpx; font-weight: 600; letter-spacing: 1rpx; }
-    .date-list { gap: 6rpx; }
+    .date-list { position: relative; gap: 6rpx; }
+    .date-list::before { content: ''; position: absolute; left: 6%; right: 6%; top: 82rpx; height: 1rpx; background: linear-gradient(90deg, transparent, #8edcf0aa, transparent); box-shadow: 0 0 12rpx #75d1e499; }
     .date-item {
+      position: relative;
+      z-index: 1;
       flex: 1;
       width: auto;
       height: 132rpx;
       min-width: 0;
       padding: 12rpx 0 10rpx;
       border: 1rpx solid transparent;
-      border-radius: 18rpx;
+      border-radius: 999rpx;
       background: transparent;
       box-sizing: border-box;
       box-shadow: none;
@@ -205,9 +213,9 @@
     .date-item.is-selected {
       color: #f3fafb !important;
       border-color: rgb(126 194 216 / 52%) !important;
-      border-radius: 18rpx !important;
-      background: linear-gradient(180deg, rgb(43 97 117 / 92%), rgb(20 56 70 / 96%)) !important;
-      box-shadow: inset 0 0 22rpx rgb(126 202 226 / 10%) !important;
+      border-radius: 999rpx !important;
+      background: radial-gradient(circle at 34% 26%, rgb(168 232 247 / 42%), rgb(43 97 117 / 68%) 44%, rgb(9 35 47 / 84%) 76%) !important;
+      box-shadow: inset 0 0 24rpx rgb(170 233 250 / 18%), 0 0 26rpx rgb(105 206 231 / 28%) !important;
     }
     .date-item.is-selected .date-day-name { color: #d8ebf0; }
     .date-item.is-selected .date-day-circle {
@@ -331,6 +339,27 @@
   .feed-card .feed-author-name { font-weight: 500; }
   .feed-card .post-time { color: #a8bdc5; }
   .feed-card .feed-author-name, .feed-card .user-name, .feed-card .feed-content { color: #e8eff0; }
+  .theme-feed-entry--photo .feed-card-main-col,
+  .theme-feed-entry--photo:first-child .feed-card-main-col { display: flex; flex-direction: column; gap: 0; }
+  .theme-feed-entry--photo .feed-card-name-block { order: 0; }
+  .theme-feed-entry--photo .feed-image,
+  .theme-feed-entry--photo:first-child .feed-image { order: 1; width: 100%; height: 390rpx; margin: 24rpx 0 0; }
+  .theme-feed-entry--photo .feed-image-content,
+  .theme-feed-entry--photo:first-child .feed-image-content { height: 390rpx; }
+  .theme-feed-entry--photo .feed-content,
+  .theme-feed-entry--photo:first-child .feed-content { order: 2; padding: 24rpx 8rpx 12rpx; font: 28rpx/1.85 'Songti SC', STSong, SimSun, serif; }
+  .theme-feed-entry--photo .feed-meta,
+  .theme-feed-entry--photo .feed-actions { order: 3; }
+  .feed-section-header { padding: 34rpx 34rpx 20rpx; border-bottom: 1rpx solid #52717d66; }
+  .feed-section-title { color: #eef5f6; font: 34rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 5rpx; }
+  .feed-section-link { color: #9fc8d3; }
+  .feed-filter-panel { margin: 0; padding: 18rpx 34rpx 28rpx; border: 0; border-bottom: 1rpx solid #52717d66; border-radius: 0; background: rgb(5 22 30 / 30%); box-shadow: none; }
+  .feed-search-wrap { border: 1rpx solid #67899680; background: rgb(8 31 42 / 64%); }
+  .feed-search-placeholder-text { color: #8fa7ae; }
+  .feed-filter-trigger-combined { color: #aac0c6; }
+  .feed-publish-btn { width: 74rpx; height: 74rpx; margin-left: 16rpx; padding: 0; justify-content: center; border: 1rpx solid #a7d8e5; border-radius: 50%; background: radial-gradient(circle at 34% 28%, #c8f2fc66, #397a8f80 46%, #0b2936d9 78%); box-shadow: inset 0 0 18rpx #c7f5ff42, 0 0 22rpx #67cce243; }
+  .feed-publish-btn .iconfont { color: #e9f8fb; font-size: 32rpx; }
+  .feed-publish-text { display: none; }
   .social-menu__trigger, .social-menu__ball { background: #172c35; border: 1rpx solid #78949e; box-shadow: 0 4rpx 18rpx #0006; color: #e8eff0; }
   .social-menu__trigger::after { background: #172c35; }
   .social-menu__label { color: #e8eff0; background: #101c23; border: 1rpx solid #425762; }
@@ -419,6 +448,31 @@
     .health-index-preview-desc { margin-top: 4rpx; color: #9db3ba; font-size: 20rpx; }
     .health-index-preview-meta { color: #88a6af; font-size: 20rpx; }
   }
+
+  /* Override the generic water card stack with the continuous route from the approved profile render. */
+  .profile-page .theme-profile-sections { padding: 8rpx 28rpx 18rpx; }
+  .profile-page .theme-profile-sections .tp-section {
+    position: relative;
+    overflow: visible;
+    margin: 0;
+    padding: 0 0 0 112rpx;
+    color: #edf4f5;
+    border: 0;
+    border-radius: 0;
+    background: rgb(5 22 30 / 22%);
+    box-shadow: none;
+  }
+  .profile-page .theme-profile-sections .tp-section + .tp-section { border-top: 1rpx solid #52748173; }
+  .profile-page .theme-profile-sections .tp-section::before { display: block; content: ''; position: absolute; left: 18rpx; top: 25rpx; width: 72rpx; height: 72rpx; border: 1rpx solid #a8d6e3; border-radius: 50%; background: radial-gradient(circle at 34% 26%, #ecfbff7d, #5598aa42 48%, #07151dcc 77%); box-shadow: inset 0 0 20rpx #c2f1ff38, 0 0 22rpx #68cbe03d; }
+  .profile-page .theme-profile-sections .tp-section::after { display: block; content: ''; position: absolute; left: 53rpx; top: 98rpx; bottom: -1rpx; width: 1rpx; background: linear-gradient(#8edce8a3, #5c89955c); }
+  .profile-page .theme-profile-sections .tp-section:last-child::after { background: linear-gradient(#8edce8a3, transparent); }
+  .profile-page .theme-profile-sections .tp-section .tp-section__mark { position: absolute; z-index: 2; left: 18rpx; top: 25rpx; width: 72rpx; height: 72rpx; border: 0; background: transparent; box-shadow: none; }
+  .profile-page .theme-profile-sections .tp-section .tp-section__mark > text { color: #e8f7fa; font-size: 31rpx; text-shadow: 0 0 12rpx #84d9eb; }
+  .profile-page .theme-profile-sections .tp-section .profile-section-heading { min-height: 122rpx; padding: 24rpx 16rpx 24rpx 0; border: 0; background: transparent; }
+  .profile-page .theme-profile-sections .tp-section .profile-card { border: 0; border-top: 1rpx solid #3f5c6770; border-radius: 0; background: rgb(6 24 33 / 42%); box-shadow: none; }
+  .profile-page .theme-profile-sections .tp-section .list-item { padding-left: 4rpx; }
+  .profile-page .theme-profile-sections .tp-section .list-icon { display: none; }
+  .profile-page .tool-card { margin-right: 28rpx; margin-left: 28rpx; border: 0; border-top: 1rpx solid #4d6d7970; border-radius: 0; background: rgb(5 22 30 / 28%); box-shadow: none; }
 }
 
 .water-daily-flow {
