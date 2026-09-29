@@ -17,7 +17,8 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
     setPlaybackSrc(undefined)
     setFailed(false)
     if (!src || !active) return () => { cancelled = true }
-    if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
+    const getEnv = (Taro as unknown as { getEnv?: () => string }).getEnv
+    if (typeof getEnv !== 'function' || getEnv() !== Taro.ENV_TYPE.WEAPP) {
       setPlaybackSrc(src)
       return () => { cancelled = true }
     }

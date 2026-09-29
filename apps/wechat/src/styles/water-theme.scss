@@ -1,5 +1,5 @@
 /* Water's own reading rhythm. All selectors are isolated from wellness and other themes. */
-.fl-balanced-theme--way-of-water {
+.fl-page-theme-root--balanced.fl-balanced-theme--way-of-water {
   --bt-page: #071016;
   --bt-surface: #101c23;
   --bt-surface-muted: #172830;
@@ -392,5 +392,5 @@
   .water-daily-flow__record { margin-top: 28rpx; padding: 24rpx 0 4rpx; border-top: 1rpx solid #2f4751; color: #f1d0ad; font-size: 27rpx; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .fl-balanced-theme--way-of-water .bt-action__water-drop { transition: none !important; }
+  .fl-page-theme-root--balanced.fl-balanced-theme--way-of-water .bt-action__water-drop { transition: none !important; }
 }

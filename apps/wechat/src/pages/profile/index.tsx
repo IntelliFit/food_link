@@ -710,7 +710,7 @@ function ProfilePage() {
       </View>
 
       </BalancedThemeExperience>
-      <BalancedThemeEntry onOpen={() => setShowBalancedThemePicker(true)} />
+      {!ink && <BalancedThemeEntry onOpen={() => setShowBalancedThemePicker(true)} />}
 
       {/* 引导横幅 */}
       {isLoggedIn && onboardingStatus !== 'completed' && (
@@ -864,7 +864,7 @@ function ProfilePage() {
       </View>
 
       <BalancedThemePicker
-        visible={showBalancedThemePicker}
+        visible={!ink && showBalancedThemePicker}
         wellnessActive={ink}
         onClose={() => setShowBalancedThemePicker(false)}
       />

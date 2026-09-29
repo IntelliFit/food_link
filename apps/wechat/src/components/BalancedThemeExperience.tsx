@@ -138,7 +138,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
             <Text className='iconfont icon-right bt-water-metric__arrow' />
           </View>
         </View>
-        <View className='bt-water-primary' role='button' aria-label='记录这一餐' hoverClass='bt-water-control--pressed' onClick={record}>
+        <View id='bt-action-record' className='bt-water-primary' role='button' aria-label='记录这一餐' hoverClass='bt-water-control--pressed' onClick={record}>
           <View className='bt-water-primary__icon'><Text className='iconfont icon-paizhao-xianxing' /></View>
           <View className='bt-water-primary__copy'><Text>记录这一餐</Text><Text>让今天，有迹可循</Text></View>
           <Text className='iconfont icon-right bt-water-primary__arrow' />
