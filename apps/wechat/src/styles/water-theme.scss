@@ -78,7 +78,191 @@
   .pet-assistant-bubble-tail { border-color: #506a74; background: #0c1a22; }
   .pet-assistant-tuck { color: #8da4ab; }
   .pet-assistant-daily-play { color: #cfdddf; border-color: #435c65; background: #10232be8; box-shadow: 0 6rpx 18rpx #0005; }
-  .home-experience-stage { border: 0; padding: 12rpx 0; }
+  .home-experience-stage {
+    gap: 0;
+    padding: 12rpx 0;
+    border: 0;
+  }
+
+  /* Home dashboard: one alignment grid and one deep-water card language. */
+  .home-page {
+    .home-module-frame,
+    .home-module-frame:nth-child(odd),
+    .home-module-frame:nth-child(even) {
+      width: 100%;
+      margin: 0 0 22rpx;
+      padding: 0;
+      border: 0;
+      box-sizing: border-box;
+      transform: none;
+    }
+
+    .home-module-frame__content,
+    .home-calendar-module,
+    .home-diet-progress,
+    .meals-section {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .home-calendar-module,
+    .home-diet-progress,
+    .meals-section {
+      margin: 0;
+      color: #eaf3f5;
+      border: 1rpx solid rgb(116 169 188 / 42%);
+      border-radius: 24rpx;
+      background: linear-gradient(145deg, rgb(16 43 56 / 96%), rgb(8 25 34 / 98%));
+      box-shadow: inset 0 1rpx 0 rgb(224 246 252 / 5%), 0 14rpx 34rpx rgb(0 0 0 / 28%);
+    }
+
+    .home-calendar-module {
+      overflow: hidden;
+      padding: 16rpx 18rpx 18rpx;
+    }
+
+    .date-selector-section { margin: 0; }
+    .date-calendar-toolbar { margin-bottom: 12rpx; }
+    .date-calendar-title__text,
+    .date-calendar-title__arrow { color: #84b6c4; }
+    .date-calendar-title__text { font-size: 23rpx; font-weight: 600; letter-spacing: 1rpx; }
+    .date-list { gap: 6rpx; }
+    .date-item {
+      flex: 1;
+      width: auto;
+      height: 132rpx;
+      min-width: 0;
+      padding: 12rpx 0 10rpx;
+      border: 1rpx solid transparent;
+      border-radius: 18rpx;
+      background: transparent;
+      box-sizing: border-box;
+      box-shadow: none;
+    }
+    .date-day-name { color: #8ea7af; font-size: 21rpx; font-weight: 500; }
+    .date-day-circle {
+      width: 58rpx;
+      height: 58rpx;
+      color: #dce9ec;
+      border: 1rpx solid #4d6872;
+      background: #142a34;
+      box-shadow: none;
+    }
+    .date-num-text { color: inherit; font-weight: 600; }
+    .date-item.is-selected {
+      color: #f3fafb !important;
+      border-color: rgb(126 194 216 / 52%) !important;
+      border-radius: 18rpx !important;
+      background: linear-gradient(180deg, rgb(43 97 117 / 92%), rgb(20 56 70 / 96%)) !important;
+      box-shadow: inset 0 0 22rpx rgb(126 202 226 / 10%) !important;
+    }
+    .date-item.is-selected .date-day-name { color: #d8ebf0; }
+    .date-item.is-selected .date-day-circle {
+      color: #f8fcfd !important;
+      border: 2rpx solid #9bc8d6 !important;
+      background: #39768b !important;
+      box-shadow: 0 0 0 5rpx rgb(118 188 211 / 10%) !important;
+    }
+
+    .home-diet-progress { overflow: hidden; }
+    .home-diet-progress__energy { padding: 0; }
+    .home-diet-progress .main-card {
+      margin: 0;
+      padding: 28rpx 30rpx 24rpx;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .main-card-header { align-items: center; margin-bottom: 22rpx; }
+    .main-card-title { min-width: 0; gap: 10rpx; }
+    .card-label { color: #bfd0d5; font-size: 24rpx; font-weight: 600; letter-spacing: 1rpx; }
+    .card-value {
+      color: #f2f8f9 !important;
+      font-size: 54rpx;
+      font-weight: 700;
+      line-height: 1.15;
+      text-shadow: 0 0 22rpx rgb(117 191 215 / 18%);
+    }
+    .card-unit { color: #9db2b9; font-size: 25rpx; }
+    .target-energy-intake-num,
+    .target-energy-target-num { color: #b7c9ce; }
+    .target-energy-slash-only,
+    .target-energy-num-muted { color: #708991; }
+    .target-edit-btn {
+      padding: 7rpx 14rpx;
+      border: 1rpx solid #52717c;
+      background: #102b36;
+      box-shadow: none;
+    }
+    .target-edit-icon,
+    .target-edit-text { color: #9ac9d7; }
+    .progress-bar-bg { height: 14rpx; background: #193542 !important; }
+    .progress-bar-fill {
+      background: linear-gradient(90deg, #4c8ea5, #86c8d9) !important;
+      box-shadow: 0 0 16rpx rgb(110 190 214 / 28%);
+    }
+
+    .home-diet-progress .home-nutrition-module {
+      padding: 22rpx 30rpx 28rpx;
+      border-top: 1rpx solid rgb(116 169 188 / 26%);
+      border-radius: 0;
+      background: rgb(4 19 27 / 22%);
+      box-shadow: none;
+    }
+    .nutrition-expand-title { color: #e5eff1; font-size: 23rpx; letter-spacing: 1rpx; }
+    .nutrition-expand-affordance {
+      padding: 6rpx 12rpx;
+      border: 1rpx solid #476773;
+      background: #112c37;
+    }
+    .nutrition-expand-affordance-icon,
+    .nutrition-expand-affordance-text { color: #96c5d2; }
+    .macros-section-horizontal {
+      align-items: stretch;
+      gap: 12rpx;
+      margin-top: 4rpx;
+    }
+    .macro-card-horizontal,
+    .macro-card-horizontal.is-warning {
+      min-height: 112rpx;
+      max-width: none;
+      padding: 14rpx 12rpx;
+      border: 1rpx solid rgb(116 169 188 / 30%);
+      border-radius: 14rpx;
+      background: rgb(20 48 60 / 72%);
+      box-shadow: inset 0 1rpx 0 rgb(218 245 252 / 4%);
+    }
+    .macro-left-content { justify-content: center; gap: 8rpx; }
+    .macro-title-row { gap: 4rpx; }
+    .macro-title-row .iconfont { color: #78b9cc !important; }
+    .macro-label-horizontal { color: #dce8eb; font-size: 21rpx; font-weight: 600; }
+    .macro-current-value-inline { color: #a8d6e1 !important; font-size: 24rpx; }
+    .macro-target-total { color: #91a7ae; font-size: 17rpx; }
+    .macro-progress-bar-bg { height: 6rpx; background: #203e4a !important; }
+    .macro-progress-bar-fill {
+      background: linear-gradient(90deg, #4a8da4, #82c4d6) !important;
+      box-shadow: none;
+    }
+
+    .meals-section { padding: 28rpx 26rpx 30rpx; }
+    .section-header { margin-bottom: 22rpx; padding: 0; }
+    .meals-title-wrap { gap: 12rpx; }
+    .meals-title { color: #edf5f7; font-size: 31rpx; letter-spacing: 1rpx; }
+    .meals-title-icon,
+    .view-all-arrow,
+    .view-all-text { color: #8dc4d3; }
+    .meal-item {
+      color: #e7f0f2;
+      border: 1rpx solid rgb(116 169 188 / 28%);
+      background: rgb(18 43 54 / 78%);
+      box-shadow: none;
+    }
+    .meal-item .meal-name,
+    .meal-item .meal-title,
+    .meal-item .meal-calorie { color: #e7f0f2; }
+    .meal-item .meal-desc { color: #aebfc4; }
+  }
   .balanced-theme-entry { border-radius: 8rpx; box-shadow: none; border-color: #3c545e; }
   .balanced-theme-entry__title { font-weight: 500; }
   .balanced-theme-entry__action { background: #172c35; border: 1rpx solid #6a8996; color: #e8eff0; }
