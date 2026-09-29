@@ -41,6 +41,26 @@
     .bt-water-control--pressed { opacity: .72; transform: scale(.985); }
     &:not(.bt-experience--home) { min-height: 360rpx; padding-bottom: 36rpx; margin-bottom: 0; }
     &:not(.bt-experience--home) .bt-scene { opacity: 1; }
+    &:not(.bt-experience--home) .bt-scene-background__video {
+      transform: scale(1.08);
+      transform-origin: center;
+      filter: brightness(.62) saturate(.82) contrast(1.08);
+    }
+    &.bt-experience--stats .bt-scene-background__video {
+      object-position: 58% 58%;
+      transform: scale(1.14);
+      filter: brightness(.58) saturate(.78) contrast(1.12);
+    }
+    &.bt-experience--community .bt-scene-background__video {
+      object-position: 42% 48%;
+      transform: scale(1.1);
+      filter: brightness(.68) saturate(.9) contrast(1.06);
+    }
+    &.bt-experience--profile .bt-scene-background__video {
+      object-position: 70% 44%;
+      transform: scale(1.18);
+      filter: brightness(.5) saturate(.7) contrast(1.16);
+    }
     .bt-water-chapter-verse { display: block; margin-top: 26rpx; font-size: 24rpx; line-height: 1.8; color: #becbd0; }
     .bt-chapter-heading, .bt-water-chapter-verse { max-width: 580rpx; }
     .bt-publish { max-width: none; margin-top: 28rpx; }

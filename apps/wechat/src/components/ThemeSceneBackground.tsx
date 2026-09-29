@@ -6,7 +6,7 @@ import './ThemeSceneBackground.scss'
 let sceneVideoSequence = 0
 
 /** A rendered scene clip replaces its still image; no effects are overlaid on the artwork. */
-export function ThemeSceneBackground({ poster, src, active, className = 'bt-scene' }: { poster?: string; src?: string; active: boolean; className?: string }) {
+export function ThemeSceneBackground({ poster, src, active, className = 'bt-scene', initialTime = 0 }: { poster?: string; src?: string; active: boolean; className?: string; initialTime?: number }) {
   const [playbackSrc, setPlaybackSrc] = React.useState<string>()
   const [playing, setPlaying] = React.useState(false)
   const [progressed, setProgressed] = React.useState(false)
@@ -52,7 +52,7 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
   return <View className={`${className} bt-scene-background${showVideo ? ' has-video-source' : ''}${playing ? ' has-started' : ''}${progressed ? ' has-progressed' : ''}${failed ? ' has-failed' : ''}`} aria-hidden>
     {poster && <Image className='bt-scene-background__poster' src={poster} mode='aspectFill' />}
     {showVideo && <Video id={videoId} key={playbackSrc} className={`bt-scene-background__video${playing ? ' is-playing' : ''}`}
-      src={playbackSrc!} autoplay loop muted controls={false} objectFit='cover'
+      src={playbackSrc!} autoplay loop muted controls={false} objectFit='cover' initialTime={initialTime}
       showCenterPlayBtn={false} showPlayBtn={false} showFullscreenBtn={false} showProgress={false}
       showBottomProgress={false} showMuteBtn={false} enablePlayGesture={false} enableProgressGesture={false}
       pageGesture={false} vslideGesture={false} enableAutoRotation={false}

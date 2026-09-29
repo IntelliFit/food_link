@@ -6,6 +6,9 @@ export type ThemeSceneSurface = 'home' | 'stats' | 'community' | 'profile'
 export const THEME_SCENE_VIDEOS: Partial<Record<BalancedThemeId, Partial<Record<ThemeSceneSurface, string>>>> = {
   'way-of-water': {
     home: '/packageThemeScenes/assets/water-home-v2.mp4',
+    stats: '/packageThemeScenes/assets/water-home-v2.mp4',
+    community: '/packageThemeScenes/assets/water-home-v2.mp4',
+    profile: '/packageThemeScenes/assets/water-home-v2.mp4',
   },
 }
 

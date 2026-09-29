@@ -102,7 +102,13 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       : theme === 'eastern-salon' ? easternLandscape : theme === 'way-of-water' ? waterRock
       : theme === 'modern-gallery' ? galleryCollage : undefined
     return <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
-      <ThemeSceneBackground className='bt-scene bt-scene--chapter' poster={art} src={sceneVideo} active={motion.active} />
+      <ThemeSceneBackground
+        className={`bt-scene bt-scene--chapter bt-scene--${surface}`}
+        poster={art}
+        src={sceneVideo}
+        active={motion.active}
+        initialTime={{ stats: 0.8, community: 1.7, profile: 2.6 }[surface]}
+      />
       <ThemeChapterHeader theme={theme} title={title} surfaceName={SURFACE_NAME[surface]} date={date.replace(/-/g, '.')} />{sceneRetry}
       {children && <View className='bt-integrated-content'>{children}</View>}
       {surface === 'community' && onPublish && <View className='bt-publish'>{action('publish', '分享我的一餐', '', 'icon-paizhao-xianxing', onPublish)}</View>}
