@@ -47,7 +47,7 @@ export function BalancedThemeEntry({ onOpen }: { onOpen: () => void }): React.Re
     >
       <Image className='balanced-theme-entry__preview' src={THEME_PREVIEWS[theme]} mode='aspectFill' />
       <View className='balanced-theme-entry__copy'>
-        <Text className='balanced-theme-entry__eyebrow'>均衡模式主题</Text>
+        <Text className='balanced-theme-entry__eyebrow'>当前主题</Text>
         <Text className='balanced-theme-entry__title'>{current.name}</Text>
         <Text className='balanced-theme-entry__subtitle'>{current.subtitle}</Text>
       </View>

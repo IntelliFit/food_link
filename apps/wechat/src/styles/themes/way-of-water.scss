@@ -30,4 +30,131 @@
   .theme-feed-entry--photo:first-child .feed-image-content { height: 440rpx; }
   .theme-feed-entry--photo:first-child .feed-content { order: 2; padding: 22rpx 0; }
   .theme-feed-entry--photo:first-child .feed-meta, .theme-feed-entry--photo:first-child .feed-actions { order: 3; }
+
+  /* Profile uses one restrained card grammar: equal insets, radius, border and type rhythm. */
+  .profile-page {
+    --water-profile-surface: linear-gradient(145deg, rgb(15 36 47 / 95%), rgb(8 24 33 / 96%));
+    --water-profile-border: rgb(142 196 211 / 30%);
+    --water-profile-radius: 24rpx;
+
+    .bt-experience--profile .profile-header-section,
+    .balanced-theme-entry,
+    .member-card,
+    .profile-recap-section,
+    .tp-section {
+      color: #edf4f5;
+      border: 1rpx solid var(--water-profile-border);
+      border-radius: var(--water-profile-radius);
+      background: var(--water-profile-surface);
+      box-shadow: inset 0 1rpx 0 rgb(255 255 255 / 5%), 0 14rpx 34rpx rgb(0 0 0 / 20%);
+    }
+
+    .bt-experience--profile .profile-header-section {
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+    }
+
+    .bt-experience--profile .user-card {
+      gap: 24rpx;
+      padding: 30rpx 26rpx 24rpx;
+    }
+
+    .bt-experience--profile .user-info-main { width: 100%; }
+    .bt-experience--profile .profile-quick-actions { margin: 0 26rpx; padding: 24rpx 0 28rpx; }
+
+    .balanced-theme-entry,
+    .member-card,
+    .profile-recap-section {
+      margin-right: 18rpx;
+      margin-left: 18rpx;
+    }
+
+    .balanced-theme-entry {
+      min-height: 126rpx;
+      margin-bottom: 20rpx;
+      padding: 18rpx 20rpx;
+      gap: 18rpx;
+    }
+
+    .balanced-theme-entry__preview { width: 118rpx; height: 84rpx; border-radius: 14rpx; }
+    .balanced-theme-entry__eyebrow { color: #8fa6ad; font-size: 19rpx; letter-spacing: 2rpx; }
+    .balanced-theme-entry__title { color: #edf4f5; font: 30rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 3rpx; }
+    .balanced-theme-entry__subtitle { color: #9fb2b8; font-size: 20rpx; }
+    .balanced-theme-entry__action { padding: 11rpx 18rpx; color: #e8f1f2; border: 1rpx solid #708b95; border-radius: 999rpx; background: #162d37; font-size: 21rpx; }
+
+    .member-card {
+      margin-bottom: 20rpx;
+      padding: 24rpx 26rpx 22rpx;
+    }
+
+    .member-card::before,
+    .member-card::after { opacity: .24; }
+    .member-card .card-title { color: #edf4f5; font: 30rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 3rpx; }
+    .member-card .card-badge { color: #c8d7da; border: 1rpx solid #526c75; background: #142832; }
+    .member-card .credit-overview__label { color: #b8c8cc; font-size: 21rpx; }
+    .member-card .credit-overview__value { color: #edf4f5; font-size: 34rpx; }
+    .member-card .credit-overview__unit,
+    .member-card .credit-overview__meta { color: #8fa6ad; }
+    .member-card .credit-overview__item + .credit-overview__item { border-left-color: #405863; }
+    .member-card .card-bg-icon { opacity: .07; }
+
+    .profile-recap-section {
+      overflow: hidden;
+      margin-top: 0;
+      margin-bottom: 20rpx;
+      padding: 0 20rpx 20rpx;
+    }
+
+    .profile-recap-section::before,
+    .profile-recap-section::after,
+    .tp-section::before,
+    .tp-section::after { display: none; }
+
+    .profile-recap-section > .profile-section-heading {
+      min-height: 0;
+      margin: 0;
+      padding: 24rpx 2rpx 18rpx;
+    }
+
+    .profile-recap-section .profile-section-title,
+    .tp-section .profile-section-title { color: #edf4f5; font: 30rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 3rpx; }
+    .profile-recap-section .profile-section-hint,
+    .tp-section .profile-section-hint { margin-top: 6rpx; color: #96aab0; font-size: 21rpx; }
+    .profile-section-mark { color: #d4a675; font-size: 28rpx; }
+
+    .profile-recap-section .recap-archive-entry {
+      min-height: 82rpx;
+      margin: 0;
+      padding: 20rpx 22rpx;
+      color: #10242d;
+      border: 0;
+      border-radius: 16rpx;
+      background: linear-gradient(105deg, #dce8e8, #b9cdd0 68%, #d8b68f);
+      box-shadow: none;
+    }
+    .profile-recap-section .recap-archive-entry > text { font-size: 27rpx; }
+    .profile-recap-section .recap-archive-entry > text + text { color: #39515a; font-size: 20rpx; font-weight: 500; }
+
+    .theme-profile-sections { padding: 0 18rpx 4rpx; }
+    .theme-profile-sections .tp-section {
+      overflow: hidden;
+      margin: 0 0 16rpx;
+    }
+
+    .tp-section .profile-section-heading {
+      min-height: 116rpx;
+      margin: 0;
+      padding: 18rpx 22rpx;
+      gap: 18rpx;
+      border: 0;
+      background: transparent;
+    }
+
+    .tp-section .tp-section__mark { width: 66rpx; height: 66rpx; }
+    .tp-section .tp-section__mark > text { font-size: 29rpx; }
+    .tp-section .profile-section-chevron { margin-right: 5rpx; border-color: #7f969e; }
+    .tp-section > .profile-card { margin: 0; border: 0; border-top: 1rpx solid #304954; border-radius: 0; background: transparent; }
+    .tp-section .list-item { min-height: 100rpx; padding-right: 22rpx; padding-left: 22rpx; }
+  }
 }

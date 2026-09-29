@@ -792,7 +792,7 @@ function ProfilePage() {
           <View className='profile-section-heading'>
             <View>
               <Text className='profile-section-title'>阶段回顾</Text>
-              <Text className='profile-section-hint'>周报、月报和年报都收藏在这里</Text>
+              <Text className='profile-section-hint'>周报、月报与年报</Text>
             </View>
             <Text className='profile-section-mark'>✦</Text>
           </View>
