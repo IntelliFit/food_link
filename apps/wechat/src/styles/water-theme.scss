@@ -20,7 +20,6 @@
     &.bt-experience--home { height: 1120rpx; }
     &.bt-experience--home .bt-scene { height: 890rpx; }
     &.bt-experience--home::before { content: ''; position: absolute; z-index: 0; pointer-events: none; inset: 0; background: linear-gradient(180deg, #06101770 0%, transparent 28%, transparent 57%, #071016 79%, #071016 100%); }
-    &.bt-experience--home::after { content: ''; position: absolute; z-index: 0; pointer-events: none; left: 36rpx; right: 36rpx; top: 665rpx; height: 1rpx; background: linear-gradient(90deg, transparent, #8faab35e 18%, #d4a16d8f 50%, #8faab35e 82%, transparent); }
     .bt-water-console { position: absolute; z-index: 2; left: 36rpx; right: 36rpx; bottom: 32rpx; }
     .bt-water-overview { display: flex; align-items: center; min-height: 105rpx; box-sizing: border-box; padding: 16rpx 24rpx; border: 1rpx solid #6d879166; border-radius: 18rpx; background: #0b1820e8; box-shadow: 0 16rpx 45rpx #0007; backdrop-filter: blur(14rpx); }
     .bt-water-metric { position: relative; flex: 1; min-width: 0; padding: 5rpx 30rpx 5rpx 0; }
