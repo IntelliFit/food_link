@@ -53,7 +53,6 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const wellness = useInkWellness()
   const { theme } = useBalancedTheme()
   const motion = useThemeMotion()
-  const sceneVideo = getThemeSceneVideo(theme, surface)
   const [scenesReady, setScenesReady] = React.useState(false)
   const [sceneError, setSceneError] = React.useState(false)
   React.useEffect(() => {
@@ -64,6 +63,9 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     return () => { active = false }
   }, [theme, wellness])
   if (wellness) return children ? <>{children}</> : null
+  // Scene clips live in the same lazy subpackage as the artwork. Mounting a video
+  // before that package is ready makes the native player fail and retain the still fallback.
+  const sceneVideo = scenesReady ? getThemeSceneVideo(theme, surface) : undefined
   const { miniatureGarden, miniatureDesk, miniatureSquare, picturebookDay, picturebookDesk, waterVessel, waterRock, naturalLeaves, easternSoup, galleryCollage } = scenesReady ? BALANCED_SCENES : {} as Partial<typeof BALANCED_SCENES>
   const retryScene = () => { setSceneError(false); loadBalancedScenes().then(() => setScenesReady(true)).catch(() => setSceneError(true)) }
   const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}>场景未能打开，轻触重试</View>
