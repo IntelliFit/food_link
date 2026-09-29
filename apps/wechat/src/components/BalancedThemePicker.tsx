@@ -17,7 +17,7 @@ import modernGallery from '../assets/balanced-themes/04-modern-gallery-v2.webp'
 import miniatureWorld from '../assets/balanced-themes/05-miniature-world-v2.webp'
 import picturebookCompanion from '../assets/balanced-themes/06-picturebook-companion-v2.webp'
 import clearCare from '../assets/balanced-themes/07-clear-care-v2.webp'
-import wayOfWater from '../assets/balanced-themes/08-way-of-water-v3.webp'
+import wayOfWater from '../assets/balanced-themes/08-way-of-water-v4.webp'
 
 import './BalancedThemePicker.scss'
 
