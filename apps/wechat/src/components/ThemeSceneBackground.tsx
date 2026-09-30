@@ -55,7 +55,7 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
   if (!poster && !showVideo) return null
   return <View className={`${className} bt-scene-background${showVideo ? ' has-video-source' : ''}${playing ? ' has-started' : ''}${progressed ? ' has-progressed' : ''}${failed ? ' has-failed' : ''}`} aria-hidden>
     {poster && <Image className='bt-scene-background__poster' src={poster} mode='aspectFill' />}
-    {showVideo && <Video id={videoId} key={playbackSrc} className={`bt-scene-background__video${playing ? ' is-playing' : ''}`}
+    {showVideo && <Video id={videoId} key={playbackSrc} className={`bt-scene-background__video${playing ? ' is-playing' : ''}`} style={{ opacity: playing ? 1 : 0 }}
       src={playbackSrc!} autoplay loop muted controls={false} objectFit='cover' initialTime={initialTime}
       showCenterPlayBtn={false} showPlayBtn={false} showFullscreenBtn={false} showProgress={false}
       showBottomProgress={false} showMuteBtn={false} enablePlayGesture={false} enableProgressGesture={false}
