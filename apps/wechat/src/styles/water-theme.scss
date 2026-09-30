@@ -758,6 +758,16 @@
     .risk-overview-title, .ai-insight-card-title { font-family: 'Songti SC', STSong, SimSun, serif; font-weight: 400; letter-spacing: 3rpx; }
     .risk-overview-card, .ai-insight-card, .chart-card,
     .macro-card, .meal-structure-card { border: 1rpx solid #8cc7d54d; border-radius: 28rpx; }
+    .ai-insight-card { background: rgba(7, 28, 38, 0.92); }
+    .analysis-content, .analysis-md-paragraph, .analysis-md-list-text,
+    .analysis-md-table-cell { color: #dceef4; }
+    .analysis-md-heading, .analysis-md-strong { color: #edfaff; }
+    .analysis-md-heading { font-weight: 600; }
+    .analysis-md-list-bullet { color: #a6e3f3; }
+    .analysis-md-underline { text-decoration-color: #a6e3f3; }
+    .analysis-md-table { border-color: #7198a6; }
+    .analysis-md-table-cell { border-color: #486a78; background: rgba(14, 42, 55, 0.86); }
+    .analysis-md-table-header { color: #edfaff; background: #254958; }
     .risk-overview-chip, .risk-score-factor, .risk-score-explain { background: rgb(20 58 73 / 52%); border-color: #8cc7d540; }
     .health-next-action-btn { background: linear-gradient(120deg, #acdce8, #5195ab); }
     .health-next-action-btn__text { color: #071e29; }
