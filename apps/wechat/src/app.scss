@@ -160,3 +160,4 @@ page > view {
 @include meta.load-css('./styles/theme-structures.scss');
 /* Theme-specific render fidelity must win over the shared structural defaults. */
 @include meta.load-css('./styles/water-theme.scss');
+@include meta.load-css('./styles/balanced-theme-controls.scss');

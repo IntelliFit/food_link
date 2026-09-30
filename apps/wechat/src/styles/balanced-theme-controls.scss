@@ -1,0 +1,98 @@
+/* Shared functional surfaces inherit the selected balanced theme. Wellness is excluded. */
+.fl-page-theme-root--balanced {
+  .profile-page .profile-recap-section .recap-archive-entry {
+    color: var(--bt-text);
+    background: var(--bt-surface);
+    border: var(--bt-border-width) solid var(--bt-border);
+    border-radius: var(--bt-radius);
+    box-shadow: var(--bt-shadow);
+  }
+  .profile-page .profile-recap-section .recap-archive-entry > text + text { color: var(--bt-muted); }
+  .profile-page .profile-recap-section .recap-archive-entry::after { color: var(--bt-border); }
+
+  .target-modal-content, .edit-modal-content, .credit-shortage-sheet__panel,
+  .risk-detail-panel, .risk-focus-modal-content, .record-menu-content {
+    color: var(--bt-text);
+    background: var(--bt-surface);
+    border: var(--bt-border-width) solid var(--bt-border);
+    border-radius: var(--bt-radius);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: var(--bt-shadow);
+  }
+  .target-modal-title, .target-form-label, .target-form-section-title,
+  .target-calorie-value, .target-input, .target-adjust-btn-text,
+  .edit-modal-title, .edit-modal .ingredient-name,
+  .edit-modal .ingredient-cal-kcal-num, .edit-modal .ingredient-detail-value,
+  .credit-shortage-sheet__title, .credit-shortage-sheet__stat-value,
+  .record-menu-list-label-v2, .risk-detail-title, .risk-focus-modal-title { color: var(--bt-text); }
+  .target-modal-desc, .target-input-unit, .target-form-section-desc,
+  .target-hidden-micros-title, .target-calorie-unit, .target-calorie-hint,
+  .edit-modal .ingredient-basis-label, .edit-modal .ingredient-per100-label,
+  .edit-modal .ingredient-summary-label, .credit-shortage-sheet__message,
+  .credit-shortage-sheet__stat-label, .credit-shortage-sheet__later-text,
+  .record-menu-list-desc-v2, .risk-detail-desc, .risk-focus-modal-subtitle { color: var(--bt-muted); }
+  .target-form-item, .target-input-wrap, .target-adjust-btn,
+  .target-hidden-micro-chip, .edit-food-card, .edit-cancel-btn,
+  .credit-shortage-sheet__stat, .credit-shortage-sheet__secondary,
+  .record-menu-list-item-v2, .record-menu-grid-card {
+    background: var(--bt-surface-muted);
+    border-color: var(--bt-border);
+    color: var(--bt-text);
+    border-radius: var(--bt-control-radius);
+  }
+  .target-save-btn, .edit-save-btn, .credit-shortage-sheet__primary {
+    background: var(--bt-accent);
+    color: var(--bt-accent-text);
+    border-radius: var(--bt-control-radius);
+    box-shadow: none;
+  }
+  .credit-shortage-sheet__primary-text { color: var(--bt-accent-text); }
+  .credit-shortage-sheet__secondary-text { color: var(--bt-text); }
+  .edit-modal-header, .edit-modal-footer { border-color: var(--bt-border); background: var(--bt-surface); }
+}
+
+.fl-page-theme-root--balanced.fl-balanced-theme--way-of-water {
+  --bt-accent: #a6dfed;
+  --bt-accent-text: #082431;
+  --bt-selection-ring: rgb(166 223 237 / 24%);
+
+  .profile-page .profile-recap-section {
+    margin: 0 28rpx 24rpx;
+    padding: 24rpx;
+    border: 1rpx solid #91c5d359;
+    border-radius: 28rpx;
+    background: linear-gradient(135deg, rgb(19 53 68 / 86%), rgb(7 28 39 / 90%));
+    box-shadow: inset 0 1rpx 0 #e4faff14;
+  }
+  .profile-page .profile-recap-section .profile-section-heading { padding: 0 0 20rpx; }
+  .profile-page .profile-recap-section .profile-section-mark { color: #a6dfed; }
+  .profile-page .profile-recap-section .recap-archive-entry {
+    min-height: 100rpx;
+    margin: 0;
+    box-sizing: border-box;
+    padding: 24rpx;
+    border: 1rpx solid #9ed7e366;
+    border-radius: 20rpx;
+    background: linear-gradient(110deg, #245568d9, #102f40e6);
+    box-shadow: inset 0 1rpx 0 #e4faff1a;
+  }
+  .profile-page .profile-recap-section .recap-archive-entry > text { font: 30rpx 'Songti SC', STSong, SimSun, serif; }
+  .profile-page .profile-recap-section .recap-archive-entry > text + text { font: 22rpx/1.6 sans-serif; }
+  .profile-page .theme-profile-sections .tp-section::before { display: none; content: none; }
+  .profile-page .theme-profile-sections .tp-section .tp-section__mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    border: 1rpx solid #b5e6f0a3;
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 24%, #bbecf552, #3062768c 52%, #0a2433e6);
+    box-shadow: inset 0 0 18rpx #c5f2fb29, 0 0 20rpx #73cfdf29;
+  }
+  .profile-page .theme-profile-sections .tp-section .profile-section-hint { color: #bfd5dc; line-height: 1.6; }
+  .profile-page .theme-profile-sections .tp-section .profile-section-chevron { border-color: #a6d4e0; }
+  .profile-page .theme-profile-sections .tp-section .list-title { color: #edf8fb; }
+  .profile-page .theme-profile-sections .tp-section .list-desc { color: #bdd2dc; }
+  .profile-page .theme-profile-sections .tp-section .list-arrow { color: #a6d4e0; }
+}
