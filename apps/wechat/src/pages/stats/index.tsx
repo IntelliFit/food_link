@@ -1763,17 +1763,17 @@ function StatsPage() {
             <View
               key={card.key}
               className='stats-card risk-card'
-              style={{ background: riskCardBgGradient(card.key) }}
+              style={!ink && theme === 'way-of-water' ? undefined : { background: riskCardBgGradient(card.key) }}
               onClick={() => setRiskDetailModal({ visible: true, card })}
             >
               <View className='risk-card-main-row'>
                 <View
                   className='risk-card-icon-circle'
-                  style={{ background: riskCardIconBgColor(card.key, scheme === 'dark') }}
+                  style={!ink && theme === 'way-of-water' ? undefined : { background: riskCardIconBgColor(card.key, scheme === 'dark') }}
                 >
                   <Text
                     className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`}
-                    style={{ color: riskCardIconColor(card.key, scheme === 'dark') }}
+                    style={!ink && theme === 'way-of-water' ? undefined : { color: riskCardIconColor(card.key, scheme === 'dark') }}
                   />
                 </View>
                 <View className='risk-card-score-wrap'>

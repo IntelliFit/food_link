@@ -602,6 +602,34 @@
   .stats-page .health-index-preview-card.analysis-preview-card { margin: 0 28rpx 32rpx; border-radius: 30rpx; background: linear-gradient(120deg, rgb(19 57 72 / 68%), rgb(7 30 41 / 60%)); }
   .stats-page .stats-card { margin-right: 28rpx; margin-left: 28rpx; border-top-color: #8cc7d58c; background: rgb(5 25 35 / 54%); }
   .stats-page {
+    padding-bottom: 0;
+    .scroll-wrap { padding-bottom: calc(148rpx + env(safe-area-inset-bottom)); }
+    .stats-page-disclaimer { padding: 12rpx 28rpx 24rpx; }
+    .stats-page-disclaimer__text { color: #afc9d2; }
+    .risk-card-grid { display: flex; flex-direction: column; gap: 16rpx; margin: 0 28rpx 20rpx; }
+    .risk-card.stats-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 92rpx;
+      gap: 8rpx 24rpx;
+      width: 100%;
+      margin: 0;
+      padding: 24rpx 28rpx;
+      box-sizing: border-box;
+      border: 1rpx solid #8cc7d54d;
+      border-radius: 24rpx;
+      background: linear-gradient(120deg, rgb(24 59 74 / 88%), rgb(7 27 38 / 90%));
+      box-shadow: inset 0 1rpx 0 #d4f3fc14;
+    }
+    .risk-card-main-row { grid-column: 2; grid-row: 1 / 4; flex-direction: column; justify-content: center; gap: 12rpx; }
+    .risk-card-title { grid-column: 1; margin: 0; color: #edf8fc; font: 30rpx/1.5 'Songti SC', STSong, SimSun, serif; letter-spacing: 2rpx; }
+    .risk-card-summary { grid-column: 1; margin: 0; color: #b8ced7; font-size: 23rpx; line-height: 1.6; white-space: normal; }
+    .risk-card-ai-badge-row { grid-column: 1; }
+    .risk-card-score { color: #f0fbff; font-size: 44rpx; }
+    .risk-card-score-unit { color: #b8d5df; }
+    .risk-card-icon-circle { background: #1b4557; border: 1rpx solid #80c3d666; }
+    .risk-card-icon { color: #a4e5f4; }
+    .risk-card-affordance { grid-column: 1 / -1; margin-top: 6rpx; padding-top: 12rpx; border-top-color: #8cc7d533; }
+    .risk-card-affordance__text, .risk-card-affordance__icon { color: #a4dfef; }
     .risk-score-gauge {
       background: conic-gradient(from 225deg, #9ce7f7 0 var(--risk-score-progress), #345461 var(--risk-score-progress) 75%, transparent 75% 100%);
       filter: drop-shadow(0 6rpx 16rpx rgb(0 0 0 / 30%));
