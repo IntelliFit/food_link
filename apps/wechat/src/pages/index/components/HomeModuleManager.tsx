@@ -25,6 +25,12 @@ function ToolboxMark({ heading = false }: { heading?: boolean }) {
     return <Image className={className} src={toolboxGourdIcon} mode='aspectFit' ariaLabel='养生功能箱' />
   }
 
+  if (theme === 'way-of-water') {
+    return <View className={`${className} home-toolbox-theme-mark home-toolbox-water-mark`} ariaLabel='水之道工具箱'>
+      <View className='home-toolbox-water-mark__panes'>{[0, 1, 2, 3].map(pane => <View key={pane} className='home-toolbox-water-mark__pane' />)}</View>
+    </View>
+  }
+
   return (
     <View className={`${className} home-toolbox-theme-mark`} ariaLabel={`${themeDefinition.toolboxLabel}功能箱`}>
       <Text className={`iconfont ${themeDefinition.toolboxIconClass}`} />
@@ -33,6 +39,9 @@ function ToolboxMark({ heading = false }: { heading?: boolean }) {
 }
 
 export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: HomeModuleToolbarProps) {
+  const wellness = useInkWellness()
+  const { theme } = useBalancedTheme()
+  const water = !wellness && theme === 'way-of-water'
   if (editing) {
     return (
       <View className='home-module-sort-toolbar'>
@@ -64,7 +73,7 @@ export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: H
   return (
     <View
       id='home-module-toolbox-button'
-      className='home-module-toolbar'
+      className={`home-module-toolbar${water ? ' home-module-toolbar--water' : ''}`}
       ariaLabel='打开功能箱'
       hoverClass='is-pressed'
       hoverStartTime={0}
@@ -75,6 +84,7 @@ export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: H
       }}
     >
       <ToolboxMark />
+      {water && <Text className='home-module-toolbar__water-label'>工具箱</Text>}
     </View>
   )
 }
@@ -176,7 +186,7 @@ export function HomeToolboxSheet({ visible, visibleIds, onAdd, onHide, onReset, 
           <View className='home-toolbox__heading'>
             <ToolboxMark heading />
             <View>
-              <Text className='home-toolbox__title'>{wellness ? '养生功能箱' : themeDefinition.toolboxLabel}</Text>
+              <Text className='home-toolbox__title'>{wellness ? '养生功能箱' : theme === 'way-of-water' ? '水之道 · 工具箱' : themeDefinition.toolboxLabel}</Text>
               <Text className='home-toolbox__subtitle'>把常用模块放在首页，不常用的先收起来</Text>
             </View>
           </View>
