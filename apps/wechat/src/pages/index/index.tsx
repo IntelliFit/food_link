@@ -1,4 +1,3 @@
-import { RecapDelivery } from '../../components/RecapDelivery'
 import { BalancedThemeExperience } from '../../components/BalancedThemeExperience'
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, type ITouchEvent } from '@tarojs/components'
 import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
@@ -3358,7 +3357,7 @@ function IndexPage() {
             : 'overflow: visible;'
         }
       />
-      <RecapDelivery />
+      {/* Report delivery popups are temporarily paused; reports remain in the profile bookshelf. */}
       {/* 页面内容 */}
       <View className='page-content'>
         <BalancedThemeExperience
