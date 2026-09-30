@@ -628,6 +628,9 @@
   &.is-roaming-near { animation-name: pet-refined-arrive-near; }
 }
 @keyframes pet-refined-arrive { from { transform: translateX(210rpx); } to { transform: translateX(0); } }
+.fl-page-theme-root--balanced.fl-balanced-theme--way-of-water .pet-assistant--refined-motion .pet-assistant-float {
+  bottom: calc(690rpx + env(safe-area-inset-bottom)) !important;
+}
 @keyframes pet-refined-arrive-near { from { transform: translateX(210rpx); } to { transform: translateX(-28rpx); } }
 @keyframes pet-refined-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.008, 1.012); } }
 @keyframes pet-refined-step { 0%, 50%, 100% { transform: translateY(0); } 25%, 75% { transform: translateY(-2rpx); } }
