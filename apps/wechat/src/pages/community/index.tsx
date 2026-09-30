@@ -2073,6 +2073,22 @@ function CommunityPage() {
                 <Text className='ranking-title'>排行榜</Text>
                 <Text className='ranking-week-tag'>本周</Text>
               </View>
+              {!ink && theme === 'way-of-water' && (
+                <View
+                  className='water-ranking-score-entry'
+                  role='button'
+                  onClick={() => {
+                    if (!getAccessToken()) return redirectToLogin()
+                    Taro.navigateTo({ url: extraPkgUrl('/pages/checkin-leaderboard/index?section=user&ranking=health') })
+                  }}
+                >
+                  <View className='water-ranking-score-copy'>
+                    <Text className='water-ranking-score-title'>综合评分榜</Text>
+                    <Text className='water-ranking-score-desc'>饮食质量 · 记录连续性 · 日间稳定性</Text>
+                  </View>
+                  <Text className='water-ranking-score-arrow'>查看 ›</Text>
+                </View>
+              )}
 
               <View className='ranking-columns'>
                 <View

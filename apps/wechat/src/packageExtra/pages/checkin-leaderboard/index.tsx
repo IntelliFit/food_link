@@ -15,6 +15,8 @@ import {
 } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { useBalancedTheme } from '../../../components/BalancedThemeContext'
+import { useInkWellness } from '../../../components/InkWellness'
 
 type LeaderboardSection = 'user' | 'food'
 type UserRankingType = 'checkin' | 'health'
@@ -93,6 +95,12 @@ function Avatar({ src, food = false }: { src: string; food?: boolean }) {
 }
 
 function CheckinLeaderboardPage() {
+  const { theme } = useBalancedTheme()
+  const wellness = useInkWellness()
+  const isWater = !wellness && theme === 'way-of-water'
+  useEffect(() => {
+    if (isWater) void Taro.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#071c26' })
+  }, [isWater])
   const router = useRouter()
   const section: LeaderboardSection = router.params.section === 'food' ? 'food' : 'user'
   const [userRankingType, setUserRankingType] = useState<UserRankingType>(
@@ -229,9 +237,9 @@ function CheckinLeaderboardPage() {
   }
 
   return (
-    <View className='leaderboard-page'>
+    <View className={`leaderboard-page${isWater ? ' leaderboard-page--water' : ''}`}>
       <View className='leaderboard-header'>
-        <Text className='leaderboard-title'>{section === 'food' ? '食物排行榜' : '用户排行榜'}</Text>
+        <Text className='leaderboard-title'>{section === 'food' ? '食物排行榜' : isWater && isHealth ? '综合评分榜' : '用户排行榜'}</Text>
         {section === 'user' ? (
           <View className='leaderboard-segments'>
             <View

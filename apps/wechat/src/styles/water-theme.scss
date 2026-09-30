@@ -784,9 +784,40 @@
   .water-feed-tabs__tab { min-width: 122rpx; padding: 24rpx 0 20rpx; color: #9cb0b6; text-align: center; font: 28rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 4rpx; }
   .water-feed-tabs__tab.is-active { color: #eff9fb; border-bottom: 3rpx solid #9de7f8; text-shadow: 0 0 20rpx #75d9ef; }
   .water-feed-tabs__verse { flex: 1; padding-right: 8rpx; color: #93aab1; text-align: right; font: 19rpx/1.6 'Songti SC', STSong, SimSun, serif; }
-  .community-scroll-content > .ranking-banner,
   .feed-section > .feed-section-header,
   .feed-section > .feed-filter-panel { display: none; }
+  .community-scroll-content > .ranking-banner {
+    display: flex;
+    margin: 26rpx 34rpx 24rpx;
+    padding: 26rpx;
+    gap: 22rpx;
+    border: 1rpx solid #8cc7d54d;
+    border-radius: 28rpx;
+    background: linear-gradient(130deg, rgba(25, 62, 78, 0.92), rgba(7, 28, 38, 0.92));
+    box-shadow: inset 0 2rpx 0 #c5f2ff14;
+    &::before, &::after { display: none; }
+    .ranking-title { font-family: 'Songti SC', STSong, SimSun, serif; font-weight: 400; letter-spacing: 3rpx; }
+    .ranking-icon-wrap { border: 1rpx solid #a6e3f366; border-radius: 50%; background: #a6e3f31a; }
+    .ranking-week-tag, .ranking-mini-tab { color: #c5e3ed; background: #254958; }
+    .ranking-mini-tab.active { color: #effaff; background: #326577; }
+    .ranking-mini-name, .ranking-mini-value, .ranking-column-title { color: #e9f7fb; }
+    .ranking-mini-rank, .ranking-mini-empty, .ranking-column-link { color: #b4e4f1; }
+  }
+  .water-ranking-score-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18rpx;
+    padding: 24rpx 22rpx;
+    border: 1rpx solid #a6e3f366;
+    border-radius: 22rpx;
+    background: linear-gradient(110deg, #a6e3f329, #a6e3f308);
+    &:active { opacity: 0.8; }
+  }
+  .water-ranking-score-copy { flex: 1; min-width: 0; }
+  .water-ranking-score-title { display: block; font: 32rpx/46rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 3rpx; color: #effaff; }
+  .water-ranking-score-desc { display: block; margin-top: 6rpx; font-size: 21rpx; line-height: 32rpx; color: #b5d4de; }
+  .water-ranking-score-arrow { flex-shrink: 0; color: #b4e4f1; font-size: 24rpx; }
   .feed-list { padding-top: 14rpx; }
   .feed-card { padding-top: 32rpx; background: linear-gradient(180deg, rgb(3 20 29 / 26%), rgb(3 20 29 / 52%)); }
   .feed-card .user-avatar { border: 1rpx solid #b6e5ef; box-shadow: 0 0 18rpx #5ccbe052; }

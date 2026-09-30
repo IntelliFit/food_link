@@ -411,3 +411,26 @@
 .leaderboard-bottom-space {
   height: 40rpx;
 }
+
+.leaderboard-page.leaderboard-page--water {
+  background: radial-gradient(ellipse at 85% 0, #244c5d 0, transparent 50%), linear-gradient(180deg, #0c2835, #04131c);
+  color: #e9f7fb;
+  .leaderboard-title { font-family: 'Songti SC', STSong, SimSun, serif; font-weight: 400; letter-spacing: 4rpx; }
+  .leaderboard-segments { background: #0b2431; border-color: #638b9b; }
+  .leaderboard-segment { color: #bdd6df; }
+  .leaderboard-segment.active, .nutrient-option.active { background: linear-gradient(120deg, #386e83, #254b5c); color: #effaff; border-color: #8cc7d5; }
+  .nutrient-option { background: #0b2431; color: #bdd6df; border-color: #486a78; }
+  .leaderboard-period-row, .leaderboard-period-icon, .health-score-explanation-total,
+  .health-score-rule, .leaderboard-detail, .leaderboard-unit, .leaderboard-state { color: #b6d0db; }
+  .health-score-explanation { background: #102e3d; border-color: #486a78; }
+  .health-score-explanation-title, .health-score-formula, .leaderboard-name { color: #e9f7fb; }
+  .health-score-my-breakdown { color: #b4e4f1; border-color: #486a78; }
+  .podium-item, .podium-item.podium-rank-2, .podium-item.podium-rank-3 { background: linear-gradient(180deg, #2e5c70, #153b4d); border: 1rpx solid #79afc166; border-radius: 32rpx 32rpx 16rpx 16rpx; }
+  .podium-item.podium-rank-1 { background: linear-gradient(180deg, #44859a, #23576c); border-color: #b0e7f4; }
+  .leaderboard-row { background: rgba(15, 43, 57, 0.86); border-color: #486a784d; }
+  .leaderboard-row.is-me { background: linear-gradient(90deg, #234e61, #143442); }
+  .leaderboard-rank, .leaderboard-value, .leaderboard-me-tag { color: #b4e4f1; }
+  .leaderboard-avatar-placeholder, .leaderboard-avatar-placeholder.is-food { background: #254958; color: #b4e4f1; }
+  .leaderboard-me-bar { background: linear-gradient(120deg, #386e83, #254b5c); border: 1rpx solid #8cc7d580; box-shadow: 0 12rpx 30rpx #0004; }
+  .leaderboard-retry { background: #326577; }
+}
