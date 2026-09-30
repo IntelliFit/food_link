@@ -13,7 +13,7 @@
     isolation: auto;
     background: transparent;
     font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    &::after { content: ''; position: fixed; z-index: 0; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgb(4 13 19 / 18%), rgb(4 16 23 / 46%) 45%, rgb(4 13 19 / 78%)); }
+    &::after { content: ''; position: fixed; z-index: 0; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgb(4 13 19 / 8%), rgb(4 16 23 / 14%) 45%, rgb(4 13 19 / 24%)); }
     > .bt-scene { position: fixed !important; z-index: 0 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; opacity: 1 !important; }
     > .bt-scene .bt-scene-background__poster,
     > .bt-scene .bt-scene-background__video { width: 100vw; height: 100vh; }
@@ -26,7 +26,7 @@
     .bt-heading__subtitle { margin-top: 14rpx; font-family: sans-serif; color: #c1d0d3; font-size: 23rpx; line-height: 1.55; letter-spacing: 2rpx; }
     .bt-action__water-drop { position: absolute; width: 104rpx; height: 104rpx; top: 0; left: calc(50% - 52rpx); pointer-events: none; }
     &.bt-experience--home { height: 1120rpx; }
-    &.bt-experience--home::before { content: ''; position: absolute; z-index: 0; pointer-events: none; inset: 0; background: linear-gradient(180deg, #0610174a 0%, transparent 30%, transparent 58%, #071016aa 88%, transparent 100%); }
+    &.bt-experience--home::before { content: ''; position: absolute; z-index: 0; pointer-events: none; inset: 0; background: linear-gradient(180deg, #06101714 0%, transparent 30%, transparent 58%, #07101624 88%, transparent 100%); }
     .bt-water-side-verse { position: absolute; z-index: 2; top: 122rpx; right: 42rpx; display: flex; flex-direction: column; gap: 7rpx; padding-left: 18rpx; border-left: 1rpx solid #a7c5cf66; }
     .bt-water-side-verse text { display: block; color: #b9cbd0; font: 21rpx/1.45 'Songti SC', STSong, SimSun, serif; letter-spacing: 3rpx; }
     .bt-water-console { position: absolute; z-index: 2; left: 36rpx; right: 36rpx; bottom: 32rpx; }
@@ -53,22 +53,22 @@
     &:not(.bt-experience--home) .bt-scene-background__video {
       transform: scale(1.08);
       transform-origin: center;
-      filter: brightness(.62) saturate(.82) contrast(1.08);
+      filter: none;
     }
     &.bt-experience--stats .bt-scene-background__video {
       object-position: 58% 58%;
       transform: scale(1.14);
-      filter: brightness(.58) saturate(.78) contrast(1.12);
+      filter: none;
     }
     &.bt-experience--community .bt-scene-background__video {
       object-position: 42% 48%;
       transform: scale(1.1);
-      filter: brightness(.68) saturate(.9) contrast(1.06);
+      filter: none;
     }
     &.bt-experience--profile .bt-scene-background__video {
       object-position: 70% 44%;
       transform: scale(1.18);
-      filter: brightness(.5) saturate(.7) contrast(1.16);
+      filter: none;
     }
     .theme-chapter--way-of-water { min-height: 394rpx; }
     .theme-chapter--way-of-water .tc-imprint { align-items: flex-start; margin-bottom: 64rpx; }
@@ -517,7 +517,7 @@
     padding-left: 46rpx;
   }
   .bt-experience--way-of-water::after {
-    background: linear-gradient(180deg, rgb(3 12 18 / 18%), rgb(3 15 22 / 34%) 48%, rgb(3 13 20 / 62%));
+    background: linear-gradient(180deg, rgb(3 12 18 / 8%), rgb(3 15 22 / 14%) 48%, rgb(3 13 20 / 24%));
   }
   .bt-experience--way-of-water .bt-scene-background__video,
   .bt-experience--way-of-water .bt-scene-background__poster {
