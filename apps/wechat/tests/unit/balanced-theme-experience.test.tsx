@@ -16,12 +16,22 @@ const home = { date: '2026-09-28', mealCount: 2, waterMl: 850, calories: 1024, a
 beforeEach(() => { mockWellness = false; mockTheme = 'clarity-order'; jest.clearAllMocks(); (loadBalancedScenes as jest.Mock).mockResolvedValue(undefined) })
 
 describe('balanced theme live experiences', () => {
-  it.each(BALANCED_THEME_IDS)('%s opens the actual record action instead of cycling a visual stage', async theme => {
+  it.each(BALANCED_THEME_IDS)('%s keeps its intended home actions usable', async theme => {
     mockTheme = theme
     const onRecord = jest.fn()
-    const { container } = render(<BalancedThemeExperience surface='home' home={home} onRecord={onRecord} />)
-    fireEvent.click(container.querySelector('#bt-action-record')!)
-    expect(onRecord).toHaveBeenCalledTimes(1)
+    const onMeals = jest.fn()
+    const onWater = jest.fn()
+    const { container } = render(<BalancedThemeExperience surface='home' home={home} onRecord={onRecord} onMeals={onMeals} onWater={onWater} />)
+    if (theme === 'way-of-water') {
+      expect(container.querySelector('#bt-action-record')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: '查看今日饮食记录' }))
+      fireEvent.click(screen.getByRole('button', { name: '记录今日饮水' }))
+      expect(onMeals).toHaveBeenCalledTimes(1)
+      expect(onWater).toHaveBeenCalledTimes(1)
+    } else {
+      fireEvent.click(container.querySelector('#bt-action-record')!)
+      expect(onRecord).toHaveBeenCalledTimes(1)
+    }
     await waitFor(() => expect(screen.queryByText('场景未能打开，轻触重试')).not.toBeInTheDocument())
   })
   it('updates metric values from the page and hides cached data for a guest', () => {
