@@ -788,6 +788,7 @@
   .feed-section > .feed-filter-panel { display: none; }
   .community-scroll-content > .ranking-banner {
     display: flex;
+    order: 0;
     margin: 26rpx 34rpx 24rpx;
     padding: 26rpx;
     gap: 22rpx;
