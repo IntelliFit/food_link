@@ -20,10 +20,10 @@ export function getCompanionSprite(pet?: Partial<CompanionAppearance>): string |
     : undefined
 }
 
-export function PetCompanionSprite({ src, name, pose = 'idle' }: { src: string; name?: string; pose?: 'idle' | 'blink' | 'wave' | 'kick' }) {
+export function PetCompanionSprite({ src, name, pose = 'idle', refined = false }: { src: string; name?: string; pose?: 'idle' | 'blink' | 'wave' | 'kick' | 'look'; refined?: boolean }) {
   const jianwen = src === JIANWEN_COMPANION_SRC
   return (
-    <View className={`pet-companion-sprite ${jianwen ? 'pet-companion-sprite--jianwen' : 'pet-companion-sprite--original'} is-${pose}`} role='img' aria-label={`${name || '宠物'}的完整形象`}>
+    <View className={`pet-companion-sprite ${jianwen ? 'pet-companion-sprite--jianwen' : 'pet-companion-sprite--original'} is-${pose}${refined ? ' has-refined-motion' : ''}`} role='img' aria-label={`${name || '宠物'}的完整形象`}>
       <Image className='pet-companion-sprite__sheet' src={src} mode='scaleToFill' lazyLoad={false} />
     </View>
   )

@@ -596,3 +596,52 @@
   transform: translateX(calc(50vw + 190rpx));
   transition: transform 980ms ease-in;
 }
+
+/* Balanced companions stay in a small safe lane instead of repeatedly crossing the page. */
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--playing,
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--running,
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--returning,
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--docked {
+  left: auto;
+  right: 20rpx;
+  bottom: calc(290rpx + env(safe-area-inset-bottom));
+}
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--playing {
+  transform: translateX(0);
+  transition: transform 1800ms cubic-bezier(.42, 0, .58, 1);
+  &.is-roaming-near { transform: translateX(-28rpx); }
+  .pet-assistant-look { animation: pet-refined-breathe 5.6s ease-in-out infinite; transform-origin: 50% 100%; }
+  &.is-walking .pet-assistant-look { animation: pet-refined-step 800ms ease-in-out infinite; }
+  &.is-wave .pet-assistant-look { animation: pet-refined-greet 1.2s ease-in-out; }
+  &.is-look .pet-assistant-look { animation: pet-refined-look 1.2s ease-in-out; }
+  &.is-kick .pet-assistant-look { animation: pet-refined-kick-body 1.2s ease-in-out; }
+  .pet-assistant-toy { animation: none; opacity: 0; }
+  &.is-kick .pet-assistant-toy { animation: pet-refined-ball 1.2s ease-out; }
+  .pet-assistant-ground { opacity: .5; background: #8baeb738; }
+}
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--running {
+  transform: translateX(210rpx);
+}
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--docked { transform: translateX(116rpx); transition: none; }
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--returning {
+  animation-name: pet-refined-arrive;
+  &.is-roaming-near { animation-name: pet-refined-arrive-near; }
+}
+@keyframes pet-refined-arrive { from { transform: translateX(210rpx); } to { transform: translateX(0); } }
+@keyframes pet-refined-arrive-near { from { transform: translateX(210rpx); } to { transform: translateX(-28rpx); } }
+@keyframes pet-refined-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.008, 1.012); } }
+@keyframes pet-refined-step { 0%, 50%, 100% { transform: translateY(0); } 25%, 75% { transform: translateY(-2rpx); } }
+@keyframes pet-refined-greet { 0%, 100% { transform: rotate(0); } 24% { transform: rotate(-3deg); } 54% { transform: rotate(2deg); } 78% { transform: rotate(-1deg); } }
+@keyframes pet-refined-look { 0%, 100% { transform: rotate(0); } 30%, 72% { transform: rotate(-2deg); } }
+@keyframes pet-refined-kick-body { 0%, 100% { transform: translateY(0); } 18% { transform: translateY(2rpx); } 38% { transform: translateY(-2rpx); } 68% { transform: translateY(0); } }
+@keyframes pet-refined-ball {
+  0%, 24% { opacity: 1; transform: translateX(-14rpx); }
+  42% { opacity: 1; transform: translate(12rpx, -22rpx) rotate(100deg); }
+  66% { opacity: 1; transform: translate(16rpx, 0) rotate(210deg); }
+  80% { opacity: 1; transform: translate(18rpx, -6rpx) rotate(260deg); }
+  100% { opacity: 0; transform: translate(20rpx, 0) rotate(300deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pet-assistant--refined-motion .pet-assistant-float { animation: none !important; transition: none !important; }
+  .pet-assistant--refined-motion .pet-assistant-look { animation: none !important; }
+}

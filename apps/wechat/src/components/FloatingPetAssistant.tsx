@@ -7,6 +7,7 @@ import { redirectToLogin } from '../utils/withAuth'
 import { PetAvatar } from './PetAvatar'
 import { getCompanionSprite, PetCompanionSprite } from './PetCompanionSprite'
 import { PetChatContent } from './PetChatContent'
+import { useInkWellness } from './InkWellness'
 import {
   completePetPlayReward,
   petDailyPlayStorageKey,
@@ -44,10 +45,11 @@ interface Props {
 export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props>(function FloatingPetAssistant({
   pet, mood, state, suppressed = false, dark = false, companionSpriteOverride, reminder, onReminderPress, onReminderShown, onChatOpenChange,
 }, ref) {
+  const refinedMotion = !useInkWellness()
   const [phase, setPhase] = useState<Phase>('playing')
   const [roamFar, setRoamFar] = useState(true)
   const [walking, setWalking] = useState(false)
-  const [idleAction, setIdleAction] = useState<'blink' | 'wave' | 'kick'>('wave')
+  const [idleAction, setIdleAction] = useState<'idle' | 'blink' | 'wave' | 'kick' | 'look'>('wave')
   const [active, setActive] = useState(true)
   const [chatOpen, setChatOpen] = useState(false)
   const [chatMounted, setChatMounted] = useState(false)
@@ -66,8 +68,10 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   const phaseRef = useRef<Phase>('playing')
   const manualDockedRef = useRef(false)
   const windowHeightRef = useRef(0)
+  const playLockedUntil = useRef(0)
   const visible = active && !suppressed
   const companionSprite = companionSpriteOverride || getCompanionSprite(pet)
+  const motionBurst = refinedMotion ? playBurst : 0
 
   const clearTimers = useCallback(() => {
     if (settleTimer.current) clearTimeout(settleTimer.current)
@@ -150,6 +154,8 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
       openChat(`${rewardContext}根据我今天的健康记录，给我一个三分钟内能完成的趣味健康探索任务。`)
       return
     }
+    if (refinedMotion && Date.now() < playLockedUntil.current) return
+    playLockedUntil.current = Date.now() + 1200
     const next = Math.min(PET_DAILY_PLAY_GOAL, dailyPlayCount + 1)
     setDailyPlayCount(next)
     setIdleAction('kick')
@@ -164,7 +170,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
       title: next >= PET_DAILY_PLAY_GOAL ? `${reward.badge} · 连续${reward.streak}天` : `陪伴活力 ${next}/${PET_DAILY_PLAY_GOAL}`,
       icon: 'none',
     })
-  }, [dailyPlayCount, openChat, playReward])
+  }, [dailyPlayCount, openChat, playReward, refinedMotion])
 
   useEffect(() => {
     const timer = setTimeout(() => setWelcoming(false), 520)
@@ -174,7 +180,33 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   useEffect(() => {
     if (!visible || chatOpen || phase !== 'playing') {
       setWalking(false)
+      if (refinedMotion) setIdleAction('idle')
       return
+    }
+    if (refinedMotion) {
+      let timer: ReturnType<typeof setTimeout>
+      let actionIndex = 0
+      const gestures = ['blink', 'look', 'blink', 'wave'] as const
+      const rest = () => {
+        setWalking(false)
+        setIdleAction('idle')
+        timer = setTimeout(gesture, 5200 + (actionIndex % 3) * 1300)
+      }
+      const gesture = () => {
+        if (actionIndex > 0 && actionIndex % 4 === 0) {
+          setIdleAction('idle')
+          setRoamFar(previous => !previous)
+          setWalking(true)
+          actionIndex += 1
+          timer = setTimeout(rest, 1800)
+        } else {
+          setIdleAction(gestures[actionIndex++ % gestures.length])
+          timer = setTimeout(rest, 1200)
+        }
+      }
+      // Finish a greeting or user-triggered kick before starting the quiet idle cycle.
+      timer = setTimeout(rest, 1200)
+      return () => clearTimeout(timer)
     }
     let timer: ReturnType<typeof setTimeout>
     let actionIndex = 0
@@ -190,7 +222,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     }
     timer = setTimeout(stroll, 1200)
     return () => clearTimeout(timer)
-  }, [chatOpen, phase, visible])
+  }, [chatOpen, phase, visible, refinedMotion, motionBurst])
 
   useImperativeHandle(ref, () => ({
     openChat,
@@ -242,7 +274,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     maxHeight: `${Math.max(0, windowHeightRef.current - keyboardHeight - 24)}px`,
   } : undefined
   return (
-    <View className={`pet-assistant ${dark ? 'pet-assistant--dark' : ''}`}>
+    <View className={`pet-assistant ${dark ? 'pet-assistant--dark' : ''}${refinedMotion ? ' pet-assistant--refined-motion' : ''}`}>
       {visible && !chatOpen ? (
         <View id='home-floating-pet' className={`pet-assistant-float pet-assistant-float--${phase} ${welcoming ? 'is-welcoming' : ''} ${roamFar ? 'is-roaming-far' : 'is-roaming-near'} ${walking ? 'is-walking' : `is-${idleAction}`} ${companionSprite ? 'has-full-body' : ''}`}>
           {phase === 'playing' && reminder ? (
@@ -283,9 +315,9 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
               <View className='pet-assistant-facing'>
                 <View className='pet-assistant-look'>
                   {companionSprite ? (
-                    <PetCompanionSprite src={companionSprite} name={pet?.name} pose={phase === 'playing' && !walking ? idleAction : 'idle'} />
+                    <PetCompanionSprite key={refinedMotion ? playBurst : undefined} src={companionSprite} name={pet?.name} refined={refinedMotion} pose={phase === 'playing' && !walking ? idleAction : 'idle'} />
                   ) : (
-                    <PetAvatar pet={pet} animal={pet ? undefined : 'cat'} size={68} mood={mood} state={state} motion={phase === 'playing' && !walking ? 'companion' : 'static'} />
+                    <PetAvatar pet={pet} animal={pet ? undefined : 'cat'} size={68} mood={mood} state={state} motion={!refinedMotion && phase === 'playing' && !walking ? 'companion' : 'static'} />
                   )}
                 </View>
               </View>
