@@ -37,7 +37,7 @@
 
 .balanced-theme-picker { position: fixed; inset: 0; z-index: 10050; }
 .balanced-theme-picker__mask { position: absolute; inset: 0; background: rgb(4 11 9 / 58%); }
-.balanced-theme-picker__panel { position: absolute; inset: 80rpx 0 0; display: flex; flex-direction: column; box-sizing: border-box; background: var(--bt-page, #f4f7f5); border-radius: 32rpx 32rpx 0 0; overflow: hidden; }
+.balanced-theme-picker__panel { position: absolute; inset: max(180rpx, calc(env(safe-area-inset-top) + 110rpx)) 0 0; display: flex; flex-direction: column; box-sizing: border-box; background: var(--bt-page, #f4f7f5); border-radius: 32rpx 32rpx 0 0; overflow: hidden; }
 .balanced-theme-picker__header { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; padding: 34rpx 30rpx 22rpx; background: var(--bt-surface, #fff); border-bottom: 1rpx solid var(--bt-border, rgb(33 79 62 / 12%)); }
 
 .balanced-theme-picker__title,
