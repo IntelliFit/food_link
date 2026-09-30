@@ -990,6 +990,7 @@ function StatsPage() {
   })
 
   const handleGenerateInsight = useCallback(async () => {
+    if (!hasAuthToken()) { redirectToLogin(); return }
     if (!data || insightActionLoading) return
     if (Math.max(0, toSafeNumber(data.recorded_days, 0)) <= 0) {
       setInsightError('还没有饮食记录，先记录至少一餐后再生成 AI 风险解读。')
@@ -1129,6 +1130,7 @@ function StatsPage() {
   }, [range])
 
   const handleAddCustomFocus = useCallback(async () => {
+    if (!hasAuthToken()) { redirectToLogin(); return }
     const label = customFocusInput.trim()
     if (!label || customFocusAdding) return
     if (!(data?.health_index?.has_enough_data ?? false)) {
@@ -1181,6 +1183,7 @@ function StatsPage() {
   }, [customFocusAdding, customFocusInput, data, mergeCustomFocusCard, mergeCustomFocusOptions, pollCustomFocusTask, range])
 
   const handleRemoveCustomFocus = useCallback(async (focusId: string) => {
+    if (!hasAuthToken()) { redirectToLogin(); return }
     if (!focusId) return
     try {
       await removeHealthFocus(focusId)
@@ -1219,6 +1222,7 @@ function StatsPage() {
   }, [range])
 
   const handleRefreshCustomFocus = useCallback(async (card: RiskCard) => {
+    if (!hasAuthToken()) { redirectToLogin(); return }
     if (!card.is_custom || customFocusRefreshingKey) return
     const focusId = card.key.replace(/^custom:/, '')
     if (!focusId) return
@@ -1304,7 +1308,7 @@ function StatsPage() {
     // 只在后端完整洞察文本变化时重新触发打字
   }, [data?.analysis_summary])
 
-  if (guestBrowse) {
+  if (guestBrowse && ink) {
     return (
       <View className={`stats-page stats-page--guest ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
         {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
@@ -1348,7 +1352,16 @@ function StatsPage() {
     )
   }
 
-  const sourceData = data!
+  // Keep the analysis navigation available to balanced-mode guests. The empty
+  // source prevents preview values from becoming personal records or API input.
+  const sourceData: StatsSummary = guestBrowse ? {
+    range, start_date: previewDate(range === 'week' ? -6 : -29), end_date: formatLocalDate(),
+    tdee: 0, streak_days: 0, recorded_days: 0, total_calories: 0,
+    avg_calories_per_day: 0, cal_surplus_deficit: 0,
+    total_protein: 0, total_carbs: 0, total_fat: 0,
+    by_meal: { breakfast: 0, morning_snack: 0, lunch: 0, afternoon_snack: 0, dinner: 0, evening_snack: 0 },
+    daily_calories: [], macro_percent: { protein: 0, carbs: 0, fat: 0 }, analysis_summary: '',
+  } : data!
   const sourceRecordedDays = Math.max(0, toSafeNumber(sourceData.recorded_days, 0))
   const isStatsDataPreview = ANALYSIS_PREVIEW_MODE && sourceRecordedDays === 0
   const previewStats = isStatsDataPreview ? buildAnalysisPreviewSample(range) : null
@@ -1548,7 +1561,12 @@ function StatsPage() {
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
         {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
         <BalancedThemeExperience surface='stats' />
-        {!ink && <ThemeDailyReview theme={theme} endDate={sourceData.end_date} days={sourceData.daily_calories} water={sourceData.body_metrics?.water_daily} onRecord={() => { void Taro.switchTab({ url: '/pages/index/index' }) }} />}
+        {!ink && <ThemeDailyReview theme={theme} endDate={sourceData.end_date} guest={guestBrowse} days={sourceData.daily_calories} water={sourceData.body_metrics?.water_daily} onRecord={() => { if (guestBrowse) { redirectToLogin(); return }; void Taro.switchTab({ url: '/pages/index/index' }) }} />}
+        {guestBrowse && <View className='stats-card analysis-guest-notice' onClick={() => redirectToLogin()}>
+          <Text className='analysis-guest-notice__title'>浏览分析示例</Text>
+          <Text className='analysis-guest-notice__description'>健康指数、AI 方案与热量分布均可查看；登录后分析你的真实记录。</Text>
+          <Text className='analysis-guest-notice__action'>登录并开始记录 →</Text>
+        </View>}
       <View
         className={`stats-range-dropdown ${loading ? 'is-loading' : ''}`}
         onClick={openRangeSelector}
@@ -1731,6 +1749,7 @@ function StatsPage() {
             className='risk-focus-edit-btn'
             onClick={(e) => {
               e.stopPropagation()
+              if (guestBrowse) { redirectToLogin(); return }
               setRiskPickerVisible(true)
             }}
           >

@@ -14,6 +14,15 @@ $stats-macro-carbs: #d4ac52;
 $stats-macro-fat: #f0985c;
 $stats-blue-soft: #7aa9ce;
 
+.analysis-guest-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  .analysis-guest-notice__title { font-size: 28rpx; font-weight: 600; }
+  .analysis-guest-notice__description { font-size: 23rpx; line-height: 1.6; opacity: .8; }
+  .analysis-guest-notice__action { font-size: 24rpx; color: $stats-primary-deep; }
+}
+
 .stats-page {
   position: relative;
   min-height: 100vh;
