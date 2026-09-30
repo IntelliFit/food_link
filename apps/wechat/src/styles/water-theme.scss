@@ -135,7 +135,8 @@
   .page-content > view:not(.bt-experience),
   .community-scroll-content > view:not(.bt-experience),
   .stats-page .scroll-wrap > view:not(.bt-experience),
-  .profile-page > view:not(.bt-experience) { position: relative; z-index: 1; }
+  /* The theme picker owns its fixed overlay position and stacking order. */
+  .profile-page > view:not(.bt-experience):not(.balanced-theme-picker) { position: relative; z-index: 1; }
 
   /* Home dashboard: one alignment grid and one deep-water card language. */
   .home-page {
