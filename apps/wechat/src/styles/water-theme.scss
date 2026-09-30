@@ -602,6 +602,21 @@
   .stats-page .health-index-preview-card.analysis-preview-card { margin: 0 28rpx 32rpx; border-radius: 30rpx; background: linear-gradient(120deg, rgb(19 57 72 / 68%), rgb(7 30 41 / 60%)); }
   .stats-page .stats-card { margin-right: 28rpx; margin-left: 28rpx; border-top-color: #8cc7d58c; background: rgb(5 25 35 / 54%); }
   .stats-page {
+    .risk-score-gauge {
+      background: conic-gradient(from 225deg, #9ce7f7 0 var(--risk-score-progress), #345461 var(--risk-score-progress) 75%, transparent 75% 100%);
+      filter: drop-shadow(0 6rpx 16rpx rgb(0 0 0 / 30%));
+    }
+    .risk-score-gauge__center {
+      background: radial-gradient(circle at 35% 25%, #203f50, #091e2a 78%);
+      box-shadow: inset 0 0 0 1rpx #8cc7d54d;
+    }
+    .risk-overview-score { color: #f6fcff; font-size: 80rpx; font-weight: 700; text-shadow: none; }
+    .risk-overview-score-unit { color: #deedf2; font-size: 24rpx; }
+    .risk-score-gauge__projected { color: #c6e7ef; font-size: 22rpx; }
+    .risk-overview-chip-label { color: #b7ced6; }
+    .risk-overview-chip-value { color: #f0f9fc; }
+    .risk-overview-badge { background: #234856; border-color: #82b8c966; }
+    .risk-overview-badge-label { color: #d7f2f8; }
     .analysis-guest-notice { margin-bottom: 24rpx; border-radius: 24rpx; }
     .analysis-guest-notice__title,
     .risk-overview-title, .ai-insight-card-title,
