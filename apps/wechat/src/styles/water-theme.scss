@@ -602,6 +602,55 @@
   .stats-page .health-index-preview-card.analysis-preview-card { margin: 0 28rpx 32rpx; border-radius: 30rpx; background: linear-gradient(120deg, rgb(19 57 72 / 68%), rgb(7 30 41 / 60%)); }
   .stats-page .stats-card { margin-right: 28rpx; margin-left: 28rpx; border-top-color: #8cc7d58c; background: rgb(5 25 35 / 54%); }
   .stats-page {
+    .risk-detail-backdrop, .risk-focus-modal-mask { background: rgb(1 10 17 / 72%); backdrop-filter: blur(8rpx); }
+    .risk-detail-panel, .risk-focus-modal-content {
+      background: linear-gradient(145deg, #153847, #081d29 72%);
+      border: 1rpx solid #8cc7d573;
+      border-radius: 32rpx;
+      padding: 28rpx 32rpx;
+      box-shadow: inset 0 1rpx 0 #d5f6ff26, 0 20rpx 64rpx #0009;
+      color: #e9f7fb;
+    }
+    .risk-detail-handle, .risk-focus-modal-handle { background: #83baca; }
+    .risk-detail-header { flex-wrap: wrap; align-items: center; gap: 16rpx; }
+    .risk-detail-title, .risk-focus-modal-title { color: #f0f9fc; font: 34rpx/1.5 'Songti SC', STSong, SimSun, serif; letter-spacing: 2rpx; }
+    .risk-detail-score { color: #b9effb; font-size: 60rpx; }
+    .risk-detail-score-unit { color: #c3dce5; }
+    .risk-detail-body { gap: 18rpx; }
+    .risk-detail-section-label { color: #93d7e8; font-size: 24rpx; letter-spacing: 2rpx; }
+    .risk-detail-section-text, .risk-detail-evidence-text { color: #d5e6ed; font-size: 26rpx; line-height: 1.75; }
+    .risk-detail-divider { background: linear-gradient(90deg, #8cc7d573, #8cc7d514); }
+    .risk-detail-badge, .risk-detail-delta,
+    .risk-detail-ai-badge, .risk-detail-confidence,
+    .risk-detail-score-change, .risk-focus-modal-count {
+      background: #214858;
+      border: 1rpx solid #8cc7d54d;
+      color: #b9eaf5;
+    }
+    .risk-detail-badge.tone-positive { color: #b4eddc; background: #193f40; }
+    .risk-detail-badge.tone-warning { color: #f2d3a0; background: #433b2b; }
+    .risk-detail-badge.tone-danger { color: #ffd0cc; background: #472f39; }
+    .risk-detail-delta-text, .risk-focus-modal-count-text { color: #b9eaf5; }
+    .risk-detail-ai-disclaimer, .risk-focus-modal-subtitle,
+    .risk-focus-modal-summary, .risk-custom-focus-meta { color: #adc8d3; }
+    .risk-detail-evidence-bullet { color: #91d9ec; }
+    .risk-detail-close-btn, .risk-focus-modal-close {
+      min-height: 88rpx;
+      padding: 20rpx 24rpx;
+      box-sizing: border-box;
+      background: linear-gradient(120deg, #c3eaf2, #73b6cb);
+      border: 1rpx solid #cef4fd;
+      box-shadow: inset 0 1rpx 0 #ffffff70, 0 6rpx 24rpx #0004;
+    }
+    .risk-detail-close-text, .risk-focus-modal-close-text { color: #082332; font-size: 28rpx; font-weight: 600; }
+    .risk-detail-refresh-btn, .risk-custom-focus-add-btn { background: #214858; border-color: #87b9cc; }
+    .risk-detail-refresh-text, .risk-custom-focus-add-btn-text { color: #d8f3fa; }
+    .risk-custom-focus-input { background: #092431; border-color: #537d8e; color: #e5f5fa; }
+    .risk-picker-chip { background: #112f3e; border-color: #537d8e; color: #c2dae4; }
+    .risk-picker-chip.active { background: #28566a; border-color: #a4dfef; color: #edfbff; }
+    .risk-picker-chip__title { color: #e3f3fa; }
+    .risk-picker-chip__action { color: #adc8d3; }
+    .risk-picker-chip.active .risk-picker-chip__action { color: #b9effb; }
     padding-bottom: 0;
     .scroll-wrap { padding-bottom: calc(148rpx + env(safe-area-inset-bottom)); }
     .stats-page-disclaimer { padding: 12rpx 28rpx 24rpx; }
