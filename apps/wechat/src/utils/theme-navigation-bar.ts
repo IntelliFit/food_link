@@ -29,8 +29,9 @@ export function applyThemeNavigationBar(
   const route = pages[pages.length - 1]?.route?.replace(/^\//, '')
   const isBalancedTab = !isWellnessMode() && ['pages/index/index', 'pages/stats/index', 'pages/community/index', 'pages/profile/index'].includes(route || '')
   const theme = getStoredBalancedTheme()
+  const waterLeaderboard = !isWellnessMode() && theme === 'way-of-water' && route === 'packageExtra/pages/checkin-leaderboard/index'
   const easternProfile = theme === 'eastern-salon' && route === 'pages/profile/index'
-  const darkArtTheme = isBalancedTab && (theme === 'way-of-water' || theme === 'picturebook-companion' || easternProfile)
+  const darkArtTheme = waterLeaderboard || (isBalancedTab && (theme === 'way-of-water' || theme === 'picturebook-companion' || easternProfile))
   const isDark = scheme === 'dark' || darkArtTheme
   const background = darkArtTheme && scheme !== 'dark'
     ? (easternProfile ? '#1c1d18' : theme === 'picturebook-companion' ? '#10222a' : '#07111a')

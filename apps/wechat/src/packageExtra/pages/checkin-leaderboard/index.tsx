@@ -98,9 +98,6 @@ function CheckinLeaderboardPage() {
   const { theme } = useBalancedTheme()
   const wellness = useInkWellness()
   const isWater = !wellness && theme === 'way-of-water'
-  useEffect(() => {
-    if (isWater) void Taro.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: '#071c26' })
-  }, [isWater])
   const router = useRouter()
   const section: LeaderboardSection = router.params.section === 'food' ? 'food' : 'user'
   const [userRankingType, setUserRankingType] = useState<UserRankingType>(
