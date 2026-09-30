@@ -11,7 +11,6 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
   const [playing, setPlaying] = React.useState(false)
   const [progressed, setProgressed] = React.useState(false)
   const [failed, setFailed] = React.useState(false)
-  const playbackStarted = React.useRef(false)
   const [videoId] = React.useState(() => `theme-scene-video-${++sceneVideoSequence}`)
   React.useEffect(() => {
     let cancelled = false
@@ -37,15 +36,12 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
     return () => { cancelled = true }
   }, [active, src])
   const play = React.useCallback(() => {
-    if (!playbackSrc || !active || playbackStarted.current) return
-    Taro.nextTick(() => {
-      if (!playbackStarted.current) Taro.createVideoContext(videoId).play()
-    })
+    if (!playbackSrc || !active) return
+    Taro.nextTick(() => Taro.createVideoContext(videoId).play())
   }, [active, playbackSrc, videoId])
   React.useEffect(() => {
     setPlaying(false)
     setProgressed(false)
-    playbackStarted.current = false
     if (!playbackSrc || !active) return
     const firstRetry = setTimeout(play, 120)
     const secondRetry = setTimeout(play, 700)
@@ -55,16 +51,16 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
   if (!poster && !showVideo) return null
   return <View className={`${className} bt-scene-background${showVideo ? ' has-video-source' : ''}${playing ? ' has-started' : ''}${progressed ? ' has-progressed' : ''}${failed ? ' has-failed' : ''}`} aria-hidden>
     {poster && <Image className='bt-scene-background__poster' src={poster} mode='aspectFill' />}
-    {showVideo && <Video id={videoId} key={playbackSrc} className={`bt-scene-background__video${playing ? ' is-playing' : ''}`} style={{ opacity: playing ? 1 : 0 }}
+    {showVideo && <Video id={videoId} key={playbackSrc} className={`bt-scene-background__video${playing ? ' is-playing' : ''}`}
       src={playbackSrc!} autoplay loop muted controls={false} objectFit='cover' initialTime={initialTime}
       showCenterPlayBtn={false} showPlayBtn={false} showFullscreenBtn={false} showProgress={false}
       showBottomProgress={false} showMuteBtn={false} enablePlayGesture={false} enableProgressGesture={false}
       pageGesture={false} vslideGesture={false} enableAutoRotation={false}
       autoPauseIfNavigate autoPauseIfOpenNative
       onLoadedMetaData={play}
-      onPlay={() => { playbackStarted.current = true }}
-      onTimeUpdate={progressed ? undefined : event => { if (event.detail.currentTime > 0) { playbackStarted.current = true; setPlaying(true); setProgressed(true) } }}
-      onError={() => { playbackStarted.current = false; setPlaying(false); setFailed(true) }}
+      onPlay={() => setPlaying(true)}
+      onTimeUpdate={progressed ? undefined : event => { if (event.detail.currentTime > 0) { setPlaying(true); setProgressed(true) } }}
+      onError={() => { setPlaying(false); setFailed(true) }}
     />}
   </View>
 }

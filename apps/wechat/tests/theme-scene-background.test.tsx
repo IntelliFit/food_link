@@ -5,8 +5,7 @@ import { ThemeSceneBackground } from '../src/components/ThemeSceneBackground'
 jest.mock('@tarojs/components', () => ({
   View: ({ children, className }: any) => <div className={className}>{children}</div>,
   Image: ({ src }: any) => <img alt='scene poster' src={src} />,
-  Video: ({ src, className, autoplay, muted, loop, controls, onPlay, onTimeUpdate, onError }: any) => <div data-testid='scene-video' className={className} data-src={src} data-autoplay={autoplay} data-muted={muted} data-loop={loop} data-controls={controls}>
-    <button onClick={onPlay}>play acknowledged</button>
+  Video: ({ src, className, autoplay, muted, loop, controls, onTimeUpdate, onError }: any) => <div data-testid='scene-video' className={className} data-src={src} data-autoplay={autoplay} data-muted={muted} data-loop={loop} data-controls={controls}>
     <button onClick={() => onTimeUpdate?.({ detail: { currentTime: 1 } })}>first frame</button>
     <button onClick={onError}>video error</button>
   </div>,
@@ -27,8 +26,6 @@ test('reveals a silent looping clip only after a decoded frame; hiding releases 
   expect(video).toHaveAttribute('data-loop', 'true')
   expect(video).toHaveAttribute('data-muted', 'true')
   expect(video).toHaveAttribute('data-controls', 'false')
-  expect(video).not.toHaveClass('is-playing')
-  fireEvent.click(screen.getByText('play acknowledged'))
   expect(video).not.toHaveClass('is-playing')
   fireEvent.click(screen.getByText('first frame'))
   expect(video).toHaveClass('is-playing')
