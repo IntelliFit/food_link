@@ -26,6 +26,8 @@ import {
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
 import { persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { useBalancedTheme } from '../../../components/BalancedThemeContext'
+import { useInkWellness } from '../../../components/InkWellness'
 import {
   chooseImageWithPrivacy,
   isCameraAuthorizationError,
@@ -147,6 +149,9 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
+  const { theme } = useBalancedTheme()
+  const wellness = useInkWellness()
+  const isWater = !wellness && theme === 'way-of-water'
   const [devToolsOpen, setDevToolsOpen] = React.useState(false)
   const [onboardingPreviewOpen, setOnboardingPreviewOpen] = React.useState(false)
   /** 预置测试图 URL（仅 development 本地 UI 调试） */
@@ -367,18 +372,24 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     {visible ? (
     <View className='record-menu-modal' catchMove>
       <View className='record-menu-mask' onClick={onClose} />
-      <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}`}>
+      <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}${isWater ? ' record-menu-content--water' : ''}`}>
         {/* 顶部圆角指示条 */}
         <View className='record-menu-handle-bar' />
+        {isWater && (
+          <View className='record-menu-water-heading'>
+            <Text className='record-menu-water-title'>记录这一餐</Text>
+            <Text className='record-menu-water-subtitle'>让日常汇入生活的长河</Text>
+          </View>
+        )}
 
         {/* 2x2 功能网格 */}
         <View className='record-menu-grid-v2'>
           {GRID_FEATURES.map((feature) => {
             const IconComponent = feature.Icon
-            const featureColor = isDark ? feature.darkColor : feature.color
-            const featureBackground = isDark ? feature.darkBackgroundColor : feature.backgroundColor
-            const featureBorder = isDark ? feature.darkBorderColor : feature.borderColor
-            const iconBackground = isDark ? feature.darkIconBackgroundColor : feature.iconBackgroundColor
+            const featureColor = isWater ? '#c0edf7' : isDark ? feature.darkColor : feature.color
+            const featureBackground = isWater ? 'rgba(30, 67, 81, 0.48)' : isDark ? feature.darkBackgroundColor : feature.backgroundColor
+            const featureBorder = isWater ? 'rgba(160, 219, 235, 0.28)' : isDark ? feature.darkBorderColor : feature.borderColor
+            const iconBackground = isWater ? 'rgba(129, 214, 251, 0.12)' : isDark ? feature.darkIconBackgroundColor : feature.iconBackgroundColor
             return (
               <View
                 key={feature.id}
@@ -445,7 +456,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
                   </View>
                 </View>
                 <View className='record-menu-dev-trigger-right'>
-                  <IconTrendingUp size={22} color='#00bc7d' />
+                  <IconTrendingUp size={22} color={isWater ? '#a8ddeb' : '#00bc7d'} />
                   <IconChevronRight
                     size={16}
                     color='#94a3b8'
