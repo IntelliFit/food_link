@@ -524,7 +524,8 @@
     object-fit: cover;
   }
 
-  /* Home: ceremonial header, two water metrics, one luminous record action. */
+  /* Home: compact header and metrics; the tab bar owns the record action. */
+  .bt-experience--way-of-water.bt-experience--home { height: auto; min-height: 0; }
   .bt-experience--home {
     height: 790rpx;
     min-height: 790rpx;
@@ -533,11 +534,11 @@
   .bt-experience--home .bt-masthead { position: relative; z-index: 2; }
   .bt-experience--home .bt-masthead__brand { color: #eff8fa; font-size: 52rpx; }
   .bt-experience--home .bt-masthead__edition { color: #d2e2e7; font-size: 25rpx; }
-  .bt-experience--home .bt-heading { position: absolute; z-index: 2; top: 158rpx; left: 46rpx; right: 46rpx; max-width: none; margin: 0; text-align: center; }
+  .bt-experience--home .bt-heading { position: relative; z-index: 2; top: auto; left: auto; right: auto; max-width: none; margin: 44rpx 0 0; text-align: center; }
   .bt-experience--home .bt-heading__title { color: #f2f8f9; font: 67rpx/1.22 'Songti SC', STSong, SimSun, serif; letter-spacing: 9rpx; }
   .bt-experience--home .bt-heading__subtitle { margin-top: 16rpx; color: #cfdee2; font: 28rpx/1.7 'Songti SC', STSong, SimSun, serif; letter-spacing: 4rpx; }
   .bt-experience--home .bt-water-side-verse { top: 246rpx; right: 40rpx; color: #aac0c7; }
-  .bt-experience--home .bt-water-console { left: 46rpx; right: 46rpx; bottom: 22rpx; }
+  .bt-experience--home .bt-water-console { position: relative; left: auto; right: auto; bottom: auto; margin-top: 104rpx; }
   .bt-experience--home .bt-water-overview { min-height: 150rpx; padding: 0 48rpx; border: 0; border-radius: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
   .bt-experience--home .bt-water-metric { text-align: center; padding: 0; }
   .bt-experience--home .bt-water-metric__label { color: #d3e3e6; font: 25rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 3rpx; }
