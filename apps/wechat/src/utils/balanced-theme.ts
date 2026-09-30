@@ -112,7 +112,7 @@ export const BALANCED_THEME_DEFINITIONS: readonly BalancedThemeDefinition[] = [
     audience: '适合喜欢哲学、冥想与抽象艺术的你',
     signature: '真实水滴光影与克制的暗色空间',
     interactionHint: '从水面入口记录饮食和饮水',
-    toolboxLabel: '流动匣',
+    toolboxLabel: '水境匣',
     toolboxIconClass: 'icon-drink',
     swatches: ['#09131d', '#274b66', '#d06f3f'],
   },

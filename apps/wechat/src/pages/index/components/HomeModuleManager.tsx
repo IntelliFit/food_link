@@ -26,8 +26,8 @@ function ToolboxMark({ heading = false }: { heading?: boolean }) {
   }
 
   if (theme === 'way-of-water') {
-    return <View className={`${className} home-toolbox-theme-mark home-toolbox-water-mark`} ariaLabel='水之道工具箱'>
-      <View className='home-toolbox-water-mark__panes'>{[0, 1, 2, 3].map(pane => <View key={pane} className='home-toolbox-water-mark__pane' />)}</View>
+    return <View className={`${className} home-toolbox-theme-mark home-toolbox-water-mark`} ariaLabel='水境匣'>
+      <View className='home-toolbox-water-mark__vessel'><View className='home-toolbox-water-mark__water' /><View className='home-toolbox-water-mark__lid' /></View>
     </View>
   }
 
@@ -42,6 +42,7 @@ export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: H
   const wellness = useInkWellness()
   const { theme } = useBalancedTheme()
   const water = !wellness && theme === 'way-of-water'
+  const [docked, setDocked] = React.useState(true)
   if (editing) {
     return (
       <View className='home-module-sort-toolbar'>
@@ -68,6 +69,19 @@ export function HomeModuleToolbar({ editing, onOpenToolbox, onFinishEditing }: H
         </View>
       </View>
     )
+  }
+
+  if (water) {
+    return <View id='home-water-dock' className={`home-module-toolbar home-module-toolbar--water${docked ? ' is-docked' : ''}`}>
+      {docked ? <View id='home-water-dock-expand' className='home-water-dock__tab' ariaLabel='展开水境匣' onClick={() => setDocked(false)}>
+        <Text>水</Text><Text>境</Text><Text>匣</Text><Text className='home-water-dock__arrow'>›</Text>
+      </View> : <>
+        <View id='home-module-toolbox-button' className='home-water-dock__open' ariaLabel='打开水境匣，管理首页模块' onClick={onOpenToolbox}>
+          <ToolboxMark /><Text className='home-module-toolbar__water-label'>水境匣</Text>
+        </View>
+        <View id='home-water-dock-collapse' className='home-water-dock__collapse' ariaLabel='收起水境匣到侧边' onClick={() => setDocked(true)}><Text>‹ 收起</Text></View>
+      </>}
+    </View>
   }
 
   return (
@@ -186,7 +200,7 @@ export function HomeToolboxSheet({ visible, visibleIds, onAdd, onHide, onReset, 
           <View className='home-toolbox__heading'>
             <ToolboxMark heading />
             <View>
-              <Text className='home-toolbox__title'>{wellness ? '养生功能箱' : theme === 'way-of-water' ? '水之道 · 工具箱' : themeDefinition.toolboxLabel}</Text>
+              <Text className='home-toolbox__title'>{wellness ? '养生功能箱' : themeDefinition.toolboxLabel}</Text>
               <Text className='home-toolbox__subtitle'>把常用模块放在首页，不常用的先收起来</Text>
             </View>
           </View>

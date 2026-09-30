@@ -554,18 +554,25 @@
   .home-page .page-content > .home-module-toolbar.home-module-toolbar--water:not(.is-editing) {
     position: fixed;
     z-index: 110;
-    top: auto;
-    right: 24rpx;
-    bottom: calc(168rpx + env(safe-area-inset-bottom));
-    width: 112rpx;
-    height: 128rpx;
+    top: 46%;
+    left: 0;
+    right: auto;
+    bottom: auto;
+    transform: translateY(-50%);
+    width: 116rpx;
+    height: auto;
     flex-direction: column;
     gap: 8rpx;
-    border-radius: 24rpx;
+    border-radius: 0 24rpx 24rpx 0;
     background: rgb(7 27 38 / 90%);
     border: 1rpx solid #8cc7d55c;
     box-shadow: 0 8rpx 24rpx #0006;
   }
+  .home-page .page-content > .home-module-toolbar.home-module-toolbar--water.is-docked { width: 60rpx; }
+  .home-water-dock__tab { display: flex; width: 100%; min-height: 176rpx; padding: 16rpx 0; box-sizing: border-box; flex-direction: column; align-items: center; gap: 6rpx; color: #cdeff8; font: 24rpx/1.2 'Songti SC', STSong, SimSun, serif; }
+  .home-water-dock__arrow { font: 32rpx/1 sans-serif; color: #91cadd; }
+  .home-water-dock__open { display: flex; width: 100%; padding: 18rpx 0 10rpx; flex-direction: column; align-items: center; gap: 8rpx; }
+  .home-water-dock__collapse { width: 100%; min-height: 56rpx; display: flex; align-items: center; justify-content: center; color: #c0dce6; font-size: 20rpx; border-top: 1rpx solid #8cc7d533; }
   .home-module-toolbar--water:not(.is-editing) .home-module-toolbar__icon { width: 76rpx; height: 76rpx; }
   .home-module-toolbar__water-label { color: #e4f7fc; font-size: 22rpx; line-height: 30rpx; letter-spacing: 2rpx; }
   .home-toolbox-water-mark {
@@ -574,8 +581,9 @@
     border-radius: 50%;
     box-shadow: inset 0 0 14rpx #d8faff40, 0 0 16rpx #77d3ed30;
   }
-  .home-toolbox-water-mark__panes { display: grid; grid-template-columns: repeat(2, 14rpx); gap: 5rpx; transform: rotate(-8deg); }
-  .home-toolbox-water-mark__pane { width: 14rpx; height: 14rpx; border-radius: 4rpx; background: #d6f7ff; box-shadow: 0 0 8rpx #88d9ef66; }
+  .home-toolbox-water-mark__vessel { position: relative; width: 38rpx; height: 42rpx; overflow: hidden; border: 2rpx solid #c0f2ff; border-radius: 9rpx 9rpx 14rpx 14rpx; background: linear-gradient(90deg, #e9fbff40, #91d4ec14 42%, #effcff55); box-shadow: inset 0 0 7rpx #dbf8ff66; }
+  .home-toolbox-water-mark__water { position: absolute; left: -5rpx; right: -5rpx; bottom: 0; height: 24rpx; border-radius: 45% 55% 0 0; background: linear-gradient(#a5eafa99, #4d9eba99); border-top: 2rpx solid #dcfaff; }
+  .home-toolbox-water-mark__lid { position: absolute; top: 5rpx; left: 4rpx; right: 4rpx; height: 2rpx; background: #e5faff99; }
   .home-toolbox { background: #071c28; }
   .home-toolbox__sheet { background: radial-gradient(ellipse at 85% 12%, #285b6b66, transparent 45%), linear-gradient(160deg, #123441, #061922 78%); color: #e6f4f9; }
   .home-toolbox__title { color: #eefaff; font: 34rpx/1.5 'Songti SC', STSong, SimSun, serif; letter-spacing: 2rpx; }
