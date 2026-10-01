@@ -628,3 +628,21 @@ final result: blocked
 - 没有制作或借用其他角色的新厨师动作；没有调用付费生成、匹配、奖励或数据库写入服务。
 
 final result: blocked
+
+---
+
+# 伙伴冒险与成长小屋 — 2026-10-01
+
+- Current implementation: 7f1088b7, /packagePetStudio/pages/adventure/index. Visual direction follows the approved warm-room reference in docs/design/pet-studio-20261001/reference.png; there is no approved pixel-exact runner screenshot.
+- Growth is the primary experience: three chapters/six action levels, real local-star collection/settlement, four collectibles, equipment, three room placement slots and three unlocked stories. Original pet sprites stay intact. Separate imagegen scene/atlas/scarf assets are actual files, not replacement characters.
+- Mandatory snapshot checks: TypeScript, ESLint, 104 suites/399 tests pass. Current-account/pet guards, storage failures and pending-round retry reviewed without remaining P1/P2 in that scope.
+- Native current-run evidence: 9423,390x844; growth home with six levels and approved originalGuigui sprite. Left/right, jump, dash, pause/resume and native page-hide freeze pass. World367x436.93px; controls80.92x50px; pause52x43px.
+- Screenshot evidence unavailable: current growth capture timeout at10s, baseline also failed. Geometry and render-state readings do not prove visual fidelity. No historical screenshot or source asset is substituted for an implementation capture.
+- Complete-round collection/purchase/restoration evidence is recorded in docs/design/pet-adventure-20261001/verification.md after final native testing; this does not waive the missing visual comparison.
+- Remaining: current native captures, side-by-side crop/typography/clothing/atlas-centering inspection, real-device frame performance and all six levels. Actual match PK, server currency, cloud saves and other-body costumes remain outside this local single-player implementation.
+
+final result: blocked
+
+Native functional follow-up (same implementation7f1088b7): three actual45s rounds1114/1299/1299points,2/3/3stars; actual local receipts8/9/9stars and67/71/71experience. Secondlevel/firststory unlocked. Real26star balance spent20onplant;6remaining,plant inventory/leftplacement. Native reLaunch preserves renderedplant andexactsave. Test-created localprogress removed onlyafterguardedcompare; initial localvalues andmode/petpreferences allrestoredtrue. Finalgrowthhome, no runninggame. This closes localgrowth-loop functional acceptance; final visual result remains blocked because current screenshots unavailable.
+
+Final back-button follow-up: expandedgrowth-back to88rpx minwidth/minheight, hot devcompile47447ms. Native now45x45px, all15 homebuttonswithin390pxviewport. Root bbox left-1/right390px has1pxedgedifference; no functionalcontrol overflow. Three localstatekeys unchanged. Evidence native-back-final.json; finalgrowthhome. No new screenshot, visualresult remainsblocked.

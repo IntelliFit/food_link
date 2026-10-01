@@ -8,7 +8,7 @@
 .growth-button[disabled] { color: #9b9486; opacity: .7; }
 .growth-header { display: flex; align-items: center; gap: 14rpx; padding: 8rpx 0 22rpx; }
 .growth-header > view:nth-child(2) { flex: 1; min-width: 0; }
-.growth-back { padding: 14rpx 10rpx; min-height: 84rpx; color: #867455; }
+.growth-back { padding: 14rpx 10rpx; min-width: 88rpx; min-height: 88rpx; color: #867455; }
 .growth-eyebrow { display: block; font-size: 21rpx; letter-spacing: 2rpx; color: #927c5d; }
 .growth-title { display: block; margin-top: 8rpx; font-family: 'Songti SC', SimSun, serif; font-size: 34rpx; font-weight: 600; }
 .growth-balance { display: grid; grid-template-columns: 38rpx auto; align-items: center; gap: 0 5rpx; font-size: 30rpx; font-weight: 600; }
