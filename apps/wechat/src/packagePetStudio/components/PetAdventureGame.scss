@@ -1,0 +1,116 @@
+.pet-adventure__button {
+  min-width: 0; max-width: 100%; margin: 0; padding: 0; box-sizing: border-box;
+  min-height: 84rpx; font-size: 26rpx; line-height: 1.4; border-radius: 24rpx;
+  background: transparent; color: #425342;
+}
+.pet-adventure__button::after { border: 0; }
+.pet-adventure__button[disabled], .pet-adventure__button:disabled { color: #899582; background: #e1e8d9; opacity: .72; }
+
+.pet-adventure {
+  min-height: 100vh; box-sizing: border-box; padding: 20rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; font-size: 26rpx;
+  color: #405043; background: #f4f2e6; overflow-x: hidden;
+  &__header { display: flex; align-items: center; gap: 16rpx; padding-bottom: 18rpx; min-height: 94rpx; }
+  &__back { width: 84rpx; height: 84rpx; flex-shrink: 0; font-size: 56rpx; line-height: 72rpx; border: 2rpx solid #d9dec7; background: #fffdf1; }
+  &__heading { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4rpx; }
+  &__chapter { display: block; font-size: 26rpx; color: #7d8b65; }
+  &__title { display: block; font-family: 'Songti SC', SimSun, serif; font-size: 34rpx; font-weight: 600; }
+  &__pause { min-width: 100rpx; padding: 0 16rpx; border: 2rpx solid #cfdbbe; background: #fffdf1; }
+  &__prop { width: 100rpx; height: 100rpx; background-size: 400% 300%; background-repeat: no-repeat; }
+  &__header-badge { width: 76rpx; height: 76rpx; }
+  &__intro { padding: 10rpx 4rpx 22rpx; display: flex; flex-direction: column; gap: 12rpx; }
+  &__intro-title { display: block; font-size: 30rpx; font-weight: 600; color: #4e6848; }
+  &__intro-caption { display: block; font-size: 26rpx; color: #7b846e; line-height: 1.6; }
+  &__world { position: relative; width: 100%; height: 600rpx; box-sizing: border-box; overflow: hidden; border-radius: 30rpx; background-size: cover; background-position: center top; border: 2rpx solid #d5dfc4; box-shadow: 0 12rpx 28rpx #4e63351a; touch-action: none; }
+  &__world-vignette { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #172e1c08, transparent 25%, #243c2610 78%, #314a272b); }
+  &__lane-guide { position: absolute; top: 44%; bottom: -18%; width: 2rpx; opacity: .4; transform-origin: top; pointer-events: none; background: linear-gradient(180deg, transparent, #fffaeabf); }
+  &__lane-guide.is-left { left: 46%; transform: rotate(13deg); }
+  &__lane-guide.is-right { right: 46%; transform: rotate(-13deg); }
+  &__world-top { position: absolute; top: 20rpx; left: 20rpx; right: 20rpx; display: flex; justify-content: space-between; gap: 20rpx; z-index: 23; pointer-events: none; }
+  &__distance, &__combo { display: block; padding: 8rpx 16rpx; border: 2rpx solid #fffaeab0; background: #fffdf1d9; color: #426045; border-radius: 30rpx; font-size: 26rpx; font-weight: 600; }
+  &__combo { color: #a57636; }
+  &__journey-track { position: absolute; left: 22rpx; right: 22rpx; top: 77rpx; z-index: 23; height: 8rpx; border-radius: 5rpx; overflow: hidden; background: #fffaf175; pointer-events: none; }
+  &__journey-fill { height: 100%; background: #fcdd8b; border-radius: inherit; }
+  &__object { position: absolute; width: 96rpx; height: 96rpx; transform-origin: center bottom; pointer-events: none; will-change: transform; }
+  &__object.is-tree { width: 126rpx; height: 126rpx; }
+  &__object.is-gap { width: 180rpx; height: 180rpx; }
+  &__world-prop { width: 100%; height: 100%; }
+  &__rider { position: absolute; top: 87%; z-index: 21; width: 186rpx; height: 206rpx; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; transition: left 100ms linear; pointer-events: none; }
+  &__collection-flash { position: absolute; top: 72%; z-index: 24; width: 64rpx; height: 64rpx; pointer-events: none; animation: adventure-collection 520ms ease-out both; }
+  &__collection-prop { width: 100%; height: 100%; }
+  &__rider-pet { position: relative; z-index: 2; display: flex; justify-content: center; align-items: flex-end; height: 175rpx; width: 100%; }
+  &__portrait { position: relative; width: 168rpx; height: 168rpx; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+  &__portrait-scarf { position: absolute; width: 19%; height: 22%; left: 40%; top: 46%; pointer-events: none; }
+  &__board { position: absolute; width: 200rpx; height: 200rpx; bottom: -126rpx; z-index: 3; pointer-events: none; }
+  &__rider-shadow { position: absolute; bottom: 4rpx; left: 24rpx; right: 24rpx; height: 24rpx; border-radius: 50%; background: #29412a45; filter: blur(4rpx); z-index: 0; }
+  &__dash-trail { display: none; position: absolute; bottom: 4rpx; left: 30rpx; right: 30rpx; height: 120rpx; border-radius: 50%; background: linear-gradient(180deg, #fff5bf00, #fff7bcd9); transform: translateY(80rpx); z-index: 0; }
+  &__rider.is-dashing .pet-adventure__dash-trail { display: block; }
+  &__rider.is-hit .pet-adventure__rider-pet { animation: adventure-hit 240ms step-end infinite; }
+  &__pet-spinner, &__settlement-spinner { width: 44rpx; height: 44rpx; border: 5rpx solid #dce3ca; border-top-color: #6e8f57; border-radius: 50%; animation: adventure-spin 900ms linear infinite; }
+  &__world-caption { position: absolute; left: 18rpx; right: 18rpx; top: 18rpx; z-index: 25; display: flex; flex-direction: column; gap: 9rpx; align-items: center; padding: 16rpx 14rpx; border-radius: 20rpx; background: #fffdf1da; pointer-events: none; }
+  &__world-caption-title { display: block; font-size: 29rpx; font-weight: 600; color: #486541; }
+  &__world-caption-subtitle { display: block; font-size: 26rpx; color: #6c7a58; }
+  &__finish-notice { position: absolute; z-index: 25; left: 20rpx; right: 20rpx; top: 111rpx; padding: 10rpx 14rpx; border-radius: 16rpx; background: #fff6dded; color: #8f6a32; text-align: center; font-size: 26rpx; }
+  &__ready-meta { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12rpx 20rpx; padding: 24rpx 0; color: #7d8867; font-size: 26rpx; }
+  &__outfit { display: block; margin: 0 0 14rpx; text-align: center; color: #7a8663; font-size: 26rpx; line-height: 1.5; }
+  &__primary { width: 100%; min-height: 90rpx; background: #6e8b55; color: #fffdf2; border: 2rpx solid #617d49; font-size: 29rpx; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 18rpx 20rpx; box-shadow: 0 5rpx 0 #455e3733; }
+  &__secondary { width: 100%; min-height: 90rpx; background: #eee9d6; border: 2rpx solid #d3d9c1; color: #65804f; font-size: 28rpx; margin-top: 18rpx; display: flex; align-items: center; justify-content: center; padding: 16rpx 20rpx; }
+  &__help { width: 100%; min-height: 84rpx; font-size: 26rpx; color: #6f805b; display: flex; align-items: center; justify-content: center; padding: 14rpx 8rpx; }
+
+  &__hud { display: flex; align-items: center; gap: 18rpx; padding: 8rpx 18rpx; margin-bottom: 14rpx; border-radius: 21rpx; border: 2rpx solid #d6dfc6; background: #fffdf2; }
+  &__hud-score { display: flex; align-items: baseline; gap: 6rpx; min-width: 100rpx; }
+  &__hud-value { font-size: 34rpx; font-weight: 700; color: #5c794b; font-variant-numeric: tabular-nums; }
+  &__hud-label { display: block; font-size: 26rpx; color: #869171; white-space: nowrap; }
+  &__hearts { display: flex; align-items: center; gap: 4rpx; }
+  &__heart { font-size: 30rpx; color: #d9d9c7; }
+  &__heart.is-full { color: #c38067; }
+  &__hud-charge { flex: 1; min-width: 0; }
+  &__charge-track { width: 100%; height: 8rpx; border-radius: 5rpx; background: #e1e6d4; overflow: hidden; margin-top: 4rpx; }
+  &__charge-fill { height: 100%; background: #cda95d; }
+  &__hud-time { font-size: 26rpx; color: #70845d; white-space: nowrap; }
+  &__feedback { min-height: 60rpx; display: flex; align-items: center; justify-content: center; padding: 8rpx 10rpx; color: #718260; font-size: 26rpx; line-height: 1.45; text-align: center; }
+  &__feedback.is-success { color: #6b8b45; }
+  &__feedback.is-warning { color: #b07945; }
+  &__controls { display: grid; grid-template-columns: 1fr 1.2fr 1fr 1.15fr; gap: 10rpx; }
+  &__direction, &__jump, &__dash { width: 100%; min-height: 98rpx; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; background: #e7ebd7; border: 2rpx solid #d1dabd; font-size: 26rpx; }
+  &__jump { background: #7e9a61; border-color: #738d58; color: #fffdf1; }
+  &__dash { background: #e9dfc1; border-color: #d9c68d; color: #967541; }
+  &__dash.is-ready { background: #f4dfaa; border-color: #c9a75d; }
+  &__control-icon { font-size: 38rpx; line-height: 1.1; }
+  &.is-round { padding-top: 12rpx; }
+  &.is-round .pet-adventure__header { padding-bottom: 12rpx; }
+  &.is-round .pet-adventure__chapter { display: none; }
+  &.is-round .pet-adventure__world { height: 58vh; min-height: 570rpx; max-height: 850rpx; }
+
+  &__result { padding: 24rpx 24rpx 12rpx; border-radius: 30rpx; border: 2rpx solid #d5dcc3; background: #fffdf1; text-align: center; }
+  &__result-badge { width: 112rpx; height: 112rpx; margin: 0 auto 14rpx; }
+  &__result-title { display: block; font-size: 34rpx; font-family: 'Songti SC', SimSun, serif; font-weight: 600; color: #4d7042; }
+  &__result-stars { display: block; font-size: 52rpx; letter-spacing: 12rpx; color: #c5a459; margin: 12rpx 0; }
+  &__result-score { display: block; font-size: 70rpx; font-weight: 700; color: #668450; }
+  &__score-unit { font-size: 28rpx; font-weight: 400; margin-left: 8rpx; }
+  &__result-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8rpx; padding: 20rpx 8rpx; background: #ecf0df; border-radius: 20rpx; margin: 18rpx 0; }
+  &__result-metric { display: flex; flex-direction: column; gap: 8rpx; }
+  &__metric-value { font-size: 31rpx; font-weight: 600; color: #627750; }
+  &__metric-label { font-size: 26rpx; color: #869273; }
+  &__result-companion { display: flex; align-items: center; justify-content: center; gap: 18rpx; text-align: left; padding: 4rpx 8rpx 18rpx; }
+  &__speech { flex: 1; min-width: 0; font-size: 27rpx; line-height: 1.6; color: #738567; }
+  &__settlement { display: block; padding: 14rpx; margin-bottom: 16rpx; border-radius: 16rpx; background: #edf1dd; color: #7b865b; font-size: 26rpx; line-height: 1.6; }
+  &__settlement-spinner { margin: 10rpx auto 22rpx; }
+  &__footnote { display: block; font-size: 26rpx; color: #8a957c; margin-top: 20rpx; line-height: 1.5; }
+  &__mask { position: fixed; inset: 0; z-index: 100; padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom)); background: #243525a6; display: flex; align-items: center; justify-content: center; }
+  &__dialog { width: 100%; max-width: 690rpx; box-sizing: border-box; border-radius: 32rpx; padding: 32rpx 26rpx 20rpx; background: #fffdf2; border: 2rpx solid #d5dcbc; box-shadow: 0 20rpx 60rpx #13261335; }
+  &__dialog-title { display: block; font-size: 35rpx; font-family: 'Songti SC', SimSun, serif; font-weight: 600; color: #56744a; text-align: center; }
+  &__dialog-caption { display: block; font-size: 26rpx; line-height: 1.65; color: #82916d; text-align: center; padding: 20rpx 6rpx; }
+  &__tutorial-row { display: flex; align-items: center; gap: 16rpx; font-size: 26rpx; line-height: 1.6; color: #748265; padding: 14rpx 0; }
+  &__tutorial-prop { width: 78rpx; height: 78rpx; flex-shrink: 0; }
+}
+
+@keyframes adventure-hit { 0%, 50% { opacity: .45; } 25%, 75%, 100% { opacity: 1; } }
+@keyframes adventure-spin { to { transform: rotate(360deg); } }
+@keyframes adventure-collection { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-65rpx); } }
+@media (prefers-reduced-motion: reduce) {
+  .pet-adventure__rider { transition: none; }
+  .pet-adventure__rider.is-hit .pet-adventure__rider-pet { animation: none; opacity: .65; }
+  .pet-adventure__dash-trail { display: none; }
+  .pet-adventure__collection-flash { display: none; }
+}

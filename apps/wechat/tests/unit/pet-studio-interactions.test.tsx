@@ -23,6 +23,7 @@ async function mount() {
 }
 test('previewing another template does not equip an unsupported scarf or change account appearance', async () => {
   const { container } = await mount()
+  fireEvent.click(screen.getByRole('button', { name: '宠物衣橱' }))
   fireEvent.click(screen.getByText('小麦'))
   expect(container.querySelector('.studio-stage .pet-avatar__image')).toHaveAttribute('src', '/assets/pets/xiaomai-01.png')
   expect(screen.getByText('该体型待适配')).toBeInTheDocument()
@@ -30,6 +31,7 @@ test('previewing another template does not equip an unsupported scarf or change 
 })
 test('scarf preview preserves the original base sprite and only saves dressing on explicit action', async () => {
   const { container } = await mount()
+  fireEvent.click(screen.getByRole('button', { name: '宠物衣橱' }))
   fireEvent.click(screen.getByText('暖暖围巾'))
   expect(container.querySelector('.studio-character-scarf')).toBeInTheDocument()
   expect(container.querySelector('.studio-stage .pet-companion-sprite__sheet')).toHaveAttribute('src', '/assets/pets/companions/companion-fbd87f73-v1.png')
@@ -37,18 +39,14 @@ test('scarf preview preserves the original base sprite and only saves dressing o
   fireEvent.click(screen.getByText('保存搭配'))
   expect(Taro.setStorageSync).toHaveBeenCalledWith(expect.stringContaining('pet_studio_dressing_v1:test-user:'), 'scarf')
 })
-test('practice scores timing, suppresses rapid duplicate hits, and stops when page hides', async () => {
+test('growth is the default playable entry and both adventure actions open the same route', async () => {
   await mount()
-  fireEvent.click(screen.getByText('游戏乐园'))
-  fireEvent.click(screen.getByText('运动闯关'))
-  fireEvent.click(screen.getByText('开始20秒练习'))
-  act(() => { jest.advanceTimersByTime(450) })
-  fireEvent.click(screen.getByText('跟上节奏'))
-  fireEvent.click(screen.getByText('跟上节奏'))
-  expect(screen.getByText(/10分/)).toBeInTheDocument()
-  expect(screen.getByText('教程练习 · 不发放代币 · 不计入真实运动记录')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: /伙伴的冒险时光/ }))
+  fireEvent.click(screen.getByText('进入冒险与成长小屋'))
+  expect(Taro.navigateTo).toHaveBeenNthCalledWith(1, { url: '/packagePetStudio/pages/adventure/index' })
+  expect(Taro.navigateTo).toHaveBeenNthCalledWith(2, { url: '/packagePetStudio/pages/adventure/index' })
+  expect(screen.queryByText('开始20秒练习')).not.toBeInTheDocument()
   act(() => { hide?.() })
-  expect(screen.queryByText('跟上节奏')).not.toBeInTheDocument()
 })
 
 test('kitchen entry opens the full single-player game route', async () => {
@@ -61,6 +59,7 @@ test('kitchen entry opens the full single-player game route', async () => {
 
 test('an account change cannot save the previous account pet dressing', async () => {
   await mount()
+  fireEvent.click(screen.getByRole('button', { name: '宠物衣橱' }))
   fireEvent.click(screen.getByText('暖暖围巾'))
   ;(Taro.getStorageSync as jest.Mock).mockImplementation(key => key === 'user_id' ? 'another-user' : '')
   await act(async () => { fireEvent.click(screen.getByText('保存搭配')); await Promise.resolve(); await Promise.resolve() })

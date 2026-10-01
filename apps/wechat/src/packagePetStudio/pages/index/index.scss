@@ -1,3 +1,10 @@
+.studio-growth-entry { display: flex; align-items: center; gap: 18rpx; width: 100%; padding: 20rpx 24rpx; margin: 0 0 24rpx; min-height: 140rpx; box-sizing: border-box; border-radius: 26rpx; border: 2rpx solid #b9c797; background: #eff2df; color: #526b3e; text-align: left; }
+.studio-growth-entry::after { border: none; }
+.studio-growth-entry > view:nth-child(2) { flex: 1; min-width: 0; }
+.studio-growth-entry > view:nth-child(2) > text { display: block; font-family: 'Songti SC', SimSun, serif; font-size: 31rpx; font-weight: 600; }
+.studio-growth-entry > view:nth-child(2) > text:last-child { font-family: 'PingFang SC', sans-serif; font-size: 23rpx; font-weight: 400; color: #849467; margin-top: 7rpx; }
+.studio-growth-entry > text { font-size: 25rpx; flex-shrink: 0; }
+.studio-growth-art { width: 100rpx; height: 100rpx; background-image: url('/packagePetStudio/assets/adventure-props-v1.png'); background-size: 400% 300%; background-position: 66.6667% 100%; background-repeat: no-repeat; flex-shrink: 0; }
 .pet-studio-page {
   width: 100%; max-width: 100%; overflow-x: hidden;
   min-height: 100vh; padding: 34rpx 26rpx 50rpx; box-sizing: border-box;

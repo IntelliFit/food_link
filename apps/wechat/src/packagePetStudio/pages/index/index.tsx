@@ -6,7 +6,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { PetAvatar } from '../../../components/PetAvatar'
 import { PetCompanionSprite } from '../../../components/PetCompanionSprite'
 import { getHomeCompanionPreference } from '../../../utils/pet-companion-preference'
-import { buildStudioCharacters, availableStudioActions, canTryStudioScarf, readStudioScarf, saveStudioScarf, rhythmPoints, type StudioAction, type StudioCharacter } from '../../../utils/pet-studio'
+import { buildStudioCharacters, availableStudioActions, canTryStudioScarf, readStudioScarf, saveStudioScarf, type StudioAction, type StudioCharacter } from '../../../utils/pet-studio'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
 
@@ -17,7 +17,7 @@ const actionNames: Record<StudioAction, string> = { idle: '待机', walk: '行�
 const games = [
   { id: 'kitchen', name: '宠物餐车', desc: '备餐控火 · 订单经营', icon: 'icon-foodshop' },
   { id: 'merge', name: '食材合成局', desc: '判断落点 · 连锁合成', icon: 'icon-all' },
-  { id: 'fitness', name: '运动闯关', desc: '掌握节奏 · 挑战纪录', icon: 'icon-dumbbell' },
+  { id: 'fitness', name: '伙伴冒险', desc: '动作闯关 · 收集成长', icon: 'icon-dumbbell' },
   { id: 'water', name: '水岸寻宝', desc: '划艇探索 · 收线寻宝', icon: 'icon-dizhi' },
 ]
 
@@ -29,7 +29,7 @@ const StudioCharacterView = memo(function StudioCharacterView({ character, scarf
 })
 
 function PetStudioPage() {
-  const [tab, setTab] = useState<Tab>('wardrobe')
+  const [tab, setTab] = useState<Tab>('arena')
   const [characters, setCharacters] = useState<StudioCharacter[]>([])
   const [selected, setSelected] = useState('')
   const [scarf, setScarf] = useState(false)
@@ -37,16 +37,7 @@ function PetStudioPage() {
   const [playing, setPlaying] = useState(false)
   const [credits, setCredits] = useState<number | null>(null)
   const [error, setError] = useState(false)
-  const [game, setGame] = useState('kitchen')
-  const [practice, setPractice] = useState(false)
-  const [seconds, setSeconds] = useState(20)
-  const [position, setPosition] = useState(0)
-  const [score, setScore] = useState(0)
-  const [feedback, setFeedback] = useState('跟随节奏，光点经过中央时点击')
-  const [finished, setFinished] = useState(false)
-  const started = useRef(0)
-  const lastTap = useRef(0)
-  const runRef = useRef(false)
+  const [game, setGame] = useState('fitness')
   const loadSequence = useRef(0)
   const loadedAccount = useRef('')
   const character = characters.find(item => item.id === selected) || characters[0]
@@ -68,37 +59,16 @@ function PetStudioPage() {
     }).catch(() => { if (isCurrent()) setCredits(null) })])
   }
   useDidShow(() => { void load() })
-  useDidHide(() => { loadSequence.current += 1; runRef.current = false; setPractice(false); setPlaying(false) })
-  useEffect(() => () => { loadSequence.current += 1; runRef.current = false }, [])
-  useEffect(() => {
-    if (!practice) return undefined
-    const timer = setInterval(() => {
-      const elapsed = Date.now() - started.current
-      setPosition(100 * (1 - Math.abs((elapsed % 1800) / 900 - 1)))
-      setSeconds(Math.max(0, 20 - Math.floor(elapsed / 1000)))
-      if (elapsed >= 20000) { runRef.current = false; setPractice(false); setFinished(true); setFeedback('练习完成，试试刷新自己的纪录') }
-    }, 60)
-    return () => clearInterval(timer)
-  }, [practice])
+  useDidHide(() => { loadSequence.current += 1; setPlaying(false) })
+  useEffect(() => () => { loadSequence.current += 1 }, [])
   const selectCharacter = (next: StudioCharacter) => {
     setSelected(next.id); setScarf(readStudioScarf(next)); setAction('idle'); setPlaying(false)
   }
-  const switchTab = (next: Tab) => { setTab(next); setPlaying(false); runRef.current = false; setPractice(false); setFinished(false) }
-  const startPractice = () => {
-    started.current = Date.now(); lastTap.current = 0; runRef.current = true
-    setScore(0); setSeconds(20); setPosition(0); setFinished(false); setPractice(true); setFeedback('光点经过中央时点击')
-  }
-  const hit = () => {
-    const now = Date.now()
-    if (!runRef.current || now - started.current >= 20000 || now - lastTap.current < 250) return
-    lastTap.current = now
-    const actual = 100 * (1 - Math.abs(((now - started.current) % 1800) / 900 - 1))
-    const points = rhythmPoints(actual)
-    setScore(value => value + points); setFeedback(points === 10 ? '完美节奏 +10' : points === 5 ? '不错，再稳一点 +5' : '放松，再等下一个节拍')
-  }
+  const switchTab = (next: Tab) => { setTab(next); setPlaying(false) }
 
   return <View className='pet-studio-page'>
     <View className='studio-heading'><Text className='studio-eyebrow'>食探 · 温暖的宠物时光</Text><Text className='studio-title'>{tab === 'wardrobe' ? '一起装扮生活' : tab === 'actions' ? '每个动作，都有回应' : '今天，来玩一局'}</Text><Text className='studio-caption'>熟悉的伙伴，陪你发现新的快乐</Text></View>
+    <Button id='studio-growth-start' className='studio-growth-entry' onClick={() => Taro.navigateTo({ url: '/packagePetStudio/pages/adventure/index' })}><View className='studio-growth-art' /><View><Text>伙伴的冒险时光</Text><Text>闯关收集 · 旅途装扮 · 成长小屋</Text></View><Text>出发 ›</Text></Button>
     <View className='studio-tabs'>{([['wardrobe', '宠物衣橱'], ['actions', '动作收藏'], ['arena', '游戏乐园']] as [Tab, string][]).map(([id, label]) => <Button key={id} className={tab === id ? 'is-selected' : ''} onClick={() => switchTab(id)}>{label}</Button>)}</View>
     <View className='studio-panel'>
       <View className='studio-panel-heading'><Text>{tab === 'wardrobe' ? '我的衣橱' : tab === 'actions' ? '动作小剧场' : '游戏乐园'}</Text><Button className='studio-balance' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/reward-center/index') })}>奖励积分 {credits === null ? '—' : credits}</Button></View>
@@ -124,9 +94,8 @@ function PetStudioPage() {
           <Text className='studio-note'>招手、庆祝与比赛动作正在筹备。没有对应素材的动作不会用别的宠物替代。</Text>
         </View> : <View className='studio-content'>
           <View className='studio-section-title'><Text>选择挑战</Text><Text className='studio-tiny'>装扮不影响成绩</Text></View>
-          <View className='studio-game-grid'>{games.map(item => <Button key={item.id} className={game === item.id ? 'is-selected' : ''} onClick={() => { setGame(item.id); runRef.current = false; setPractice(false); setFinished(false) }}><Text className={`iconfont ${item.icon}`} /><Text>{item.name}</Text><Text className='studio-tiny'>{item.desc}</Text></Button>)}</View>
-          <View className='studio-match-status'><Text>匹配对战尚未开放</Text><Text className='studio-note'>真人匹配与代币结算接入后开放，当前不会安排虚拟对手或扣除积分。</Text></View>
-          {game === 'kitchen' ? <View className='studio-practice'><View className='studio-section-title'><Text>湖畔餐车开张啦</Text><Text className='studio-tiny'>6关 · 12份配方</Text></View><Text className='studio-note'>选好食材，安排备餐、灶台和装盘的顺序。在90秒里稳住火候，把热乎乎的餐食交给顾客。</Text><Button id='studio-kitchen-start' className='studio-primary' onClick={() => Taro.navigateTo({ url: '/packagePetStudio/pages/kitchen/index' })}>开始餐车关卡</Button><Text className='studio-tiny'>单人闯关 · 不发放代币</Text></View> : game === 'fitness' ? <View className='studio-practice'><View className='studio-section-title'><Text>节奏练习</Text><Text>{seconds}秒 · {score}分</Text></View><Text className='studio-note'>{feedback}</Text><View className='studio-rhythm-track'><View className='studio-rhythm-target' /><View className='studio-rhythm-marker' style={{ left: `${position}%` }} /></View>{practice ? <Button id='studio-rhythm-hit' className='studio-primary' onClick={hit}>跟上节奏</Button> : <Button id='studio-practice-start' className='studio-primary' onClick={startPractice}>{finished ? '再练一局' : '开始20秒练习'}</Button>}<Text className='studio-tiny'>教程练习 · 不发放代币 · 不计入真实运动记录</Text></View> : <Text className='studio-note'>该游戏正在制作，可以先体验宠物餐车完整单人关卡。</Text>}
+          <View className='studio-game-grid'>{games.map(item => <Button key={item.id} className={game === item.id ? 'is-selected' : ''} onClick={() => setGame(item.id)}><Text className={`iconfont ${item.icon}`} /><Text>{item.name}</Text><Text className='studio-tiny'>{item.desc}</Text></Button>)}</View>
+          {game === 'kitchen' ? <View className='studio-practice'><View className='studio-section-title'><Text>湖畔餐车开张啦</Text><Text className='studio-tiny'>6关 · 12份配方</Text></View><Text className='studio-note'>选好食材，安排备餐、灶台和装盘的顺序。在90秒里稳住火候，把热乎乎的餐食交给顾客。</Text><Button id='studio-kitchen-start' className='studio-primary' onClick={() => Taro.navigateTo({ url: '/packagePetStudio/pages/kitchen/index' })}>开始餐车关卡</Button><Text className='studio-tiny'>单人餐车</Text></View> : game === 'fitness' ? <View className='studio-practice'><View className='studio-section-title'><Text>把星光带回小屋</Text><Text className='studio-tiny'>3章 · 6关</Text></View><Text className='studio-note'>和当前伙伴一起换道、跃起、冲刺。收集星光，兑换装扮与小屋摆件，解锁你们的旅途故事。</Text><Button id='studio-adventure-start' className='studio-primary' onClick={() => Taro.navigateTo({ url: '/packagePetStudio/pages/adventure/index' })}>进入冒险与成长小屋</Button><Text className='studio-tiny'>冒险星光与奖励积分分开记录</Text></View> : <Text className='studio-note'>该游戏正在制作，先和伙伴去冒险吧。</Text>}
         </View>}
       </>}
     </View>

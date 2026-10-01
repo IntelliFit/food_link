@@ -86,7 +86,7 @@ export default defineAppConfig({
   darkmode: false,
   pages: mainPages,
   subpackages: [
-    { root: 'packagePetStudio', name: 'pet-studio', pages: ['pages/index/index', 'pages/kitchen/index'] },
+    { root: 'packagePetStudio', name: 'pet-studio', pages: ['pages/index/index', 'pages/kitchen/index', 'pages/adventure/index'] },
     { root: 'packageThemeScenes', name: 'theme-scenes', pages: ['pages/index/index'] },
     {
       root: 'packageExtra',
