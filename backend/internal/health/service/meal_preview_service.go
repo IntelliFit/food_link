@@ -30,6 +30,14 @@ func (s *StatsService) PreviewMeals(ctx context.Context, userID string, input Me
 		return nil, fmt.Errorf("请先登录")
 	}
 	state := &campusDietAgentRunState{UserID: userID, Intent: "initial", Question: "下一餐吃什么", Location: input.Location}
+	if profile, err := s.repo.GetUserProfile(ctx, userID); err == nil {
+		if school, campusID, campusName := studentDiningPreference(profile); school != nil {
+			state.School = *school
+			state.CampusID = campusID
+			state.CampusName = campusName
+			state.Constraints.AllowedSchoolIDs = []string{school.ID}
+		}
+	}
 	if slices.Contains([]string{"breakfast", "lunch", "dinner"}, input.MealType) {
 		state.Constraints.MealType = input.MealType
 	}
@@ -37,27 +45,7 @@ func (s *StatsService) PreviewMeals(ctx context.Context, userID string, input Me
 }
 
 func mealHistoryQuestion(q string) bool {
-	return regexp.MustCompile(`历史.*(?:餐|吃|饮食|记录)|过去.*(?:吃|餐|记录)|吃过|记录过的餐|本人.*餐`).MatchString(q)
-}
-
-func (s *StatsService) runHybridMealRecommendation(ctx context.Context, state *campusDietAgentRunState) *CampusDietAgentResult {
-	result, err := s.hybridMealRecommendation(ctx, state)
-	if err != nil {
-		logger.Error(ctx, "真实餐食检索失败", err, slog.String("user_id", state.UserID))
-		return mealHarnessEmptyResult(state, "context_unavailable")
-	}
-	lines := []string{result.Summary}
-	evidence := []CampusDietAgentEvidence{}
-	for i, option := range result.Recommendations {
-		evidence = append(evidence, CampusDietAgentEvidence{SourceID: option.SourceID, FoodName: option.Title, Calories: option.Calories, Protein: option.Protein, Carbs: option.Carbs, Fat: option.Fat, NutritionBasis: option.NutritionBasis, UncertaintyLevel: option.UncertaintyLevel})
-		parts := []string{}
-		for _, item := range option.Items {
-			parts = append(parts, strings.TrimSpace(item.Name+" "+item.Amount))
-		}
-		lines = append(lines, fmt.Sprintf("%d. %s：%s。%s；%s。", i+1, option.DecisionLabel, strings.Join(parts, " + "), option.SourceLabel, option.Reason))
-	}
-	lines = append(lines, result.DataNotes...)
-	return &CampusDietAgentResult{AgentRunID: state.RunID, Answer: strings.Join(lines, "\n"), Recommendation: *result, Evidence: evidence, ToolCount: state.ToolCount, ToolTrace: state.ToolTrace}
+	return regexp.MustCompile(`历史.*(?:餐|吃|饮食|记录)|过去.*(?:吃|餐|记录)|吃过|记录过的餐|本人.*餐|记录(?:里|中)|核对.{0,6}日期`).MatchString(q)
 }
 
 type groundedMeal struct {
@@ -108,7 +96,7 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 		if radius <= 0 {
 			radius = 3
 		}
-		nearby, _, err := s.repo.SearchCampusDietCandidates(ctx, domain.CampusDietSearchFilter{AllowUnknownNutrition: true, ViewerID: state.UserID, Location: state.Location, RadiusKM: radius, MerchantOnly: len(state.Constraints.AllowedSchoolIDs) == 0 || state.Constraints.CampusAccessDenied, Limit: 100, MaxPrice: state.Constraints.MaxPrice, SortBy: "best_match"})
+		nearby, _, err := s.repo.SearchCampusDietCandidates(ctx, domain.CampusDietSearchFilter{AllowUnknownNutrition: true, ViewerID: state.UserID, Location: state.Location, RadiusKM: radius, MerchantOnly: state.Constraints.CampusAccessDenied, Limit: 100, MaxPrice: state.Constraints.MaxPrice, SortBy: "best_match"})
 		state.ToolCount++
 		status := "success"
 		if err != nil {
@@ -125,7 +113,7 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 						}
 					}
 				}
-				if candidate.DistanceKM == nil || *candidate.DistanceKM > radius || !mealCampusAvailable(state, candidate) {
+				if candidate.DistanceKM == nil || *candidate.DistanceKM > radius || candidate.IsCampusFood && state.Constraints.CampusAccessDenied {
 					continue
 				}
 				if len(candidate.Items) == 0 {
@@ -138,6 +126,41 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 			}
 		}
 		state.ToolTrace = append(state.ToolTrace, CampusDietAgentToolTrace{ToolName: "search_nearby_foods", Status: status, ResultCount: len(nearby)})
+	} else if state.School.ID != "" && slices.Contains(state.Constraints.AllowedSchoolIDs, state.School.ID) && !historyOnly {
+		result.SearchScope = "campus_and_history"
+		campusMeals, _, err := s.repo.SearchCampusDietCandidates(ctx, domain.CampusDietSearchFilter{
+			AllowUnknownNutrition: true,
+			ViewerID:              state.UserID,
+			CampusOnly:            true,
+			SchoolID:              state.School.ID,
+			CampusID:              state.CampusID,
+			Limit:                 100,
+			SortBy:                "best_match",
+		})
+		state.ToolCount++
+		status := "success"
+		if err != nil {
+			status = "failed"
+			logger.Error(ctx, "学生学校食堂餐食检索失败，保留历史选项", err, slog.String("user_id", state.UserID), slog.String("school_id", state.School.ID))
+			result.DataNotes = append(result.DataNotes, "本校食堂餐食暂时读取失败，当前只展示可核对的历史选项。")
+		} else {
+			for _, candidate := range campusMeals {
+				if candidate.Calories <= 0 {
+					candidate.NutritionBasis = "unavailable"
+					for i := range candidate.Items {
+						if candidate.Items[i].Amount == "1份" {
+							candidate.Items[i].Amount = "份量待确认"
+						}
+					}
+				}
+				if len(candidate.Items) == 0 {
+					candidate.Items = []DietRecommendationFoodItem{{Name: candidate.Title, Amount: candidate.PortionDescription, Source: candidate.Source, SourceID: candidate.SourceID}}
+				}
+				pool = append(pool, groundedMeal{candidate: candidate})
+			}
+			result.DataNotes = append(result.DataNotes, "已根据注册档案中确认的学生学校优先查询本校食堂；开放时段和当日供应仍以食堂现场为准。")
+		}
+		state.ToolTrace = append(state.ToolTrace, CampusDietAgentToolTrace{ToolName: "search_student_campus_foods", Status: status, ResultCount: len(campusMeals)})
 	} else if state.Location == nil {
 		note := "没有有效的实时定位；可先选历史餐食，使用当前位置后再加入附近选项。"
 		if result.LocationHint != nil {
@@ -191,6 +214,9 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 		if c.DistanceKM != nil {
 			meal.score -= math.Min(15, *c.DistanceKM*2)
 		}
+		if c.SchoolID != "" && slices.Contains(state.Constraints.AllowedSchoolIDs, c.SchoolID) {
+			meal.score += 10
+		}
 		text := normalizedDietDecisionCandidateText(c)
 		for _, f := range state.PersonalContext.FoodFrequency {
 			if strings.Contains(text, normalizeDietDecisionToken(f.Name)) {
@@ -235,7 +261,14 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 		option.HistoryDate = meal.date
 		option.DistanceKM, option.MerchantName, option.Address, option.LocationLevel = c.DistanceKM, c.MerchantName, c.Address, c.LocationLevel
 		option.DecisionRole, option.DecisionLabel, option.DecisionScore = role, label, meal.score
-		option.SourceLabel = "附近已收录 · " + c.MerchantName
+		option.SourceLabel = strings.Join(compactDietStrings(c.MerchantName, c.SchoolName, c.CanteenName), " · ")
+		if c.IsCampusFood {
+			option.SourceLabel = strings.Join(compactDietStrings(c.SchoolName, c.CanteenName), " · ")
+		}
+		option.RequiresCampusAccessConfirmation = c.IsCampusFood && !slices.Contains(state.Constraints.AllowedSchoolIDs, c.SchoolID)
+		if option.RequiresCampusAccessConfirmation {
+			option.Tips = append(option.Tips, "校内餐食，需确认本次能否进入并在食堂就餐")
+		}
 		if c.NutritionBasis == "unavailable" {
 			option.DecisionMissingEvidence = []string{"营养数据缺失", "需向商家确认份量与配料"}
 		}
@@ -245,20 +278,32 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 		}
 		result.Recommendations = append(result.Recommendations, option)
 	}
+	// Home is primarily a decision about where to eat. Prefer two different
+	// nearby venues; history is at most one fallback, never filler for no GPS.
+	venues := map[string]bool{}
 	for _, meal := range eligible {
-		if meal.candidate.Source != "food_record" {
-			add(meal, "nearby", "附近可选")
-			break
+		c := meal.candidate
+		venue := strings.Join(compactDietStrings(c.MerchantName, c.SchoolID, c.CanteenName), ":")
+		if c.Source != "food_record" && !venues[venue] && len(result.Recommendations) < 2 {
+			add(meal, "nearby", "")
+			venues[venue] = true
+		}
+	}
+	for _, meal := range eligible {
+		if meal.candidate.Source != "food_record" && len(result.Recommendations) < 2 {
+			add(meal, "nearby", "")
 		}
 	}
 	for _, meal := range eligible {
 		if meal.candidate.Source == "food_record" {
-			add(meal, "history", "历史回选")
+			add(meal, "history", "")
 			break
 		}
 	}
 	for _, meal := range eligible {
-		add(meal, "balanced", "换个选择")
+		if meal.candidate.Source != "food_record" {
+			add(meal, "nearby", "")
+		}
 	}
 	result.Summary = "结合个人目标、今日摄入和近期餐食记录，下面是互为替代的选择，不是一起吃。"
 	if state.Location != nil {

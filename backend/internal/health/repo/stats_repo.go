@@ -242,8 +242,16 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 
 	base := r.db.WithContext(ctx).
 		Table("public_food_library").
-		Where(`status = ? AND COALESCE(is_campus_food, false) = true AND school_id = ? AND total_calories > 0
+		Where(`status = ? AND COALESCE(is_campus_food, false) = true AND school_id = ?
 			AND COALESCE(food_name, '') !~* '(餐盒|打包盒|包装盒|纸袋|塑料袋|餐具|筷子|勺子|吸管|杯盖|餐巾)'`, "published", filter.SchoolID)
+	if !filter.AllowUnknownNutrition {
+		base = base.Where("total_calories > 0")
+	}
+	if filter.ViewerID != "" {
+		base = base.Where(`NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
+			(b.blocker_user_id = ? AND b.blocked_user_id = public_food_library.user_id) OR
+			(b.blocker_user_id = public_food_library.user_id AND b.blocked_user_id = ?))`, filter.ViewerID, filter.ViewerID)
+	}
 	if campusID := strings.TrimSpace(filter.CampusID); campusID != "" {
 		base = base.Where("campus_id = ?", campusID)
 	}
@@ -323,7 +331,7 @@ func (r *StatsRepo) getPublicFoodRecommendationCandidates(ctx context.Context, s
 	var rows []dietRecommendationRow
 	q := r.db.WithContext(ctx).
 		Table("public_food_library").
-		Select(`id, COALESCE(NULLIF(food_name, ''), NULLIF(description, ''), '公共食物') AS title,
+		Select(`id, COALESCE(NULLIF(food_name, ''), NULLIF(description, ''), '收录餐食') AS title,
 			COALESCE(description, '') AS description, total_calories AS calories,
 			total_protein AS protein, total_carbs AS carbs, total_fat AS fat,
 			COALESCE(CAST(items AS TEXT), '[]') AS items_json,

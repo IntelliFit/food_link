@@ -12,7 +12,7 @@ import (
 	"food_link/backend/internal/health/domain"
 )
 
-const mealHarnessVersion = "foodlink-meal-harness-v3"
+const mealHarnessVersion = "foodlink-meal-harness-v5"
 
 type mealHistoryEvidence struct {
 	Date   string                  `json:"date"`
@@ -186,6 +186,12 @@ func summarizeMealHistory(records []domain.FoodRecord, now time.Time) mealPerson
 }
 
 func mealHarnessScope(state *campusDietAgentRunState) string {
+	if mealHistoryQuestion(state.Question) && !mealRequestsNearbyOnly(state.Question) {
+		return "history"
+	}
+	if state.Constraints.Scene == "campus" && state.School.ID != "" {
+		return "school"
+	}
 	if state.Location != nil {
 		return "nearby"
 	}
@@ -196,14 +202,30 @@ func mealHarnessScope(state *campusDietAgentRunState) string {
 }
 
 func mealHarnessSourceLabel(state *campusDietAgentRunState) string {
+	if len(state.Candidates) > 0 {
+		history, public := false, false
+		for _, c := range state.Candidates {
+			history = history || c.Source == "food_record"
+			public = public || c.Source != "food_record"
+		}
+		if history && !public {
+			return "你的饮食记录"
+		}
+		if history && public {
+			return "你的饮食记录和附近餐食库"
+		}
+	}
 	if state.Location != nil {
 		return "附近已收录餐食"
 	}
-	return state.School.Name + "校园餐食库"
+	if state.School.Name != "" {
+		return state.School.Name + "校园餐食库"
+	}
+	return "已收录餐食"
 }
 
 func mealHarnessNotes(state *campusDietAgentRunState) []string {
-	notes := []string{"菜品来自已收录的公开餐食数据；价格和营养以记录为准，当日供应需向商家或食堂确认"}
+	notes := []string{"历史餐食来自本人饮食记录，不代表附近在售；商家餐食来自已收录数据，价格、配料和当日供应需向商家确认"}
 	if state.Location != nil {
 		notes = append(notes, "距离为约算直线距离；校园级定位只代表校区附近，不保证校外人员可以进入")
 	}
@@ -223,6 +245,9 @@ func mealHarnessEmptyResult(state *campusDietAgentRunState, reason string) *Camp
 	}
 	if reason == "context_unavailable" {
 		answer = "这次没能读取完整饮食记录或健康档案，请稍后再试。你也可以先补充本餐需求。"
+	}
+	if reason == "needs_location" {
+		answer = "可以，按你这轮的地点找餐食，不再沿用之前的学校。请先使用当前位置，我再查询附近已收录的商家。"
 	}
 	if state.Constraints.PendingSchool != nil && !state.Constraints.CampusAccessDenied && state.Constraints.Scene != "takeout" {
 		answer = fmt.Sprintf("已收录的附近选择里有%s食堂，但位置不代表能在校内就餐。你这次可以在%s食堂吃饭吗？也可以只看校外商家。", state.Constraints.PendingSchool.Name, state.Constraints.PendingSchool.Name)
@@ -262,10 +287,13 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 	out := make([]DietRecommendationCandidate, 0, len(candidates))
 	scores := map[string]float64{}
 	for _, candidate := range candidates {
+		candidate = normalizeMealEvidence(candidate)
+		isHistory := candidate.Source == "food_record"
 		if !mealCampusAvailable(state, candidate) {
 			continue
 		}
-		if state.Location != nil {
+		campusScope := state.Constraints.Scene == "campus" && candidate.IsCampusFood && state.School.ID != "" && candidate.SchoolID == state.School.ID
+		if state.Location != nil && !isHistory && !campusScope {
 			radius := state.Constraints.RadiusKM
 			if radius <= 0 {
 				radius = 3
@@ -274,17 +302,26 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 				continue
 			}
 		}
-		if state.Constraints.Scene == "takeout" && (candidate.IsCampusFood || candidate.MerchantName == "") {
+		if !isHistory && state.Constraints.Scene == "takeout" && (candidate.IsCampusFood || candidate.MerchantName == "") {
 			continue
 		}
-		if state.Constraints.Scene == "campus" && !candidate.IsCampusFood {
+		if !isHistory && state.Constraints.Scene == "campus" && !candidate.IsCampusFood {
+			continue
+		}
+		if !isHistory && state.Constraints.Scene == "campus" && state.School.ID != "" && candidate.SchoolID != state.School.ID {
+			continue
+		}
+		if !isHistory && state.Constraints.CanteenName != "" && !strings.Contains(candidate.CanteenName, state.Constraints.CanteenName) {
 			continue
 		}
 		eval := evaluateDietDecisionCandidate(ctx, candidate)
-		if !eval.Feasible {
+		if !eval.Feasible || !groundedMealAllowed(state, candidate) {
 			continue
 		}
 		text := normalizedDietDecisionCandidateText(candidate)
+		if state.Constraints.RequiredStaple == "rice" && !mealAvoidFoodMatches("米饭", text) || state.Constraints.RequiredStaple == "noodles" && !mealAvoidFoodMatches("面", text) {
+			continue
+		}
 		blocked := false
 		for _, avoid := range state.Constraints.AvoidFoods {
 			if mealAvoidFoodMatches(avoid, text) {
@@ -295,6 +332,9 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 			continue
 		}
 		score := eval.Scores.BalancedUtility
+		if candidate.NutritionBasis == "unavailable" {
+			score = 35 // Missing macros must never score as a zero-calorie meal.
+		}
 		if candidate.DistanceKM != nil {
 			score -= math.Min(15, *candidate.DistanceKM*2)
 		}
@@ -354,14 +394,23 @@ func mealHarnessPreferences(state *campusDietAgentRunState, raw string) (map[str
 		}
 		return out
 	}
-	// Hard exclusions come from explicit user clauses, not a model's inferred
-	// full replacement list (e.g. treating 清淡 as an allergy to all fried food).
+	// Keep legacy callers compatible, but never accept an inferred replacement
+	// list. Evidence-backed deltas can release temporary exclusions without
+	// altering independently enforced profile allergies.
 	_ = args.AvoidFoods
+	if _, err := applyMealRequirementUpdates(state, raw); err != nil {
+		return nil, err
+	}
 	if args.PreferFoods != nil {
-		state.Constraints.PreferFoods = normalize(*args.PreferFoods)
+		for _, food := range normalize(*args.PreferFoods) {
+			if strings.Contains(state.Question, food) && mealFoodPreference.MatchString(state.Question) && !mealFoodNegative.MatchString(state.Question) {
+				mealApplyFoodUpdate(&state.Constraints, "prefer_food", "add", food)
+			}
+		}
 	}
 	// Scene and distance changes must be supported by this user's text.
 	applyCampusDietAgentQuestionConstraints(&state.Constraints, state.Question)
+	state.ToolCache = nil // results are keyed to preferences and evidence at retrieval time
 	// Previously retrieved candidates must be revalidated after preferences change.
 	state.LastSearch = mealHarnessRank(state, state.LastSearch)
 	for id, c := range state.Candidates {

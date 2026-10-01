@@ -329,11 +329,12 @@ type PetChatInput struct {
 }
 
 type PetChatEntryContext struct {
-	Source      string `json:"source"`
-	Date        string `json:"date"`
-	MealType    string `json:"meal_type"`
-	MealLabel   string `json:"meal_label,omitempty"`
-	BasicAdvice string `json:"basic_advice,omitempty"`
+	SelectedSourceID string `json:"selected_source_id,omitempty"`
+	Source           string `json:"source"`
+	Date             string `json:"date"`
+	MealType         string `json:"meal_type"`
+	MealLabel        string `json:"meal_label,omitempty"`
+	BasicAdvice      string `json:"basic_advice,omitempty"`
 }
 
 type PetChatEstimateResult struct {
@@ -2562,11 +2563,12 @@ func normalizePetChatEntryContext(input *PetChatEntryContext) *PetChatEntryConte
 		return nil
 	}
 	return &PetChatEntryContext{
-		Source:      "home_next_meal",
-		Date:        date,
-		MealType:    mealType,
-		MealLabel:   trimStatsRunes(strings.TrimSpace(input.MealLabel), 12),
-		BasicAdvice: trimStatsRunes(strings.TrimSpace(input.BasicAdvice), 80),
+		SelectedSourceID: trimStatsRunes(strings.TrimSpace(input.SelectedSourceID), 36),
+		Source:           "home_next_meal",
+		Date:             date,
+		MealType:         mealType,
+		MealLabel:        trimStatsRunes(strings.TrimSpace(input.MealLabel), 12),
+		BasicAdvice:      trimStatsRunes(strings.TrimSpace(input.BasicAdvice), 80),
 	}
 }
 

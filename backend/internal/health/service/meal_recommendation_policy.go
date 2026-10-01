@@ -16,14 +16,18 @@ var mealRelocation = regexp.MustCompile(`外地|出差|离开.{0,10}(?:学校|�
 func mealExplicitPlaceText(question string) string {
 	parts := []string{}
 	for _, match := range regexp.MustCompile(`(?:现在在|目前在|在|换到|到了)([^，。；！？,;!?]{1,50})`).FindAllStringSubmatch(question, -1) {
+		if strings.HasPrefix(match[1], "校") || strings.HasPrefix(match[1], "读") || strings.HasPrefix(match[1], "线") {
+			continue
+		}
 		parts = append(parts, match[1])
 	}
 	return strings.Join(parts, "，")
 }
 
-// A location, saved university, or student identity is not an assertion that a
-// particular dining facility can be used. Only user-confirmed access is durable
-// within the meal conversation; models cannot grant it through tool arguments.
+// A location or merely saved university is not an assertion that a dining
+// facility can be used. Explicit registration identity is injected into
+// AllowedSchoolIDs by the service; conversation confirmation remains durable
+// for other schools, and models cannot grant access through tool arguments.
 func initializeMealAccess(state *campusDietAgentRunState) {
 	c := &state.Constraints
 	q := strings.ReplaceAll(state.Question, " ", "")
@@ -36,6 +40,12 @@ func initializeMealAccess(state *campusDietAgentRunState) {
 		c.CampusAccessDenied = true
 		c.Scene = "takeout"
 		return
+	}
+	if school := state.ConfirmedStudentSchool; school != nil && school.ID != "" {
+		c.AllowedSchoolIDs = []string{school.ID}
+		c.PendingSchool = nil
+		c.CampusAccessDenied = false
+		state.School = *school
 	}
 	target := state.School
 	if target.ID == "" && c.PendingSchool != nil {
@@ -82,58 +92,17 @@ func mealExplicitScene(q string) string {
 	if strings.Contains(q, "外卖") || regexp.MustCompile(`只.{0,4}校外|只.{0,4}商家`).MatchString(q) {
 		return "takeout"
 	}
-	if regexp.MustCompile(`(?:想|要|去|在|只看|只吃).{0,10}食堂|校内吃`).MatchString(q) {
+	if regexp.MustCompile(`(?:想|要|去|在|只看|只吃).{0,10}食堂|校内吃|(?:清华|大学|学校|本校)食堂`).MatchString(q) {
 		return "campus"
 	}
-	if regexp.MustCompile(`食堂.{0,8}(?:商家|外卖).{0,6}都可以|都可以|不限场景`).MatchString(q) {
+	if regexp.MustCompile(`(?:食堂.{0,8}(?:商家|外卖)|(?:外卖|商家).{0,8}食堂).{0,6}都可以|不限场景`).MatchString(q) {
 		return "any"
 	}
 	return ""
 }
 
-func mealFoodTokens(value string) []string {
-	out := []string{}
-	for _, token := range regexp.MustCompile(`[、,，和及与或/]+`).Split(value, -1) {
-		token = strings.TrimSpace(token)
-		for _, prefix := range []string{"还是", "仍然", "也", "再", "吃"} {
-			token = strings.TrimPrefix(token, prefix)
-		}
-		for _, suffix := range []string{"了", "的", "一些", "一点"} {
-			token = strings.TrimSuffix(token, suffix)
-		}
-		if token == "" || regexp.MustCompile(`食堂|学校|校内|校外|外卖|商家|方案|推荐|建议|搭配|没吃过|说成|食谱|历史|来源|查不到|换菜|地点|位置|预算|记录|营养|主食|只|单个|更多|保持|不变|条件|限制|编|胡说|瞎猜`).MatchString(token) {
-			continue
-		}
-		if !slices.Contains(out, token) {
-			out = append(out, token)
-		}
-	}
-	return out
-}
-
 func applyMealFoodConstraints(c *CampusDietRecommendationConstraints, q string) {
-	c.AvoidFoods = mealFoodTokens(strings.Join(c.AvoidFoods, "、"))
-	for _, match := range regexp.MustCompile(`(?:不吃|不要|不能吃|忌口)[：:]?([^，。；！？\n]+)`).FindAllStringSubmatch(q, -1) {
-		for _, food := range mealFoodTokens(match[1]) {
-			if len([]rune(food)) <= 10 && !slices.Contains(c.AvoidFoods, food) {
-				c.AvoidFoods = append(c.AvoidFoods, food)
-			}
-		}
-	}
-	for _, match := range regexp.MustCompile(`(?:可以吃|能吃|取消忌口)[：:]?([^，。；！？\n]+)`).FindAllStringSubmatch(q, -1) {
-		for _, food := range mealFoodTokens(match[1]) {
-			c.AvoidFoods = slices.DeleteFunc(c.AvoidFoods, func(old string) bool { return old == food })
-		}
-	}
-	// Chinese commonly places the food before the permission: 虾今天可以吃了.
-	for _, clause := range regexp.MustCompile(`[，。；！？,;!?\n]+`).Split(q, -1) {
-		for _, food := range append([]string(nil), c.AvoidFoods...) {
-			pattern := `(?:^|但|不过|今天|这餐|现在)` + regexp.QuoteMeta(food) + `(?:今天|这餐|现在)?(?:可以|能)吃(?:了)?$`
-			if regexp.MustCompile(pattern).MatchString(strings.TrimSpace(clause)) {
-				c.AvoidFoods = slices.DeleteFunc(c.AvoidFoods, func(old string) bool { return old == food })
-			}
-		}
-	}
+	mealApplyExplicitFoodChanges(c, q)
 	if strings.Contains(q, "清淡") && !slices.Contains(c.PreferFoods, "清淡") {
 		c.PreferFoods = append(c.PreferFoods, "清淡")
 	}
@@ -156,7 +125,7 @@ func mealEvidenceText(state *campusDietAgentRunState, answer string) string {
 	unsafe := regexp.MustCompile(`完美契合|不会给.{0,8}(?:肠胃|胃|消化)|胃炎|胃部|胃黏膜|易消化|促进消化|升糖指数|肌酸|即可满足.{0,8}需求|长期偏低|今天.{0,6}(?:没吃|空着)|不含花生|不含虾|均不含|均避开|(?:验证|核实|确认|过敏).{0,4}安全|一次买齐|一起解决|稳稳控制|实时外卖平台`)
 	for _, segment := range segments {
 		segment = strings.TrimSpace(segment)
-		if segment == "" || campusDietAgentUnsupportedClaimPattern.MatchString(segment) || unsafe.MatchString(segment) {
+		if segment == "" || campusDietAgentUnsupportedClaimPattern.MatchString(segment) || unsafe.MatchString(segment) || regexp.MustCompile(`(?i:低GI|高GI)`).MatchString(segment) {
 			continue
 		}
 		if regexp.MustCompile(`可以吃|可食用|可以接受|可接受|不再忌口|不过敏`).MatchString(segment) && matchedDietDecisionAllergen(state.MealContext.Allergies, DietRecommendationCandidate{Title: segment}) != "" {
@@ -207,7 +176,7 @@ func mealConstraintConfirmation(state *campusDietAgentRunState) string {
 func mealFeasibleChoices(state *campusDietAgentRunState, candidates []DietRecommendationCandidate) []DietRecommendationCandidate {
 	out := []DietRecommendationCandidate{}
 	for _, c := range mealHarnessRank(state, candidates) {
-		if state.Constraints.CompleteMeal && !mealHasStructure(c) {
+		if state.Constraints.CompleteMeal && !mealHasEvidenceStructure(c) {
 			continue
 		}
 		if state.Intent == "more" && slices.Contains(state.ExcludedSourceIDs, c.SourceID) {
@@ -228,6 +197,14 @@ func mealAvoidFoodMatches(avoid, text string) bool {
 	}
 	if avoid == "鸡肉" {
 		return regexp.MustCompile(`鸡胸|鸡腿|鸡翅|鸡排|鸡块|鸡柳|鸡饭|鸡丝|烤鸡|炸鸡|盐焗鸡|鸡丁`).MatchString(text)
+	}
+	switch mealCanonicalFood(avoid) {
+	case "米饭":
+		return regexp.MustCompile(`米饭|拌饭|盖饭|盖浇|炒饭|煲仔|石锅|饭团|饭卷|[鸡鸭鹅牛猪鱼虾蛋肉排骨腿]饭`).MatchString(text)
+	case "面":
+		return regexp.MustCompile(`面条|面食|拉面|拌面|炒面|汤面|意面|荞麦面|[牛肉鸡排鱼汤热干凉刀削]面|米线|米粉|土豆粉|河粉|肠粉`).MatchString(text)
+	case "鸡蛋":
+		return regexp.MustCompile(`鸡蛋|煎蛋|炒蛋|滑蛋|卤蛋|荷包蛋|蒸蛋|茶叶蛋|蛋饭|蛋花|蛋黄|蛋清|全蛋`).MatchString(text)
 	}
 	for _, alias := range dietDecisionAllergenAliases(avoid) {
 		if strings.Contains(text, alias) {
