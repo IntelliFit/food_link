@@ -39,13 +39,31 @@ test('scarf preview preserves the original base sprite and only saves dressing o
 })
 test('practice scores timing, suppresses rapid duplicate hits, and stops when page hides', async () => {
   await mount()
-  fireEvent.click(screen.getByText('匹配对战'))
+  fireEvent.click(screen.getByText('游戏乐园'))
+  fireEvent.click(screen.getByText('运动闯关'))
   fireEvent.click(screen.getByText('开始20秒练习'))
   act(() => { jest.advanceTimersByTime(450) })
   fireEvent.click(screen.getByText('跟上节奏'))
   fireEvent.click(screen.getByText('跟上节奏'))
   expect(screen.getByText(/10分/)).toBeInTheDocument()
-  expect(screen.getByText('单人练习 · 不发放代币 · 不计入真实运动记录')).toBeInTheDocument()
+  expect(screen.getByText('教程练习 · 不发放代币 · 不计入真实运动记录')).toBeInTheDocument()
   act(() => { hide?.() })
   expect(screen.queryByText('跟上节奏')).not.toBeInTheDocument()
+})
+
+test('kitchen entry opens the full single-player game route', async () => {
+  await mount()
+  fireEvent.click(screen.getByRole('button', { name: '游戏乐园' }))
+  fireEvent.click(screen.getByText('宠物餐车'))
+  fireEvent.click(screen.getByText('开始餐车关卡'))
+  expect(Taro.navigateTo).toHaveBeenCalledWith({ url: '/packagePetStudio/pages/kitchen/index' })
+})
+
+test('an account change cannot save the previous account pet dressing', async () => {
+  await mount()
+  fireEvent.click(screen.getByText('暖暖围巾'))
+  ;(Taro.getStorageSync as jest.Mock).mockImplementation(key => key === 'user_id' ? 'another-user' : '')
+  await act(async () => { fireEvent.click(screen.getByText('保存搭配')); await Promise.resolve(); await Promise.resolve() })
+  expect(Taro.setStorageSync).not.toHaveBeenCalled()
+  expect(getPetSummary).toHaveBeenCalledTimes(2)
 })

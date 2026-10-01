@@ -1,0 +1,23 @@
+.pet-kitchen-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 24rpx;
+  padding: 40rpx;
+  box-sizing: border-box;
+  background: #f6ead7;
+  color: #493b2b;
+  font-size: 26rpx;
+  button { background: #65814f; color: #fffdf6; }
+}
+.pet-kitchen-loading-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border: 4rpx solid #ddd0b9;
+  border-top-color: #65814f;
+  border-radius: 50%;
+  animation: pet-kitchen-loading-spin 1s linear infinite;
+}
+@keyframes pet-kitchen-loading-spin { to { transform: rotate(360deg); } }
