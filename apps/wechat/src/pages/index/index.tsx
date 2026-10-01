@@ -2,9 +2,12 @@ import SleepCard from './components/SleepCard'
 import NextMealRecommendations from './components/NextMealRecommendations'
 import { Success } from '@taroify/icons'
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, ScrollView } from '@tarojs/components'
-import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
-import homeBotanicalBackground from '../../assets/home/home-botanical-bg-v1.webp'
-import nutritionOrbitImage from '../../assets/home/nutrition-orbit-v1.webp'
+import {
+  CAFETERIA_HERO_BG_URL,
+  GOOSE_DUCK_CHICKEN_BG_URL,
+  HOME_BOTANICAL_BG_URL as homeBotanicalBackground,
+  HOME_NUTRITION_ORBIT_URL as nutritionOrbitImage,
+} from '../../utils/static-asset-cdn-url'
 import * as React from 'react'
 import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {

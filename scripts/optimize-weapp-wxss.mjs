@@ -39,6 +39,17 @@ function canRemoveWebkitDeclaration(decl) {
   )
 }
 
+function hasStandardGradientFallback(decl) {
+  const match = decl.value.match(/^-webkit-((?:repeating-)?(?:linear|radial)-gradient)\(/)
+  if (!match) return false
+  const siblings = decl.parent?.nodes || []
+  // 标准声明必须排在后面且优先级相同；此时微信本来就使用标准渐变。
+  return siblings.slice(siblings.indexOf(decl) + 1).some(
+    (node) => node.type === 'decl' && node.prop === decl.prop &&
+      Boolean(node.important) === Boolean(decl.important) && node.value.startsWith(`${match[1]}(`)
+  )
+}
+
 let filesChanged = 0
 let bytesSaved = 0
 
@@ -57,6 +68,7 @@ for (const file of walkWxssFiles(distDir)) {
       return
     }
     if (canRemoveWebkitDeclaration(decl)) decl.remove()
+    else if (hasStandardGradientFallback(decl)) decl.remove()
   })
 
   const output = root.toString()

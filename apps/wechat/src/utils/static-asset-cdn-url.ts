@@ -22,3 +22,7 @@ export const DEFAULT_AVATAR_URL = getFoodImagesCdnUrl('wechat/default_avatar.jpg
 
 /** 鹅腿/鸭腿/鸡腿专线背景图（COS: food-images / ecf8e073-83ca-41b4-bb79-659b17e94c85.png） */
 export const GOOSE_DUCK_CHICKEN_BG_URL = getFoodImagesCdnUrl('ecf8e073-83ca-41b4-bb79-659b17e94c85.png')
+
+/** 首页装饰原图使用内容版本路径，避免内联图片挤占小程序主包。 */
+export const HOME_BOTANICAL_BG_URL = getFoodImagesCdnUrl('wechat/home/home-botanical-bg-v1-63ba25c9e4fe.webp')
+export const HOME_NUTRITION_ORBIT_URL = getFoodImagesCdnUrl('wechat/home/nutrition-orbit-v1-d593efc274a1.webp')
