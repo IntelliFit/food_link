@@ -932,6 +932,16 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 	)
 
 	var err error
+	visionMode := stringFromMap(task.Payload, "execution_mode")
+	if visionMode == "" {
+		visionMode = stringFromMap(task.Payload, "executionMode")
+	}
+	if visionMode == "" && strings.HasPrefix(task.TaskType, "precision_") {
+		visionMode = "strict"
+	}
+	shadowEligible := (task.TaskType == "food" || task.TaskType == "precision_plan") &&
+		!boolFromAny(task.Payload["internal_benchmark"]) && !boolFromAny(task.Payload["open_api"])
+	taskCtx = analyzeservice.WithVisionRequest(taskCtx, visionMode, task.ID, shadowEligible)
 	switch task.TaskType {
 	case "food":
 		err = r.processFood(taskCtx, task)

@@ -120,6 +120,7 @@ type AnalyzeService struct {
 	ordinaryOpenLuxPercent  int
 	precisionOpenLuxPercent int
 	visionHedgePolicy       visionHedgePolicy
+	visionChannels          *visionChannelRouter
 }
 
 type visionHedgePolicy struct {
@@ -130,14 +131,16 @@ type visionHedgePolicy struct {
 }
 
 type geminiVisionHedgeOutcome struct {
-	parsed         map[string]any
-	client         LLMClient
-	upstream       string
-	model          string
-	hedgeLaunched  bool
-	alternateWon   bool
-	primaryError   error
-	alternateError error
+	parsed          map[string]any
+	client          LLMClient
+	upstream        string
+	model           string
+	hedgeLaunched   bool
+	alternateWon    bool
+	primaryError    error
+	alternateError  error
+	primaryUpstream string
+	primaryModel    string
 }
 
 type NutritionResolver interface {
@@ -419,6 +422,9 @@ func (s *AnalyzeService) geminiVisionTimeout(upstream string) time.Duration {
 // keep that upstream's own timeout; ordinary mode fails instead of accepting a
 // lower-quality Qwen recognition result.
 func (s *AnalyzeService) geminiVisionRouteContext(ctx context.Context, model, primaryUpstream string, primaryClient LLMClient) (context.Context, context.CancelFunc) {
+	if s.visionChannels != nil {
+		return context.WithTimeout(ctx, time.Duration(s.visionChannels.config.OverallTimeoutSeconds)*time.Second)
+	}
 	alternateClient, _, _ := s.alternateGeminiClient(model, primaryUpstream)
 	if alternateClient == nil || alternateClient == primaryClient {
 		return ctx, func() {}
@@ -451,6 +457,9 @@ func (s *AnalyzeService) runHedgedGeminiVision(
 	primaryClient LLMClient,
 	validate func(map[string]any) error,
 ) (geminiVisionHedgeOutcome, error) {
+	if s.visionChannels != nil {
+		return s.runChannelGeminiVision(ctx, stage, primaryUpstream, primaryModel, prompt, imageURLs, temperature, primaryClient, validate)
+	}
 	policy := s.normalizedVisionHedgePolicy()
 	hedgeCtx, hedgeCancel := context.WithTimeout(ctx, policy.overallTimeout)
 	defer hedgeCancel()
@@ -613,10 +622,7 @@ func isOrdinaryFoodImageMode(executionMode string) bool {
 }
 
 func validateNonEmptyFoodAnalysisResult(parsed map[string]any) error {
-	if len(parseItems(parsed)) == 0 {
-		return ErrEmptyFoodAnalysisResult
-	}
-	return nil
+	return validateVisionFoodPayload(parsed)
 }
 
 func shouldFallbackGeminiVision(err error) bool {
@@ -2729,6 +2735,9 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	input.PreciseMicronutrients = true
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
+	if _, ok := ctx.Value(visionRequestKey{}).(*visionRequest); !ok {
+		ctx = WithVisionRequest(ctx, executionMode, foodImageModelRoutingKey(userID, input), true)
+	}
 	if strings.TrimSpace(input.ModelName) == "" {
 		input.ModelName = s.SelectFoodImageModel(executionMode, foodImageModelRoutingKey(userID, input))
 	}
@@ -2844,6 +2853,9 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		)
 		parsed, err = outcome.parsed, hedgeErr
 		geminiUpstreamHedgeLaunched = outcome.hedgeLaunched
+		if outcome.primaryUpstream != "" {
+			primaryGeminiUpstream, primaryModel = outcome.primaryUpstream, outcome.primaryModel
+		}
 		if err == nil {
 			client = outcome.client
 			geminiUpstream = outcome.upstream
@@ -5794,7 +5806,12 @@ func modelResultFrom(result map[string]any, err error, modelName string) map[str
 }
 
 func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID string, parsed map[string]any, input AnalyzeInput, executionMode, provider, model string, durationMs float64) (map[string]any, error) {
+	postprocessStart := time.Now()
+	timings := map[string]any{"vision_and_review": durationMs}
 	resp := buildAnalyzeResponse(parsed, executionMode, provider, model, durationMs)
+	if review, exists := parsed["channel_review"]; exists {
+		resp["channel_review"] = review
+	}
 	engine := strings.ToLower(strings.TrimSpace(input.AnalysisEngine))
 	if engine == "" {
 		engine = normalizeAnalysisEngine("", executionMode, strings.TrimSpace(input.Text) != "")
@@ -5809,6 +5826,7 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 		postprocessCtx, postprocessCancel = context.WithTimeout(ctx, fastPostprocessTimeout)
 	}
 	defer postprocessCancel()
+	phaseStart := time.Now()
 	if fastMode {
 		resp["items"] = withDefaultEdiblePortions(toItems(resp["items"]), "fast_default")
 		resp["edible_portion_status"] = "fast_default"
@@ -5816,6 +5834,8 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	} else {
 		resp = s.applyEdiblePortionRatios(postprocessCtx, resp, input)
 	}
+	timings["edible_portion"] = observeVisionPhase(ctx, executionMode, "edible_portion", phaseStart)
+	phaseStart = time.Now()
 	switch engine {
 	case analysisEngineLegacyDirect, analysisEngineAIDirect:
 		resp = finalizeAIDirectNutrition(resp, engine)
@@ -5832,6 +5852,8 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 			nutritionFallbackTimeout:     fastModeDuration(fastMode, fastNutritionFallbackTimeout),
 		})
 	}
+	timings["nutrition_resolution"] = observeVisionPhase(ctx, executionMode, "nutrition_resolution", phaseStart)
+	phaseStart = time.Now()
 	if input.PreciseMicronutrients {
 		items, err := s.ApplyUserRequestedMicronutrientsToResolvedItems(postprocessCtx, toItems(resp["items"]), fullNutritionContext(input))
 		if err != nil {
@@ -5844,7 +5866,12 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	} else {
 		resp["precise_micronutrients"] = map[string]any{"requested": false, "status": "not_requested"}
 	}
+	timings["micronutrients"] = observeVisionPhase(ctx, executionMode, "micronutrients", phaseStart)
+	phaseStart = time.Now()
 	resp = s.applySuggestedRatios(postprocessCtx, resp, input)
+	timings["suggested_ratios"] = observeVisionPhase(ctx, executionMode, "suggested_ratios", phaseStart)
+	timings["total_postprocess"] = observeVisionPhase(ctx, executionMode, "total_postprocess", postprocessStart)
+	resp["processing_timings_ms"] = timings
 	return resp, nil
 }
 
@@ -6309,7 +6336,9 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		fallbackResultCh = resultCh
 		candidates := append([]UnresolvedNutritionCandidate(nil), fallbackCandidates...)
 		go func() {
+			phaseStart := time.Now()
 			rows, err := s.estimateNutritionWithFallback(fallbackCtx, candidates, contextText)
+			observeVisionPhase(fallbackCtx, "db_first", "nutrition_model_fallback", phaseStart)
 			resultCh <- nutritionFallbackResult{rows: rows, err: err}
 		}()
 	}
@@ -6332,7 +6361,9 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 				queries = append(queries, semanticQueries[index].QueryName)
 			}
 			embeddingCtx, embeddingCancel := context.WithTimeout(ctx, resolveFoodEmbeddingTimeout)
+			phaseStart := time.Now()
 			embeddingCandidates, embeddingErr := s.nutritionSemantic.SearchCandidates(embeddingCtx, queries, resolveFoodCandidateLimit)
+			observeVisionPhase(ctx, "db_first", "nutrition_embedding", phaseStart)
 			embeddingCancel()
 			if embeddingErr != nil {
 				logger.Warn(ctx, "营养向量候选召回失败，保留原有回退链路",
@@ -6355,6 +6386,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	}
 
 	if len(semanticCandidates) > 0 && !options.skipSemanticRerank {
+		phaseStart := time.Now()
 		if decisions, err := s.rerankNutritionCandidatesWithAI(ctx, semanticQueries, semanticCandidates); err != nil {
 			logger.Warn(ctx, "营养候选复用模型判定失败",
 				logger.Err(err),
@@ -6417,6 +6449,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 				}
 			}
 		}
+		observeVisionPhase(ctx, "db_first", "nutrition_semantic_rerank", phaseStart)
 	}
 	fallbackCandidates = unresolvedNutritionFallbackCandidates(lookups, fallbackCandidates)
 

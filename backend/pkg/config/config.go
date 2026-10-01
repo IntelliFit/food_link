@@ -102,38 +102,58 @@ type StorageConfig struct {
 }
 
 type ExternalConfig struct {
-	AppID                         string `mapstructure:"appid"`
-	Secret                        string `mapstructure:"secret"`
-	SupabaseURL                   string `mapstructure:"supabase_url"`
-	SupabaseKey                   string `mapstructure:"supabase_service_role_key"`
-	TiandituTK                    string `mapstructure:"tianditu_tk"`
-	OfoxAIAPIKey                  string `mapstructure:"ofoxai_api_key"`
-	OfoxAIBaseURL                 string `mapstructure:"ofoxai_base_url"`
-	Gemini35APIKey                string `mapstructure:"gemini35_api_key"`
-	Gemini35BaseURL               string `mapstructure:"gemini35_base_url"`
-	Gemini35Model                 string `mapstructure:"gemini35_model"`
-	OpenLuxAPIKey                 string `mapstructure:"openlux_api_key"`
-	OpenLuxBaseURL                string `mapstructure:"openlux_base_url"`
-	OpenLuxOrdinaryGeminiPercent  int    `mapstructure:"openlux_ordinary_gemini_traffic_percent"`
-	OpenLuxPrecisionGeminiPercent int    `mapstructure:"openlux_precision_gemini_traffic_percent"`
-	LLMProvider                   string `mapstructure:"llm_provider"`
-	DeepSeekAPIKey                string `mapstructure:"deepseek_api_key"`
-	DeepSeekBaseURL               string `mapstructure:"deepseek_base_url"`
-	PixelAvatarAPIKey             string `mapstructure:"pixel_avatar_api_key"`
-	PixelAvatarBaseURL            string `mapstructure:"pixel_avatar_base_url"`
-	PixelAvatarModel              string `mapstructure:"pixel_avatar_model"`
-	DoubaoAPIKey                  string `mapstructure:"doubao_api_key"`
-	DoubaoWebSearchAPIKey         string `mapstructure:"doubao_web_search_api_key"`
-	DoubaoBaseURL                 string `mapstructure:"doubao_base_url"`
-	DashScopeAPIKey               string `mapstructure:"dashscope_api_key"`
-	DashScopeBaseURL              string `mapstructure:"dashscope_base_url"`
-	Qwen38OrdinaryTrafficPercent  int    `mapstructure:"qwen38_ordinary_traffic_percent"`
-	Qwen38PrecisionTrafficPercent int    `mapstructure:"qwen38_precision_traffic_percent"`
-	NutritionEmbeddingEnabled     bool   `mapstructure:"nutrition_embedding_enabled"`
-	NutritionEmbeddingAPIKey      string `mapstructure:"nutrition_embedding_api_key"`
-	NutritionEmbeddingBaseURL     string `mapstructure:"nutrition_embedding_base_url"`
-	NutritionEmbeddingModel       string `mapstructure:"nutrition_embedding_model"`
-	NutritionEmbeddingDimensions  int    `mapstructure:"nutrition_embedding_dimensions"`
+	AppID                         string              `mapstructure:"appid"`
+	Secret                        string              `mapstructure:"secret"`
+	SupabaseURL                   string              `mapstructure:"supabase_url"`
+	SupabaseKey                   string              `mapstructure:"supabase_service_role_key"`
+	TiandituTK                    string              `mapstructure:"tianditu_tk"`
+	OfoxAIAPIKey                  string              `mapstructure:"ofoxai_api_key"`
+	OfoxAIBaseURL                 string              `mapstructure:"ofoxai_base_url"`
+	Gemini35APIKey                string              `mapstructure:"gemini35_api_key"`
+	Gemini35BaseURL               string              `mapstructure:"gemini35_base_url"`
+	Gemini35Model                 string              `mapstructure:"gemini35_model"`
+	OpenLuxAPIKey                 string              `mapstructure:"openlux_api_key"`
+	OpenLuxBaseURL                string              `mapstructure:"openlux_base_url"`
+	OpenLuxOrdinaryGeminiPercent  int                 `mapstructure:"openlux_ordinary_gemini_traffic_percent"`
+	OpenLuxPrecisionGeminiPercent int                 `mapstructure:"openlux_precision_gemini_traffic_percent"`
+	A6APIKey                      string              `mapstructure:"a6_api_key"`
+	A6BaseURL                     string              `mapstructure:"a6_base_url"`
+	VisionRouting                 VisionRoutingConfig `mapstructure:"vision_routing"`
+	LLMProvider                   string              `mapstructure:"llm_provider"`
+	DeepSeekAPIKey                string              `mapstructure:"deepseek_api_key"`
+	DeepSeekBaseURL               string              `mapstructure:"deepseek_base_url"`
+	PixelAvatarAPIKey             string              `mapstructure:"pixel_avatar_api_key"`
+	PixelAvatarBaseURL            string              `mapstructure:"pixel_avatar_base_url"`
+	PixelAvatarModel              string              `mapstructure:"pixel_avatar_model"`
+	DoubaoAPIKey                  string              `mapstructure:"doubao_api_key"`
+	DoubaoWebSearchAPIKey         string              `mapstructure:"doubao_web_search_api_key"`
+	DoubaoBaseURL                 string              `mapstructure:"doubao_base_url"`
+	DashScopeAPIKey               string              `mapstructure:"dashscope_api_key"`
+	DashScopeBaseURL              string              `mapstructure:"dashscope_base_url"`
+	Qwen38OrdinaryTrafficPercent  int                 `mapstructure:"qwen38_ordinary_traffic_percent"`
+	Qwen38PrecisionTrafficPercent int                 `mapstructure:"qwen38_precision_traffic_percent"`
+	NutritionEmbeddingEnabled     bool                `mapstructure:"nutrition_embedding_enabled"`
+	NutritionEmbeddingAPIKey      string              `mapstructure:"nutrition_embedding_api_key"`
+	NutritionEmbeddingBaseURL     string              `mapstructure:"nutrition_embedding_base_url"`
+	NutritionEmbeddingModel       string              `mapstructure:"nutrition_embedding_model"`
+	NutritionEmbeddingDimensions  int                 `mapstructure:"nutrition_embedding_dimensions"`
+}
+
+// VisionRoutingConfig controls channel scheduling, without changing product models.
+type VisionRoutingConfig struct {
+	A6ShadowPercent        int      `mapstructure:"a6_shadow_percent"`
+	ShadowMaxConcurrent    int      `mapstructure:"shadow_max_concurrent"`
+	ShadowTimeoutSeconds   int      `mapstructure:"shadow_timeout_seconds"`
+	CostRoutingEnabled     bool     `mapstructure:"cost_routing_enabled"`
+	A6ApprovedModels       []string `mapstructure:"a6_approved_models"`
+	A6IndependentUpstream  bool     `mapstructure:"a6_independent_upstream"`
+	HedgeMinSeconds        int      `mapstructure:"hedge_min_seconds"`
+	HedgeMaxSeconds        int      `mapstructure:"hedge_max_seconds"`
+	ThirdHedgeSeconds      int      `mapstructure:"third_hedge_seconds"`
+	OverallTimeoutSeconds  int      `mapstructure:"overall_timeout_seconds"`
+	CircuitFailures        int      `mapstructure:"circuit_failures"`
+	CircuitCooldownSeconds int      `mapstructure:"circuit_cooldown_seconds"`
+	UncertainReviewEnabled bool     `mapstructure:"uncertain_review_enabled"`
 }
 
 type AppAuthConfig struct {
@@ -562,6 +582,17 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileV.IsSet("external.openlux_precision_gemini_traffic_percent") {
 		v.Set("external.openlux_precision_gemini_traffic_percent", fileCfg.External.OpenLuxPrecisionGeminiPercent)
+	}
+	if fileV.IsSet("external.a6_api_key") {
+		v.Set("external.a6_api_key", fileCfg.External.A6APIKey)
+	}
+	if fileV.IsSet("external.a6_base_url") {
+		v.Set("external.a6_base_url", fileCfg.External.A6BaseURL)
+	}
+	for _, key := range fileV.AllKeys() {
+		if strings.HasPrefix(key, "external.vision_routing.") {
+			v.Set(key, fileV.Get(key))
+		}
 	}
 	if fileCfg.External.DeepSeekAPIKey != "" {
 		v.Set("external.deepseek_api_key", fileCfg.External.DeepSeekAPIKey)
@@ -1084,6 +1115,8 @@ var cloudConfigKeyAliases = map[string]string{
 	"GEMINI35_MODEL":                           "external.gemini35_model",
 	"OPENLUX_API_KEY":                          "external.openlux_api_key",
 	"OPENLUX_BASE_URL":                         "external.openlux_base_url",
+	"A6_API_KEY":                               "external.a6_api_key",
+	"A6_BASE_URL":                              "external.a6_base_url",
 	"OPENLUX_ORDINARY_GEMINI_TRAFFIC_PERCENT":  "external.openlux_ordinary_gemini_traffic_percent",
 	"OPENLUX_PRECISION_GEMINI_TRAFFIC_PERCENT": "external.openlux_precision_gemini_traffic_percent",
 	"LLM_PROVIDER":                             "external.llm_provider",
@@ -1231,6 +1264,8 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.Gemini35Model = strings.TrimSpace(cfg.Gemini35Model)
 	cfg.OpenLuxAPIKey = strings.TrimSpace(cfg.OpenLuxAPIKey)
 	cfg.OpenLuxBaseURL = strings.TrimRight(strings.TrimSpace(cfg.OpenLuxBaseURL), "/")
+	cfg.A6APIKey = strings.TrimSpace(cfg.A6APIKey)
+	cfg.A6BaseURL = strings.TrimRight(strings.TrimSpace(cfg.A6BaseURL), "/")
 	cfg.LLMProvider = strings.TrimSpace(cfg.LLMProvider)
 	cfg.DeepSeekAPIKey = strings.TrimSpace(cfg.DeepSeekAPIKey)
 	cfg.DeepSeekBaseURL = strings.TrimSpace(cfg.DeepSeekBaseURL)
@@ -1504,6 +1539,20 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.qwen38_ordinary_traffic_percent", 0)
 	v.SetDefault("external.qwen38_precision_traffic_percent", 20)
 	v.SetDefault("external.openlux_base_url", "https://api.openlux.ai/v1")
+	v.SetDefault("external.a6_base_url", "https://api.a6api.com")
+	v.SetDefault("external.vision_routing.a6_shadow_percent", 10)
+	v.SetDefault("external.vision_routing.shadow_max_concurrent", 2)
+	v.SetDefault("external.vision_routing.shadow_timeout_seconds", 35)
+	v.SetDefault("external.vision_routing.cost_routing_enabled", false)
+	v.SetDefault("external.vision_routing.a6_approved_models", []string{})
+	v.SetDefault("external.vision_routing.a6_independent_upstream", false)
+	v.SetDefault("external.vision_routing.hedge_min_seconds", 3)
+	v.SetDefault("external.vision_routing.hedge_max_seconds", 6)
+	v.SetDefault("external.vision_routing.third_hedge_seconds", 10)
+	v.SetDefault("external.vision_routing.overall_timeout_seconds", 35)
+	v.SetDefault("external.vision_routing.circuit_failures", 3)
+	v.SetDefault("external.vision_routing.circuit_cooldown_seconds", 60)
+	v.SetDefault("external.vision_routing.uncertain_review_enabled", false)
 	v.SetDefault("external.openlux_ordinary_gemini_traffic_percent", 50)
 	v.SetDefault("external.openlux_precision_gemini_traffic_percent", 50)
 	v.SetDefault("external.nutrition_embedding_base_url", "https://yunwu.ai/v1")
@@ -1557,6 +1606,8 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.gemini35_model", "GEMINI35_MODEL")
 	_ = v.BindEnv("external.openlux_api_key", "OPENLUX_API_KEY")
 	_ = v.BindEnv("external.openlux_base_url", "OPENLUX_BASE_URL")
+	_ = v.BindEnv("external.a6_api_key", "A6_API_KEY")
+	_ = v.BindEnv("external.a6_base_url", "A6_BASE_URL")
 	_ = v.BindEnv("external.openlux_ordinary_gemini_traffic_percent", "OPENLUX_ORDINARY_GEMINI_TRAFFIC_PERCENT")
 	_ = v.BindEnv("external.openlux_precision_gemini_traffic_percent", "OPENLUX_PRECISION_GEMINI_TRAFFIC_PERCENT")
 	_ = v.BindEnv("external.llm_provider", "LLM_PROVIDER")

@@ -51,11 +51,28 @@ external:
   gemini35_api_key: ""
   gemini35_base_url: ""
   gemini35_model: "gemini-3.5-flash"
-  # Gemini 独立第二上游。下列比例只决定首选上游；即使比例为 0，主源 10 秒未返回有效结果时仍可能调用 OpenLux 对冲。
+  # Gemini 独立第二上游。比例决定首选上游；主源未返回有效结果时仍会参与延迟对冲。
   openlux_api_key: ""
   openlux_base_url: "https://api.openlux.ai/v1"
   openlux_ordinary_gemini_traffic_percent: 50
   openlux_precision_gemini_traffic_percent: 50
+  # 最便宜第三渠道。正式 Key 仅在 Apollo/部署环境填写；空值时不发影子请求。
+  a6_api_key: ""
+  a6_base_url: "https://api.a6api.com"
+  vision_routing:
+    a6_shadow_percent: 10
+    shadow_max_concurrent: 2 # 每个 Pod 的额外请求上限
+    shadow_timeout_seconds: 35
+    cost_routing_enabled: false
+    a6_approved_models: [] # 完成同模型完整生产请求的速度/质量验收后再填
+    a6_independent_upstream: false # A6固定商家且确认独立故障域后才能为true
+    hedge_min_seconds: 3
+    hedge_max_seconds: 6
+    third_hedge_seconds: 10
+    overall_timeout_seconds: 35
+    circuit_failures: 3
+    circuit_cooldown_seconds: 60
+    uncertain_review_enabled: false # 低置信度额外复核，最多增加4秒；按质量样本按需启用
   # 旧兼容字段；普通模式主识别固定 Gemini，且 Gemini 失败时不回退 Qwen。
   qwen38_ordinary_traffic_percent: 50
   deepseek_api_key: ""

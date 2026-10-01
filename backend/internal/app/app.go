@@ -230,6 +230,7 @@ func New(cfg *config.Config) (*App, error) {
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(doubaoClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureOpenLuxGeminiClients(cfg.External.OpenLuxAPIKey, cfg.External.OpenLuxBaseURL)
+	analyzeSvc.ConfigureA6VisionRouting(cfg.External.A6APIKey, cfg.External.A6BaseURL, cfg.External.VisionRouting)
 	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
 	var dashscopeClient *analyzeservice.OfoxAIClient
 	if strings.TrimSpace(cfg.External.DashScopeAPIKey) != "" {

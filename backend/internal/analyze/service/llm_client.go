@@ -277,9 +277,13 @@ func (c *OfoxAIClient) analyzeWithImagesAndTemperatureMeta(ctx context.Context, 
 	}
 	body := map[string]any{
 		"model":           model,
+		"stream":          false,
 		"messages":        []map[string]any{{"role": "user", "content": content}},
 		"response_format": map[string]string{"type": "json_object"},
 		"temperature":     temperature,
+	}
+	if strings.HasPrefix(strings.ToLower(model), "gemini-") {
+		body["max_tokens"] = 8192
 	}
 	useQwenDefaultReasoningEffort := false
 	for key, value := range extras {
@@ -416,6 +420,10 @@ func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model 
 		return nil, nil, fmt.Errorf("empty response from Gemini")
 	}
 	firstCandidate := mapFromAny(candidates[0])
+	captureVisionUsage(ctx, raw)
+	if strings.EqualFold(stringFromAny(firstCandidate["finishReason"]), "MAX_TOKENS") {
+		return nil, nil, &LLMJSONParseError{Err: fmt.Errorf("Gemini 响应因 token 上限截断")}
+	}
 	content := mapFromAny(firstCandidate["content"])
 	for _, part := range anyListFromAny(content["parts"]) {
 		text := stringFromAny(mapFromAny(part)["text"])
@@ -523,6 +531,10 @@ func (c *OfoxAIClient) doRequest(ctx context.Context, url string, body map[strin
 		return nil, nil, fmt.Errorf("empty response from ofoxai")
 	}
 	message := mapFromAny(firstChoice["message"])
+	captureVisionUsage(ctx, raw)
+	if strings.EqualFold(stringFromAny(firstChoice["finish_reason"]), "length") {
+		return nil, nil, &LLMJSONParseError{Err: fmt.Errorf("模型响应因 token 上限截断")}
+	}
 	content := stringFromAny(message["content"])
 	if strings.TrimSpace(content) == "" {
 		return nil, nil, fmt.Errorf("empty response from ofoxai")
