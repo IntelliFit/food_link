@@ -518,7 +518,6 @@ function ProMembershipPage() {
   const isEarlyTrial = isTrial && (trialPolicy === 'founding_top_500_bonus_month' || trialPolicy === 'early_first_1000' || trialDaysTotal >= 30)
   const earlyUserRank = membership?.early_user_rank ?? null
   const earlyUserLimit = membership?.early_user_limit ?? 1000
-  const earlyPaidUserLimit = membership?.early_paid_user_limit ?? 100
   const earlyUserEligible = !!membership?.early_user_paid_bonus_eligible
   const paidBonusMultiplier = membership?.early_user_paid_bonus_multiplier ?? 1
   const founderBonusSourceLabel = getFounderPaidBonusSourceLabel(membership)
@@ -620,11 +619,6 @@ function ProMembershipPage() {
           </View>
         <View className='hero-copy'>
           <Text className='hero-title'>食探会员</Text>
-            <Text className='hero-subtitle'>
-            {earlyUserEligible
-              ? `你属于${founderBonusSourceLabel || `前 ${earlyUserLimit} 注册用户 / 前 ${earlyPaidUserLimit} 付费用户`}礼遇，开通会员后每日积分翻倍`
-              : '按使用强度选套餐，轻度版不含精准模式'}
-          </Text>
         </View>
         {earlyUserEligible && (
           <View className='hero-founder-badge'>
@@ -804,19 +798,6 @@ function ProMembershipPage() {
             <Text className='plan-original-price'>原价 ¥{originalAmountDisplay}{PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}</Text>
           )}
         </View>
-      </View>
-
-      <View className='virtual-payment-notice'>
-        <View className='virtual-payment-notice-head'>
-          <Text className='virtual-payment-notice-badge'>支付方式</Text>
-          <Text className='virtual-payment-notice-title'>微信小程序虚拟支付</Text>
-        </View>
-        <Text className='virtual-payment-notice-channel'>
-          iOS 端通过 Apple 支付，其他平台通过微信支付
-        </Text>
-        <Text className='virtual-payment-notice-detail'>
-          一次性购买，到期不自动续费
-        </Text>
       </View>
 
       {/* 三档对比表 */}
