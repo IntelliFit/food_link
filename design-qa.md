@@ -592,3 +592,39 @@ Native check returned reLaunch:ok, route packagePetStudio/pages/index/index, cha
 4. Obtain current wardrobe/actions/arena captures, compare each against the matching source screen, fix P0/P1/P2 differences, and re-capture before visual approval.
 
 final result: blocked
+
+---
+
+# 宠物餐车与衣橱修正 — 2026-10-01
+
+- Visual reference: `docs/design/pet-studio-20261001/reference.png`，温暖宠物空间概念图；餐车规则依据同目录 `game-design-plan.md`。概念图没有本轮独立餐车的逐屏参考，不能声称游戏页像素复刻通过。
+- Runtime: 原生微信开发者工具，自动化端口9423，实际窗口390×844；新的餐车路由为 `/packagePetStudio/pages/kitchen/index`。
+- Current local evidence: `.local-state/verification/pet-game-20261001/native-final-check.json`、`native-menu-final.json` 与 `native-touch-boxes.json`。记录保持本机，不提交账号资料。
+- Implementation screenshot: unavailable，仍为 `timeout waiting for automator response`；诊断调用还返回过 `fail to capture screenshot`。没有使用历史截图冒充本轮结果。
+
+## 已验证的功能与几何
+
+- 衣橱网格宽340px，两张卡宽均166px，左边缘24.67/198.5px，右卡右边缘364.5px不超过网格右边缘364.67px。本视口没有横向裁切。
+- 围巾实际尺寸28×32px，角色114×148px，围巾顶边相对角色顶边下移68px。原精灵来源保持不变；缺少截图，脸部遮挡和自然贴合仍未视觉验收。
+- 从宠物空间“游戏乐园”进入餐车成功，六个关卡的实际ID均存在；十二份配方本打开、关闭成功。首次通用类查询曾返回0，后续ID查询证明六关存在，不把查询失败当作页面缺失。
+- 第一关实际选择米饭、鸡蛋，完成备餐、灶台、装盘和出餐；HUD变为120分、1/4份、×1连击，反馈“完美火候”，原订单移除。
+- 暂停2.2秒，剩余时间保持75秒；手动恢复后2.2秒变为73秒。离开返回宠物空间成功；未结算本局的最高分存储前后相同。
+- 初次游戏区域测量中工位214–341px、火候347–450px、食材455–613px均位于窗口内。后续检查发现按钮确实偏小：源码38px编译成38rpx，裸button选择器被转成.h5-button；已使用显式类名和正确rpx尺寸修正。
+- 最新编译使用原生 `wx.createSelectorQuery().boundingClientRect()` 实测外层：三个工位按钮均约111×39px，暂停43×43px，火候117×39px，食材90×39px；核心字号12px。最新工位208–356px、火候362–413px、食材418–504px，全部位于390×844窗口内，三工位排列对齐。
+- 最新样式的开始、暂停、返回菜单均通过原生点击检查，最终停留在餐车菜单：开局按钮存在、暂停按钮不存在，未运行游戏。
+
+## 实现边界与待验收
+
+- 当前新增完整单人餐车：六关、十二份配方、三个并行工位、食材选择/拖拽、火候、品质、顾客耐心、连击、90秒星级结算、重试与按账号保存本机纪录。
+- 规则模拟验证六关可通过；界面测试覆盖出餐、后台暂停、恢复、结算只写一次、重试与账号切换。真实原生只验了一次出餐与暂停恢复，尚未完成90秒整局结算、六关逐关试玩、拖拽或真机验收。
+- 已修复拖拽在松手时重新读取落点，防止滚动后使用旧位置；已防止旧账号异步响应和当前局成绩写入新账号。
+- 其他三款完整游戏、真人匹配PK、代币账本/商店、跨页面换装、新厨师动作及其他体型服饰适配仍未实现。游戏成绩不写饮食/运动记录，不发放或扣取代币。
+- 字体、配色、背景裁切、围巾贴合和整体精致程度需要取得有效原生截图后与参考并排核对；当前功能证据不能代替视觉验收。
+
+## 构建与自动检查
+
+- 最终原生样式修正后开发watch编译通过，58352ms。
+- 暂存快照提交检查通过TypeScript、ESLint及100套359项测试。主实现为7888958d，原生按钮样式修正为56f9862。
+- 没有制作或借用其他角色的新厨师动作；没有调用付费生成、匹配、奖励或数据库写入服务。
+
+final result: blocked
