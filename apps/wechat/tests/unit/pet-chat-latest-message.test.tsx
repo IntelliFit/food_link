@@ -11,6 +11,7 @@ jest.mock('../../src/utils/api', () => ({
   getAccessToken: jest.fn(() => 'test-access-token'),
   getPetChatSession: jest.fn(),
   getLatestPetChatSession: jest.fn(),
+  getHealthProfile: jest.fn().mockResolvedValue({ health_condition: {} }),
   getPetSummary: jest.fn(),
   getStatsSummary: jest.fn(),
   listPetChatSessions: jest.fn(),

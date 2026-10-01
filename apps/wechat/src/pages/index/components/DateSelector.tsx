@@ -1,7 +1,7 @@
 import { View, Text } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import React from 'react'
-import { IconCollapse, IconExpand } from '../../../components/iconfont'
+import { IconCollapse } from '../../../components/iconfont'
 import { type WeekHeatmapCell } from '../types'
 import {
   buildCalendarRecordMap,
@@ -25,6 +25,15 @@ interface DateSelectorProps {
 }
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六']
+
+function selectedDateHeading(dateKey: string): { date: string; weekday: string } {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  const value = new Date(year, month - 1, day)
+  return {
+    date: `${month}月${day}日`,
+    weekday: `周${WEEKDAY_LABELS[value.getDay()]}`,
+  }
+}
 
 function getCircleClass(cell?: WeekHeatmapCell): string {
   const hasRecord = cell?.hasRecord ?? Number(cell?.calories || 0) > 0
@@ -81,17 +90,30 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect,
   }
 
   const titleMonth = expanded ? visibleMonth : getCalendarMonthKey(selectedDate)
+  const selectedHeading = selectedDateHeading(selectedDate)
+
+  const shiftSelectedWeek = (offset: number) => {
+    const [year, month, day] = selectedDate.split('-').map(Number)
+    const next = new Date(year, month - 1, day + offset * 7)
+    const nextKey = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`
+    handleSelect(offset > 0 && nextKey > todayKey ? todayKey : nextKey)
+  }
 
   return (
     <View className={`date-selector-section ${expanded ? 'is-calendar-expanded' : ''}`}>
       <View className='date-calendar-toolbar'>
         <View className='date-calendar-title' onClick={toggleExpanded}>
-          <Text className='date-calendar-title__text'>{formatCalendarMonthLabel(titleMonth)}</Text>
+          {expanded ? (
+            <Text className='date-calendar-title__text'>{formatCalendarMonthLabel(titleMonth)}</Text>
+          ) : (
+            <>
+              <Text className='date-calendar-title__date'>{selectedHeading.date}</Text>
+              <Text className='date-calendar-title__weekday'>{selectedHeading.weekday}</Text>
+            </>
+          )}
           {expanded ? (
             <IconCollapse size={18} color='currentColor' className='date-calendar-title__indicator' />
-          ) : (
-            <IconExpand size={18} color='currentColor' className='date-calendar-title__indicator' />
-          )}
+          ) : null}
         </View>
         {expanded && (
           <View className='date-calendar-nav-group'>
@@ -148,8 +170,12 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect,
           </>)}
         </View>
       ) : (
-        <View className='date-list'>
-          {weekCells.map((cell) => (
+        <View className='date-week-shell'>
+          <View className='date-week-arrow' role='button' aria-label='查看上一周' onClick={() => shiftSelectedWeek(-1)}>
+            <Text className='iconfont icon-left' />
+          </View>
+          <View className='date-list'>
+            {weekCells.map((cell) => (
               <View
                 key={cell.date}
                 className={`date-item ${selectedDate === cell.date ? 'is-selected' : ''}`}
@@ -160,7 +186,11 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect,
                   <Text className='date-num-text'>{cell.dayNum}</Text>
                 </View>
               </View>
-          ))}
+            ))}
+          </View>
+          <View className={`date-week-arrow ${selectedDate >= todayKey ? 'is-disabled' : ''}`} role='button' aria-label='查看下一周' onClick={() => shiftSelectedWeek(1)}>
+            <Text className='iconfont icon-right' />
+          </View>
         </View>
       )}
     </View>

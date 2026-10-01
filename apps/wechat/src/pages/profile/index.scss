@@ -1,4 +1,5 @@
 @import '../../styles/tab-page-layout.scss';
+@import '../../styles/meal-orbit-tokens.scss';
 
 .profile-page {
   min-height: 100vh;
@@ -12,6 +13,70 @@
   );
   padding: $tab-page-content-top 0 320rpx;
 
+}
+
+// 日常入口优先：找餐、校园、档案与宠物，其他服务仍在分组列表中。
+.profile-shortcuts-card {
+  padding: 24rpx;
+}
+
+.profile-group-title {
+  display: block;
+  color: $orbit-muted;
+  font-size: 24rpx;
+  line-height: 36rpx;
+  font-weight: 600;
+}
+
+.profile-shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.profile-shortcut {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 88rpx;
+  gap: 12rpx;
+  padding: 12rpx 16rpx;
+  box-sizing: border-box;
+  background: $orbit-soft;
+  border-radius: 20rpx;
+
+  &:active { opacity: 0.72; }
+}
+
+.profile-shortcut-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
+  flex-shrink: 0;
+  border-radius: 14rpx;
+}
+
+.profile-shortcut-title {
+  flex: 1;
+  min-width: 0;
+  color: $orbit-ink;
+  font-size: 28rpx;
+  line-height: 38rpx;
+}
+
+.profile-list-chevron {
+  flex-shrink: 0;
+  color: $orbit-muted;
+  font-size: 20rpx;
+}
+
+.profile-group-card {
+  padding-top: 22rpx;
+
+  .list-item { padding: 24rpx 0; }
 }
 
 /* 养生模式：我的页使用暖白卡片与森林绿会员主卡，形成跨页连续感。 */
@@ -882,4 +947,43 @@
       color: #6ee7b7;
     }
   }
+}
+
+.profile-page {
+  .profile-group-card { padding: 22rpx 28rpx 0; }
+
+  .profile-group-card .list-item { padding: 24rpx 0; }
+
+  .user-name-row { flex-wrap: wrap; row-gap: 8rpx; }
+  .user-name { flex-basis: 180rpx; }
+  .user-days-pill-text,
+  .user-meta-text { font-size: 24rpx; }
+}
+
+.profile-page:not(.profile-page--dark) {
+  background: $orbit-page;
+
+  .profile-card:not(.member-card) {
+    background: $orbit-surface;
+    border: 1rpx solid $orbit-border;
+    border-radius: $orbit-radius;
+    box-shadow: $orbit-shadow;
+  }
+
+  .user-card .user-name,
+  .quick-action-num,
+  .list-item .list-title { color: $orbit-ink; }
+
+  .user-meta-text,
+  .quick-action-text,
+  .profile-version { color: $orbit-muted; }
+
+  .list-item { border-bottom-color: $orbit-border; }
+}
+
+.profile-page--dark {
+  .profile-shortcut { background: #25372d; }
+  .profile-shortcut-title { color: #e8ece9; }
+  .profile-group-title,
+  .profile-list-chevron { color: #a9b8ad; }
 }

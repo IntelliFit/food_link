@@ -40,9 +40,11 @@ describe('home date selector layout', () => {
     )
   })
 
-  it('uses a left-aligned month title with an expand indicator', () => {
+  it('shows the selected date and weekday and opens the month from the title', () => {
     expect(dateSelectorSource).not.toContain("className='date-calendar-toggle'")
-    expect(dateSelectorSource).toContain('<IconExpand')
+    expect(dateSelectorSource).toContain('{selectedHeading.date}')
+    expect(dateSelectorSource).toContain('{selectedHeading.weekday}')
+    expect(dateSelectorSource).toContain("className='date-calendar-title' onClick={toggleExpanded}")
     expect(dateSelectorSource).toContain('<IconCollapse')
     expect(calendarTitleStyles).not.toMatch(/^\s*(?:position|left|right|transform)\s*:/m)
     expect(calendarTitleStyles).not.toMatch(/^\s*margin\s*:\s*auto/m)

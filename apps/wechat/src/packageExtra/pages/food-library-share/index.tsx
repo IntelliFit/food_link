@@ -843,8 +843,8 @@ function FoodLibrarySharePage() {
           : mapLightingMode
             ? "确定点亮这家美食吗？发布后，其他用户可以在美食地图上发现它。"
           : quickUploadMode
-            ? "确定上传到公共食物库吗？审核通过后其他用户即可查看。"
-            : "确定要将该食物分享到公共食物库吗？提交后需经系统审核，通过后其他用户可查看。",
+            ? "确定上传到美食图谱吗？审核通过后其他用户即可查看。"
+            : "确定要将该食物分享到美食图谱吗？提交后需经系统审核，通过后其他用户可查看。",
       confirmText: isEditMode ? "保存" : "确定提交",
       cancelText: "取消",
     });
@@ -997,7 +997,7 @@ function FoodLibrarySharePage() {
       >
         <CampusMembershipGate
           title='校园食堂为会员专属'
-          subtitle='开通食探会员后，可以分享校园食堂菜品并绑定已审核食堂。普通公共食物库分享仍可继续使用。'
+          subtitle='开通食探会员后，可以分享校园食堂菜品并绑定已审核食堂。普通美食图谱分享仍可继续使用。'
         />
       </View>
     );
@@ -1009,7 +1009,7 @@ function FoodLibrarySharePage() {
     >
       {quickUploadMode && (
         <View className='quick-upload-tip'>
-          <Text className='quick-upload-title'>上传到公共食物库</Text>
+          <Text className='quick-upload-title'>上传到美食图谱</Text>
           <Text className='quick-upload-subtitle'>
             已自动带入刚识别的餐食；商家和位置均可选，核对后即可上传。
           </Text>

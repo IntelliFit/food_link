@@ -20,6 +20,7 @@ function openWithoutStacking(url: string): void {
 }
 
 export type PetChatHomeMealEntry = {
+  selectedSourceID?: string
   source: 'home_next_meal'
   date: string
   mealType: 'breakfast' | 'lunch' | 'dinner'
@@ -42,6 +43,7 @@ export function openPetChat(input?: unknown): void {
       ['meal_type', String(context.mealType || '').trim()],
       ['meal_label', String(context.mealLabel || '').trim()],
       ['advice', String(context.basicAdvice || '').trim()],
+      ['meal_id', String(context.selectedSourceID || '').trim()],
     )
   }
   const query = params.length

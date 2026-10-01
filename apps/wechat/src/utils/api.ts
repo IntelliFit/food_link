@@ -1322,6 +1322,7 @@ export interface DietRecommendationFoodItem {
 }
 
 export interface DietRecommendationOption {
+  requires_campus_access_confirmation?: boolean
   history_date?: string
   source_label?: string
   meal_components?: DietRecommendationOption[]
@@ -1583,6 +1584,7 @@ export interface PetChatLocation {
 }
 
 export interface PetChatEntryContext {
+  selected_source_id?: string
   source: 'home_next_meal'
   date: string
   meal_type: 'breakfast' | 'lunch' | 'dinner'
@@ -2231,6 +2233,8 @@ export interface ReportExtract {
 
 /** 健康档案中的病史/饮食/过敏等 JSON */
 export interface HealthCondition {
+  /** 用户主动确认的学生身份；只有 true 且选择了学校时才直接推荐本校食堂。 */
+  is_student?: boolean
   medical_history?: string[]
   diet_preference?: string[]
   allergies?: string[]
@@ -2305,6 +2309,8 @@ export interface HealthProfileUpdateRequest {
   dashboard_targets?: DashboardTargets
   /** 精准模式默认参考物配置，写入 health_condition.precision_reference_defaults */
   precision_reference_defaults?: PrecisionReferenceDefaults
+  /** 是否为在校学生；false 会同时清除已保存的校园就餐学校。 */
+  is_student?: boolean
   /** 宠物校园餐推荐的常用学校/校区；学校 ID 为空时清除。 */
   campus_dining_preference?: {
     school_id: string

@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Input, Switch } from '@tarojs/components'
+import { View, Text, ScrollView, Input, Switch, Checkbox } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
@@ -27,49 +27,19 @@ import {
   savePendingCustomFocusTask,
   type PendingCustomFocusTask,
 } from '../../utils/custom-focus-task'
-import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconExpand, IconCollapse } from '../../components/iconfont'
+import { IconExpand, IconCollapse } from '../../components/iconfont'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
-  morning_snack: '早加餐',
+  morning_snack: '上午加餐',
   lunch: '午餐',
-  afternoon_snack: '午加餐',
+  afternoon_snack: '下午加餐',
   dinner: '晚餐',
-  evening_snack: '晚加餐',
-  snack: '午加餐'
-}
-
-const MEAL_ICONS = {
-  breakfast: IconBreakfast,
-  morning_snack: IconSnack,
-  lunch: IconLunch,
-  afternoon_snack: IconSnack,
-  dinner: IconDinner,
-  evening_snack: IconSnack,
-  snack: IconSnack
-} as const
-
-/** 餐次结构配色：仅分早餐 / 午餐 / 晚餐三色；各时段加餐与对应主餐同色（与首页主色、蓝、橙一致） */
-const MEAL_STRUCTURE_COLORS = {
-  breakfast: '#5cb896',
-  lunch: '#5c9ed4',
-  dinner: '#f0985c',
-} as const
-
-function mealStructureAccent(mealKey: string): string {
-  if (mealKey === 'breakfast' || mealKey === 'morning_snack') {
-    return MEAL_STRUCTURE_COLORS.breakfast
-  }
-  if (mealKey === 'lunch' || mealKey === 'afternoon_snack' || mealKey === 'snack') {
-    return MEAL_STRUCTURE_COLORS.lunch
-  }
-  if (mealKey === 'dinner' || mealKey === 'evening_snack') {
-    return MEAL_STRUCTURE_COLORS.dinner
-  }
-  return MEAL_STRUCTURE_COLORS.breakfast
+  evening_snack: '晚间加餐',
+  snack: '下午加餐'
 }
 
 function formatLocalDate(date: Date = new Date()): string {
@@ -298,9 +268,9 @@ type HeatmapCell = {
 type AnalysisPanelKey = 'health' | 'nutrition' | 'structure'
 
 const ANALYSIS_PANEL_TABS: Array<{ key: AnalysisPanelKey; label: string }> = [
-  { key: 'health', label: '健康指数' },
-  { key: 'nutrition', label: 'AI分析' },
-  { key: 'structure', label: '热量分布' },
+  { key: 'health', label: '健康关注' },
+  { key: 'nutrition', label: '饮食解读' },
+  { key: 'structure', label: '趋势' },
 ]
 
 const DEFAULT_RISK_KEYS = ['hypertension', 'diabetes', 'cardio', 'weight', 'micronutrient']
@@ -383,55 +353,7 @@ function riskCardIcon(key: string): string {
   }
 }
 
-function riskCardIconColor(key: string, isDark: boolean): string {
-  if (isDark) {
-    switch (key) {
-      case 'hypertension': return '#f87171'
-      case 'diabetes': return '#60a5fa'
-      case 'cardio': return '#fbbf24'
-      case 'weight': return '#4ade80'
-      case 'colorectal': return '#a3e635'
-      case 'longevity': return '#c084fc'
-      case 'micronutrient': return '#38bdf8'
-      default: return '#34d399'
-    }
-  }
-  switch (key) {
-    case 'hypertension': return '#c45c5c'
-    case 'diabetes': return '#5a9bc7'
-    case 'cardio': return '#c9965c'
-    case 'weight': return '#5aa86e'
-    case 'colorectal': return '#8ab060'
-    case 'longevity': return '#a070b0'
-    case 'micronutrient': return '#3b82f6'
-    default: return '#5aa896'
-  }
-}
 
-function riskCardIconBgColor(key: string, isDark: boolean): string {
-  if (isDark) {
-    switch (key) {
-      case 'hypertension': return 'rgba(248, 113, 113, 0.16)'
-      case 'diabetes': return 'rgba(96, 165, 250, 0.16)'
-      case 'cardio': return 'rgba(251, 191, 36, 0.16)'
-      case 'weight': return 'rgba(74, 222, 128, 0.16)'
-      case 'colorectal': return 'rgba(163, 230, 53, 0.16)'
-      case 'longevity': return 'rgba(192, 132, 252, 0.16)'
-      case 'micronutrient': return 'rgba(56, 189, 248, 0.16)'
-      default: return 'rgba(52, 211, 153, 0.16)'
-    }
-  }
-  switch (key) {
-    case 'hypertension': return '#fdf2f2'
-    case 'diabetes': return '#eff6fc'
-    case 'cardio': return '#fef7ed'
-    case 'weight': return '#f0fdf4'
-    case 'colorectal': return '#f4fbea'
-    case 'longevity': return '#faf5ff'
-    case 'micronutrient': return '#eff6ff'
-    default: return '#f0fdf9'
-  }
-}
 
 function customRiskCardToOption(card: RiskCard): RiskOption {
   return {
@@ -468,18 +390,6 @@ function pendingCustomRiskCardFromOption(option: RiskOption): RiskCard {
   }
 }
 
-function riskCardBgGradient(key: string): string {
-  switch (key) {
-    case 'hypertension': return 'linear-gradient(145deg, #fee2e2 0%, #ffffff 22%, #ffffff 100%)'
-    case 'diabetes': return 'linear-gradient(145deg, #dbeafe 0%, #ffffff 22%, #ffffff 100%)'
-    case 'cardio': return 'linear-gradient(145deg, #ffedd5 0%, #ffffff 22%, #ffffff 100%)'
-    case 'weight': return 'linear-gradient(145deg, #dcfce7 0%, #ffffff 22%, #ffffff 100%)'
-    case 'colorectal': return 'linear-gradient(145deg, #ecfccb 0%, #ffffff 22%, #ffffff 100%)'
-    case 'longevity': return 'linear-gradient(145deg, #f3e8ff 0%, #ffffff 22%, #ffffff 100%)'
-    case 'micronutrient': return 'linear-gradient(145deg, #e0f2fe 0%, #ffffff 22%, #ffffff 100%)'
-    default: return 'linear-gradient(145deg, #dcfce7 0%, #ffffff 22%, #ffffff 100%)'
-  }
-}
 
 const WATER_GOAL_DEFAULT = 2000
 
@@ -567,6 +477,13 @@ function StatsPage() {
   rangeRef.current = range
   const [riskDetailModal, setRiskDetailModal] = useState<{ visible: boolean; card: RiskCard | null }>({ visible: false, card: null })
   const [riskPickerVisible, setRiskPickerVisible] = useState(false)
+  const [overviewExpanded, setOverviewExpanded] = useState(false)
+  const [actionsExpanded, setActionsExpanded] = useState(false)
+  const [issuesExpanded, setIssuesExpanded] = useState(false)
+  const [customFocusFormVisible, setCustomFocusFormVisible] = useState(false)
+  const [insightExpanded, setInsightExpanded] = useState(false)
+  const [insightCanExpand, setInsightCanExpand] = useState(false)
+  const [mealValuesInCalories, setMealValuesInCalories] = useState(false)
 
   // 自定义 tabBar 显隐同步：弹窗打开时隐藏底栏
   useEffect(() => {
@@ -601,7 +518,7 @@ function StatsPage() {
     macro: true,
     meals: true,
     streak: false,
-    body: true,
+    body: false,
     ai: false,
   })
 
@@ -616,9 +533,6 @@ function StatsPage() {
   const [error, setError] = useState<string | null>(null)
   /** 未登录：可进入分析 Tab 浏览引导，不拉取需登录接口 */
   const [guestBrowse, setGuestBrowse] = useState(() => !hasAuthToken())
-  const [aiDisplayText, setAiDisplayText] = useState('')
-  const typingTimerRef = useRef<any>(null)
-  const [isTyping, setIsTyping] = useState(false)
   const [insightActionLoading, setInsightActionLoading] = useState(false)
   const [insightError, setInsightError] = useState<string | null>(null)
   const [showCalories, setShowCalories] = useState(false)
@@ -1097,60 +1011,36 @@ function StatsPage() {
     }
   }, [customFocusRefreshingKey, mergeCustomFocusCard, pollCustomFocusTask, range])
 
-  // AI 洞察打字机效果：当 analysis_summary 从空变为非空时，按字符逐步显示
+  // 周期切换只重置展示状态，不改变个人关注、缓存或生成规则。
   useEffect(() => {
-    const full = data?.analysis_summary || ''
+    setOverviewExpanded(false)
+    setActionsExpanded(false)
+    setIssuesExpanded(false)
+    setMealValuesInCalories(false)
+    setRiskPickerVisible(false)
+    setRiskDetailModal({ visible: false, card: null })
+  }, [range])
 
-    // 如果还没有洞察，清空显示并停止打字
-    if (!full) {
-      setAiDisplayText('')
-      setIsTyping(false)
-      if (typingTimerRef.current) {
-        clearInterval(typingTimerRef.current)
-        typingTimerRef.current = null
-      }
-      return
-    }
+  useEffect(() => {
+    setInsightExpanded(false)
+    setInsightCanExpand(false)
+  }, [range, data?.analysis_summary])
 
-    // 已经完全展示，无需重新打字
-    if (aiDisplayText === full && !isTyping) {
-      return
-    }
-
-    if (typingTimerRef.current) {
-      clearInterval(typingTimerRef.current)
-      typingTimerRef.current = null
-    }
-
-    let index = 0
-    const step = 2 // 每次输出的字符数
-    setAiDisplayText('')
-    setIsTyping(true)
-
-    const timer = setInterval(() => {
-      index += step
-      if (index >= full.length) {
-        setAiDisplayText(full)
-        setIsTyping(false)
-        if (typingTimerRef.current) {
-          clearInterval(typingTimerRef.current)
-          typingTimerRef.current = null
+  // 测量完整原文；仅折叠过长报告，不裁剪/重新总结内容。
+  useEffect(() => {
+    if (analysisPanel !== 'nutrition' || !data?.analysis_summary) return
+    let cancelled = false
+    Taro.nextTick(() => {
+      if (cancelled) return
+      const foldHeight = Taro.getWindowInfo().windowWidth * 720 / 750
+      Taro.createSelectorQuery().select('.analysis-content').boundingClientRect((rect) => {
+        if (!cancelled && rect && !Array.isArray(rect)) {
+          setInsightCanExpand(rect.height > foldHeight + 1)
         }
-      } else {
-        setAiDisplayText(full.slice(0, index))
-      }
-    }, 40)
-
-    typingTimerRef.current = timer
-
-    return () => {
-      if (typingTimerRef.current) {
-        clearInterval(typingTimerRef.current)
-        typingTimerRef.current = null
-      }
-    }
-    // 只在后端完整洞察文本变化时重新触发打字
-  }, [data?.analysis_summary])
+      }).exec()
+    })
+    return () => { cancelled = true }
+  }, [analysisPanel, data?.analysis_summary, range, loading])
 
   if (guestBrowse) {
     return (
@@ -1197,7 +1087,6 @@ function StatsPage() {
   const totalProtein = toSafeNumber(d.total_protein)
   const totalCarbs = toSafeNumber(d.total_carbs)
   const totalFat = toSafeNumber(d.total_fat)
-  const hasInsight = Boolean(d.analysis_summary?.trim())
   const insightGeneratedDate = d.analysis_summary_generated_date || ''
   const insightNeedsRefresh = Boolean(d.analysis_summary_needs_refresh)
   const insightDailyLimit = Math.max(1, toSafeNumber(d.analysis_summary_daily_limit, 3))
@@ -1209,7 +1098,7 @@ function StatsPage() {
   const canGenerateInsight = canUseStatsInsight && insightRemainingToday > 0
   const normalizedInsightText = normalizeInsightText(d.analysis_summary || '')
   const displayInsightText = canUseStatsInsight
-    ? normalizeInsightText(aiDisplayText || (hasInsight && !isTyping ? normalizedInsightText : ''))
+    ? normalizedInsightText
     : ''
   const bodyMetrics = d.body_metrics
   const macroPercent = {
@@ -1228,9 +1117,7 @@ function StatsPage() {
   const chartDays = range === 'week' ? d.daily_calories.slice(-7) : d.daily_calories.slice(-14)
 
   // Calculate max calories for the chart scaling
-  const maxDailyCalories = d.daily_calories.length > 0
-    ? Math.max(...d.daily_calories.map(i => i.calories))
-    : 2000
+  const maxDailyCalories = Math.max(tdee, ...chartDays.map(i => toSafeNumber(i.calories)), 1) * 1.12
   const weightTrend = bodyMetrics?.weight_entries || []
   const latestWeight = bodyMetrics?.latest_weight || null
   const previousWeight = bodyMetrics?.previous_weight || null
@@ -1319,6 +1206,7 @@ function StatsPage() {
       return option?.is_custom ? pendingCustomRiskCardFromOption(option) : null
     })
     .filter((card): card is RiskCard => Boolean(card))
+  const isPendingRiskCard = (card: RiskCard) => Boolean(card.is_custom && !customRiskCards.some(item => item.key === card.key))
   const hasVisibleCustomFocus = visibleRiskCards.some(card => card.is_custom)
   const focusOverallScore = overallRiskScore
   const focusProjectedScore = projectedOverallScore
@@ -1326,9 +1214,6 @@ function StatsPage() {
   const focusScoreHint = hasVisibleCustomFocus
     ? '按全部核心指标与自定义 AI 指标综合计算'
     : '按全部核心关注指标综合计算'
-  const selectedRiskSummary = selectedRiskItems.length > 0
-    ? selectedRiskItems.map(item => item.short).join('、')
-    : '暂无，点下方指标即可显示'
   const topIssues = healthIndex?.top_issues ?? []
   const actionList = healthIndex?.action_list ?? []
   const toggleSection = (key: string) => {
@@ -1369,7 +1254,8 @@ function StatsPage() {
   }
 
   return (
-    <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+    <View className={`stats-page stats-page--editorial ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+      <View className='stats-page-title'><Text>分析</Text></View>
       <View
         className={`stats-range-dropdown ${loading ? 'is-loading' : ''}`}
         onClick={openRangeSelector}
@@ -1377,25 +1263,47 @@ function StatsPage() {
         <Text className='stats-range-dropdown__label'>{range === 'week' ? '近一周' : '近一个月'}</Text>
         <Text className='iconfont icon-right-arrow stats-range-dropdown__arrow' />
       </View>
-      <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
-        {!hasEnoughHealthIndexData ? (
+      <View className='analysis-tabs-container'>
+        <View className={`segmented-control analysis-panel-control ${loading ? 'is-loading' : ''}`}>
+          {ANALYSIS_PANEL_TABS.map(item => (
+            <View
+              key={item.key}
+              className={`segment-item ${analysisPanel === item.key ? 'active' : ''}`}
+              aria-role='button'
+              aria-label={`${item.label}${analysisPanel === item.key ? '，已选中' : ''}`}
+              onClick={() => { if (!loading) setAnalysisPanel(item.key) }}
+            >
+              <Text>{item.label}</Text>
+            </View>
+          ))}
+          {loading ? <View className='tabs-loading'><View className='loading-spinner-md' /></View> : null}
+        </View>
+      </View>
+      <ScrollView className='scroll-wrap' scrollY={!riskPickerVisible && !riskDetailModal.visible} enhanced showScrollbar={false}>
+        {error && data ? <View className='analysis-error'><Text>{error}</Text></View> : null}
+        {analysisPanel === 'health' && !hasEnoughHealthIndexData ? (
           <View className='stats-card health-index-gate-card'>
             <View className='health-index-gate-icon'>
               <Text className='iconfont icon-shangzhang health-index-gate-icon-text' />
             </View>
             <View className='health-index-gate-copy'>
-              <Text className='health-index-gate-title'>连续记录两天后显示健康指数</Text>
+              <Text className='health-index-gate-title'>记录至少 2 天后显示饮食参考分</Text>
               <Text className='health-index-gate-desc'>
-                当前已记录 {d.recorded_days ?? 0} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
+                当前已记录 {recordedDays} 天。继续记录后，这里会展示饮食趋势和关注方向。
               </Text>
             </View>
           </View>
-        ) : (
+        ) : analysisPanel === 'health' ? (
           <>
             <View className='stats-card risk-overview-card'>
               <View className='risk-overview-top'>
                 <View className='risk-overview-copy'>
-                  <Text className='risk-overview-title'>关注综合分</Text>
+                  <View className='risk-overview-title-line'>
+                    <Text className='risk-overview-title'>饮食综合分</Text>
+                    <View className='stats-info-button' aria-role='button' aria-label='查看综合分依据' onClick={() => setOverviewExpanded(value => !value)}>
+                      <Text className='iconfont icon-target' />
+                    </View>
+                  </View>
                 </View>
                 <View className='risk-overview-actions'>
                   <View className={`risk-overview-badge tone-${scoreToTone(focusOverallScore)}`}>
@@ -1404,48 +1312,47 @@ function StatsPage() {
                 </View>
               </View>
 
+              <View className='risk-overview-compact-row'>
               <View className='risk-overview-score-row'>
                 <Text className='risk-overview-score'>{focusOverallScore}</Text>
                 <Text className='risk-overview-score-unit'>/ 100</Text>
               </View>
-              <Text className='risk-overview-score-hint'>{focusScoreHint}</Text>
-
-              <Text className='risk-overview-summary'>{focusOverviewCopy}</Text>
-
-              <View className='risk-overview-chip-row'>
+              <View className='risk-overview-records'>
+                <Text className='risk-overview-record-days'>已记录 {recordedDays} 天</Text>
+                <Text className='risk-overview-record-caption'>基于全部关注指标</Text>
+              </View>
+              </View>
+              {overviewExpanded ? <View className='risk-overview-expanded'>
+                <Text className='risk-overview-score-hint'>{focusScoreHint}</Text>
+                <Text className='risk-overview-summary'>{focusOverviewCopy}</Text>
+                <View className='risk-overview-chip-row'>
                 {signalChips.map((chip) => (
                   <View key={chip.label} className='risk-overview-chip'>
                     <Text className='risk-overview-chip-label'>{chip.label}</Text>
                     <Text className='risk-overview-chip-value'>{chip.value}</Text>
                   </View>
                 ))}
-              </View>
+                </View>
+                <Text className='risk-overview-estimate'>改善后的综合分估计：{focusOverallScore} → {focusProjectedScore}，不代表实际健康变化。</Text>
+              </View> : null}
             </View>
           </>
-        )}
-        <View className='analysis-tabs-container'>
-          <View className={`segmented-control analysis-panel-control ${loading ? 'is-loading' : ''}`}>
-            {loading && (
-              <View className='tabs-loading'>
-                <View className='loading-spinner-md' />
-              </View>
-            )}
-            {ANALYSIS_PANEL_TABS.map(item => (
-              <View
-                key={item.key}
-                className={`segment-item ${analysisPanel === item.key ? 'active' : ''}`}
-                onClick={() => !loading && setAnalysisPanel(item.key)}
-              >
-                <Text>{item.label}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
+        ) : null}
 
         {analysisPanel === 'health' && hasEnoughHealthIndexData ? (
           <>
+        <View className='stats-card stats-actions-card'>
+          <Text className='card-title'>优先调整</Text>
+          {actionList.length > 0 ? (actionsExpanded ? actionList : actionList.slice(0, 2)).map((action, index) => (
+            <View className='stats-priority-item' key={`${index}-${action}`}>
+              <Text className='stats-priority-number'>{index + 1}</Text>
+              <Text className='stats-priority-text'>{action}</Text>
+            </View>
+          )) : <Text className='stats-empty-copy'>暂无额外调整建议，继续记录即可。</Text>}
+          {actionList.length > 2 ? <View className='stats-text-action' onClick={() => setActionsExpanded(value => !value)}><Text>{actionsExpanded ? '收起' : `展开全部 ${actionList.length} 项`}</Text><Text className='iconfont icon-right-arrow' /></View> : null}
+        </View>
         <View className='risk-section-header'>
-          <Text className='risk-section-title'>健康指标关注</Text>
+          <Text className='risk-section-title'>我的关注</Text>
           <View
             className='risk-focus-edit-btn'
             onClick={(e) => {
@@ -1453,8 +1360,7 @@ function StatsPage() {
               setRiskPickerVisible(true)
             }}
           >
-            <Text className='iconfont icon-target risk-focus-edit-icon' />
-            <Text className='risk-focus-edit-text'>我的关注</Text>
+            <Text className='risk-focus-edit-text'>管理</Text>
           </View>
         </View>
 
@@ -1463,24 +1369,12 @@ function StatsPage() {
             <View
               key={card.key}
               className='stats-card risk-card'
-              style={{ background: riskCardBgGradient(card.key) }}
+              aria-role='button'
+              aria-label={`查看${card.title}的饮食参考依据`}
               onClick={() => setRiskDetailModal({ visible: true, card })}
             >
-              <View className='risk-card-main-row'>
-                <View
-                  className='risk-card-icon-circle'
-                  style={{ background: riskCardIconBgColor(card.key, scheme === 'dark') }}
-                >
-                  <Text
-                    className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`}
-                    style={{ color: riskCardIconColor(card.key, scheme === 'dark') }}
-                  />
-                </View>
-                <View className='risk-card-score-wrap'>
-                  <Text className='risk-card-score'>{card.score}</Text>
-                  <Text className='risk-card-score-unit'>分</Text>
-                </View>
-              </View>
+              <View className='risk-card-icon-circle'><Text className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`} /></View>
+              <View className='risk-card-copy'>
               <Text className='risk-card-title'>{card.title}</Text>
               {card.is_custom ? (
                 <View className='risk-card-ai-badge-row'>
@@ -1494,11 +1388,17 @@ function StatsPage() {
                 </View>
               ) : null}
               <Text className='risk-card-summary'>{card.brief}</Text>
+              </View>
+              <View className='risk-card-score-wrap'>
+                <Text className='risk-card-score'>{isPendingRiskCard(card) ? '—' : card.score}</Text>
+                {!isPendingRiskCard(card) ? <Text className='risk-card-score-unit'>分</Text> : null}
+              </View>
+              <Text className='iconfont icon-right-arrow risk-card-chevron' />
             </View>
           ))}
         </View>
         {visibleRiskCards.length === 0 ? (
-          <Text className='risk-focus-empty'>还没有显示的关注方向，点击“我的关注”选择。</Text>
+          <View className='risk-focus-empty' onClick={() => setRiskPickerVisible(true)}><Text>选择你想关注的方向</Text><Text className='iconfont icon-right-arrow' /></View>
         ) : null}
 
         {riskPickerVisible ? (
@@ -1521,7 +1421,24 @@ function StatsPage() {
                   <Text className='risk-focus-modal-count-text'>显示 {selectedRiskItems.length} 项</Text>
                 </View>
               </View>
-              <Text className='risk-focus-modal-summary'>当前：{selectedRiskSummary}</Text>
+              <ScrollView className='risk-focus-options-scroll' scrollY showScrollbar={false}>
+              <View className='risk-picker-grid risk-picker-grid--modal'>
+                {orderedRiskOptions.map((item) => {
+                  const active = selectedRiskKeys.includes(item.key)
+                  const focusId = isCustomRiskKey(item.key) ? item.key.replace(/^custom:/, '') : ''
+                  return (
+                    <View key={item.key} className={`risk-picker-chip ${active ? 'active' : ''} ${item.is_custom ? 'is-custom' : ''}`}>
+                      <View className='risk-picker-option-toggle' aria-role='button' aria-label={`${item.title}${active ? '，已显示' : '，已隐藏'}`} onClick={() => toggleRiskPreference(item.key)}>
+                        <View className='risk-picker-checkbox' style={{ pointerEvents: 'none' }}><Checkbox value={item.key} checked={active} color='#214f3c' /></View>
+                        <Text className='risk-picker-chip__title'>{item.title}</Text>
+                      </View>
+                      {item.is_custom ? <View className='risk-picker-chip__remove' aria-role='button' aria-label={`永久移除${item.title}`} onClick={() => { if (focusId) confirmRemoveCustomFocus(focusId, item.title) }}><Text>移除</Text></View> : null}
+                    </View>
+                  )
+                })}
+              </View>
+              <View className='stats-custom-focus-toggle' onClick={() => setCustomFocusFormVisible(value => !value)}><Text>新增自定义关注</Text>{customFocusFormVisible ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}</View>
+              {customFocusFormVisible ? <>
               <View className='risk-custom-focus-add'>
                 <Input
                   className='risk-custom-focus-input'
@@ -1548,50 +1465,8 @@ function StatsPage() {
                   自定义关注 {addedCustomFocusCount}/{customFocusMeta.max_focuses} 个 · 今日可生成 {customFocusMeta.remaining_today}/{customFocusMeta.daily_limit} 次
                 </Text>
               ) : null}
-              <View className='risk-picker-grid risk-picker-grid--modal'>
-                {orderedRiskOptions.map((item) => {
-                  const active = selectedRiskKeys.includes(item.key)
-                  const focusId = isCustomRiskKey(item.key) ? item.key.replace(/^custom:/, '') : ''
-                  return (
-                    <View
-                      key={item.key}
-                      className={`risk-picker-chip ${active ? 'active' : ''} ${item.is_custom ? 'is-custom' : ''}`}
-                      onClick={() => {
-                        if (!item.is_custom) toggleRiskPreference(item.key)
-                      }}
-                    >
-                      <Text className='risk-picker-chip__title'>
-                        {item.title}
-                        {item.is_custom ? ' · AI' : ''}
-                      </Text>
-                      {item.is_custom ? (
-                        <View className='risk-picker-chip__controls'>
-                          <Text
-                            className='risk-picker-chip__action'
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleRiskPreference(item.key)
-                            }}
-                          >
-                            {active ? '隐藏卡片' : '显示卡片'}
-                          </Text>
-                          <Text
-                            className='risk-picker-chip__remove'
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (focusId) confirmRemoveCustomFocus(focusId, item.title)
-                            }}
-                          >
-                            移除关注
-                          </Text>
-                        </View>
-                      ) : (
-                        <Text className='risk-picker-chip__action'>{active ? '点按隐藏' : '点按显示'}</Text>
-                      )}
-                    </View>
-                  )
-                })}
-              </View>
+              </> : null}
+              </ScrollView>
               <View
                 className='risk-focus-modal-close'
                 onClick={() => setRiskPickerVisible(false)}
@@ -1622,14 +1497,17 @@ function StatsPage() {
                   ) : null}
                 </View>
                 <View className='risk-detail-score-row'>
-                  <Text className='risk-detail-score'>{riskDetailModal.card.score}</Text>
+                  <Text className='risk-detail-score'>{isPendingRiskCard(riskDetailModal.card) ? '—' : riskDetailModal.card.score}</Text>
+                  {!isPendingRiskCard(riskDetailModal.card) ? <>
                   <Text className='risk-detail-score-unit'>分</Text>
                   <View className={`risk-detail-badge tone-${riskDetailModal.card.tone}`}>
                     <Text className='risk-detail-badge-text'>{scoreToLabel(riskDetailModal.card.score)}</Text>
                   </View>
+                  </> : null}
                 </View>
               </View>
-              <View className='risk-detail-body'>
+              <ScrollView className='risk-detail-body' scrollY showScrollbar={false}>
+                {riskDetailModal.card.action ? <View className='risk-detail-priority'><Text className='risk-detail-section-label'>可以先这样调整</Text><Text className='risk-detail-section-text'>{riskDetailModal.card.action}</Text></View> : null}
                 {riskDetailModal.card.is_custom ? (
                   <>
                     <Text className='risk-detail-ai-disclaimer'>
@@ -1645,7 +1523,7 @@ function StatsPage() {
                     </View>
                   </>
                 ) : null}
-                <Text className='risk-detail-section-text'>{riskDetailModal.card.summary}</Text>
+                {riskDetailModal.card.summary ? <Text className='risk-detail-section-text'>{riskDetailModal.card.summary}</Text> : null}
                 {riskDetailModal.card.is_custom && riskDetailModal.card.score_reason ? (
                   <>
                     <View className='risk-detail-divider' />
@@ -1660,9 +1538,11 @@ function StatsPage() {
                     <Text className='risk-detail-section-text'>{riskDetailModal.card.change_reason}</Text>
                   </>
                 ) : null}
+                {riskDetailModal.card.basis ? <>
                 <View className='risk-detail-divider' />
                 <Text className='risk-detail-section-label'>判断依据</Text>
                 <Text className='risk-detail-section-text'>{riskDetailModal.card.basis}</Text>
+                </> : null}
                 {riskDetailModal.card.is_custom && (riskDetailModal.card.evidence?.length || 0) > 0 ? (
                   <View className='risk-detail-evidence-list'>
                     {riskDetailModal.card.evidence!.map(item => (
@@ -1680,12 +1560,9 @@ function StatsPage() {
                     <Text className='risk-detail-section-text'>{riskDetailModal.card.missing_evidence!.join('、')}</Text>
                   </>
                 ) : null}
-                <View className='risk-detail-divider' />
-                <Text className='risk-detail-section-label'>最小改善动作</Text>
-                <Text className='risk-detail-section-text'>{riskDetailModal.card.action}</Text>
-                <View className='risk-detail-delta'>
-                  <Text className='risk-detail-delta-text'>预计可提升 {riskDetailModal.card.delta} 分</Text>
-                </View>
+                {!isPendingRiskCard(riskDetailModal.card) ? <View className='risk-detail-delta'>
+                  <Text className='risk-detail-delta-text'>饮食参考分预计可提升 {riskDetailModal.card.delta} 分，并非实际健康结果。</Text>
+                </View> : null}
                 {riskDetailModal.card.is_custom && riskDetailModal.card.needs_refresh ? (
                   <View
                     className={`risk-detail-refresh-btn${customFocusRefreshingKey === riskDetailModal.card.key ? ' is-loading' : ''}`}
@@ -1697,61 +1574,26 @@ function StatsPage() {
                   >
                     <Text className='risk-detail-refresh-text'>
                       {customFocusRefreshingKey === riskDetailModal.card.key ? (
-                        <><Text className='iconfont icon-jiazaixiao risk-detail-refresh-spinner' /> 可离开此页</>
+                        <Text className='iconfont icon-jiazaixiao risk-detail-refresh-spinner' />
                       ) : `更新 · ${customFocusCost} 积分`}
                     </Text>
                   </View>
                 ) : null}
-              </View>
+              </ScrollView>
               <View
                 className='risk-detail-close-btn'
                 onClick={() => setRiskDetailModal({ visible: false, card: null })}
               >
-                <Text className='risk-detail-close-text'>知道了</Text>
+                <Text className='risk-detail-close-text'>关闭</Text>
               </View>
             </View>
           </View>
         )}
 
-        <View className='action-section-header'>
-          <View className='action-section-title-wrap'>
-            <Text className='action-section-title'>这段时间最值得先改的地方</Text>
-          </View>
-        </View>
-        <View className='action-plan-grid'>
-            <View className='action-plan-panel action-plan-panel--red'>
-              <Text className='action-plan-panel__title'>当前主要拖累项</Text>
-              {topIssues.length > 0 ? (
-                topIssues.map((issue) => (
-                  <View key={issue.title} className='action-plan-item'>
-                    <Text className='action-plan-item__bullet action-plan-item__bullet--error'>×</Text>
-                    <View className='action-plan-item__copy'>
-                      <Text className='action-plan-item__title'>{issue.title}</Text>
-                      <Text className='action-plan-item__detail'>{issue.detail}</Text>
-                    </View>
-                  </View>
-                ))
-              ) : (
-                <Text className='action-plan-panel__empty'>当前没有特别突出的单一问题，重点保持稳定记录和小幅优化。</Text>
-              )}
-            </View>
-
-            <View className='action-plan-panel action-plan-panel--green'>
-              <Text className='action-plan-panel__title'>建议你先这样改</Text>
-              {actionList.map((action) => (
-                <View key={action} className='action-plan-item'>
-                  <Text className='action-plan-item__bullet'>•</Text>
-                  <View className='action-plan-item__copy'>
-                    <Text className='action-plan-item__title'>{action}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-          </View>
-          <View className='action-score-delta'>
-            <Text className='action-score-delta__dot' />
-            <Text className='action-score-delta__text'>如果完成修改，综合健康分约为 {overallRiskScore} → {projectedOverallScore}</Text>
-          </View>
+        {topIssues.length > 0 ? <View className='stats-card stats-issues-card'>
+          <View className='card-header card-header--collapsible' onClick={() => setIssuesExpanded(value => !value)}><Text className='card-title'>记录中值得留意的地方</Text>{issuesExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}</View>
+          {issuesExpanded ? topIssues.map((issue, index) => <View key={`${index}-${issue.title}`} className='stats-issue-item'><Text className='stats-issue-title'>{issue.title}</Text><Text className='stats-issue-detail'>{issue.detail}</Text></View>) : null}
+        </View> : null}
 
           </>
         ) : null}
@@ -1761,7 +1603,7 @@ function StatsPage() {
         <View className='stats-card ai-insight-card'>
           <View className='ai-insight-card-top'>
             <View className='ai-insight-card-title-wrap'>
-              <Text className='ai-insight-card-title'>AI 风险解读</Text>
+              <Text className='ai-insight-card-title'>本{range === 'week' ? '周' : '月'}饮食解读</Text>
             </View>
           </View>
           <View className='ai-insight-card-body'>
@@ -1769,13 +1611,9 @@ function StatsPage() {
               <View className={`analysis-status${insightNeedsRefresh ? ' warning' : ''}`}>
                 <View className='analysis-status-copy'>
                   <Text className='analysis-status-text'>
-                    {insightNeedsRefresh
-                      ? `当前展示的是 ${insightGeneratedDate} 生成的缓存，你最近新增了饮食记录，可按需手动更新。`
-                      : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
+                    更新于 {insightGeneratedDate}
                   </Text>
-                  <Text className='analysis-status-subtext'>
-                    今日剩余 {insightRemainingToday}/{insightDailyLimit} 次
-                  </Text>
+                  {insightNeedsRefresh ? <Text className='analysis-status-new'>有新记录</Text> : null}
                 </View>
                 {canGenerateInsight ? (
                   <View
@@ -1788,7 +1626,7 @@ function StatsPage() {
                     {insightActionLoading ? (
                       <Text className='iconfont icon-jiazaixiao analysis-status-action-icon' />
                     ) : (
-                      <Text className='analysis-status-action-text'>更新 · 1 积分</Text>
+                      <Text className='analysis-status-action-text'>更新 · 1积分</Text>
                     )}
                   </View>
                 ) : (
@@ -1798,6 +1636,7 @@ function StatsPage() {
                 )}
               </View>
             ) : null}
+            {canUseStatsInsight ? <Text className='analysis-quota'>今日剩余 {insightRemainingToday}/{insightDailyLimit} 次</Text> : null}
             {insightError ? (
               <View className='analysis-error'>
                 <Text className='analysis-error-text'>{insightError}</Text>
@@ -1805,17 +1644,32 @@ function StatsPage() {
             ) : null}
             {!canUseStatsInsight ? (
               <View className='analysis-empty analysis-empty--gate'>
-                <Text className='analysis-empty-title'>先记录饮食后再生成 AI 风险解读</Text>
-                <Text className='analysis-empty-text'>当前统计周期还没有饮食记录，暂时无法判断热量、餐次和宏量营养趋势。记录至少一餐后，这里会基于真实数据生成解读。</Text>
+                <Text className='analysis-empty-title'>记录一餐，开始了解自己的饮食</Text>
+                <Text className='analysis-empty-text'>本周期还没有饮食记录，暂时无法生成解读。</Text>
               </View>
-            ) : insightActionLoading ? (
+            ) : displayInsightText ? (
+              <>
+                <View className={`analysis-report ${insightCanExpand && !insightExpanded ? 'is-collapsed' : ''}`}>
+                  <View className='analysis-content'>{renderInsightMarkdown(displayInsightText)}</View>
+                </View>
+                {insightCanExpand ? <View className='stats-text-action analysis-report-toggle' aria-role='button' aria-label={insightExpanded ? '收起完整解读' : '展开完整解读'} onClick={() => setInsightExpanded(value => !value)}><Text>{insightExpanded ? '收起' : '展开全文'}</Text>{insightExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}</View> : null}
+              </>
+            ) : !insightActionLoading ? (
+              <View className='analysis-empty'>
+                <Text className='analysis-empty-title'>还没有本{range === 'week' ? '周' : '月'}解读</Text>
+                <Text className='analysis-empty-text'>需要时手动生成，之后可随时查看。</Text>
+                <View
+                  className={`analysis-empty-action${!canGenerateInsight ? ' is-disabled' : ''}`}
+                  onClick={() => { if (canGenerateInsight) handleGenerateInsight() }}
+                >
+                  <Text className='analysis-empty-action-text'>{canGenerateInsight ? '生成解读 · 1积分' : '今日生成次数已用完'}</Text>
+                </View>
+              </View>
+            ) : null}
+            {insightActionLoading ? (
               <View className='analysis-loading-card'>
                 <View className='analysis-loading-card-header'>
                   <Text className='iconfont icon-jiazaixiao analysis-loading-card-icon' />
-                  <View className='analysis-loading-card-copy'>
-                    <Text className='analysis-loading-card-title'>正在更新 AI 风险解读</Text>
-                    <Text className='analysis-loading-card-text'>会基于你当前统计周期的最新饮食记录重新生成这段分析。</Text>
-                  </View>
                 </View>
                 <View className='analysis-skeleton-group'>
                   <View className='analysis-skeleton-line w-92' />
@@ -1825,32 +1679,7 @@ function StatsPage() {
                   <View className='analysis-skeleton-line w-70' />
                 </View>
               </View>
-            ) : displayInsightText ? (
-              <View className='analysis-content'>{renderInsightMarkdown(displayInsightText)}</View>
-            ) : isTyping ? (
-              <View className='analysis-loading'>
-                <Text className='iconfont icon-jiazaixiao analysis-loading-icon' />
-                <Text className='analysis-loading-text'>
-                  正在展示已生成的洞察...
-                </Text>
-              </View>
-            ) : (
-              <View className='analysis-empty'>
-                <Text className='analysis-empty-text'>这里不会在每次打开页面时自动重新分析。你可以在需要时手动生成一次。</Text>
-                <View
-                  className={`analysis-empty-action${!canGenerateInsight ? ' is-disabled' : ''}`}
-                  onClick={() => {
-                    if (canGenerateInsight) handleGenerateInsight()
-                  }}
-                >
-                  <Text className='analysis-empty-action-text'>
-                    {canGenerateInsight
-                      ? `生成本${range === 'week' ? '周' : '月'}深度解读（1积分）`
-                      : '今日生成次数已用完'}
-                  </Text>
-                </View>
-              </View>
-            )}
+            ) : null}
           </View>
         </View>
 
@@ -1865,43 +1694,43 @@ function StatsPage() {
             <View className='chart-title-group'>
               <Text className='iconfont icon-shangzhang chart-title-icon' />
               <View className='card-header-copy'>
-                <Text className='card-title'>热量摄入趋势</Text>
-                <Text className='card-subtitle'>{range === 'week' ? '最近 7 天' : '最近 14 天'}摄入变化和超标情况</Text>
+                <Text className='card-title'>热量摄入 <Text className='stats-unit'>(kcal)</Text></Text>
+                <Text className='card-subtitle'>{range === 'week' ? '最近 7 天' : '近一个月统计 · 图示最近 14 天'}</Text>
               </View>
             </View>
             <View className='card-header-actions'>
+              {expandedSections.calories ? <View className='chart-switch-wrap' onClick={(e) => e.stopPropagation()}>
+                <Text className='chart-switch-label'>数值</Text>
+                <Switch
+                  className='chart-switch'
+                  checked={showCalories}
+                  color='#5cb896'
+                  onChange={(event) => setShowCalories(event.detail.value)}
+                />
+              </View> : null}
               <View className='card-header-arrow'>{expandedSections.calories ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
             </View>
           </View>
           {expandedSections.calories ? (
             <View className='card-collapsible-content'>
-              <View style={{ marginBottom: '20rpx' }}>
-                <View className='chart-switch-wrap' onClick={(e) => e.stopPropagation()}>
-                  <Text className='chart-switch-label'>显示数值</Text>
-                  <Switch
-                    className='chart-switch'
-                    checked={showCalories}
-                    color='#5cb896'
-                    onChange={(event) => setShowCalories(event.detail.value)}
-                  />
-                </View>
-              </View>
               {chartDays.length > 0 ? (
                 <View className='bar-chart-container'>
+                  {tdee > 0 ? <View className='calorie-reference-line' style={{ bottom: `${44 + clampPercent(tdee / maxDailyCalories * 100) * 2.6}rpx` }}><Text>参考消耗 {Math.round(tdee)}</Text></View> : null}
                   {chartDays.map((item) => {
-                    const heightPct = Math.max((item.calories / maxDailyCalories) * 100, 10)
+                    const heightPct = clampPercent(toSafeNumber(item.calories) / maxDailyCalories * 100)
                     return (
                       <View key={item.date} className='chart-col'>
                         {showCalories ? (
-                          <Text className='bar-calorie-text'>{Math.round(item.calories)}</Text>
+                          <Text className='bar-calorie-text'>{item.calories > 0 ? Math.round(item.calories) : '—'}</Text>
                         ) : null}
                         <View className='bar-wrapper'>
                           <View
                             className={`bar-fill ${item.calories > tdee ? 'over' : ''}`}
                             style={{ height: `${heightPct}%` }}
                           />
+                          {item.calories <= 0 ? <Text className='stats-chart-no-data'>—</Text> : null}
                         </View>
-                        <Text className='bar-label'>{item.date.slice(5)}</Text>
+                        <Text className='bar-label'>{range === 'week' ? item.date.slice(5) : item.date.slice(8)}</Text>
                       </View>
                     )
                   })}
@@ -1911,6 +1740,7 @@ function StatsPage() {
                   <Text className='empty-text'>暂无数据</Text>
                 </View>
               )}
+              <Text className='stats-chart-note'>{chartDays[0]?.date.slice(5)} — {chartDays[chartDays.length - 1]?.date.slice(5)} · 横线表示无摄入数据；参考消耗为估算值。</Text>
             </View>
           ) : null}
         </View>
@@ -1918,52 +1748,40 @@ function StatsPage() {
         <View className='stats-card macro-card evidence-card'>
           <View className='card-header card-header--collapsible' onClick={() => toggleSection('macro')}>
             <Text className='iconfont icon-tianpingzuo chart-title-icon' />
-            <View className='card-header-copy'>
-              <Text className='card-title'>宏量营养结构</Text>
-              <Text className='card-subtitle'>蛋白质、碳水和脂肪的摄入占比</Text>
+            <View className='card-header-copy stats-inline-heading'>
+              <Text className='card-title'>营养构成</Text>
+              <Text className='card-subtitle'>本{range === 'week' ? '周' : '月'}累计 · 能量占比</Text>
             </View>
             <View className='card-header-arrow'>{expandedSections.macro ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
           </View>
           {expandedSections.macro ? (
             <View className='card-collapsible-content'>
               <View className='macro-list'>
-                <View className='macro-row'>
-                  <View className='macro-info'>
-                    <View className='macro-label-wrap'>
-                      <Text className='iconfont icon-danbaizhi macro-icon protein' />
-                      <Text className='macro-name'>蛋白质</Text>
-                    </View>
-                    <Text className='macro-detail'>{totalProtein.toFixed(0)}g / {macroPercent.protein}%</Text>
-                  </View>
+                <View className='macro-row stats-macro-row'>
+                  <Text className='macro-name'>蛋白质</Text>
                   <View className='progress-track'>
                     <View className='progress-fill protein' style={{ width: `${clampPercent(macroPercent.protein)}%` }}></View>
                   </View>
+                  <Text className='stats-macro-grams'>{totalProtein.toFixed(0)}g</Text>
+                  <Text className='stats-macro-percent'>{macroPercent.protein}%</Text>
                 </View>
 
-                <View className='macro-row'>
-                  <View className='macro-info'>
-                    <View className='macro-label-wrap'>
-                      <Text className='iconfont icon-tanshui-dabiao macro-icon carbs' />
-                      <Text className='macro-name'>碳水化合物</Text>
-                    </View>
-                    <Text className='macro-detail'>{totalCarbs.toFixed(0)}g / {macroPercent.carbs}%</Text>
-                  </View>
+                <View className='macro-row stats-macro-row'>
+                  <Text className='macro-name'>碳水</Text>
                   <View className='progress-track'>
                     <View className='progress-fill carbs' style={{ width: `${clampPercent(macroPercent.carbs)}%` }}></View>
                   </View>
+                  <Text className='stats-macro-grams'>{totalCarbs.toFixed(0)}g</Text>
+                  <Text className='stats-macro-percent'>{macroPercent.carbs}%</Text>
                 </View>
 
-                <View className='macro-row'>
-                  <View className='macro-info'>
-                    <View className='macro-label-wrap'>
-                      <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin macro-icon fat' />
-                      <Text className='macro-name'>脂肪</Text>
-                    </View>
-                    <Text className='macro-detail'>{totalFat.toFixed(0)}g / {macroPercent.fat}%</Text>
-                  </View>
+                <View className='macro-row stats-macro-row'>
+                  <Text className='macro-name'>脂肪</Text>
                   <View className='progress-track'>
                     <View className='progress-fill fat' style={{ width: `${clampPercent(macroPercent.fat)}%` }}></View>
                   </View>
+                  <Text className='stats-macro-grams'>{totalFat.toFixed(0)}g</Text>
+                  <Text className='stats-macro-percent'>{macroPercent.fat}%</Text>
                 </View>
               </View>
             </View>
@@ -1974,50 +1792,28 @@ function StatsPage() {
           <View className='card-header card-header--collapsible' onClick={() => toggleSection('meals')}>
             <Text className='iconfont icon-canciguanli chart-title-icon' />
             <View className='card-header-copy'>
-              <Text className='card-title'>餐次热量分布</Text>
-              <Text className='card-subtitle'>早餐、午餐、晚餐和加餐的热量占比</Text>
+              <Text className='card-title'>餐次分布</Text>
+              <Text className='card-subtitle'>本周期热量占比</Text>
             </View>
+            {expandedSections.meals ? <View
+              className='stats-meal-value-toggle'
+              aria-role='button'
+              aria-label={mealValuesInCalories ? '切换显示餐次热量占比' : '切换显示餐次摄入热量'}
+              onClick={(event) => { event.stopPropagation(); setMealValuesInCalories(value => !value) }}
+            ><Text>{mealValuesInCalories ? '看占比' : '看热量'}</Text></View> : null}
             <View className='card-header-arrow'>{expandedSections.meals ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
           </View>
           {expandedSections.meals ? (
             <View className='card-collapsible-content'>
-              <View className='meal-gauges-grid'>
+              <View className='stats-meal-list'>
                 {(['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'] as const).map((key) => {
                   const cal = byMeal[key]
                   const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
-                  const MealIcon = MEAL_ICONS[key]
-                  const color = mealStructureAccent(key)
-                  const trackColor = scheme === 'dark' ? '#2f353a' : '#f0f0f0'
-                  const radius = 43
-                  const circumference = 2 * Math.PI * radius
-                  const progress = Math.min(pct / 100, 1)
-
                   return (
-                    <View key={key} className='meal-gauge-item'>
-                      <View className='meal-gauge-left'>
-                        <View className='meal-gauge-icon-wrap' style={{ backgroundColor: `${color}14` }}>
-                          <MealIcon size={20} color={color} />
-                        </View>
-                        <Text className='meal-gauge-label'>{MEAL_NAMES[key]}</Text>
-                        <Text className='meal-gauge-percent' style={{ color }}>{pct.toFixed(1)}%</Text>
-                      </View>
-
-                      <View className='meal-gauge-right'>
-                        <View className='meal-gauge-circle'>
-                          <View
-                            className='meal-gauge-ring'
-                            style={{
-                              backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(
-                                `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='${radius}' fill='none' stroke='${trackColor}' stroke-width='12'/><circle cx='50' cy='50' r='${radius}' fill='none' stroke='${color}' stroke-width='12' stroke-linecap='round' stroke-dasharray='${circumference}' stroke-dashoffset='${circumference * (1 - progress)}'/></svg>`
-                              )}")`,
-                              backgroundSize: '100% 100%'
-                            }}
-                          />
-                          <View className='meal-gauge-center'>
-                            <Text className='meal-gauge-cal' style={{ color }}>{Math.round(cal)}</Text>
-                          </View>
-                        </View>
-                      </View>
+                    <View key={key} className={`stats-meal-row ${mealValuesInCalories ? 'shows-calories' : ''}`}>
+                      <Text className='stats-meal-name'>{MEAL_NAMES[key]}</Text>
+                      <View className='progress-track'><View className='progress-fill' style={{ width: `${clampPercent(pct)}%` }} /></View>
+                      <Text className='stats-meal-percent'>{mealValuesInCalories ? `${Math.round(cal)} kcal` : totalCalories > 0 ? `${pct.toFixed(1)}%` : '—'}</Text>
                     </View>
                   )
                 })}
@@ -2030,8 +1826,8 @@ function StatsPage() {
           <View className='card-header card-header--collapsible' onClick={() => toggleSection('body')}>
             <Text className='iconfont icon-shangzhang chart-title-icon' />
             <View className='card-header-copy'>
-              <Text className='card-title'>长期健康指标</Text>
-              <Text className='card-subtitle'>体重趋势和喝水趋势</Text>
+              <Text className='card-title'>体重与喝水</Text>
+              <Text className='card-subtitle'>体重最近 {range === 'week' ? '7' : '10'} 次 · 饮水最近 {range === 'week' ? '7' : '14'} 天</Text>
             </View>
             <View className='card-header-arrow'>{expandedSections.body ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
           </View>
@@ -2097,21 +1893,24 @@ function StatsPage() {
                 <View className='body-metric-panel water-panel'>
                   <View className='body-metric-panel-header'>
                     <Text className='body-metric-title'>喝水趋势</Text>
+                    {waterRecordedDays > 0 ? (
                     <Text className='body-metric-main'>
                       {avgDailyWaterMl.toFixed(0)} ml
                     </Text>
+                    ) : <Text className='body-metric-empty'>暂无喝水记录</Text>}
                   </View>
                   <Text className='body-metric-sub'>
-                    日均 {avgDailyWaterMl.toFixed(0)} ml，目标 {waterGoalMl} ml，累计 {totalWaterMl.toFixed(0)} ml
+                    {waterRecordedDays > 0 ? `日均 ${avgDailyWaterMl.toFixed(0)} ml，目标 ${waterGoalMl} ml，累计 ${totalWaterMl.toFixed(0)} ml` : `饮水目标 ${waterGoalMl} ml`}
                   </Text>
-                  {waterTrend.length > 0 ? (
+                  {waterRecordedDays > 0 && waterTrend.length > 0 ? (
                     <View className='water-trend-chart'>
                       {waterTrend.map((item) => {
-                        const pct = maxWaterValue > 0 ? Math.max((toSafeNumber(item.total) / maxWaterValue) * 100, 8) : 8
+                        const pct = maxWaterValue > 0 ? clampPercent(toSafeNumber(item.total) / maxWaterValue * 100) : 0
                         return (
                           <View key={item.date} className='water-trend-col'>
                             <View className='water-trend-bar-wrap'>
                               <View className='water-trend-bar' style={{ height: `${pct}%` }} />
+                              {toSafeNumber(item.total) <= 0 ? <Text className='stats-chart-no-data'>—</Text> : null}
                             </View>
                             <Text className='water-trend-label'>{item.date.slice(5)}</Text>
                           </View>

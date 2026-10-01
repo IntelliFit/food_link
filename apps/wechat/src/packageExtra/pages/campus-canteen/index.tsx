@@ -725,10 +725,9 @@ function CampusCanteenPage() {
             mode='aspectFill'
           />
           <View>
-            <Text className='campus-hero-eyebrow'>食探校园活动</Text>
             <Text className='campus-hero-title'>食探校园食堂计划</Text>
             <Text className='campus-hero-subtitle'>
-              按你所在省份选择高校，一起补全食堂菜品价格、位置和营养信息
+              选学校，查菜品、价格和营养
             </Text>
           </View>
           <View className='campus-hero-upload' onClick={goUpload}>

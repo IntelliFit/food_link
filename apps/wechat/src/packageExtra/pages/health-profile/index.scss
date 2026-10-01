@@ -154,7 +154,8 @@
     align-items: center;
     gap: 36rpx;
     flex: 1;
-    justify-content: center;
+    justify-content: flex-start;
+    padding-top: 12rpx;
   }
 
   .profile-avatar-choose-wrapper {
@@ -229,6 +230,98 @@
     font-size: 30rpx;
     color: #1a1a1a;
     box-sizing: border-box;
+  }
+
+  .student-identity {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 18rpx;
+  }
+
+  .student-identity__heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 20rpx;
+  }
+
+  .student-identity__label {
+    color: #334155;
+    font-size: 28rpx;
+    font-weight: 600;
+  }
+
+  .student-identity__hint {
+    color: #7b8c85;
+    font-size: 23rpx;
+  }
+
+  .student-identity__choices {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16rpx;
+  }
+
+  .student-identity__choice {
+    min-height: 76rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2rpx solid #e2e8f0;
+    border-radius: 20rpx;
+    background: #fff;
+    color: #52635c;
+    font-size: 28rpx;
+    box-sizing: border-box;
+
+    &.is-active {
+      border-color: #00a973;
+      background: #ecfbf5;
+      color: #087a56;
+      font-weight: 600;
+    }
+  }
+
+  .student-identity__school {
+    min-height: 88rpx;
+    padding: 16rpx 22rpx;
+    border: 2rpx solid #dce8e2;
+    border-radius: 20rpx;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-sizing: border-box;
+  }
+
+  .student-identity__school-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+  }
+
+  .student-identity__school-label {
+    color: #7b8c85;
+    font-size: 22rpx;
+  }
+
+  .student-identity__school-name {
+    max-width: 520rpx;
+    overflow: hidden;
+    color: #809089;
+    font-size: 28rpx;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &.is-selected { color: #183f30; }
+  }
+
+  .student-identity__school-arrow {
+    color: #7b8c85;
+    font-size: 28rpx;
   }
 
   .profile-skip-onboarding {

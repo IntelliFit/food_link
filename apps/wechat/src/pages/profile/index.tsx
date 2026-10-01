@@ -288,7 +288,7 @@ function ProfilePage() {
     {
       id: 6,
       iconClass: 'icon-zengji',
-      title: '签到打卡 · 上传食物赚积分',
+      title: '签到与积分奖励',
       desc: '每日签到、分享打卡或上传真实食物都能赚积分',
       path: extraPkgUrl('/pages/reward-center/index')
     },
@@ -309,8 +309,8 @@ function ProfilePage() {
     {
       id: 5,
       iconClass: 'icon-foodshop',
-      title: '公共食物库',
-      desc: '浏览公共食物营养数据',
+      title: '美食图谱',
+      desc: '发现附近餐食与真实营养数据',
       path: extraPkgUrl('/pages/food-library/index')
     },
     {
@@ -334,6 +334,14 @@ function ProfilePage() {
       desc: '提交问题或建议，并自动附带最近请求诊断',
       path: extraPkgUrl('/pages/feedback/index')
     }
+  ]
+
+  // 只组织已有入口，认证和业务跳转仍由原 handler 处理。
+  const quickServices = services.filter(service => [5, 9, 0, 4].includes(service.id))
+    .sort((a, b) => [5, 9, 0, 4].indexOf(a.id) - [5, 9, 0, 4].indexOf(b.id))
+  const serviceGroups = [
+    { title: '记录与奖励', items: services.filter(service => [2, 6, 12].includes(service.id)) },
+    { title: '帮助与邀请', items: services.filter(service => [11, 8, 10].includes(service.id)) },
   ]
 
   // 设置项
@@ -370,7 +378,7 @@ function ProfilePage() {
       Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
       return
     }
-    // 公共食物库
+    // 美食图谱
     if (service.id === 5) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/food-library/index') })
       return
@@ -566,6 +574,7 @@ function ProfilePage() {
               key.startsWith('home_experience_config_v1:') ||
               key.startsWith('home_experience_config_v2:') ||
               key.startsWith('home_module_layout_v2:') ||
+              key.startsWith('home_module_layout_v3:') ||
               key.startsWith('home_check_in_snooze_v1:')
             ) {
               try { Taro.removeStorageSync(key) } catch (_) {}
@@ -775,30 +784,50 @@ function ProfilePage() {
 
       {isLoggedIn && <WeeklyRecapEntry />}
 
-      {/* 功能列表（合并为单个白色卡片） */}
-      <View className='profile-card list-card combined-list'>
-        {/* 核心功能 */}
-        {services.map((service) => (
-          <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
-            <View className='list-icon' style={getProfileListIconStyle(service.id, SERVICE_ICON_TONES, scheme)}>
-              <ProfileListIcon name={service.iconClass} />
-            </View>
-            <Text className='list-title'>{service.title}</Text>
-            {(service as any).badgeCount > 0 && (
-              <View className='list-badge'>
-                <Text className='list-badge-text'>{(service as any).badgeCount}</Text>
+      <View className='profile-card profile-shortcuts-card'>
+        <Text className='profile-group-title'>日常使用</Text>
+        <View className='profile-shortcuts-grid'>
+          {quickServices.map(service => (
+            <View key={service.id} className='profile-shortcut' onClick={() => handleServiceClick(service)}>
+              <View className='profile-shortcut-icon' style={getProfileListIconStyle(service.id, SERVICE_ICON_TONES, scheme)}>
+                <ProfileListIcon name={service.iconClass} />
               </View>
-            )}
-          </View>
-        ))}
+              <Text className='profile-shortcut-title'>{service.title}</Text>
+              <Text className='iconfont icon-right profile-list-chevron' />
+            </View>
+          ))}
+        </View>
+      </View>
 
-        {/* 设置 */}
+      {serviceGroups.map(group => (
+        <View key={group.title} className='profile-card list-card profile-group-card'>
+          <Text className='profile-group-title'>{group.title}</Text>
+          {group.items.map(service => (
+            <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
+              <View className='list-icon' style={getProfileListIconStyle(service.id, SERVICE_ICON_TONES, scheme)}>
+                <ProfileListIcon name={service.iconClass} />
+              </View>
+              <Text className='list-title'>{service.title}</Text>
+              {(service as any).badgeCount > 0 && (
+                <View className='list-badge'>
+                  <Text className='list-badge-text'>{(service as any).badgeCount}</Text>
+                </View>
+              )}
+              <Text className='iconfont icon-right profile-list-chevron' />
+            </View>
+          ))}
+        </View>
+      ))}
+
+      <View className='profile-card list-card profile-group-card'>
+        <Text className='profile-group-title'>设置</Text>
         {settings.map((setting) => (
           <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
             <View className='list-icon' style={getProfileListIconStyle(setting.id, SETTING_ICON_TONES, scheme)}>
               <ProfileListIcon name={setting.iconClass} />
             </View>
             <Text className='list-title'>{setting.title}</Text>
+            <Text className='iconfont icon-right profile-list-chevron' />
           </View>
         ))}
       </View>

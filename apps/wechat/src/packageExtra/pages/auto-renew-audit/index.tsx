@@ -78,7 +78,7 @@ export default function AutoRenewAuditPage() {
             <Text className='service-item'>健康档案</Text>
             <Text className='service-item'>运动记录</Text>
             <Text className='service-item'>社区互动</Text>
-            <Text className='service-item'>公共食物库</Text>
+            <Text className='service-item'>美食图谱</Text>
           </View>
         </View>
 

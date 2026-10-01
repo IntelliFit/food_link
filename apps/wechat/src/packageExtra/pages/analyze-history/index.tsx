@@ -833,7 +833,7 @@ function AnalyzeHistoryPage() {
     // 分享功能：跳转到分享页面
     if (task.status === 'done' && task.result) {
       const result = task.result as AnalyzeResponse
-      // 准备分享数据：自动填充到公共食物库分享页
+      // 准备分享数据：自动填充到美食图谱分享页
       const imageUrls = pickTaskImageUrls(task)
       const items = (result.items || []).map(it => ({
         name: it.name || '',
@@ -1388,7 +1388,7 @@ function AnalyzeHistoryPage() {
                 onClick={actionSheetShare}
               >
                 <Text className='iconfont icon-shiwu action-sheet-icon action-sheet-icon--library' />
-                <Text className='action-sheet-label'>分享到公共食物库</Text>
+                <Text className='action-sheet-label'>分享到美食图谱</Text>
               </View>
               <View className='action-sheet-divider' />
               <View className='action-sheet-item action-sheet-item--danger' onClick={actionSheetDelete}>

@@ -1,3 +1,5 @@
+@import '../../../styles/meal-orbit-tokens.scss';
+
 .campus-canteen-page {
   min-height: 100vh;
   background: #f3f8f5;
@@ -896,15 +898,13 @@
   border-radius: 40rpx;
 }
 
-.fl-page-theme-root--dark {
+.fl-d .campus-canteen-page {
+  background: linear-gradient(180deg, #101715 0%, #0d1312 100%);
+
   .collector-channel-button {
     border-color: rgb(110 231 183 / 22%);
     background: rgb(24 33 31 / 94%);
     color: #6ee7b7;
-  }
-
-  .campus-canteen-page {
-    background: linear-gradient(180deg, #101715 0%, #0d1312 100%);
   }
 
   .campus-hero {
@@ -939,6 +939,7 @@
 
   .filter-chip-text,
   .filter-chip-input-inner,
+  .filter-guide-title,
   .search-input,
   .section-title,
   .recommend-card-title,
@@ -948,6 +949,8 @@
 
   .filter-chip-arrow,
   .search-input-icon,
+  .filter-guide-hint,
+  .campus-feedback-text,
   .section-subtitle,
   .recommend-card-meta,
   .recommend-panel-line,
@@ -1046,4 +1049,44 @@
   .login-tip {
     background: transparent;
   }
+}
+
+.campus-canteen-page {
+  .campus-hero { padding: 24rpx; gap: 16rpx; }
+  .campus-hero-title { font-size: 32rpx; line-height: 44rpx; margin-bottom: 4rpx; }
+  .campus-hero-subtitle { font-size: 24rpx; line-height: 36rpx; }
+  .campus-hero-upload { padding: 16rpx 20rpx; }
+  .filter-guide-hint { font-size: 24rpx; }
+  .filter-chip-text { font-size: 28rpx; }
+  .recommend-card-title { font-size: 28rpx; line-height: 40rpx; }
+  .recommend-card-meta { font-size: 24rpx; line-height: 36rpx; }
+  .section-head { flex-wrap: wrap; gap: 6rpx; }
+  .section-subtitle { font-size: 24rpx; line-height: 36rpx; }
+  .filter-clear-btn { padding: 12rpx 0 12rpx 16rpx; }
+}
+
+.fl-page-theme-root:not(.fl-d) .campus-canteen-page {
+  background: $orbit-page;
+
+  .campus-header,
+  .sort-section,
+  .recommend-card,
+  .recommend-panel,
+  .campus-card {
+    background: $orbit-surface;
+    border: 1rpx solid $orbit-border;
+    box-shadow: $orbit-shadow;
+  }
+
+  .filter-chip,
+  .search-input-wrap { background: $orbit-soft; }
+  .search-btn,
+  .fab-button { background: $orbit-forest; }
+  .filter-chip-text,
+  .section-title,
+  .recommend-card-title { color: $orbit-ink; }
+  .filter-guide-hint,
+  .section-subtitle,
+  .recommend-card-meta { color: $orbit-muted; }
+  .sort-item.active { color: $orbit-forest; border-color: $orbit-forest; }
 }

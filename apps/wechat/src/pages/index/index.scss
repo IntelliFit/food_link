@@ -910,7 +910,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     }
   }
 
-  .wellness-overview-card,
   .wellness-daily-advice,
   .main-card,
   .meals-section,
@@ -6634,3 +6633,571 @@ button.poster-share-channel--btn {
 .home-social-inbox__badge { min-width: 30rpx; text-align: center; padding: 1rpx 6rpx; border-radius: 14rpx; background: #e8f4ee; color: #35825b; }
 .home-supplement-module { margin: 0 0 24rpx; padding: 4rpx 24rpx 20rpx; border-radius: 24rpx; background: #fff; border: 1rpx solid #edf0ee; }
 .home-page--dark { .home-supplement-module { background: #202d26; border-color: #34463a; } .home-social-inbox__badge { background: #2b4837; color: #a6d3b2; } }
+
+// 2026-10 首页视觉重构：以「Meal Orbit」方案为基准，保留原有数据与交互。
+.home-page {
+  overflow-x: hidden;
+  color: #0b3b2e;
+  background: #f8f6e9;
+}
+
+.home-botanical-background {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  opacity: .34;
+  pointer-events: none;
+}
+
+.page-content {
+  padding-right: 30rpx;
+  padding-left: 30rpx;
+}
+
+.greeting-section {
+  min-height: 124rpx;
+  margin-bottom: 6rpx;
+  padding-top: 0;
+}
+
+.greeting-main { overflow: visible; }
+
+.greeting-pet {
+  width: 122rpx;
+  height: 112rpx;
+  flex-basis: 122rpx;
+  margin-right: 3rpx;
+}
+
+.greeting-pet__motion {
+  top: -7rpx;
+  left: -2rpx;
+  width: 124rpx;
+  height: 124rpx;
+}
+
+.greeting-pet__avatar {
+  width: 124rpx !important;
+  height: 124rpx !important;
+}
+
+.greeting-pet__ground {
+  right: 8rpx;
+  left: 6rpx;
+  background: rgb(39 88 67 / 12%);
+}
+
+.greeting-pet-reminder,
+.greeting-pet-reminder--default {
+  max-width: 520rpx;
+  min-height: 70rpx;
+  margin: 0 8rpx;
+  padding: 15rpx 26rpx;
+  border: 2rpx solid rgb(231 189 112 / 52%);
+  border-radius: 28rpx;
+  background: rgb(255 253 246 / 88%);
+  box-shadow: 0 12rpx 34rpx rgb(53 88 68 / 9%);
+
+  &::before {
+    top: 25rpx;
+    border-color: rgb(231 189 112 / 52%);
+    background: #fffdf6;
+  }
+}
+
+.greeting-pet-reminder__text {
+  color: #173f34;
+  font-size: 23rpx;
+  font-weight: 750;
+  line-height: 35rpx;
+}
+
+.greeting-mode-toggle,
+.greeting-mode-toggle--balanced {
+  min-width: 128rpx;
+  min-height: 66rpx;
+  gap: 10rpx;
+  margin-top: 0;
+  padding: 0 16rpx;
+  border: 0;
+  color: #fff8df;
+  background: linear-gradient(135deg, #2a674f 0%, #0c6547 100%);
+  box-shadow: 0 12rpx 28rpx rgb(17 84 61 / 22%);
+}
+
+.greeting-mode-toggle__leaf { color: #e7f5dd; font-size: 27rpx; }
+.greeting-mode-toggle__label { font-size: 25rpx; font-weight: 800; }
+.greeting-mode-toggle__switch { margin-top: -5rpx; color: #dbe9db; font-size: 26rpx; }
+
+.home-layout-toolbar {
+  min-height: 42rpx;
+  margin: 0 2rpx -8rpx;
+  color: #77877f;
+  font-size: 21rpx;
+}
+
+.home-layout-toolbar__edit {
+  padding: 7rpx 2rpx 7rpx 18rpx;
+  color: #526c60;
+  font-weight: 650;
+}
+
+.date-selector-section { margin: 0 0 20rpx; }
+
+.date-calendar-toolbar {
+  min-height: 74rpx;
+  margin-bottom: 5rpx;
+}
+
+.date-selector-section:not(.is-calendar-expanded) .date-calendar-toolbar { padding: 0 6rpx; }
+
+.date-calendar-title {
+  gap: 13rpx;
+  padding: 4rpx 0;
+  color: #0a3b2d;
+}
+
+.date-calendar-title__date {
+  font-size: 43rpx;
+  font-weight: 900;
+  letter-spacing: -2rpx;
+  line-height: 58rpx;
+}
+
+.date-calendar-title__weekday {
+  color: #64746d;
+  font-size: 25rpx;
+  font-weight: 700;
+  line-height: 54rpx;
+}
+
+.date-week-shell {
+  display: flex;
+  align-items: center;
+  gap: 3rpx;
+}
+
+.date-week-arrow {
+  display: flex;
+  width: 48rpx;
+  height: 48rpx;
+  flex: 0 0 48rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #7a8b83;
+  background: rgb(255 255 255 / 70%);
+  box-shadow: 0 7rpx 18rpx rgb(50 76 64 / 8%);
+  font-size: 36rpx;
+
+  &.is-disabled { opacity: .28; pointer-events: none; }
+}
+
+.date-list {
+  min-width: 0;
+  flex: 1;
+}
+
+.date-item {
+  width: 70rpx;
+  height: 108rpx;
+  padding: 10rpx 0 8rpx;
+  border-radius: 35rpx;
+
+  .date-day-name { color: #687870; font-size: 20rpx; }
+
+  .date-day-circle {
+    width: 48rpx;
+    height: 48rpx;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .date-day-circle.is-empty,
+  .date-day-circle.is-recorded,
+  .date-day-circle.is-over {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    .date-num-text { color: #64756c; }
+  }
+
+  .date-day-circle.is-over .date-num-text { color: #c7746e; }
+
+  &.is-selected {
+    background: linear-gradient(180deg, #2f865f 0%, #12563f 100%);
+    border-color: transparent;
+    box-shadow: 0 12rpx 26rpx rgb(16 91 63 / 23%);
+
+    &::after {
+      position: absolute;
+      bottom: 8rpx;
+      width: 7rpx;
+      height: 7rpx;
+      border-radius: 50%;
+      background: #fff9d7;
+      content: '';
+    }
+  }
+
+  &.is-selected .date-day-circle .date-num-text { color: #fff; }
+}
+
+.date-num-text { font-size: 24rpx; line-height: 32rpx; }
+
+.home-experience-stage { min-height: 380rpx; }
+
+.wellness-overview-card {
+  position: relative;
+  min-height: 350rpx;
+  margin: 0 0 18rpx;
+  overflow: visible;
+  padding: 26rpx 24rpx 20rpx;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.wellness-overview-main {
+  position: relative;
+  z-index: 1;
+  gap: 28rpx;
+  min-height: 280rpx;
+}
+
+.wellness-orbit-decoration {
+  position: absolute;
+  z-index: 0;
+  top: -36rpx;
+  left: -32rpx;
+  width: calc(100% + 64rpx);
+  height: 404rpx;
+  pointer-events: none;
+}
+
+.wellness-calorie-gauge {
+  width: 290rpx;
+  height: 290rpx;
+  flex-basis: 290rpx;
+  background: conic-gradient(from 225deg, #18875d 0 var(--wellness-progress), rgb(201 220 204 / 78%) var(--wellness-progress) 75%, transparent 75% 100%);
+  filter: drop-shadow(0 14rpx 22rpx rgb(31 113 77 / 10%));
+
+  &::after {
+    inset: 20rpx;
+    background: rgb(255 254 247 / 88%);
+    box-shadow: inset 0 0 28rpx rgb(255 255 255 / 64%);
+  }
+}
+
+.wellness-calorie-gauge__center { inset: 34rpx 18rpx 14rpx; }
+.wellness-calorie-gauge__label { color: #758078; font-size: 25rpx; font-weight: 650; }
+.wellness-calorie-gauge__value { color: #073d2f; font-size: 74rpx; font-weight: 900; line-height: 82rpx; letter-spacing: -3rpx; }
+.wellness-calorie-gauge__unit { color: #173f34; font-size: 25rpx; font-weight: 700; }
+.wellness-calorie-gauge__leaf { color: #70a653; font-size: 31rpx; }
+
+.wellness-overview-detail {
+  position: relative;
+  z-index: 1;
+  padding-top: 8rpx;
+}
+
+.wellness-overview-summary-row {
+  position: absolute;
+  top: -20rpx;
+  right: 0;
+  justify-content: flex-end;
+}
+
+.wellness-intake-summary,
+.wellness-total-progress { display: none; }
+
+.wellness-target-edit {
+  padding: 7rpx 13rpx;
+  border-color: rgb(40 104 76 / 14%);
+  color: #34664f;
+  background: rgb(249 251 238 / 76%);
+}
+
+.wellness-macros {
+  display: flex;
+  flex-direction: column;
+  gap: 22rpx;
+  margin-top: 28rpx;
+}
+
+.wellness-macro {
+  display: grid;
+  grid-template-columns: 94rpx minmax(0, 1fr);
+  column-gap: 8rpx;
+  align-items: center;
+}
+
+.wellness-macro__title {
+  grid-column: 1;
+  grid-row: 1;
+  color: #173f34;
+  font-size: 23rpx;
+  font-weight: 800;
+}
+
+.wellness-macro__icon { color: #0e5b42; font-size: 25rpx; }
+
+.wellness-macro__numbers {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.wellness-macro__current { color: #33765a; font-size: 22rpx; font-weight: 850; }
+.wellness-macro__target { display: inline; margin-left: 2rpx; color: #7a8780; font-size: 19rpx; }
+
+.wellness-macro__track {
+  grid-column: 2;
+  grid-row: 2;
+  height: 11rpx;
+  margin-top: 8rpx;
+  background: rgb(170 182 173 / 38%);
+}
+
+.wellness-macro:nth-child(2) .wellness-macro__fill { background: linear-gradient(90deg, #efb833, #ffd765); }
+.wellness-macro:nth-child(3) .wellness-macro__fill { background: linear-gradient(90deg, #337f5c, #85b56f); }
+
+.wellness-nutrition-shell {
+  position: relative;
+  z-index: 2;
+  margin-top: -20rpx;
+}
+
+.wellness-nutrition-shell .nutrition-expand-main { padding: 0 6rpx; }
+.wellness-nutrition-shell .nutrition-expand-title { color: #4f7563; font-size: 19rpx; }
+.wellness-nutrition-shell .nutrition-expand-affordance { margin-left: auto; color: #55806c; font-size: 19rpx; }
+
+.wellness-nutrition-expanded-body {
+  padding: 22rpx;
+  border: 1rpx solid rgb(255 255 255 / 80%);
+  border-radius: 28rpx;
+  background: rgb(255 254 247 / 95%);
+}
+
+.home-quick-heading {
+  display: block;
+  margin: 2rpx 4rpx 16rpx;
+  color: #0b3b2e;
+  font-size: 29rpx;
+  font-weight: 800;
+  line-height: 40rpx;
+}
+
+.body-status-scroll {
+  margin: 2rpx 0 24rpx;
+  overflow: hidden;
+}
+
+.body-status-section { gap: 14rpx; }
+
+.body-status-card {
+  display: grid;
+  grid-template-columns: 58rpx minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 12rpx;
+  align-content: center;
+  min-height: 112rpx;
+  padding: 14rpx;
+  border: 1rpx solid rgb(255 255 255 / 76%);
+  border-radius: 26rpx;
+  background: rgb(255 255 255 / 78%);
+  box-shadow: 0 13rpx 30rpx rgb(49 82 67 / 9%);
+}
+
+.body-status-section--count-4 {
+  width: 858rpx;
+  .body-status-card { width: 202rpx; flex-basis: 202rpx; }
+}
+
+.body-status-section--count-1 {
+  .body-status-card { grid-template-columns: 100rpx minmax(0, 1fr); min-height: 174rpx; padding: 22rpx 30rpx; column-gap: 24rpx; }
+  .body-status-title { grid-row: 1; font-size: 25rpx; }
+  .body-status-content { grid-row: 2; }
+  .body-status-value { font-size: 46rpx; line-height: 58rpx; }
+  .body-status-unit { font-size: 24rpx; }
+  .body-status-title-wrap .iconfont,
+  .sleep-quick-card__icon { width: 100rpx; height: 100rpx; font-size: 44rpx !important; grid-row: 1 / 4; }
+  .water-single-progress { grid-column: 2; grid-row: 3; height: 12rpx; margin-top: 6rpx; overflow: hidden; border-radius: 999rpx; background: #dfe9ec; }
+  .water-single-progress__fill { height: 100%; border-radius: inherit; background: #44aaf0; }
+}
+
+.body-status-header,
+.body-status-title-wrap { display: contents; }
+.body-status-title { grid-column: 2; grid-row: 2; color: #5a6b63; font-size: 24rpx; line-height: 32rpx; }
+.body-status-title-wrap .iconfont,
+.sleep-quick-card__icon {
+  display: flex;
+  grid-column: 1;
+  grid-row: 1 / 3;
+  align-self: center;
+  width: 58rpx;
+  height: 58rpx;
+  margin: 0 !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #e4f6ea;
+}
+.water-card .body-status-title-wrap .iconfont { color: #339ce7 !important; background: #e5f5ff; }
+.weight-card .body-status-title-wrap .iconfont { color: #15956a !important; }
+.exercise-card .body-status-title-wrap .iconfont { color: #109864 !important; background: #e4f7e9; }
+.sleep-quick-card__icon { border: 0; color: #8160ba; background: #eee8ff; transform: none; font-size: 28rpx !important; }
+.body-status-content { min-width: 0; grid-column: 2; grid-row: 1; margin: 0; gap: 2rpx; white-space: nowrap; }
+.body-status-value { color: #0d3a2e; font-size: 29rpx; line-height: 40rpx; }
+.body-status-unit { margin: 0; font-size: 18rpx; }
+.body-status-change,
+.body-status-hint { display: none; }
+
+.home-meal-count { margin-left: 12rpx; font-size: 23rpx; font-weight: 700; color: #48715e; }
+.home-meal-strip { width: 100%; }
+.home-meal-strip__list { display: flex; min-width: 100%; }
+.home-meal-strip__item { display: flex; width: 50%; flex: 0 0 50%; min-width: 0; align-items: center; gap: 14rpx; padding: 8rpx 14rpx; box-sizing: border-box; }
+.home-meal-strip__item + .home-meal-strip__item { border-left: 1rpx solid #dfe7df; }
+.home-meal-strip__media { width: 84rpx; height: 84rpx; flex: 0 0 84rpx; }
+.home-meal-strip__image,
+.home-meal-strip__icon { display: flex; width: 84rpx; height: 84rpx; align-items: center; justify-content: center; border: 3rpx solid #fff; border-radius: 50%; box-sizing: border-box; }
+.home-meal-strip__copy { min-width: 0; }
+.home-meal-strip__label { display: block; color: #163e32; font-size: 24rpx; font-weight: 700; white-space: nowrap; }
+.home-meal-strip__time { display: block; color: #8d9991; font-size: 18rpx; line-height: 26rpx; }
+.home-meal-strip__check { display: flex; width: 30rpx; height: 30rpx; flex: 0 0 30rpx; align-items: center; justify-content: center; margin-left: auto; border: 2rpx solid #287956; border-radius: 50%; color: #287956; font-size: 22rpx; }
+.home-meal-strip__empty { display: flex; min-height: 76rpx; align-items: center; justify-content: space-between; color: #628070; font-size: 25rpx; }
+.home-meal-strip__skeleton { display: flex; gap: 18rpx; height: 100rpx; view { flex: 1; border-radius: 20rpx; background: #e8efe6; animation: sleep-shimmer 1.2s ease-in-out infinite alternate; } }
+
+.home-reward-hint-swiper {
+  margin: 0 0 22rpx;
+  border: 2rpx solid rgb(255 255 255 / 44%);
+  border-radius: 28rpx;
+  box-shadow: 0 13rpx 30rpx rgb(28 99 70 / 13%);
+}
+
+.home-supplement-module,
+.meals-section,
+.expiry-section,
+.weekly-recap-entry,
+.stats-entry-section {
+  border: 1rpx solid rgb(255 255 255 / 72%);
+  background: rgb(255 255 255 / 76%);
+  box-shadow: 0 14rpx 34rpx rgb(49 82 67 / 8%);
+  backdrop-filter: blur(16rpx);
+}
+
+.home-supplement-module {
+  margin: 0 0 22rpx;
+  padding: 8rpx 22rpx 18rpx;
+  border-radius: 28rpx;
+}
+
+.home-supplement-module .today-supplements-card { margin: 0; padding: 10rpx 0 0; border: 0; background: transparent; box-shadow: none; }
+.home-supplement-module .today-supplements-title { font-size: 26rpx; color: #174e39; }
+.expiry-empty { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; padding: 14rpx 0; }
+.expiry-empty-title { font-size: 24rpx; color: #7d8d82; font-weight: 500; }
+.expiry-empty-add { flex: 0 0 auto; padding: 10rpx 20rpx; border-radius: 999rpx; background: #e5f3e9; color: #287956; font-size: 23rpx; font-weight: 700; }
+.wellness-macro .wellness-macro__fill.is-over { background: $home-warning-red; }
+
+.meals-section,
+.expiry-section {
+  margin: 0 0 22rpx;
+  padding: 22rpx;
+  border-radius: 30rpx;
+  box-sizing: border-box;
+}
+
+.meals-title { color: #103d30; font-size: 28rpx; }
+.meals-title-icon { color: #16895e; font-size: 29rpx; }
+.section-header { margin-bottom: 14rpx; padding: 0 2rpx; }
+.view-all-arrow { color: #2c7658; font-size: 36rpx; }
+
+.meal-item,
+.expiry-item {
+  border: 0;
+  border-radius: 20rpx;
+  background: rgb(255 255 255 / 66%);
+  box-shadow: 0 5rpx 14rpx rgb(45 75 61 / 5%);
+}
+
+.weekly-recap-entry { margin: 0 0 22rpx; border-radius: 30rpx; }
+
+.stats-entry-section {
+  overflow: hidden;
+  margin-bottom: 24rpx;
+  border-radius: 30rpx;
+}
+
+.home-layout-density-compact {
+  .home-module { margin-bottom: -4rpx; }
+  .body-status-scroll,
+  .home-supplement-module,
+  .meals-section,
+  .expiry-section,
+  .weekly-recap-entry { margin-bottom: 15rpx; }
+  .meals-section,
+  .expiry-section { padding: 18rpx; }
+  .meal-item,
+  .expiry-item { padding: 12rpx; }
+}
+
+.home-layout-density-comfortable {
+  .home-module { margin-bottom: 9rpx; }
+  .body-status-card { padding: 22rpx; }
+  .meals-section,
+  .expiry-section { padding: 28rpx; }
+}
+
+.bottom-spacer { height: 120rpx; }
+
+.home-page--dark {
+  background: #14251d;
+  .home-botanical-background { opacity: .08; }
+  .home-quick-heading,
+  .home-meal-strip__label,
+  .home-meal-count,
+  .body-status-value { color: #e8f3e9; }
+  .wellness-overview-card { background: transparent; }
+  .wellness-orbit-decoration { opacity: .35; }
+  .wellness-nutrition-expanded-body { background: #223a2d; border-color: #365141; }
+  .greeting-pet-reminder { background: #253a2d; border-color: #547457; }
+  .greeting-pet-reminder::before { background: #253a2d; border-color: #547457; }
+  .greeting-pet-reminder__text,
+  .date-calendar-title__date { color: #e7efde; }
+  .date-calendar-title__weekday { color: #a6b8ad; }
+  .date-week-arrow { background: #263d30; color: #a6b8ad; }
+}
+
+.home-page .date-selector-section:not(.is-calendar-expanded) { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.home-page .date-item .date-day-circle { background: transparent; box-shadow: none; }
+.home-page .date-item .date-day-circle.is-recorded,
+.home-page .date-item .date-day-circle.is-empty,
+.home-page .date-item .date-day-circle.is-over { border: 0; background: transparent; box-shadow: none; }
+.home-page .date-item:not(.is-selected) .date-day-circle .date-num-text { color: #64756c; }
+.home-page .date-item:not(.is-selected) .date-day-circle.is-over .date-num-text { color: #c7746e; }
+.home-page--dark .date-item:not(.is-selected) .date-day-circle .date-num-text { color: #a9bbaf; }
+
+// 覆盖全局旧深色主题的实色日期圆，仅限首页，其他 Tab 继续原样。
+.fl-d .home-page .date-item:not(.is-selected) .date-day-circle.is-recorded,
+.fl-d .home-page .date-item:not(.is-selected) .date-day-circle.is-over,
+.fl-d .home-page .date-item:not(.is-selected) .date-day-circle.is-empty { background: transparent !important; border-color: transparent !important; }
+.fl-d .home-page .date-item:not(.is-selected) .date-day-circle.is-recorded .date-num-text { color: #a9bbaf !important; }
+.fl-d .home-page .date-item:not(.is-selected) .date-day-circle.is-over .date-num-text { color: #efaaa4 !important; }
+.home-page--dark {
+  .wellness-macro__title,
+  .wellness-calorie-gauge__unit { color: #dce9df !important; }
+  .wellness-macro__icon,
+  .wellness-macro__current { color: #91cba8 !important; }
+  .wellness-macro__current.is-over { color: $home-warning-red !important; }
+  .wellness-calorie-gauge::after { background: #1c2f25; box-shadow: none; }
+  .wellness-calorie-gauge__label,
+  .wellness-macro__target { color: #aec0b3 !important; }
+  .home-layout-toolbar__edit { color: #aec0b3; }
+}

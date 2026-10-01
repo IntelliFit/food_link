@@ -14,6 +14,7 @@ import {
   showUnifiedApiError,
   type HealthProfileUpdateRequest,
   type OnboardingStatus,
+  type SchoolItem,
 } from '../../../utils/api'
 import { processChooseAvatarSelection, ensureAvatarUploadedForSave, getInitialRegistrationAvatar } from '../../../utils/new-user-profile-form'
 import { shouldShowProfileFormFromApiUser } from '../../../utils/new-user-onboarding-scenarios'
@@ -28,6 +29,7 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { formatBodyMetric } from '../../../utils/number-format'
 import CustomNavBar from '../../../components/CustomNavBar'
+import SchoolPicker from '../../../components/SchoolPicker'
 
 import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
@@ -132,6 +134,7 @@ function HealthProfilePage() {
   const [saving, setSaving] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [profileStepRequired, setProfileStepRequired] = useState(true)
+  const [studentStepRequired, setStudentStepRequired] = useState(true)
 
   const [gender, setGender] = useState<string>('')
   const [birthday, setBirthday] = useState<string>('')
@@ -147,6 +150,9 @@ function HealthProfilePage() {
   const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
   const [avatarUrl, setAvatarUrl] = useState<string>('')
   const [nickname, setNickname] = useState<string>('')
+  const [isStudent, setIsStudent] = useState<boolean | null>(null)
+  const [selectedSchool, setSelectedSchool] = useState<SchoolItem | null>(null)
+  const [schoolPickerOpen, setSchoolPickerOpen] = useState(false)
   const [onboardingStatus, setOnboardingStatus] = useState<OnboardingStatus>('pending')
   const initialIdentityRef = useRef({ avatar: '', nickname: '' })
   const profileFormActionRef = useRef<'next' | 'skip'>('next')
@@ -164,7 +170,7 @@ function HealthProfilePage() {
   const [editingAllergy, setEditingAllergy] = useState<string>('') // 正在编辑的自定义过敏源
 
   const [healthNotes, setHealthNotes] = useState<string>('') // 用户自己文字补充自己身体的特殊情况和问题
-  const firstVisibleStep = profileStepRequired ? 0 : 1
+  const firstVisibleStep = profileStepRequired || studentStepRequired ? 0 : 1
   const visibleStepCount = TOTAL_STEPS - firstVisibleStep
   const visibleCurrentStep = Math.max(0, currentStep - firstVisibleStep)
 
@@ -223,6 +229,15 @@ function HealthProfilePage() {
       if (profile.height != null) setHeight(formatBodyMetric(profile.height))
       if (profile.weight != null) setWeight(formatBodyMetric(profile.weight))
       const hc = profile.health_condition
+      setStudentStepRequired(typeof hc?.is_student !== 'boolean')
+      if (typeof hc?.is_student === 'boolean') setIsStudent(hc.is_student)
+      if (hc?.is_student === true && hc.campus_dining_preference?.school_id) {
+        setSelectedSchool({
+          id: hc.campus_dining_preference.school_id,
+          name: hc.campus_dining_preference.school_name || '已选学校',
+          location_type: 'university',
+        })
+      }
       if (profile.diet_goal) setDietGoal(profile.diet_goal)
       if (typeof hc?.daily_life_activity_level === 'string' && hc.daily_life_activity_level.trim()) {
         setActivityLevel(hc.daily_life_activity_level)
@@ -258,7 +273,8 @@ function HealthProfilePage() {
       const savedStep = Number.isInteger(draftStep) && draftStep >= 0 && draftStep < TOTAL_STEPS
         ? draftStep
         : 0
-      setCurrentStep(!requiresProfileStep && savedStep === 0 ? 1 : savedStep)
+      const requiresIdentityStep = requiresProfileStep || typeof profile?.health_condition?.is_student !== 'boolean'
+      setCurrentStep(!requiresIdentityStep && savedStep === 0 ? 1 : savedStep)
       setLoading(false)
     }
   }
@@ -288,6 +304,12 @@ function HealthProfilePage() {
     routine_type: formatRoutineHours(routineHours) || undefined,
     routine_sleep_hour: routineHours.sleepHour,
     routine_wake_hour: routineHours.wakeHour,
+    is_student: isStudent ?? undefined,
+    campus_dining_preference: isStudent === true && selectedSchool
+      ? { school_id: selectedSchool.id }
+      : isStudent === false
+        ? { school_id: '' }
+        : undefined,
   })
 
   const saveDraft = async (nextStep: number) => {
@@ -303,7 +325,12 @@ function HealthProfilePage() {
       } else if (currentStep === 4 && weight) {
         Taro.showToast({ title: '请输入 30～200 之间的体重 (kg)', icon: 'none' })
       } else if (currentStep === 0) {
-        Taro.showToast({ title: '请上传头像并填写昵称', icon: 'none' })
+        const title = isStudent === null
+          ? '请选择是否为在校学生'
+          : isStudent && !selectedSchool
+            ? '请选择你所在的学校'
+            : '请上传头像并填写昵称'
+        Taro.showToast({ title, icon: 'none' })
       } else {
         Taro.showToast({ title: '请先完成当前题目', icon: 'none' })
       }
@@ -587,7 +614,15 @@ function HealthProfilePage() {
           nickname: normalizedNickname,
         })
       }
-      await updateHealthProfile({ onboarding_status: 'skipped' })
+      await updateHealthProfile({
+        onboarding_status: 'skipped',
+        is_student: isStudent ?? undefined,
+        campus_dining_preference: isStudent === true && selectedSchool
+          ? { school_id: selectedSchool.id }
+          : isStudent === false
+            ? { school_id: '' }
+            : undefined,
+      })
       setOnboardingStatus('skipped')
       Taro.showToast({ title: identityChanged ? '个人资料已保存，可稍后补充健康档案' : '可稍后在我的中填写', icon: 'none' })
       setTimeout(() => {
@@ -617,7 +652,7 @@ function HealthProfilePage() {
   const canProceed = (profileNickname = nickname) => {
     switch (currentStep) {
       case 0:
-        return !!avatarUrl && !!profileNickname.trim()
+        return !!avatarUrl && !!profileNickname.trim() && isStudent !== null && (!isStudent || !!selectedSchool)
       case 1:
         return !!gender
       case 2:
@@ -664,7 +699,13 @@ function HealthProfilePage() {
       routine_type: finalRoutine || undefined,
       routine_sleep_hour: routineHours.sleepHour,
       routine_wake_hour: routineHours.wakeHour,
-      report_image_url: reportImageUrls[0] || reportImageUrl || undefined
+      report_image_url: reportImageUrls[0] || reportImageUrl || undefined,
+      is_student: isStudent ?? undefined,
+      campus_dining_preference: isStudent === true && selectedSchool
+        ? { school_id: selectedSchool.id }
+        : isStudent === false
+          ? { school_id: '' }
+          : undefined,
     }
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
       Taro.showToast({ title: '请完成前几项必填', icon: 'none' })
@@ -811,7 +852,7 @@ function HealthProfilePage() {
           {/* Step 0: 头像昵称 */}
           <LazyProfileStep active={currentStep === 0} className='profile-step-card'>
             <Text className='step-card-title'>完善资料</Text>
-            <Text className='step-card-subtitle'>设置头像和昵称，让朋友更容易认出你。</Text>
+            <Text className='step-card-subtitle'>补充基本资料，我们也会据此推荐更合适的用餐地点。</Text>
             <Form className='profile-native-form' onSubmit={handleProfileFormSubmit}>
               <View className='profile-form-body'>
               <View className='profile-avatar-choose-wrapper'>
@@ -845,6 +886,41 @@ function HealthProfilePage() {
                   onConfirm={(event) => handleNicknameInput(event.detail.value)}
                 />
               </View>
+              <View className='student-identity'>
+                <View className='student-identity__heading'>
+                  <Text className='student-identity__label'>你是在校学生吗？</Text>
+                  <Text className='student-identity__hint'>学生可优先获得本校食堂推荐</Text>
+                </View>
+                <View className='student-identity__choices'>
+                  <View
+                    className={`student-identity__choice${isStudent === true ? ' is-active' : ''}`}
+                    onClick={() => setIsStudent(true)}
+                  >
+                    <Text>是学生</Text>
+                  </View>
+                  <View
+                    className={`student-identity__choice${isStudent === false ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setIsStudent(false)
+                      setSelectedSchool(null)
+                      setSchoolPickerOpen(false)
+                    }}
+                  >
+                    <Text>不是学生</Text>
+                  </View>
+                </View>
+                {isStudent === true && (
+                  <View className='student-identity__school' onClick={() => setSchoolPickerOpen(true)}>
+                    <View className='student-identity__school-copy'>
+                      <Text className='student-identity__school-label'>所在学校</Text>
+                      <Text className={`student-identity__school-name${selectedSchool ? ' is-selected' : ''}`}>
+                        {selectedSchool?.name || '请选择学校'}
+                      </Text>
+                    </View>
+                    <Text className='iconfont icon-right student-identity__school-arrow' />
+                  </View>
+                )}
+              </View>
               </View>
               <View className='card-footer card-footer-single profile-step-footer'>
               <Button
@@ -852,9 +928,9 @@ function HealthProfilePage() {
                 color='primary'
                 shape='round'
                 formType='submit'
-                className={`card-next-btn ${avatarUrl ? 'ready' : ''}`}
+                className={`card-next-btn ${canProceed() ? 'ready' : ''}`}
                 onClick={() => { profileFormActionRef.current = 'next' }}
-                disabled={!avatarUrl}
+                disabled={!avatarUrl || !nickname.trim() || isStudent === null || (isStudent && !selectedSchool)}
               >
                 下一步 <Text className='iconfont icon-right' />
               </Button>
@@ -893,8 +969,8 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer'>
               <View
-                className={`card-prev-btn ${profileStepRequired ? '' : 'card-prev-btn--hidden'}`}
-                onClick={profileStepRequired ? goPrev : undefined}
+                className={`card-prev-btn ${firstVisibleStep === 0 ? '' : 'card-prev-btn--hidden'}`}
+                onClick={firstVisibleStep === 0 ? goPrev : undefined}
               >
                 <Text className='card-prev-arrow iconfont icon-left' />上一步
               </View>
@@ -1325,6 +1401,15 @@ function HealthProfilePage() {
           </LazyProfileStep>
         </View>
       </View>
+      <SchoolPicker
+        visible={schoolPickerOpen}
+        value={selectedSchool?.id}
+        onSelect={(school) => {
+          setSelectedSchool(school)
+          setSchoolPickerOpen(false)
+        }}
+        onCancel={() => setSchoolPickerOpen(false)}
+      />
       {currentStep > 0 && currentStep < TOTAL_STEPS - 1 && (
         <View className='health-profile-save-exit' onClick={handleSaveAndExit}>
           保存并稍后继续

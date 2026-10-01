@@ -1,13 +1,13 @@
 import Taro from '@tarojs/taro'
 
 export const HOME_MODULES = [
-  { id: 'nextMeal', label: '下一餐建议', description: '查看具体菜品与份量，继续调整方案' },
   { id: 'diet', label: '饮食与营养', description: '当日摄入、目标和营养概览' },
+  { id: 'nextMeal', label: '下一餐建议', description: '查看具体菜品与份量，继续调整方案' },
+  { id: 'body', label: '快捷记录', description: '体重、喝水、运动和睡眠集中显示' },
   { id: 'supplements', label: '今日补剂', description: '补剂计划和快捷记录' },
-  { id: 'rewards', label: '活动横幅', description: '积分任务、校园活动等首页横幅' },
-  { id: 'body', label: '快捷数据卡', description: '体重、喝水、运动和睡眠集中显示' },
-  { id: 'meals', label: '今日餐食', description: '已记录的餐食和营养明细' },
   { id: 'expiry', label: '食物保质期', description: '查看临期食物和保质期' },
+  { id: 'rewards', label: '活动横幅', description: '积分任务、校园活动等首页横幅' },
+  { id: 'meals', label: '今日餐食', description: '已记录的餐食和营养明细' },
   { id: 'recap', label: '上周回顾', description: '回看真实记录，留下一周的小结' },
 ] as const
 
@@ -20,20 +20,23 @@ export const HOME_QUICK_STATS = [
 
 export type HomeModuleId = typeof HOME_MODULES[number]['id']
 export type HomeQuickStatId = typeof HOME_QUICK_STATS[number]['id']
-export type HomeModuleLayout = { order: HomeModuleId[]; hidden: HomeModuleId[]; quickStats: HomeQuickStatId[] }
+export type HomeLayoutDensity = 'smart' | 'comfortable' | 'compact'
+export type HomeModuleLayout = { order: HomeModuleId[]; hidden: HomeModuleId[]; quickStats: HomeQuickStatId[]; density: HomeLayoutDensity }
 export type HomeModuleLocks = Partial<Record<HomeModuleId, string>>
 const ids: HomeModuleId[] = HOME_MODULES.map(item => item.id)
+const legacyDefaultOrder: HomeModuleId[] = ['nextMeal', 'diet', 'supplements', 'rewards', 'body', 'meals', 'expiry', 'recap']
 const quickStatIds: HomeQuickStatId[] = HOME_QUICK_STATS.map(item => item.id)
 const defaultQuickStats: HomeQuickStatId[] = ['weight', 'water', 'sleep']
-export const HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v2:'
+export const HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v3:'
+const LEGACY_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v2:'
 
 export function defaultHomeModuleLayout(): HomeModuleLayout {
-  return { order: [...ids], hidden: ['supplements'], quickStats: [...defaultQuickStats] }
+  return { order: [...ids], hidden: ['supplements'], quickStats: [...defaultQuickStats], density: 'smart' }
 }
 
 export function normalizeHomeModuleLayout(value: unknown): HomeModuleLayout {
   if (!value || typeof value !== 'object') return defaultHomeModuleLayout()
-  const raw = value as { order?: unknown; hidden?: unknown; quickStats?: unknown }
+  const raw = value as { order?: unknown; hidden?: unknown; quickStats?: unknown; density?: unknown }
   const validModules = (list: unknown): HomeModuleId[] => Array.isArray(list)
     ? [...new Set(list.filter((id): id is HomeModuleId => ids.includes(id)))] : []
   const validQuickStats = (list: unknown): HomeQuickStatId[] => Array.isArray(list)
@@ -66,6 +69,7 @@ export function normalizeHomeModuleLayout(value: unknown): HomeModuleLayout {
     order: [...order, ...ids.filter(id => !order.includes(id))],
     hidden: validModules(raw.hidden).filter(id => id !== 'diet' && id !== 'body'),
     quickStats,
+    density: raw.density === 'comfortable' || raw.density === 'compact' ? raw.density : 'smart',
   }
 }
 
@@ -107,7 +111,21 @@ export function homeLayoutOwner(): string {
 }
 
 export function readHomeModuleLayout(): HomeModuleLayout {
-  try { return normalizeHomeModuleLayout(Taro.getStorageSync(HOME_MODULE_LAYOUT_PREFIX + homeLayoutOwner())) }
+  try {
+    const owner = homeLayoutOwner()
+    const current = Taro.getStorageSync(HOME_MODULE_LAYOUT_PREFIX + owner)
+    if (current) return normalizeHomeModuleLayout(current)
+    const legacy = Taro.getStorageSync(LEGACY_HOME_MODULE_LAYOUT_PREFIX + owner)
+    const migrated = normalizeHomeModuleLayout(legacy)
+    const legacyOrder = legacy && typeof legacy === 'object' && Array.isArray((legacy as { order?: unknown }).order)
+      ? (legacy as { order: unknown[] }).order
+      : []
+    if (legacyOrder.length === legacyDefaultOrder.length && legacyDefaultOrder.every((id, index) => legacyOrder[index] === id)) {
+      migrated.order = [...ids]
+    }
+    Taro.setStorageSync(HOME_MODULE_LAYOUT_PREFIX + owner, migrated)
+    return migrated
+  }
   catch { return defaultHomeModuleLayout() }
 }
 
