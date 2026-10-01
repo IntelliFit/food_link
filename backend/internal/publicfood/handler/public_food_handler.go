@@ -206,13 +206,13 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 	if filter.HasLocation != nil {
 		requestAttrs = append(requestAttrs, slog.Bool("has_location", *filter.HasLocation))
 	}
-	logger.Info(ctx, "收到公共食物库查询请求", requestAttrs...)
+	logger.Info(ctx, "收到美食图谱查询请求", requestAttrs...)
 	items, err := h.svc.List(ctx, userID, filter)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	logger.Info(ctx, "公共食物库查询完成", append(requestAttrs, slog.Int("item_count", len(items)))...)
+	logger.Info(ctx, "美食图谱查询完成", append(requestAttrs, slog.Int("item_count", len(items)))...)
 	response.Success(c, gin.H{"list": items})
 }
 

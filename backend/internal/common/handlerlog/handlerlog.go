@@ -53,7 +53,7 @@ func moduleLogLabel(module string) string {
 	case "pet":
 		return "成长伙伴"
 	case "public_food":
-		return "公共食物库"
+		return "美食图谱"
 	case "recipe":
 		return "食谱"
 	case "school":
