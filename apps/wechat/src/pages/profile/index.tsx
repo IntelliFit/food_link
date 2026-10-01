@@ -520,6 +520,7 @@ function ProfilePage() {
           Taro.removeStorageSync('showRecordMenuModal')
           Taro.removeStorageSync('home_pet_companion_collapsed_v1')
           Taro.removeStorageSync('home_pet_companion_float_position_v1')
+          Taro.getStorageInfoSync().keys.filter(key => key.startsWith('pet_studio_dressing_v1:')).forEach(key => Taro.removeStorageSync(key))
           Taro.removeStorageSync('home_pet_meal_prompt_seen_v1')
 
           // 识别记录 / 结果页相关缓存

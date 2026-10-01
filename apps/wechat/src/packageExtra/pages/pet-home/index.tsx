@@ -17,6 +17,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { PetAvatar } from '../../../components/PetAvatar'
+import { PetIdentityAvatar } from '../../../components/PetIdentityAvatar'
 import {
   chooseImageWithPrivacy,
   isPrivacyAuthorizeError,
@@ -24,6 +25,7 @@ import {
 } from '../../../utils/weapp-privacy'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../../utils/pet-events'
 import { openPetChat } from '../../../utils/pet-navigation'
+import { setHomeCompanionChoice } from '../../../utils/pet-companion-preference'
 import {
   PET_DAILY_PLAY_GOAL,
   readPetDailyPlayCount,
@@ -144,6 +146,7 @@ function PetHomePage() {
     try {
       setSelectingCandidateId(candidate.id)
       const result = await selectPetAppearance(candidate.id)
+      setHomeCompanionChoice('follow')
       syncPetProfile(result.pet)
       Taro.showToast({ title: '宠物已选择', icon: 'success' })
     } catch (error) {
@@ -234,6 +237,7 @@ function PetHomePage() {
       const filePath = result.tempFilePaths?.[0]
       if (!filePath) return
       const customized = await customizePetPixelAvatar(filePath, petName)
+      setHomeCompanionChoice('follow')
       syncPetProfile(customized.pet)
       setPixelAvatarPreview(customized.pet)
     } catch (error) {
@@ -291,7 +295,7 @@ function PetHomePage() {
         <View className='pet-home-hero'>
           <View className='pet-home-hero-main'>
             <View className='pet-home-hero-stage'>
-              <PetAvatar
+              <PetIdentityAvatar
                 pet={petSummary?.pet}
                 size='large'
                 mood={petSummary?.status?.mood}
@@ -355,6 +359,10 @@ function PetHomePage() {
           </View>
         </View>
 
+        <View id='pet-studio-entry' className='pet-home-card pet-home-action-item' role='button' onClick={() => Taro.navigateTo({ url: '/packagePetStudio/pages/index/index' })}>
+          <View><Text className='pet-home-action-title'>温暖的宠物时光</Text><Text className='pet-home-action-desc'>衣橱试穿、动作小剧场与游戏练习</Text></View>
+          <Text className='iconfont icon-right pet-home-action-arrow' />
+        </View>
         <View className='pet-home-card pet-home-playground'>
           <View className='pet-home-card-head'>
             <View>

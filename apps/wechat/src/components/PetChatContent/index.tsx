@@ -22,7 +22,7 @@ import { withAuth } from '../../utils/withAuth'
 import { useAppColorScheme } from '../AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../utils/theme-navigation-bar'
 import { openPetSettings } from '../../utils/pet-navigation'
-import { PetAvatar } from '../PetAvatar'
+import { PetIdentityAvatar } from '../PetIdentityAvatar'
 import { PetMarkdown } from './pet-markdown'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import './index.scss'
@@ -593,7 +593,7 @@ export function PetChatContent({ embedded = false, active = true, starterQuestio
     <View className={`pet-chat-page ${embedded ? 'pet-chat-page--embedded' : ''} ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>
       <View className='pet-chat-topbar'>
         <View className='pet-chat-identity' onClick={openPetSettings}>
-          <PetAvatar pet={petSummary?.pet} size={72} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
+          <PetIdentityAvatar pet={petSummary?.pet} size={72} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
           <View className='pet-chat-identity-copy'>
             <Text className='pet-chat-identity-name'>{petName}</Text>
           </View>

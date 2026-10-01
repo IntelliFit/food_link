@@ -555,3 +555,40 @@ final result: blocked
 
 ## 2026-09-28 原画视频纠正
 - V9叠加动效被用户否定，改为即梦图生视频。当前等用户登录；真实视频尚未生成。播放器/静态回退准备不代表动态效果完成。见 docs/design/balanced-themes-scene-video-20260928.md。
+
+---
+
+# 温暖的宠物时光 — 2026-10-01
+
+- Source visual truth: docs/design/pet-studio-20261001/reference.png (1536 × 1024 px, three-screen concept board).
+- Implementation route: /packagePetStudio/pages/index/index, native WeChat developer tools port9423, logged-in account, wardrobe default state.
+- Intended mobile viewport: approximately390 × 844 CSSpx; actual screenshot dimensions/density could not be measured.
+- Implementation screenshot: unavailable. App.captureScreenshot returned timeout waiting for automator response. Project open/reconnect and CLI auto retry did not yield a valid capture.
+- Density normalization/full-view comparison/focused comparison: blocked; source and implementation cannot be placed together without a valid current capture.
+
+## Findings
+
+- [P1] Visual evidence missing: fonts, spacing, colors, image positioning/quality and text hierarchy cannot be accepted from source code or computed paths alone. Native navigation and image-source checks do not substitute for visual comparison.
+- Functionality deliberately limited to wardrobe preview, per-account local dressing, existing action frames and20-second rhythm practice. Real PK, clothing purchase, game currency settlement and new-body animations are unavailable and explicitly shown as such.
+- Existing approved original sprite is reused; unsupported bodies cannot equip the scarf and unavailable animations do not borrow another pet.
+
+## Runtime evidence
+
+Native check returned reLaunch:ok, route packagePetStudio/pages/index/index, characters5, original companion-fbd87f73-v1.png and packagePetStudio/assets/warm-room-v1.jpg. Screenshot then timed out. Subsequent interaction script/reconnect timed out before returning complete results. Do not claim scarf saving/action playback/gameplay passed native acceptance.
+
+## Required fidelity surfaces
+
+- Fonts and typography: not visually verified.
+- Spacing and layout rhythm: not visually verified.
+- Colors and tokens/contrast: not visually verified.
+- Image asset fidelity: original character sources verified; scarf anchor, scale and background crop not visually verified.
+- Copy/content: implemented explicit preview and unavailable states, requires screenshot review.
+
+## Comparison history and next checks
+
+1. Approved warm concept selected; copied original program character assets and generated separate background/scarf assets.
+2. New route compiled in existing developer watch workflow; native route/image paths queried successfully.
+3. Capture and follow-up interaction attempts failed. No historical screenshot was used.
+4. Obtain current wardrobe/actions/arena captures, compare each against the matching source screen, fix P0/P1/P2 differences, and re-capture before visual approval.
+
+final result: blocked

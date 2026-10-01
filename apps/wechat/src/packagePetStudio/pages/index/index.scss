@@ -1,0 +1,66 @@
+.pet-studio-page {
+  min-height: 100vh; padding: 34rpx 26rpx 50rpx; box-sizing: border-box;
+  background: #f6ead7; color: #493b2b; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  button { padding: 0; margin: 0; font-size: 26rpx; line-height: 1.5; background: none; color: #493b2b; border-radius: 22rpx; }
+  button::after { border: 0; }
+  button[disabled] { opacity: .58; color: #625849; }
+  text { color: inherit; }
+  .studio-heading { display: flex; flex-direction: column; gap: 12rpx; padding: 0 10rpx 28rpx; }
+  .studio-eyebrow { font-size: 23rpx; color: #7d6b52; letter-spacing: 3rpx; }
+  .studio-title { font-size: 43rpx; font-family: 'Songti SC', SimSun, serif; font-weight: 600; }
+  .studio-caption { font-size: 25rpx; color: #79654a; }
+  .studio-tabs { display: flex; padding: 8rpx; background: #e9dcc5; border-radius: 26rpx; gap: 6rpx; margin-bottom: 24rpx; }
+  .studio-tabs button { flex: 1; padding: 18rpx 0; }
+  .studio-tabs button.is-selected { background: #fffbf2; box-shadow: 0 4rpx 12rpx #c4ad8e40; font-weight: 600; }
+  .studio-panel { border: 2rpx solid #ddc6a4; border-radius: 32rpx; overflow: hidden; background: #fff9ed; box-shadow: 0 12rpx 28rpx #7b5b3320; }
+  .studio-panel-heading { padding: 22rpx 24rpx 14rpx; display: flex; align-items: center; justify-content: space-between; font-size: 29rpx; font-weight: 600; gap: 12rpx; }
+  .studio-balance { padding: 8rpx 16rpx; background: #f0e0bd; font-size: 22rpx; white-space: nowrap; }
+  .studio-selector { width: 100%; box-sizing: border-box; padding: 8rpx 18rpx 18rpx; }
+  .studio-selector-track { display: flex; gap: 14rpx; }
+  .studio-choice { width: 140rpx; min-width: 140rpx; border: 2rpx solid #e9dcc5; background: #f3eadb; display: flex; flex-direction: column; align-items: center; padding: 8rpx 4rpx 10rpx; }
+  .studio-choice.is-selected { border-color: #819763; background: #eef1df; }
+  .studio-thumbnail { width: 88rpx; height: 96rpx; position: relative; overflow: hidden; }
+  .studio-thumbnail .studio-character { transform: scale(.35); transform-origin: top center; position: absolute; left: 50%; margin-left: -110rpx; }
+  .studio-tiny { display: block; font-size: 21rpx; color: #796b57; font-weight: 400; }
+  .studio-stage { height: 430rpx; position: relative; overflow: hidden; }
+  .studio-room { width: 100%; height: 100%; display: block; }
+  .studio-stage-character { position: absolute; left: 50%; bottom: 70rpx; transform: translateX(-50%); }
+  .studio-character { width: 220rpx; height: 286rpx; display: flex; align-items: flex-end; justify-content: center; position: relative; }
+  .studio-character .pet-companion-sprite { width: 220rpx; height: 286rpx; }
+  .studio-character .pet-companion-sprite__sheet { image-rendering: pixelated; }
+  .studio-character .pet-avatar { width: 220rpx; height: 250rpx; }
+  .studio-character .pet-avatar__body { animation: none; }
+  .studio-character.is-walking .pet-companion-sprite__sheet { animation: studio-original-stride 800ms step-end infinite; }
+  .studio-character.is-walking .pet-companion-sprite--jianwen .pet-companion-sprite__sheet { animation: pet-refined-stride 800ms step-end infinite; }
+  .studio-character-scarf { position: absolute; width: 86rpx; height: 86rpx; top: 98rpx; left: 67rpx; pointer-events: none; }
+  .studio-stage-label { position: absolute; bottom: 14rpx; left: 50%; transform: translateX(-50%); padding: 8rpx 20rpx; background: #fff9edf0; border-radius: 20rpx; white-space: nowrap; font-size: 23rpx; }
+  .studio-content { padding: 26rpx 24rpx; }
+  .studio-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; font-size: 27rpx; font-weight: 600; margin-bottom: 18rpx; }
+  .studio-wardrobe-grid, .studio-game-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
+  .studio-item { border: 2rpx solid #e3d4bc; background: #f7efdf; padding: 14rpx 10rpx 18rpx; display: flex; flex-direction: column; align-items: center; }
+  .studio-item.is-selected { background: #eef1df; border-color: #819763; }
+  .studio-item-preview { height: 126rpx; width: 120rpx; position: relative; overflow: hidden; }
+  .studio-item-preview .studio-character { position: absolute; left: 50%; margin-left: -110rpx; transform: scale(.43); transform-origin: top center; }
+  .studio-scarf-item { width: 126rpx; height: 126rpx; }
+  .studio-note { display: block; font-size: 23rpx; line-height: 1.8; color: #78674f; margin: 18rpx 0; }
+  .studio-primary { background: #65814f; color: #fffdf6; padding: 20rpx 18rpx; border-radius: 26rpx; font-size: 29rpx; font-weight: 600; width: 100%; }
+  .studio-link { padding: 20rpx 0 0; color: #617947; font-size: 23rpx; }
+  .studio-actions { display: flex; gap: 16rpx; margin-bottom: 24rpx; }
+  .studio-actions button { flex: 1; padding: 22rpx 16rpx; border: 2rpx solid #e3d4bc; display: flex; flex-direction: column; align-items: center; gap: 12rpx; }
+  .studio-actions .is-selected, .studio-game-grid .is-selected { background: #eef1df; border-color: #819763; }
+  .studio-game-grid button { border: 2rpx solid #e3d4bc; padding: 22rpx 12rpx; display: flex; flex-direction: column; align-items: center; gap: 10rpx; }
+  .iconfont { font-size: 36rpx; color: #708256; }
+  .studio-match-status { padding: 20rpx 22rpx 4rpx; background: #f0e6d4; border-radius: 20rpx; margin-top: 24rpx; font-size: 27rpx; }
+  .studio-practice { padding-top: 28rpx; }
+  .studio-practice .studio-tiny { text-align: center; margin-top: 16rpx; }
+  .studio-rhythm-track { position: relative; height: 44rpx; background: #e7ddc9; border: 2rpx solid #d4c1a0; border-radius: 16rpx; margin: 26rpx 12rpx; overflow: hidden; }
+  .studio-rhythm-target { position: absolute; height: 100%; width: 16%; left: 42%; background: #b4ca8f; }
+  .studio-rhythm-marker { position: absolute; top: 0; width: 8rpx; height: 100%; background: #9a6335; transform: translateX(-50%); }
+  .studio-footer { display: block; text-align: center; padding: 32rpx 0 0; font-size: 23rpx; color: #887359; }
+  .studio-empty { min-height: 420rpx; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 20rpx; }
+  .studio-empty button { background: #e9dcc5; padding: 12rpx 36rpx; }
+  .studio-spinner { width: 38rpx; height: 38rpx; border: 4rpx solid #ddd0b9; border-top-color: #65814f; border-radius: 50%; animation: studio-spinner 1s linear infinite; }
+}
+@keyframes studio-original-stride { 0%, 50%, 100% { transform: translateX(0); } 25% { transform: translateX(-25%); } 75% { transform: translateX(-75%); } }
+@keyframes studio-spinner { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pet-studio-page .studio-character.is-walking .pet-companion-sprite__sheet { animation: none; } }
