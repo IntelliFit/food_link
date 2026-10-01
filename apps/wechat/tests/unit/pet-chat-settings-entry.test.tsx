@@ -47,4 +47,19 @@ describe('pet chat settings entry', () => {
       url: '/packageExtra/pages/pet-home/index',
     })
   })
+
+  it('opens the studio directly from chat and returns to an existing studio without stacking it', () => {
+    render(<PetChatPage />)
+    fireEvent.click(screen.getByRole('button', { name: '打开宠物时光' }))
+    expect(Taro.navigateTo).toHaveBeenCalledWith({ url: '/packagePetStudio/pages/index/index' })
+
+    ;(Taro.getCurrentPages as jest.Mock).mockReturnValue([
+      { route: 'packagePetStudio/pages/index/index' },
+      { route: 'packageExtra/pages/pet-chat/index' },
+    ])
+    jest.clearAllMocks()
+    fireEvent.click(screen.getByRole('button', { name: '打开宠物时光' }))
+    expect(Taro.navigateBack).toHaveBeenCalledWith({ delta: 1 })
+    expect(Taro.navigateTo).not.toHaveBeenCalled()
+  })
 })

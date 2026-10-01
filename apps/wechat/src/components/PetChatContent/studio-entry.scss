@@ -1,0 +1,39 @@
+.pet-chat-studio-entry { position: relative; z-index: 1; }
+.pet-chat-studio-entry {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin-bottom: 22rpx;
+  padding: 20rpx 24rpx;
+  border: 1rpx solid #e5d7bc;
+  border-radius: 24rpx;
+  background: linear-gradient(110deg, #fff6e6, #f1f5e9);
+  box-sizing: border-box;
+}
+
+.pet-chat-studio-icon {
+  flex-shrink: 0;
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20rpx;
+  background: #e4ebd7;
+  color: #526c3f;
+  .iconfont { font-size: 34rpx; }
+}
+
+.pet-chat-studio-copy { flex: 1; min-width: 0; }
+.pet-chat-studio-title { display: block; font-size: 28rpx; line-height: 38rpx; font-weight: 800; color: #31472c; }
+.pet-chat-studio-note { display: block; margin-top: 4rpx; font-size: 22rpx; line-height: 30rpx; color: #697a5c; }
+.pet-chat-studio-link { flex-shrink: 0; color: #526c3f; font-size: 23rpx; line-height: 34rpx; }
+
+.pet-chat-page--dark {
+  .pet-chat-studio-entry { background: linear-gradient(110deg, #27372b, #23352e); border-color: #4d6250; }
+  .pet-chat-studio-icon { background: #394d36; color: #dce9c6; }
+  .pet-chat-studio-title { color: #edf4df; }
+  .pet-chat-studio-note { color: #c1cfb3; }
+  .pet-chat-studio-link { color: #dce9c6; }
+}

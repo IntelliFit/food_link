@@ -24,7 +24,8 @@ import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { openPetSettings } from '../../../utils/pet-navigation'
-import { PetAvatar } from '../../../components/PetAvatar'
+import { PetIdentityAvatar } from '../../../components/PetIdentityAvatar'
+import { PetChatStudioEntry } from '../../../components/PetChatContent/studio-entry'
 import { PetMarkdown } from './pet-markdown'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
@@ -602,20 +603,23 @@ function PetChatPage() {
     <View className={`pet-chat-page ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>
       <View className='pet-chat-topbar'>
         <View className='pet-chat-identity' onClick={openPetSettings}>
-          <PetAvatar pet={petSummary?.pet} size={72} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
+          <PetIdentityAvatar pet={petSummary?.pet} size={72} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
           <View className='pet-chat-identity-copy'>
             <Text className='pet-chat-identity-name'>{petName}</Text>
+            <Text className='pet-chat-identity-caption'>陪你吃好，也陪你玩</Text>
           </View>
         </View>
         <View className='pet-chat-top-actions'>
           <View className='pet-chat-history-button' onClick={openHistoryPanel}>
-            <Text>最近</Text>
+            <Text>最近对话</Text>
           </View>
           <View className={`pet-chat-new-button ${isEmptyConversation ? 'disabled' : ''}`} onClick={isEmptyConversation ? undefined : startNewConversation}>
             <Text>新对话</Text>
           </View>
         </View>
       </View>
+
+      <PetChatStudioEntry />
 
       <ScrollView className='pet-chat-scroll' scrollY enhanced showScrollbar={false} scrollIntoView={latestMessageID}>
         <View className='pet-chat-messages'>
@@ -738,7 +742,7 @@ function PetChatPage() {
             ))}
           />
         </View>
-        <ScrollView className='pet-chat-quick-row' scrollX enhanced showScrollbar={false}>
+        <View className='pet-chat-quick-row'>
           <View className='pet-chat-quick-row-inner'>
             {FOLLOW_UPS.map((text) => (
               <View
@@ -750,7 +754,7 @@ function PetChatPage() {
               </View>
             ))}
           </View>
-        </ScrollView>
+        </View>
 
         {pendingImages.length > 0 ? (
           <ScrollView className='pet-chat-image-draft-scroll' scrollX enhanced showScrollbar={false}>

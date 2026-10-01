@@ -28,3 +28,7 @@ export function openPetChat(starterQuestion?: unknown): void {
 export function openPetSettings(): void {
   openWithoutStacking(extraPkgUrl('/pages/pet-home/index'))
 }
+
+export function openPetStudio(): void {
+  openWithoutStacking('/packagePetStudio/pages/index/index')
+}

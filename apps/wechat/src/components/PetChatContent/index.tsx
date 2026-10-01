@@ -22,6 +22,7 @@ import { withAuth } from '../../utils/withAuth'
 import { useAppColorScheme } from '../AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../utils/theme-navigation-bar'
 import { openPetSettings } from '../../utils/pet-navigation'
+import { PetChatStudioEntry } from './studio-entry'
 import { PetIdentityAvatar } from '../PetIdentityAvatar'
 import { PetMarkdown } from './pet-markdown'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
@@ -596,11 +597,12 @@ export function PetChatContent({ embedded = false, active = true, starterQuestio
           <PetIdentityAvatar pet={petSummary?.pet} size={72} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
           <View className='pet-chat-identity-copy'>
             <Text className='pet-chat-identity-name'>{petName}</Text>
+            <Text className='pet-chat-identity-caption'>陪你吃好，也陪你玩</Text>
           </View>
         </View>
         <View className='pet-chat-top-actions'>
           <View className='pet-chat-history-button' onClick={openHistoryPanel}>
-            <Text>最近</Text>
+            <Text>最近对话</Text>
           </View>
           <View className={`pet-chat-new-button ${isEmptyConversation ? 'disabled' : ''}`} onClick={isEmptyConversation ? undefined : startNewConversation}>
             <Text>新对话</Text>
@@ -608,6 +610,8 @@ export function PetChatContent({ embedded = false, active = true, starterQuestio
           {onMinimize ? <View id='pet-chat-minimize' className='pet-chat-minimize' role='button' aria-label='收起聊天' onClick={onMinimize}><Text>−</Text></View> : null}
         </View>
       </View>
+
+      <PetChatStudioEntry />
 
       <ScrollView className='pet-chat-scroll' scrollY enhanced showScrollbar={false} scrollIntoView={latestMessageID}>
         {historyError ? <View className='pet-chat-retry' role='button' onClick={refreshConversation}><Text>{historyError}</Text></View> : null}
@@ -719,7 +723,7 @@ export function PetChatContent({ embedded = false, active = true, starterQuestio
             ))}
           />
         </View>
-        <ScrollView className='pet-chat-quick-row' scrollX enhanced showScrollbar={false}>
+        <View className='pet-chat-quick-row'>
           <View className='pet-chat-quick-row-inner'>
             {FOLLOW_UPS.map((text) => (
               <View
@@ -731,7 +735,7 @@ export function PetChatContent({ embedded = false, active = true, starterQuestio
               </View>
             ))}
           </View>
-        </ScrollView>
+        </View>
 
         <View className='pet-chat-input-bar'>
           <Input
