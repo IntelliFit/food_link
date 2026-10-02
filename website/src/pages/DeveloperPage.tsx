@@ -1,68 +1,54 @@
-import { ArrowRight, Bot, Braces, Camera, Cpu, Download, KeyRound, ShieldCheck, WalletCards } from 'lucide-react'
+import { ArrowRight, Bot, Camera, Database, History } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 import { SiteHeader } from '@/components/layout/SiteHeader'
 import { Button } from '@/components/ui/button'
-import { openApiBaseURL } from '@/lib/developer-api'
-
-const capabilities = [
-  { icon: Braces, title: '统一 HTTP API', text: '文字或图片食物分析、异步结果查询和可信营养库搜索。' },
-  { icon: Bot, title: 'WorkBuddy / Codex / MCP', text: '通过同一 API Key 接入 Agent，MCP 只是轻量适配层，不重复计费。' },
-  { icon: Cpu, title: '硬件友好', text: '设备经你的服务端调用，密钥不写入固件；支持按应用隔离余额和审计。' },
-]
+import { AIHandoffCard } from '@/components/developer/AIHandoffCard'
+import { GettingStartedSteps } from '@/components/developer/GettingStartedSteps'
 
 export function DeveloperPage() {
-  return (
-    <div className="min-h-screen bg-gradient-page">
-      <SiteHeader />
-      <main className="pt-below-header">
-        <section className="mx-auto grid max-w-6xl gap-10 px-4 py-12 md:grid-cols-[1.1fr_.9fr] md:px-8 md:py-20">
-          <div className="flex flex-col items-start gap-6">
-            <span className="rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-sm font-medium text-primary">食探开放平台 Beta</span>
-            <h1 className="max-w-3xl text-4xl font-bold tracking-tight md:text-6xl">让你的 Agent 和硬件<br /><span className="text-primary">看懂每一餐</span></h1>
-            <p className="max-w-2xl text-base leading-8 text-muted-foreground md:text-lg">一套 API 覆盖上传、食物识别、营养搜索、点数计费和调用审计。余额不足时返回 402，由调用方提示用户前往官网充值，不会突然代替用户发起付款。</p>
-            <div className="flex flex-wrap gap-3">
-              <Button size="lg" render={<Link to="/developer/console" />}>进入开发者控制台 <ArrowRight /></Button>
-              <Button size="lg" variant="outline" render={<Link to="/developer/docs" />}>查看完整开发文档</Button>
-              <Button size="lg" variant="outline" render={<a href="/downloads/foodlink-mcp-latest.zip" download />}><Download />下载官方 MCP</Button>
-              <Button size="lg" variant="ghost" render={<a href="/developer/ai-guide.md" download />}>下载给 AI 的接入说明</Button>
-            </div>
+  return <div className="min-h-screen bg-gradient-page">
+    <SiteHeader />
+    <main className="pt-below-header">
+      <section className="mx-auto grid max-w-6xl gap-10 px-4 py-12 md:grid-cols-2 md:px-8 md:py-20">
+        <div className="flex flex-col items-start gap-6">
+          <span className="rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-sm font-medium text-primary">食探开放平台 Beta · 支持 AI 自助接入</span>
+          <h1 className="text-4xl font-bold tracking-tight md:text-5xl">给你的 AI 助手<br /><span className="text-primary">加上看懂每一餐的能力</span></h1>
+          <p className="text-base leading-8 text-muted-foreground md:text-lg">把餐照分析、食物营养和你的饮食历史接入常用 AI 助手。会向 Codex、WorkBuddy 提需求，就可以让它带你完成接入，不必先学接口文档。</p>
+          <div className="flex flex-wrap gap-3">
+            <Button size="lg" nativeButton={false} render={<Link to="/developer/console" />}>开始接入 <ArrowRight /></Button>
+            <Button size="lg" variant="outline" nativeButton={false} render={<a href="#ai-start" />}><Bot />复制任务给 AI</Button>
           </div>
-          <div className="rounded-3xl border border-border bg-card p-5 shadow-xl shadow-primary/5 md:p-8">
-            <div className="mb-5 flex items-center justify-between"><span className="flex items-center gap-2 font-semibold"><Camera className="size-4 text-primary" /> 图片识别完整链路</span><span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">上传 → 分析 → 轮询</span></div>
-            <pre className="overflow-x-auto rounded-2xl bg-foreground p-5 text-xs leading-6 text-background md:text-sm"><code>{`# 1. 上传图片
-curl ${openApiBaseURL}/uploads \\
-  -H "Authorization: Bearer $FOODLINK_API_KEY" \\
-  -F "file=@meal.jpg"
-
-# 2. 使用返回的 image_url 提交分析
-curl ${openApiBaseURL}/food-analyses \\
-  -H "Authorization: Bearer $FOODLINK_API_KEY" \\
-  -H "Idempotency-Key: meal-photo-001" \\
-  -H "Content-Type: application/json" \\
-  -d '{"image_urls":["..."],"mode":"precision",
-       "meal_type":"lunch","additional_context":"没喝汤"}'`}</code></pre>
+          <p className="text-sm leading-6 text-muted-foreground">每个账号的第一个应用赠送 100 点。账户查询和营养搜索先免费验证；普通餐照 5 点/张，文字分析 2 点/次。</p>
+        </div>
+        <div className="rounded-3xl border border-border bg-card p-6 shadow-xl shadow-primary/5 md:p-8">
+          <h2 className="text-xl font-bold">接好后，你可以直接这样问 AI</h2>
+          <div className="mt-6 space-y-5">
+            {[
+              { icon: Camera, title: '发一张餐照', example: '“分析这顿饭的热量和蛋白质。我只吃了一半米饭。”', note: '返回食物明细、估算重量、营养与不确定性说明。' },
+              { icon: Database, title: '查一种食物', example: '“查一下鸡胸肉的营养信息。”', note: '查询食探营养库，Beta 期免费。' },
+              { icon: History, title: '回顾我的饮食', example: '“读取我最近一周的记录，看看蛋白质和健康评分。”', note: '需主动开启个人数据读取权限，并已有食探记录；只读，不修改记录。' },
+            ].map(({icon: Icon, title, example, note}) => <article key={title} className="border-b border-border pb-5 last:border-0 last:pb-0"><div className="flex items-center gap-2 font-semibold"><Icon className="size-5 text-primary" />{title}</div><p className="mt-2 text-sm leading-7">{example}</p><p className="mt-1 text-xs leading-6 text-muted-foreground">{note}</p></article>)}
           </div>
-        </section>
-
-        <section className="mx-auto grid max-w-6xl gap-4 px-4 py-10 md:grid-cols-3 md:px-8">
-          {capabilities.map(({ icon: Icon, title, text }) => <article key={title} className="rounded-2xl border border-border bg-card p-6"><Icon className="mb-5 size-8 text-primary" /><h2 className="mb-2 text-lg font-semibold">{title}</h2><p className="text-sm leading-7 text-muted-foreground">{text}</p></article>)}
-        </section>
-
-        <section id="quickstart" className="mx-auto max-w-6xl px-4 py-16 md:px-8">
-          <div className="rounded-3xl border border-border bg-card p-6 md:p-10">
-            <h2 className="mb-8 text-2xl font-bold md:text-3xl">从 0 到第一次调用</h2>
-            <ol className="grid gap-5 md:grid-cols-3">
-              {[['1', '短信登录并创建应用', '每个开发者账号仅第一个应用赠送 100 个测试点。'], ['2', '复制一次性 API Key', '服务端只保存哈希；密钥只展示一次。'], ['3', '按完整文档接入', '支持文字、图片、多图、普通/精准模式、营养搜索、任务轮询与 MCP。']].map(([n, title, text]) => <li key={n} className="flex gap-4"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{n}</span><div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{text}</p></div></li>)}
-            </ol>
-          </div>
-        </section>
-
-        <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-20 md:grid-cols-3 md:px-8">
-          {[{ icon: WalletCards, title: '可控支付', text: 'PC 官网扫码充值；只有微信回调验签和金额校验通过才会入账。' }, { icon: KeyRound, title: '最小权限密钥', text: '分析与搜索 scope 可独立控制，密钥可随时吊销。' }, { icon: ShieldCheck, title: '幂等和审计', text: '同一个 Idempotency-Key 不会重复提交任务或重复扣点。' }].map(({ icon: Icon, title, text }) => <article key={title} className="rounded-2xl bg-muted/70 p-6"><Icon className="mb-4 text-primary" /><h3 className="font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></article>)}
-        </section>
-      </main>
-      <SiteFooter />
-    </div>
-  )
+        </div>
+      </section>
+      <section id="quickstart" className="mx-auto max-w-6xl scroll-mt-28 px-4 pb-10 md:px-8"><GettingStartedSteps /></section>
+      <section id="ai-start" className="mx-auto max-w-6xl scroll-mt-28 px-4 pb-12 md:px-8"><AIHandoffCard /></section>
+      <section className="mx-auto max-w-6xl px-4 pb-12 md:px-8">
+        <h2 className="text-2xl font-bold">第一次接入，常见的问题</h2>
+        <div className="mt-5 divide-y divide-border rounded-2xl border border-border bg-card px-5">
+          {[
+            ['“应用”是什么？', '它是这次接入的名字和独立账本，比如“我的饮食助手”，不需要开发或下载一个新 App。多台电脑可接入同一应用；重新创建密钥不会再赠送点数。'],
+            ['API、MCP 要选哪个？', '先把任务交给 AI。API 是食探提供能力的接口，MCP 是让 AI 使用这些接口的一套现成工具。AI 会根据当前客户端能力选择；两种方式用同一应用余额。'],
+            ['密钥列表为什么不能复制？', '列表只显示标识。完整密钥在创建时弹出的窗口里复制或下载；遗失后需新建一把，不扣点。不要点“吊销”，除非你确定要停用旧密钥。'],
+            ['怎样知道接入成功？', '先在控制台免费验证连接，再让 AI 查一次余额和“鸡胸肉”营养。成功后发一张餐照，确认收到最终食物明细，而不是只看到任务编号。'],
+            ['余额不足会突然弹出支付吗？', '不会。AI 会告诉你余额不足，由你到控制台选择套餐并主动扫码充值。API 点数与食探小程序会员积分独立。'],
+            ['识别结果会自动写进我的饮食记录吗？', '不会。食物分析属于当前应用的分析历史；读取个人饮食记录需要你额外授权。这些只读接口不提供修改或删除个人记录的能力。'],
+          ].map(([question,answer]) => <details key={question} className="py-4"><summary className="cursor-pointer font-medium">{question}</summary><p className="mt-3 text-sm leading-7 text-muted-foreground">{answer}</p></details>)}
+        </div>
+      </section>
+      <section className="mx-auto max-w-6xl px-4 pb-16 md:px-8"><div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-muted/70 p-6"><div><h2 className="font-semibold">要接自己的产品或硬件？</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">完整文档提供图片、文字、多图、参数、计费、任务轮询与 MCP 安装说明。</p></div><Button variant="outline" nativeButton={false} render={<Link to="/developer/docs" />}>查看完整开发文档 <ArrowRight /></Button></div></section>
+    </main>
+    <SiteFooter />
+  </div>
 }

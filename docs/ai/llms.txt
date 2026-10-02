@@ -4,6 +4,11 @@ FoodLink provides food image analysis, text meal analysis, nutrition database se
 
 ## Start here
 
+- Beginner onboarding: https://healthymax.cn/developer/#quickstart
+- The console can run a free account + nutrition-search connection check. It does not submit analysis or spend analysis credits.
+- An app is a named integration and credit ledger, not a separate mobile app. Creation shows a save-key dialog; download the complete key file and give the agent only its local path.
+- Guide novice users one click at a time. Verify the client's real file/command/MCP capabilities; never claim installation or analysis success without executing the required checks.
+
 - AI integration guide: https://healthymax.cn/developer/ai-guide.md
 - Human developer documentation: https://healthymax.cn/developer/docs/
 - OpenAPI 3.1 schema: https://healthymax.cn/openapi/foodlink-openapi-v1.yaml

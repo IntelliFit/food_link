@@ -120,3 +120,39 @@ export const developerApi = {
 }
 
 export const openApiBaseURL = `${API_BASE_URL}/open/v1`
+
+export type OpenAPIConnectionResult = {
+  account: { app_id: string; app_name: string; balance_units: number; scopes: string[] }
+  searchMessage: string
+}
+
+export async function checkOpenAPIConnection(rawKey: string): Promise<OpenAPIConnectionResult> {
+  const key = rawKey.trim()
+  if (!key.startsWith('flk_beta_') || key.includes('…') || key.includes('...')) throw new Error('请使用创建时保存的完整密钥，不能使用列表中的密钥前缀。')
+  async function get<T>(path: string): Promise<T> {
+    let response: Response
+    try {
+      response = await fetch(`${openApiBaseURL}${path}`, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000) })
+    } catch {
+      throw new Error('API 连接超时或网络未连通，请检查网络后重试。')
+    }
+    const payload = await response.json().catch(() => ({})) as Partial<ApiEnvelope<T>> & { detail?: string }
+    if (!response.ok) {
+      if (response.status === 401) throw new Error('密钥无效或已吊销。请新建并保存完整密钥后再试。')
+      if (response.status === 403) throw new Error('这把密钥缺少所需功能权限，请重新创建包含相应权限的密钥。')
+      throw new Error(`验证暂未成功（${response.status}），请稍后再试。`)
+    }
+    if (payload.code !== undefined && payload.code !== 0) throw new Error('API 未返回成功结果，请稍后再试。')
+    return (payload.data ?? payload) as T
+  }
+  const account = await get<OpenAPIConnectionResult['account']>('/account')
+  if (!account || !Array.isArray(account.scopes) || typeof account.balance_units !== 'number') throw new Error('账户返回内容不完整，请稍后再试。')
+  if (!account.scopes.includes('food:search')) return { account, searchMessage: '这把密钥没有营养查询权限，已跳过搜索验证。' }
+  try {
+    const search = await get<{ items: unknown[] }>('/foods/search?query=%E9%B8%A1%E8%83%B8%E8%82%89&limit=3')
+    if (!Array.isArray(search?.items)) throw new Error('营养查询返回内容不完整，请稍后再试。')
+    return { account, searchMessage: `营养查询成功：找到 ${search.items.length} 条结果。` }
+  } catch (e) {
+    return { account, searchMessage: `账户已连通，营养查询未通过：${e instanceof Error ? e.message : '请稍后再试。'}` }
+  }
+}
