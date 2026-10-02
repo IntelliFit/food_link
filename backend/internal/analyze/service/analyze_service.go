@@ -2901,12 +2901,13 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			return primaryImageCall(callCtx)
 		})
 	}
-	if err == nil && provider == "qwen" && isOrdinaryFoodImageMode(executionMode) {
+	if err == nil && provider == "qwen" && (isOrdinaryFoodImageMode(executionMode) || isFastExecutionMode(executionMode)) {
 		err = validateNonEmptyFoodAnalysisResult(parsed)
 		if stderrors.Is(err, ErrEmptyFoodAnalysisResult) {
 			logger.Warn(ctx, "食物图片千问返回业务空结果",
 				slog.String("provider", provider),
 				slog.String("model", model),
+				slog.String("execution_mode", executionMode),
 				slog.Any("result_keys", foodAnalysisResultKeys(parsed)),
 				slog.Int("item_count", len(parseItems(parsed))),
 				slog.Bool("has_description", strings.TrimSpace(stringFromAny(parsed["description"])) != ""),
