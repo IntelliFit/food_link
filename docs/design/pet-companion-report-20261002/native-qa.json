@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-02",
+  "code_commit": "a4026605ab3f5f3e7bc56aa7715b7a699b52d2c0",
+  "verification_tool": "weapp-devtools / miniprogram-automator",
+  "live_account_acceptance": "blocked",
+  "live_blocker": {
+    "path": "/api/pet/summary",
+    "http_status": 502,
+    "configured_origin": "https://api.healthymax.cn"
+  },
+  "isolated_context": {
+    "mock": "read-only pet summary response only",
+    "gameplay": "actual native button inputs; no injected score, progress or stars",
+    "rendered_route": "packagePetStudio/pages/index/index",
+    "rendered_identity_resource": "/assets/pets/companions/companion-fbd87f73-v1.png"
+  },
+  "native_interactions": {
+    "sections": ["home", "map", "collection", "story"],
+    "map_game_entries": ["kitchen", "merge", "adventure", "explore"],
+    "free_journey_card_placement": "passed",
+    "merge_round": {
+      "level": 1,
+      "score": 420,
+      "plates": 2,
+      "effective_steps": 4,
+      "completed": true,
+      "wallet_after": 6,
+      "receipt_count_after": 1,
+      "collected": ["merge-tricolor-plate"]
+    },
+    "explore_round": {
+      "level": 1,
+      "score": 397,
+      "stars_rating": 3,
+      "route_inputs": "clue observation; three-cell canal rotations and connection check; measured-tension hauling",
+      "completed": true,
+      "unique_landmarks": 3,
+      "wallet_after": 12,
+      "receipt_count_after": 2,
+      "collected": ["pebble-ornament", "waterside-memory-1"]
+    }
+  },
+  "cleanup": {
+    "original_request_restored": true,
+    "strict_local_save_comparison_and_restoration": true,
+    "left_mock_view": true,
+    "final_route": "pages/index/index"
+  },
+  "screenshot_status": "capture timeout or failure; no visual-fidelity acceptance",
+  "not_verified": [
+    "live-account full chapter",
+    "all 24 levels on a physical device",
+    "render-to-device visual fidelity",
+    "cloud wallet or sync",
+    "real matchmaking PK",
+    "production package upload"
+  ],
+  "staged_snapshot_checks": {
+    "typescript": "passed",
+    "eslint": "passed",
+    "jest_suites": 113,
+    "jest_tests": 576,
+    "diff_and_sensitive_files": "passed"
+  }
+}
