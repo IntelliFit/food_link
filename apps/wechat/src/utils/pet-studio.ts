@@ -1,7 +1,8 @@
 import Taro from '@tarojs/taro'
 import type { PetProfile, PetAppearanceCandidate } from './api'
+import { completePetCatalog } from './pet-catalog'
 import { getCompanionSprite } from '../components/PetCompanionSprite'
-import { getHomeCompanionSpriteOverride, type HomeCompanionPreference } from './pet-companion-preference'
+import { getHomeCompanionSpriteOverride, ORIGINAL_COMPANION_SRC, type HomeCompanionPreference } from './pet-companion-preference'
 
 export const PET_STUDIO_DRESSING_KEY = 'pet_studio_dressing_v1'
 export type StudioAction = 'idle' | 'walk' | 'hop'
@@ -15,7 +16,7 @@ export interface StudioCharacter {
 export function buildStudioCharacters(pet: PetProfile, preference: HomeCompanionPreference): StudioCharacter[] {
   const sprite = getHomeCompanionSpriteOverride(preference) || getCompanionSprite(pet)
   const current: StudioCharacter = { id: sprite || `current:${pet.builtin_avatar_id || pet.pixel_avatar_url || pet.id}`, name: pet.name, pet, sprite, current: true }
-  const candidates = (pet.selection_candidates || []).filter((candidate: PetAppearanceCandidate) => candidate.builtin_avatar_id && candidate.builtin_avatar_id !== pet.builtin_avatar_id)
+  const candidates = completePetCatalog(pet.selection_candidates).filter((candidate: PetAppearanceCandidate) => candidate.builtin_avatar_id && (sprite === ORIGINAL_COMPANION_SRC || candidate.builtin_avatar_id !== pet.builtin_avatar_id))
   return [current, ...candidates.map(candidate => ({ id: candidate.id, name: candidate.name, pet: candidate, sprite: getCompanionSprite(candidate), current: false }))]
 }
 export function availableStudioActions(character?: StudioCharacter): StudioAction[] {

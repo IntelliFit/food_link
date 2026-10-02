@@ -2009,6 +2009,8 @@ export interface PetProfile {
   pixel_avatar_blink_url?: string
   pixel_avatar_squash_url?: string
   pixel_avatar_jump_url?: string
+  pixel_motion_atlas_url?: string
+  pixel_motion_version?: number
   builtin_avatar_id?: string
 }
 

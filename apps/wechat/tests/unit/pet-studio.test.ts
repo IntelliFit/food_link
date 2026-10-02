@@ -12,6 +12,7 @@ test('the approved account sprite remains distinct from template previews', () =
   expect(template.pet.builtin_avatar_id).toBe('xiaomai-01')
   expect(template.sprite).toBeUndefined()
   expect(canTryStudioScarf(template)).toBe(false)
+  expect(buildStudioCharacters(pet, { enabledOriginal: true, selected: 'original' }).some(item => item.pet.builtin_avatar_id === 'jianwen-01' && !item.current)).toBe(true)
 })
 test('photo pets never borrow another character motion or scarf', () => {
   const [photo] = buildStudioCharacters({ ...pet, builtin_avatar_id: '', pixel_avatar_url: 'https://example.com/my-pet.png' }, { enabledOriginal: false, selected: 'follow' })

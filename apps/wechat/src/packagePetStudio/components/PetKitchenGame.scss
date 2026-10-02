@@ -155,8 +155,9 @@
   &.is-round .pet-kitchen__eyebrow { display: none; }
   &.is-round .pet-kitchen__title { font-size: 32rpx; }
   &.is-round .pet-kitchen__orders-heading { display: none; }
-  &.is-round .pet-kitchen__scene { height: 200rpx; }
-  &.is-round .pet-kitchen__scene-actor { width: 180rpx; height: 180rpx; bottom: 0; }
+  // Packed poses extend slightly beyond the actor box; keep feet and raised hands inside the clipped scene.
+  &.is-round .pet-kitchen__scene { height: 220rpx; }
+  &.is-round .pet-kitchen__scene-actor { width: 180rpx; height: 180rpx; bottom: 16rpx; }
 }
 @keyframes kitchen-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .pet-kitchen__settlement-spinner { animation-duration: 2s; } }

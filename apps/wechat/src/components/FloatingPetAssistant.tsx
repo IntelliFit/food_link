@@ -6,6 +6,7 @@ import { getAccessToken } from '../utils/api'
 import { redirectToLogin } from '../utils/withAuth'
 import { PetAvatar } from './PetAvatar'
 import { PetActor } from './PetActor'
+import { petMotionAtlas } from '../utils/pet-motion'
 import { getCompanionSprite, PetCompanionSprite } from './PetCompanionSprite'
 import { PetChatContent } from './PetChatContent'
 import { useInkWellness } from './InkWellness'
@@ -72,6 +73,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   const playLockedUntil = useRef(0)
   const visible = active && !suppressed
   const companionSprite = companionSpriteOverride || getCompanionSprite(pet)
+  const hasRidePose = refinedMotion && Boolean(petMotionAtlas(pet, companionSprite))
   const motionBurst = refinedMotion ? playBurst : 0
 
   const clearTimers = useCallback(() => {
@@ -277,7 +279,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   return (
     <View className={`pet-assistant ${dark ? 'pet-assistant--dark' : ''}${refinedMotion ? ' pet-assistant--refined-motion' : ''}`}>
       {visible && !chatOpen ? (
-        <View id='home-floating-pet' className={`pet-assistant-float pet-assistant-float--${phase} ${welcoming ? 'is-welcoming' : ''} ${roamFar ? 'is-roaming-far' : 'is-roaming-near'} ${walking ? 'is-walking' : `is-${idleAction}`} ${companionSprite ? 'has-full-body' : ''}`}>
+        <View id='home-floating-pet' className={`pet-assistant-float pet-assistant-float--${phase} ${welcoming ? 'is-welcoming' : ''} ${roamFar ? 'is-roaming-far' : 'is-roaming-near'} ${walking ? 'is-walking' : `is-${idleAction}`} ${companionSprite || hasRidePose ? 'has-full-body' : ''} ${hasRidePose ? 'has-ride-pose' : ''}`}>
           {phase === 'playing' && reminder ? (
             <View id={reminder.tone === 'messages' ? 'home-pet-message-reminder' : 'home-pet-analyze-reminder'} className='pet-assistant-reminder' role='button' onClick={onReminderPress}>
               <Text>{reminder.text}</Text>
@@ -315,27 +317,27 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
             <View className='pet-assistant-traveler'>
               <View className='pet-assistant-facing'>
                 <View className='pet-assistant-look'>
-                  {refinedMotion ? <PetActor pet={pet} size={78} active={visible} spriteOverride={companionSprite} action={walking || phase === 'running' || phase === 'returning' ? 'walk' : phase === 'playing' && idleAction === 'look' ? 'observe' : phase === 'playing' && idleAction === 'blink' ? 'blink' : phase === 'playing' && idleAction === 'wave' ? 'wave' : 'idle'} /> : companionSprite ? (
+                  {refinedMotion ? <PetActor pet={pet} size={78} active={visible} spriteOverride={companionSprite} action={(phase === 'running' || phase === 'returning') && hasRidePose ? 'ride' : walking || phase === 'running' || phase === 'returning' ? 'walk' : phase === 'playing' && idleAction === 'look' ? 'observe' : phase === 'playing' && idleAction === 'blink' ? 'blink' : phase === 'playing' && idleAction === 'wave' ? 'wave' : 'idle'} /> : companionSprite ? (
                     <PetCompanionSprite key={refinedMotion ? playBurst : undefined} src={companionSprite} name={pet?.name} refined={refinedMotion} pose={phase === 'playing' && !walking ? idleAction : 'idle'} />
                   ) : (
                     <PetAvatar pet={pet} animal={pet ? undefined : 'cat'} size={68} mood={mood} state={state} motion={!refinedMotion && phase === 'playing' && !walking ? 'companion' : 'static'} />
                   )}
                 </View>
               </View>
-              <View className={`pet-assistant-rider-limbs${companionSprite?.includes('jianwen') ? ' is-jianwen' : ''}`} aria-hidden>
+              {!hasRidePose && <View className={`pet-assistant-rider-limbs${companionSprite?.includes('jianwen') ? ' is-jianwen' : ''}`} aria-hidden>
                 <View className='pet-assistant-rider-leg is-far'><View /></View>
                 <View className='pet-assistant-rider-leg is-near'><View /></View>
-              </View>
+              </View>}
               <View key={playBurst} className='pet-assistant-toy' />
             </View>
-            <View className={`pet-assistant-rider-arms${companionSprite?.includes('jianwen') ? ' is-jianwen' : ''}`} aria-hidden>
+            {!hasRidePose && <View className={`pet-assistant-rider-arms${companionSprite?.includes('jianwen') ? ' is-jianwen' : ''}`} aria-hidden>
               <View className='pet-assistant-rider-arm is-far'>
                 <View className='pet-assistant-rider-arm__upper' /><View className='pet-assistant-rider-arm__forearm' /><View className='pet-assistant-rider-arm__hand' />
               </View>
               <View className='pet-assistant-rider-arm is-near'>
                 <View className='pet-assistant-rider-arm__upper' /><View className='pet-assistant-rider-arm__forearm' /><View className='pet-assistant-rider-arm__hand' />
               </View>
-            </View>
+            </View>}
             <View className='pet-assistant-ride' aria-hidden>
               <View className='pet-assistant-ride__shadow' />
               <View className='pet-assistant-ride__wheel pet-assistant-ride__wheel--rear'>

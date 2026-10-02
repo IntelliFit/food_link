@@ -1,4 +1,5 @@
-import { View, Text } from '@tarojs/components'
+import { completePetCatalog } from '../../../utils/pet-catalog'
+import { Button, View, Text } from '@tarojs/components'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
 import {
@@ -17,6 +18,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { PetAvatar } from '../../../components/PetAvatar'
+import { PetActor, petActionCapabilities, type PetAction } from '../../../components/PetActor'
 import { PetIdentityAvatar } from '../../../components/PetIdentityAvatar'
 import {
   chooseImageWithPrivacy,
@@ -36,6 +38,7 @@ import './index.scss'
 
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
+const motionNames: Record<PetAction, string> = { idle: '休息', blink: '眨眼', walk: '散步', wave: '招手', observe: '观察', cook: '做饭', jump: '跳跃', celebrate: '庆祝', ride: '骑车' }
 
 function getStoredHomePetHidden(): boolean {
   try {
@@ -77,6 +80,7 @@ function PetHomePage() {
   const [claiming, setClaiming] = useState(false)
   const [pixelAvatarCustomizing, setPixelAvatarCustomizing] = useState(false)
   const [pixelAvatarPreview, setPixelAvatarPreview] = useState<PetProfile | null>(null)
+  const [previewAction, setPreviewAction] = useState<PetAction>('idle')
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
   const [renamingPet, setRenamingPet] = useState(false)
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
@@ -149,7 +153,7 @@ function PetHomePage() {
   })
 
   const petEvent: PetOfflineEvent | null = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
-  const selectionCandidates = petSummary?.pet?.selection_candidates || []
+  const selectionCandidates = petSummary?.pet ? completePetCatalog(petSummary.pet.selection_candidates) : []
   const commonCandidates = selectionCandidates.filter((candidate) => Boolean(candidate.builtin_avatar_id))
   const matchedCandidates = selectionCandidates.filter((candidate) => !candidate.builtin_avatar_id)
   const shouldShowSelection = matchedCandidates.length > 0
@@ -294,6 +298,7 @@ function PetHomePage() {
       if (!currentProfileRequest(request)) return
       setHomeCompanionChoice('follow')
       syncPetProfile(customized.pet, request)
+      setPreviewAction('wave')
       setPixelAvatarPreview(customized.pet)
     } catch (error) {
       if (!currentProfileRequest(request)) return
@@ -516,7 +521,7 @@ function PetHomePage() {
             <View className='pet-home-action-item' onClick={handleCustomizePixelAvatar}>
               <View>
                 <Text className='pet-home-action-title'>专属像素分身</Text>
-                <Text className='pet-home-action-desc'>用一张清晰人像生成你的像素伙伴</Text>
+                <Text className='pet-home-action-desc'>生成完整身躯，以及这个角色自己的互动动作</Text>
               </View>
               <View className='pet-home-action-side'>
                 <Text className='pet-home-action-cost'>
@@ -553,8 +558,11 @@ function PetHomePage() {
             <Text className='pet-pixel-preview-desc'>已经保存并同步到首页，这是你的新伙伴。</Text>
             <View className='pet-pixel-preview-stage'>
               <View className='pet-pixel-preview-glow' />
-              <PetAvatar pet={pixelAvatarPreview} size='large' motion='companion' />
+              <PetActor pet={pixelAvatarPreview} size={160} followAppearance={false} action={previewAction} />
               <View className='pet-pixel-preview-shadow' />
+            </View>
+            <View className='pet-pixel-preview-motion-options'>
+              {petActionCapabilities(pixelAvatarPreview).map(action => <Button key={action} className={`pet-pixel-preview-motion-option${previewAction === action ? ' is-active' : ''}`} onClick={() => setPreviewAction(action)}>{motionNames[action]}</Button>)}
             </View>
             <View className='pet-pixel-preview-actions'>
               <View className='pet-pixel-preview-btn secondary' onClick={closePixelAvatarPreview}>

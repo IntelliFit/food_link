@@ -171,6 +171,10 @@ func (h *PetHandler) CustomizePixelAvatar(c *gin.Context) {
 			response.Error(c, &commonerrors.AppError{Code: 10002, Message: "无法识别这张照片，请换一张重试", HTTPStatus: http.StatusBadRequest})
 			return
 		}
+		if errors.Is(err, service.ErrIncompletePixelMotion) {
+			response.Error(c, &commonerrors.AppError{Code: 10000, Message: "生成的角色或动作不完整，原有伙伴已保留，请重试", HTTPStatus: http.StatusBadGateway})
+			return
+		}
 		if errors.Is(err, service.ErrInvalidPetName) {
 			response.Error(c, &commonerrors.AppError{Code: 10002, Message: "宠物名字需为 1–12 个字", HTTPStatus: http.StatusBadRequest})
 			return

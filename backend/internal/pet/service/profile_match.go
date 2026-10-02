@@ -192,6 +192,25 @@ func buildAppearanceCandidates(userID, fingerprint, archetype string, reasons []
 	return builtinAppearanceCandidates()
 }
 
+// Repair legacy catalogs without replacing the selected appearance or renaming
+// the user's companion. Retain custom candidates and their existing IDs/order.
+func completeAppearanceCandidates(existing []AppearanceCandidate) []AppearanceCandidate {
+	result := append([]AppearanceCandidate(nil), existing...)
+	for _, candidate := range builtinAppearanceCandidates() {
+		found := false
+		for _, item := range result {
+			if item.BuiltinAvatarID == candidate.BuiltinAvatarID || item.ID == candidate.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result = append(result, candidate)
+		}
+	}
+	return result
+}
+
 func builtinAppearanceCandidates() []AppearanceCandidate {
 	return []AppearanceCandidate{
 		{

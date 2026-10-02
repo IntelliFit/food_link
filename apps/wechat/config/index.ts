@@ -116,6 +116,7 @@ export default defineConfig<'vite'>(async (merge) => {
       patterns: [
         { from: 'src/packagePetStudio/assets', to: 'packagePetStudio/assets' },
         { from: 'src/assets/pets/clothing', to: 'assets/pets/clothing' },
+        { from: 'src/assets/pets/motions', to: 'assets/pets/motions' },
         { from: 'src/packageThemeScenes/assets', to: 'packageThemeScenes/assets' },
         { from: 'src/packageThemeScenes/ready.js', to: 'packageThemeScenes/ready.js' },
         { from: 'src/packageRecap/assets/recap', to: 'packageRecap/assets/recap' },

@@ -33,6 +33,10 @@ func TestOpenAIImageEditClientSendsPixelArtEditAndDecodesBase64(t *testing.T) {
 		assert.Contains(t, prompt, "rather than coarse mosaic blocks")
 		assert.Contains(t, prompt, "no white border")
 		assert.Contains(t, prompt, "transparent background")
+		assert.Contains(t, prompt, "4-by-4")
+		assert.Contains(t, prompt, "both complete shoes")
+		assert.Contains(t, prompt, "0, 90, 180 and 270 degrees")
+		assert.NotContains(t, prompt, "head and upper body")
 
 		file, _, err := r.FormFile("image")
 		require.NoError(t, err)

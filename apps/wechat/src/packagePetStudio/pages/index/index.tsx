@@ -27,7 +27,7 @@ const ROOM = '/packagePetStudio/assets/growth-room-v1.jpg'
 const ATLAS = '/packagePetStudio/assets/adventure-props-v1.png'
 const cells: Record<string, [number, number]> = { plant: [0, 1], lamp: [1, 1], 'journey-card': [3, 1], leafboard: [0, 2] }
 const names: Record<string, string> = { ...Object.fromEntries(PET_MILESTONES.map(item => [`badge:${item.id}`, item.name])), ...EXPLORE_COLLECTIBLES, 'journey-card': '初次出发旅途卡', 'cozy-scarf': '暖暖围巾', 'memory-first-light': '灯亮之前故事页', 'memory-riverside': '水岸失物故事页', 'memory-rain-cart': '雨天餐车故事页', ...Object.fromEntries(GROWTH_SHOP.map(item => [item.id, item.name])), ...Object.fromEntries(KITCHEN_LEVELS.map(item => [item.collectibleId, item.collectibleName])), ...Object.fromEntries(MERGE_LEVELS.map(item => [item.collectible, item.collectibleName])) }
-const actionNames: Record<PetAction, string> = { idle: '休息', walk: '散步', jump: '跳跃', wave: '招手', blink: '眨眼', observe: '观察', celebrate: '庆祝', cook: '做饭' }
+const actionNames: Record<PetAction, string> = { idle: '休息', walk: '散步', jump: '跳跃', wave: '招手', blink: '眨眼', observe: '观察', celebrate: '庆祝', cook: '做饭', ride: '骑车' }
 function Ornament({ item }: { item: string }) { const badge = PET_MILESTONES.find(entry => item === `badge:${entry.id}`); if (badge) return <View className={`journey-badge is-${badge.game}`}><Text>{badge.mark}</Text><Text>{badge.id.endsWith('-route') ? 'III' : badge.id.endsWith('-first') ? 'I' : 'II'}</Text></View>; const [column, row] = cells[item] || [2, 2]; return <View className='journey-ornament' style={{ backgroundImage: `url(${ATLAS})`, backgroundPosition: `${column * 100 / 3}% ${row * 50}%` }} /> }
 function PetStudioPage() {
   const [pet, setPet] = useState<PetProfile | null>(null)

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -36,6 +37,7 @@ type fakePetAvatarStorage struct {
 	keys        []string
 	data        []byte
 	contentType string
+	failAt      int
 }
 
 func TestCustomizePixelAvatarRejectsLongPetName(t *testing.T) {
@@ -48,6 +50,9 @@ func TestCustomizePixelAvatarRejectsLongPetName(t *testing.T) {
 }
 
 func (f *fakePetAvatarStorage) UploadBytes(bucketAlias, key string, data []byte, contentType string) (string, error) {
+	if f.failAt > 0 && len(f.keys)+1 == f.failAt {
+		return "", errors.New("storage failed")
+	}
 	f.bucket = bucketAlias
 	f.key = key
 	f.keys = append(f.keys, key)
@@ -168,7 +173,7 @@ func TestCustomizePixelAvatarStoresOnlyGeneratedAvatarMetadata(t *testing.T) {
 	storage := &fakePetAvatarStorage{}
 	svc := NewService(repository)
 	svc.ConfigureStorage(storage)
-	svc.ConfigurePixelAvatarGenerator(&fakePixelAvatarGenerator{})
+	svc.ConfigurePixelAvatarGenerator(&fakePixelAvatarGenerator{output: makeTestPixelMotionSheet(t)})
 
 	source := image.NewNRGBA(image.Rect(0, 0, 32, 32))
 	for y := 0; y < 32; y++ {
@@ -187,9 +192,9 @@ func TestCustomizePixelAvatarStoresOnlyGeneratedAvatarMetadata(t *testing.T) {
 	assert.True(t, strings.HasPrefix(storage.key, "pixel-avatars/user-1/"))
 	assert.Equal(t, "pixel_self", result.Pet.AvatarType)
 	assert.Equal(t, "水滴汤圆", result.Pet.Name)
-	assert.Contains(t, result.Pet.PixelAvatarURL, storage.key)
+	assert.Contains(t, result.Pet.PixelAvatarURL, storage.keys[0])
 	assert.Equal(t, "kept", repository.pet.Meta["existing"])
-	assert.Equal(t, storage.key, repository.pet.Meta["pixel_avatar_key"])
+	assert.Equal(t, storage.keys[0], repository.pet.Meta["pixel_avatar_key"])
 }
 
 func TestCustomizePixelAvatarStoresAnimationFrameMetadata(t *testing.T) {
@@ -208,11 +213,11 @@ func TestCustomizePixelAvatarStoresAnimationFrameMetadata(t *testing.T) {
 	storage := &fakePetAvatarStorage{}
 	svc := NewService(repository)
 	svc.ConfigureStorage(storage)
-	svc.ConfigurePixelAvatarGenerator(&fakePixelAvatarGenerator{output: makeTestPixelAvatarSpriteSheet(t)})
+	svc.ConfigurePixelAvatarGenerator(&fakePixelAvatarGenerator{output: makeTestPixelMotionSheet(t)})
 
 	result, err := svc.CustomizePixelAvatar(t.Context(), "user-1", "小满", makeTestPixelAvatarSpriteSheet(t))
 	require.NoError(t, err)
-	require.Len(t, storage.keys, 4)
+	require.Len(t, storage.keys, 5)
 	assert.Contains(t, storage.keys[0], "/idle.png")
 	assert.Contains(t, storage.keys[1], "/blink.png")
 	assert.Contains(t, storage.keys[2], "/squash.png")
@@ -225,6 +230,8 @@ func TestCustomizePixelAvatarStoresAnimationFrameMetadata(t *testing.T) {
 	assert.Contains(t, result.Pet.PixelAvatarBlinkURL, storage.keys[1])
 	assert.Contains(t, result.Pet.PixelAvatarSquashURL, storage.keys[2])
 	assert.Contains(t, result.Pet.PixelAvatarJumpURL, storage.keys[3])
+	assert.Contains(t, result.Pet.PixelMotionAtlasURL, storage.keys[4])
+	assert.Equal(t, pixelMotionVersion, result.Pet.PixelMotionVersion)
 }
 
 func TestCustomizePixelAvatarKeepsCurrentAvatarUntilExplicitReplacement(t *testing.T) {
@@ -243,7 +250,7 @@ func TestCustomizePixelAvatarKeepsCurrentAvatarUntilExplicitReplacement(t *testi
 	storage := &fakePetAvatarStorage{}
 	svc := NewService(repository)
 	svc.ConfigureStorage(storage)
-	svc.ConfigurePixelAvatarGenerator(&fakePixelAvatarGenerator{})
+	svc.ConfigurePixelAvatarGenerator(&fakePixelAvatarGenerator{output: makeTestPixelMotionSheet(t)})
 
 	makeSource := func(fill color.NRGBA) []byte {
 		source := image.NewNRGBA(image.Rect(0, 0, 32, 32))
@@ -266,9 +273,9 @@ func TestCustomizePixelAvatarKeepsCurrentAvatarUntilExplicitReplacement(t *testi
 	require.NoError(t, err)
 	secondKey, _ := repository.pet.Meta["pixel_avatar_key"].(string)
 
-	require.Len(t, storage.keys, 2)
+	require.Len(t, storage.keys, 10)
 	assert.NotEqual(t, firstKey, secondKey)
-	assert.Equal(t, storage.keys[1], secondKey)
+	assert.Equal(t, storage.keys[5], secondKey)
 	assert.Contains(t, second.Pet.PixelAvatarURL, secondKey)
 }
 

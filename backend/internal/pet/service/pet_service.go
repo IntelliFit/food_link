@@ -131,6 +131,8 @@ type PetProfile struct {
 	PixelAvatarBlinkURL         string                `json:"pixel_avatar_blink_url,omitempty"`
 	PixelAvatarSquashURL        string                `json:"pixel_avatar_squash_url,omitempty"`
 	PixelAvatarJumpURL          string                `json:"pixel_avatar_jump_url,omitempty"`
+	PixelMotionAtlasURL         string                `json:"pixel_motion_atlas_url,omitempty"`
+	PixelMotionVersion          int                   `json:"pixel_motion_version,omitempty"`
 	BuiltinAvatarID             string                `json:"builtin_avatar_id,omitempty"`
 }
 
@@ -603,7 +605,17 @@ func (s *Service) ensureProfileMatch(ctx context.Context, userID string, pet *pe
 	currentFingerprint := stringFromMeta(pet.Meta, "profile_fingerprint")
 	selectedID := stringFromMeta(pet.Meta, "selected_candidate_id")
 	if currentVersion >= petProfileMatchVersion && currentFingerprint == match.Fingerprint {
-		return pet, nil
+		existing := candidatesFromMeta(pet.Meta)
+		complete := completeAppearanceCandidates(existing)
+		if len(existing) == len(complete) {
+			return pet, nil
+		}
+		meta := clonePetMeta(pet.Meta)
+		meta["selection_candidates"] = complete
+		if err := s.repo.UpdatePet(ctx, pet.ID, map[string]any{"meta": meta}); err != nil {
+			return nil, err
+		}
+		return s.repo.GetPetByUserID(ctx, userID)
 	}
 	meta := mergedProfileMeta(pet.Meta, match)
 	if currentVersion == 0 {
@@ -964,7 +976,7 @@ func (s *Service) profileFromPet(pet *petdomain.UserPet) PetProfile {
 		return PetProfile{}
 	}
 	levelExp := pet.Experience % nextLevelExp
-	candidates := candidatesFromMeta(pet.Meta)
+	candidates := completeAppearanceCandidates(candidatesFromMeta(pet.Meta))
 	selectedID := stringFromMeta(pet.Meta, "selected_candidate_id")
 	avatarType := stringFromMeta(pet.Meta, "avatar_type")
 	builtinAvatarID := stringFromMeta(pet.Meta, "builtin_avatar_id")
@@ -976,6 +988,8 @@ func (s *Service) profileFromPet(pet *petdomain.UserPet) PetProfile {
 	pixelAvatarBlinkURL := ""
 	pixelAvatarSquashURL := ""
 	pixelAvatarJumpURL := ""
+	pixelMotionAtlasURL := ""
+	pixelMotionVersionValue := 0
 	if avatarType == "pixel_self" && pixelAvatarKey != "" && s.storage != nil {
 		pixelAvatarURL = s.storage.BuildAccessURL("user-avatars", pixelAvatarKey)
 		if pixelAvatarBlinkKey != "" {
@@ -986,6 +1000,10 @@ func (s *Service) profileFromPet(pet *petdomain.UserPet) PetProfile {
 		}
 		if pixelAvatarJumpKey != "" {
 			pixelAvatarJumpURL = s.storage.BuildAccessURL("user-avatars", pixelAvatarJumpKey)
+		}
+		if motionKey := stringFromMeta(pet.Meta, "pixel_motion_atlas_key"); motionKey != "" && intFromMeta(pet.Meta, "pixel_motion_version") == pixelMotionVersion {
+			pixelMotionAtlasURL = s.storage.BuildAccessURL("user-avatars", motionKey)
+			pixelMotionVersionValue = pixelMotionVersion
 		}
 	}
 	return PetProfile{
@@ -1015,6 +1033,8 @@ func (s *Service) profileFromPet(pet *petdomain.UserPet) PetProfile {
 		PixelAvatarBlinkURL:         pixelAvatarBlinkURL,
 		PixelAvatarSquashURL:        pixelAvatarSquashURL,
 		PixelAvatarJumpURL:          pixelAvatarJumpURL,
+		PixelMotionAtlasURL:         pixelMotionAtlasURL,
+		PixelMotionVersion:          pixelMotionVersionValue,
 	}
 }
 

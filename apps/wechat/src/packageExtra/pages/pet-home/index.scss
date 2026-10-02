@@ -921,3 +921,9 @@
       0 14rpx 24rpx rgb(0 0 0 / 18%);
   }
 }
+// Full-body action preview uses a compact wrapping control, rather than another
+// tall list in the already scrollable pet library.
+.pet-pixel-preview-motion-options { display: flex; flex-wrap: wrap; gap: 12rpx; justify-content: center; padding: 12rpx 20rpx 24rpx; }
+.pet-pixel-preview-motion-option { margin: 0; padding: 0 22rpx; height: 56rpx; line-height: 56rpx; border-radius: 28rpx; font-size: 24rpx; color: #35564a; background: #edf5ef; }
+.pet-pixel-preview-motion-option::after { border: none; }
+.pet-pixel-preview-motion-option.is-active { color: #fff; background: #438d73; }

@@ -96,7 +96,7 @@ func (s *Service) CustomizePixelAvatar(ctx context.Context, userID, name string,
 	)
 
 	postprocessStartedAt := time.Now()
-	frames, err := createPixelAvatarAnimationPNGs(modelOutput)
+	frames, err := createPixelMotionPNGs(modelOutput)
 	if err != nil {
 		return nil, err
 	}
@@ -135,10 +135,14 @@ func (s *Service) CustomizePixelAvatar(ctx context.Context, userID, name string,
 	if err != nil {
 		return nil, err
 	}
+	motionKey, err := uploadFrame("motion-atlas-v1", frames.Atlas)
+	if err != nil {
+		return nil, err
+	}
 	logger.Info(ctx, "像素分身上传完成",
 		slog.String("user_id", userID),
 		slog.String("object_key", key),
-		slog.Int("frame_count", countPixelAvatarFrames(frames)),
+		slog.Int("frame_count", 16),
 		slog.Int64("storage.duration_ms", time.Since(uploadStartedAt).Milliseconds()),
 	)
 
@@ -149,6 +153,8 @@ func (s *Service) CustomizePixelAvatar(ctx context.Context, userID, name string,
 	setOptionalPixelAvatarMeta(meta, "pixel_avatar_blink_key", blinkKey)
 	setOptionalPixelAvatarMeta(meta, "pixel_avatar_squash_key", squashKey)
 	setOptionalPixelAvatarMeta(meta, "pixel_avatar_jump_key", jumpKey)
+	meta["pixel_motion_atlas_key"] = motionKey
+	meta["pixel_motion_version"] = pixelMotionVersion
 	meta["pixel_avatar_updated_at"] = time.Now().UTC().Format(time.RFC3339)
 	meta["custom_name"] = true
 	meta["custom_name_updated_at"] = time.Now().UTC().Format(time.RFC3339)

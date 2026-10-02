@@ -30,16 +30,20 @@ const pixelAvatarPrompt = `Transform the person in the reference photo into one 
 
 Identity and composition:
 - preserve the person's recognizable facial features, hairstyle, hair color, skin tone, glasses and distinctive clothing colors
-- show the same centered, friendly, front-facing chibi character in every frame, with head and upper body clearly visible
+- show the same FULL-BODY friendly chibi character in EVERY cell, from the top of the hair to both complete shoes; include torso, two arms, hands, legs and feet even when the reference is a portrait
+- design the unseen lower body in clothing consistent with the reference; never return a bust, head-only avatar, cropped legs, or clipped extremities
 - keep the pose simple and suitable for a small mobile companion
 
 Sprite-sheet layout:
-- return one square 2-by-2 sprite sheet with four equal square cells and generous transparent gutters between cells
-- top-left: neutral idle pose with eyes naturally open
-- top-right: the pixel-identical idle pose with both eyes fully closed in a brief blink; closed eyelids must be two short horizontal dark pixel lines with no iris or pupil
-- bottom-left: a tiny squash pose preparing to hop, eyes open
-- bottom-right: a cheerful airborne hop pose, eyes open
-- keep identity, proportions, scale, clothing, lighting and palette pixel-consistent across all four cells
+- return one square 4-by-4 sprite sheet: EXACTLY SIXTEEN equal square cells with generous transparent gutters; read left to right, top to bottom
+- row 1: neutral full-body idle; the same idle with eyes closed in a blink; walking left leg forward; walking right leg forward
+- row 2: a friendly wave with hand raised; a second wave pose with hand moved; curious observation with hand at chin; stirring a small food bowl with a spoon
+- row 3: crouch preparing to jump; airborne jump with both feet lifted; celebration with both arms raised; a second happy celebration pose
+- row 4: FOUR side three-quarter seated bicycle riding poses facing RIGHT, both hands held forward at the SAME handlebar position, hips at the SAME seat position; alternate bent knees and feet along the circular pedal path at crank angles 0, 90, 180 and 270 degrees
+- riding cells contain only the FULL character, no bicycle, chair, equipment or background; do not reuse walking poses for riding
+- keep identity, proportions, character scale, clothing, lighting and palette consistent across all sixteen cells; each pose is drawn specifically for this person
+- keep standing characters on one shared baseline, without repositioning their head between animation frames
+- closed eyelids must be short horizontal dark pixel lines, with no iris or pupil
 - never add glasses, sunglasses, masks, eye patches or eyewear unless the person visibly wears them in the reference photo; eyewear must never appear or disappear between frames
 - do not add cell borders, labels, numbers, guides, separators, stars, glows, floor shadows or duplicated background objects
 
@@ -48,11 +52,11 @@ Pixel-art requirements:
 - retain clear eyes, eyebrows, nose, mouth, hair strands and clothing details; the face must remain recognizable at avatar size
 - use fine pixel clusters rather than coarse mosaic blocks or an intentionally low-resolution look
 - crisp nearest-neighbor look; no blur, no antialiasing, no soft-focus painting, no gradients, no photographic texture
-- transparent background in every cell and all the way to every canvas edge; every pixel outside the four characters must have zero alpha
+- transparent background in every cell and all the way to every canvas edge; every pixel outside the sixteen characters must have zero alpha; no stray pixels or fragments
 - absolutely no white border, white halo, outline frame, circular badge, card, sticker edge, drop shadow or background panel
 - leave a small transparent margin around each character while keeping the center gutters transparent
 
-Return exactly one square PNG 2-by-2 sprite sheet.`
+Return exactly one square PNG 4-by-4 FULL-BODY sprite sheet, with all sixteen action cells complete.`
 
 var ErrPixelAvatarGenerationUnavailable = errors.New("pixel avatar generation unavailable")
 

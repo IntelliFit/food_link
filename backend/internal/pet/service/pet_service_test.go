@@ -627,3 +627,35 @@ func TestSelectAppearanceRejectsUnknownCandidate(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, result)
 }
+
+func TestMissingJianwenCatalogIsRepairedWithoutChangingPhotoIdentity(t *testing.T) {
+	fake := newFakePetRepo()
+	meta := profileMatchMeta(buildProfileMatch("user-1", nil))
+	meta["selection_candidates"] = builtinAppearanceCandidates()[1:]
+	meta["avatar_type"] = "pixel_self"
+	meta["pixel_avatar_key"] = "my-photo/idle.png"
+	meta["pixel_motion_atlas_key"] = "my-photo/motions.png"
+	meta["pixel_motion_version"] = pixelMotionVersion
+	meta["selected_candidate_id"] = "my-selected-photo"
+	meta["custom_name"] = true
+	fake.pet = &petdomain.UserPet{ID: "pet-1", UserID: "user-1", Name: "鬼鬼", PetSeed: "photo-seed", Meta: meta, Level: 8, Experience: 150}
+	svc := NewService(fake)
+	svc.ConfigureStorage(&fakePetAvatarStorage{})
+	for index := 0; index < 2; index++ {
+		summary, err := svc.Summary(t.Context(), "user-1", "2026-10-03")
+		require.NoError(t, err)
+		require.Len(t, summary.Pet.SelectionCandidates, 5)
+		assert.Equal(t, "鬼鬼", summary.Pet.Name)
+		assert.Equal(t, "pixel_self", summary.Pet.AvatarType)
+		assert.Equal(t, "photo-seed", summary.Pet.PetSeed)
+		assert.Contains(t, summary.Pet.PixelMotionAtlasURL, "my-photo/motions.png")
+		assert.Equal(t, "my-selected-photo", fake.pet.Meta["selected_candidate_id"])
+	}
+	selected, err := svc.SelectAppearance(t.Context(), "user-1", "builtin:jianwen-01")
+	require.NoError(t, err)
+	assert.Equal(t, "jianwen-01", selected.Pet.BuiltinAvatarID)
+	assert.Empty(t, selected.Pet.PixelMotionAtlasURL, "inactive photo motion must not leak into a template")
+	reloaded, err := svc.Summary(t.Context(), "user-1", "2026-10-03")
+	require.NoError(t, err)
+	assert.Equal(t, "jianwen-01", reloaded.Pet.BuiltinAvatarID)
+}
