@@ -5,6 +5,7 @@ import type { PetProfile } from '../utils/api'
 import { getAccessToken } from '../utils/api'
 import { redirectToLogin } from '../utils/withAuth'
 import { PetAvatar } from './PetAvatar'
+import { PetActor } from './PetActor'
 import { getCompanionSprite, PetCompanionSprite } from './PetCompanionSprite'
 import { PetChatContent } from './PetChatContent'
 import { useInkWellness } from './InkWellness'
@@ -314,7 +315,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
             <View className='pet-assistant-traveler'>
               <View className='pet-assistant-facing'>
                 <View className='pet-assistant-look'>
-                  {companionSprite ? (
+                  {refinedMotion ? <PetActor pet={pet} size={78} active={visible} spriteOverride={companionSprite} action={walking || phase === 'running' || phase === 'returning' ? 'walk' : phase === 'playing' && idleAction === 'look' ? 'observe' : phase === 'playing' && idleAction === 'blink' ? 'blink' : phase === 'playing' && idleAction === 'wave' ? 'wave' : 'idle'} /> : companionSprite ? (
                     <PetCompanionSprite key={refinedMotion ? playBurst : undefined} src={companionSprite} name={pet?.name} refined={refinedMotion} pose={phase === 'playing' && !walking ? idleAction : 'idle'} />
                   ) : (
                     <PetAvatar pet={pet} animal={pet ? undefined : 'cat'} size={68} mood={mood} state={state} motion={!refinedMotion && phase === 'playing' && !walking ? 'companion' : 'static'} />

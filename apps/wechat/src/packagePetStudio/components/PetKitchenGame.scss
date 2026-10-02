@@ -1,216 +1,162 @@
 .pet-kitchen {
   min-height: 100vh;
+  padding: 24rpx 28rpx calc(32rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  padding: 24rpx 26rpx calc(36rpx + env(safe-area-inset-bottom));
-  background: #f6ead8;
-  color: #483a2b;
+  background: #faf8f2;
+  color: #183f3e;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
   overflow-x: hidden;
-
-  .pet-kitchen__button { min-width: 0; max-width: 100%; margin: 0; padding: 0; line-height: 1.4; font-size: 25rpx; color: inherit; background: transparent; border-radius: 18rpx; box-sizing: border-box; }
-  .pet-kitchen__button::after { border: none; }
-  .pet-kitchen__button[disabled], .pet-kitchen__button:disabled { background: #e5dfd3; color: #867c6d; opacity: .75; }
+  view { box-sizing: border-box; min-width: 0; }
   text { color: inherit; }
-  view { box-sizing: border-box; }
-
-  &__header { display: flex; align-items: center; gap: 18rpx; min-height: 112rpx; padding-bottom: 20rpx; }
-  &__back { width: 84rpx; min-height: 84rpx; height: 84rpx; line-height: 72rpx !important; font-size: 58rpx !important; background: #fff8ec !important; border: 2rpx solid #ddc8a6; flex-shrink: 0; }
-  &__header-copy { display: flex; flex-direction: column; gap: 3rpx; flex: 1; }
-  &__eyebrow { font-size: 21rpx; color: #8c7250; letter-spacing: 2rpx; }
-  &__title { font-size: 38rpx; font-weight: 700; font-family: 'Songti SC', SimSun, serif; }
-  &__host { width: 90rpx; height: 112rpx; display: flex; justify-content: center; align-items: flex-end; flex-shrink: 0; overflow: hidden; }
-  &__utility { min-height: 84rpx; min-width: 84rpx; padding: 14rpx 18rpx !important; display: flex; align-items: center; justify-content: center; background: #fff8ec !important; border: 2rpx solid #d8c29c; font-size: 24rpx !important; }
-  &__muted { display: block; color: #7c6c54; font-size: 22rpx; line-height: 1.65; }
-  &__section-heading { display: flex; align-items: center; justify-content: space-between; gap: 14rpx; margin: 22rpx 0 14rpx; font-size: 28rpx; font-weight: 600; }
-  &__section-heading .pet-kitchen__button { color: #647c4f; font-size: 24rpx; padding: 8rpx 0; flex-shrink: 0; }
-  &__section-heading .pet-kitchen__muted { font-size: 21rpx; font-weight: 400; text-align: right; }
-
-  &__welcome { border-radius: 26rpx; overflow: hidden; background: #fff8e9; border: 2rpx solid #e0c99e; box-shadow: 0 8rpx 24rpx #7a5e2420; text-align: center; padding: 0 20rpx 22rpx; }
-  &__awning { height: 36rpx; margin: 0 -20rpx 28rpx; background: repeating-linear-gradient(90deg, #73875b 0, #73875b 64rpx, #e7ebd7 64rpx, #e7ebd7 128rpx); border-radius: 0 0 16rpx 16rpx; border-bottom: 5rpx solid #586d41; }
-  &__welcome-title { display: block; font-family: 'Songti SC', SimSun, serif; font-size: 31rpx; font-weight: 600; margin-bottom: 12rpx; }
-  &__welcome-food { display: flex; gap: 28rpx; align-items: center; justify-content: center; font-size: 56rpx; padding: 20rpx 0; }
-  &__welcome-food text { width: 78rpx; height: 78rpx; border-radius: 50%; background: #eedcbd; display: flex; align-items: center; justify-content: center; box-shadow: 0 6rpx 0 #d8bf953d; }
-  &__welcome-meta { display: flex; justify-content: center; flex-wrap: wrap; gap: 8rpx 18rpx; font-size: 20rpx; color: #806c4e; }
-  &__levels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
-  &__level { display: flex; flex-direction: column; align-items: stretch; width: 100%; text-align: left; padding: 20rpx !important; border: 2rpx solid #e0ceb2; background: #fffaf0 !important; min-height: 202rpx; }
-  &__level.is-selected { background: #edf1df !important; border-color: #819667; box-shadow: inset 0 0 0 2rpx #819667; }
-  &__level-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10rpx; }
-  &__level-number { width: 38rpx; height: 38rpx; line-height: 38rpx; text-align: center; border-radius: 50%; background: #e7dbc4; color: #705b3b; font-size: 22rpx; font-weight: 600; }
-  &__stars { color: #aa793c; letter-spacing: 2rpx; font-size: 22rpx; }
-  &__level-name { display: block; font-size: 28rpx; font-weight: 600; }
-  &__level-description { display: block; font-size: 21rpx; line-height: 1.6; color: #7d6b54; margin-top: 6rpx; min-height: 66rpx; }
-  &__level-record { display: block; font-size: 20rpx; color: #60734a; margin-top: 12rpx; }
-  &__menu { border-radius: 22rpx; background: #eadcc3; padding: 2rpx 20rpx 20rpx; margin: 22rpx 0; }
-  &__menu-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; }
-  &__menu-items > view { display: flex; align-items: center; gap: 10rpx; font-size: 22rpx; min-width: 0; }
-  &__menu-items > view > text:first-child { font-size: 26rpx; white-space: nowrap; }
-  &__primary { display: block; width: 100%; background: #65804e !important; color: #fffaf0 !important; padding: 23rpx 18rpx !important; font-size: 29rpx !important; font-weight: 600; border-radius: 24rpx !important; box-shadow: 0 6rpx 0 #4a633930; }
-  &__secondary { width: 100%; background: #efe2c7 !important; color: #4a573b !important; padding: 22rpx 18rpx !important; margin-top: 20rpx !important; border: 2rpx solid #d2bd98; font-size: 27rpx !important; }
-  &__text-button { width: 100%; padding: 22rpx 0 !important; color: #6b7a52 !important; font-size: 23rpx !important; }
-  &__footnote { display: block; margin: 20rpx 0 4rpx; text-align: center; font-size: 21rpx; line-height: 1.7; color: #817056; }
-
-  &__hud { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 20rpx 8rpx; background: #fff8e9; border: 2rpx solid #e0c9a4; border-radius: 22rpx; }
-  &__hud > view { display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 2rpx solid #e5d5b9; gap: 5rpx; }
-  &__hud > view:last-child { border: 0; }
-  &__hud > view > text:first-child { font-size: 35rpx; font-weight: 700; font-variant-numeric: tabular-nums; }
-  &__hud > view > text:first-child text { font-size: 20rpx; margin-left: 3rpx; font-weight: 400; }
-  &__hud > view > text:last-child { font-size: 20rpx; color: #847054; }
-  &__hud .is-urgent { color: #a2442a; }
-  &__combo { color: #6b814e; }
-  &__orders { width: 100%; margin-bottom: 12rpx; }
-  &__order-track { display: flex; gap: 14rpx; padding: 2rpx 2rpx 6rpx; }
-  &__order { flex: 0 0 244rpx; width: 244rpx; min-height: 174rpx; background: #fffaf0 !important; border: 2rpx solid #ddc7a2; text-align: left; padding: 16rpx !important; }
-  &__order.is-selected { border-color: #7e945a; background: #eff2e1 !important; box-shadow: inset 0 0 0 2rpx #7e945a; }
-  &__order.is-urgent { border-style: dashed; border-color: #b97840; }
-  &__order-top { display: flex; justify-content: space-between; align-items: center; gap: 6rpx; }
-  &__order-top > text:first-child { font-size: 28rpx; white-space: nowrap; }
-  &__order-top > text:last-child { font-size: 20rpx; color: #8c5a32; white-space: nowrap; }
-  &__order-name { display: block; font-size: 26rpx; font-weight: 600; margin-top: 6rpx; }
-  &__order-state { display: block; font-size: 20rpx; color: #7a6a54; margin-top: 6rpx; }
-  &__patience { height: 8rpx; border-radius: 5rpx; overflow: hidden; background: #e3d6bc; margin-top: 14rpx; }
-  &__patience > view { height: 100%; background: #8ca26b; border-radius: inherit; transition: width .1s linear; }
-  &__order.is-urgent .pet-kitchen__patience > view { background: #b9753e; }
-  &__order-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 174rpx; width: 100%; background: #ebe3d3; border-radius: 20rpx; font-size: 27rpx; gap: 8rpx; }
-  &__order-empty text:last-child { color: #7d705b; font-size: 22rpx; }
-  &__feedback { display: flex; align-items: center; gap: 10rpx; border: 2rpx solid #e1d0ad; background: #eee1c7; border-radius: 16rpx; min-height: 62rpx; padding: 11rpx 16rpx; font-size: 23rpx; line-height: 1.5; margin: 10rpx 0 18rpx; }
-  &__feedback > text:first-child { width: 28rpx; height: 28rpx; border-radius: 50%; background: #a58c64; color: #fffaf0; text-align: center; line-height: 28rpx; flex-shrink: 0; font-weight: 700; }
-  &__feedback.is-success { background: #e4ecd6; border-color: #bed0a5; }
-  &__feedback.is-success > text:first-child { background: #768d56; }
-  &__feedback.is-warning { background: #f4e0c8; border-color: #d7b089; }
-  &__feedback.is-warning > text:first-child { background: #ad7046; }
-  &__guide { background: #fcf5e6; border-left: 5rpx solid #8b9d6e; padding: 14rpx 18rpx; border-radius: 12rpx; margin-bottom: 18rpx; }
-  &__guide > view { display: flex; align-items: center; justify-content: space-between; font-size: 23rpx; font-weight: 600; margin-bottom: 8rpx; }
-  &__guide .pet-kitchen__button { color: #78845e; font-size: 22rpx; }
-  &__guide > text { display: block; font-size: 23rpx; color: #70614a; line-height: 1.6; }
-
-  &__stations { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10rpx; padding: 16rpx 10rpx; border-radius: 22rpx; border: 2rpx solid #c9ac80; background: repeating-linear-gradient(0deg, #d6b991, #d6b991 7rpx, #d9bd96 7rpx, #d9bd96 14rpx); box-shadow: 0 7rpx 0 #b28d5b38; }
-  &__station { position: relative; padding: 12rpx 10rpx 10rpx; min-width: 0; background: #fff8eb; border: 2rpx solid #e3ccb0; border-radius: 16rpx; display: flex; flex-direction: column; align-items: stretch; }
-  &__station.is-ready { border-color: #8da06d; background: #f2f4e7; }
-  &__station.is-burnt { border-color: #b68059; background: #efe0d0; }
-  &__station-heading { display: flex; align-items: center; justify-content: center; gap: 6rpx; font-size: 24rpx; font-weight: 600; }
-  &__station-heading > text:first-child { width: 28rpx; height: 28rpx; line-height: 28rpx; text-align: center; border-radius: 50%; background: #e9dbc4; color: #786241; font-size: 20rpx; }
-  &__dish { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 113rpx; border-radius: 14rpx; margin: 10rpx 0 6rpx; background: #f0e5d0; overflow: hidden; }
-  &__dish-icon { font-size: 42rpx; line-height: 1.4; white-space: nowrap; }
-  &__dish-name { font-size: 20rpx; line-height: 1.4; padding: 0 2rpx; text-align: center; min-height: 29rpx; }
-  &__station-state { display: block; min-height: 54rpx; font-size: 24rpx; line-height: 1.45; text-align: center; color: #806d50; }
-  &__progress { height: 9rpx; border-radius: 5rpx; background: #e4d5b9; margin: 8rpx 0 13rpx; overflow: hidden; }
-  &__progress > view { height: 100%; background: #8ea36d; border-radius: inherit; transition: width .1s linear; }
-  &__quality { display: block; text-align: center; font-size: 20rpx; color: #718254; min-height: 28rpx; margin: -5rpx 0 8rpx; }
-  &__station.is-burnt .pet-kitchen__progress > view { background: #ad7255; }
-  &__station-action { width: 100%; min-height: 76rpx; background: #7c925f !important; color: #fffaf0 !important; padding: 15rpx 3rpx !important; font-size: 24rpx !important; font-weight: 600; white-space: nowrap; border-radius: 12rpx !important; }
-  &__station-action[disabled], &__station-action:disabled { background: #e4ddcf !important; color: #948771 !important; }
-  &__discard { padding: 12rpx 0 3rpx !important; font-size: 20rpx !important; color: #937353 !important; }
-  &__station-tip { text-align: center; font-size: 20rpx; color: #918064; line-height: 1.5; padding-top: 9rpx; }
-  &__heat { margin-top: 22rpx; border: 2rpx solid #e1ccb0; border-radius: 20rpx; background: #fff8eb; padding: 0 18rpx 18rpx; }
+  .pet-kitchen__button { margin: 0; min-width: 0; min-height: 84rpx; max-width: 100%; box-sizing: border-box; padding: 0; line-height: 1.45; font-size: 26rpx; color: inherit; background: transparent; border-radius: 20rpx; }
+  .pet-kitchen__button::after { border: none; }
+  .pet-kitchen__button[disabled], .pet-kitchen__button:disabled { opacity: .55; }
+  &__header { display: flex; min-height: 96rpx; align-items: center; gap: 18rpx; padding-bottom: 12rpx; }
+  &__header-copy { flex: 1; display: flex; flex-direction: column; gap: 4rpx; }
+  &__eyebrow { font-size: 26rpx; color: #6b8580; }
+  &__title { font-size: 38rpx; font-weight: 700; }
+  &__back { width: 84rpx; height: 84rpx; min-height: 84rpx; background: #edf2ec !important; font-size: 52rpx !important; line-height: 76rpx !important; flex-shrink: 0; }
+  &__utility { min-width: 84rpx; min-height: 84rpx; display: flex; align-items: center; justify-content: center; padding: 12rpx 16rpx !important; background: #edf2ec !important; }
+  &__muted { color: #71857e; font-size: 26rpx; line-height: 1.5; }
+  &__section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; margin: 24rpx 0 16rpx; font-size: 30rpx; font-weight: 600; }
+  &__section-heading .pet-kitchen__button { min-height: 84rpx; display: flex; align-items: center; color: #4c7866; font-size: 26rpx; }
+  &__scene { position: relative; height: 370rpx; overflow: hidden; border-radius: 28rpx; background: #e9eadf; }
+  &__scene-art { width: 100%; height: 100%; display: block; }
+  &__scene-actor { position: absolute; left: 42%; bottom: 62rpx; width: 180rpx; height: 180rpx; display: flex; align-items: flex-end; justify-content: center; }
+  &__scene-caption { position: absolute; left: 20rpx; right: 20rpx; bottom: 16rpx; padding: 14rpx; border-radius: 18rpx; background: #faf8f0ed; display: flex; align-items: center; flex-direction: column; gap: 4rpx; font-size: 28rpx; }
+  &__scene-caption text:last-child { color: #71877c; font-size: 26rpx; }
+  &__scene-level { position: absolute; left: 16rpx; top: 14rpx; padding: 8rpx 14rpx; background: #faf8f0ed; border-radius: 14rpx; font-size: 26rpx; }
+  &__levels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; }
+  &__level { width: 100%; display: flex; align-items: stretch; flex-direction: column; text-align: left; padding: 20rpx !important; background: #fffdf7 !important; border: 2rpx solid #e4dccb; }
+  &__level.is-selected { background: #edf3e6 !important; border-color: #87a473; box-shadow: inset 0 0 0 2rpx #87a473; }
+  &__level-top { display: flex; justify-content: space-between; margin-bottom: 10rpx; }
+  &__level-number { color: #8e7445; font-size: 26rpx; }
+  &__stars { color: #af8851; font-size: 26rpx; }
+  &__level-name { font-size: 30rpx; font-weight: 600; }
+  &__level-description { color: #6e8379; font-size: 26rpx; line-height: 1.6; margin-top: 8rpx; }
+  &__level-record { color: #49735c; font-size: 26rpx; margin-top: 12rpx; }
+  &__menu, &__story, &__banquet { margin: 22rpx 0; padding: 18rpx; background: #edf2e9; border-radius: 24rpx; }
+  &__menu .pet-kitchen__section-heading { margin-top: 0; }
+  &__menu-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
+  &__menu-items > view { display: flex; align-items: center; flex-wrap: wrap; gap: 6rpx; font-size: 26rpx; }
+  &__story { display: flex; flex-direction: column; gap: 12rpx; font-size: 26rpx; line-height: 1.6; }
+  &__story text:last-child { color: #90713d; }
+  &__banquet { display: flex; flex-direction: column; gap: 14rpx; font-size: 26rpx; }
+  &__banquet-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
+  &__banquet-options .pet-kitchen__menu-option { width: 100%; min-height: 84rpx; padding: 12rpx; border: 2rpx solid #ddd5c5; background: #fffdf7; }
+  &__banquet-options .pet-kitchen__menu-option.is-selected { background: #dceadc; border-color: #719476; }
+  &__primary, &__secondary { display: flex; width: 100%; min-height: 96rpx; justify-content: center; align-items: center; padding: 22rpx 18rpx !important; font-size: 30rpx !important; font-weight: 600; }
+  &__primary { background: #2d6956 !important; color: #fffdf6 !important; }
+  &__secondary { margin-top: 16rpx !important; background: #eaf2eb !important; color: #2d6956 !important; }
+  &__text-button { min-height: 84rpx; width: 100%; padding: 20rpx 0 !important; color: #5e8072 !important; }
+  &__footnote { display: block; text-align: center; color: #819189; font-size: 26rpx; margin-top: 18rpx; line-height: 1.6; }
+  &__hud { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 16rpx 6rpx; border-radius: 22rpx; background: #eef3e8; }
+  &__hud > view { display: flex; flex-direction: column; align-items: center; gap: 3rpx; }
+  &__hud > view > text:first-child { font-size: 32rpx; font-weight: 700; font-variant-numeric: tabular-nums; }
+  &__hud > view > text:first-child text { margin-left: 4rpx; font-size: 26rpx; font-weight: 400; }
+  &__hud > view > text:last-child { color: #788d7e; font-size: 26rpx; }
+  &__hud .is-urgent { color: #a56a33; }
+  &__combo { color: #ae7c38; }
+  &__orders { width: 100%; margin: 12rpx 0; }
+  &__order-track { display: flex; gap: 12rpx; padding: 2rpx 0 6rpx; }
+  &__order { flex: 0 0 226rpx; width: 226rpx; min-height: 136rpx; padding: 12rpx !important; border: 2rpx solid #e2d8c4; background: #fffdf7 !important; text-align: left; }
+  &__order.is-selected { border-color: #78946b; background: #f0f4e7 !important; }
+  &__order.is-urgent { border-style: dashed; border-color: #b68148; }
+  &__order-top { display: flex; justify-content: space-between; gap: 6rpx; font-size: 26rpx; color: #7f937e; }
+  &__order-name { display: block; font-size: 28rpx; font-weight: 600; margin: 4rpx 0; }
+  &__order-state { display: block; font-size: 26rpx; color: #7b8c7f; }
+  &__patience { height: 8rpx; border-radius: 8rpx; margin-top: 10rpx; background: #e5e4d5; overflow: hidden; }
+  &__patience > view { height: 100%; background: #81a079; border-radius: inherit; }
+  &__order.is-urgent .pet-kitchen__patience > view { background: #bf9059; }
+  &__order-empty { width: 100%; min-height: 136rpx; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 26rpx; background: #edf3e8; border-radius: 20rpx; gap: 8rpx; }
+  &__feedback { display: flex; align-items: center; gap: 10rpx; padding: 12rpx 14rpx; margin: 10rpx 0; min-height: 62rpx; font-size: 26rpx; line-height: 1.4; background: #f0f3eb; border-radius: 16rpx; }
+  &__feedback > text:first-child { flex-shrink: 0; font-weight: 700; }
+  &__feedback.is-warning { color: #9b682f; background: #f6ead6; }
+  &__feedback.is-success { color: #356a4e; background: #e9f1e3; }
+  &__guide { padding: 14rpx; border-left: 4rpx solid #8aa378; background: #f1f3e8; border-radius: 12rpx; margin-bottom: 10rpx; font-size: 26rpx; line-height: 1.5; }
+  &__guide > view { display: flex; justify-content: space-between; }
+  &__stations { position: sticky; top: 0; z-index: 4; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12rpx; padding: 10rpx 0; background: #faf8f2; }
+  &__station { border-radius: 22rpx; padding: 12rpx 8rpx; background: #e8efdd; display: flex; flex-direction: column; align-items: stretch; text-align: center; }
+  &__station.is-cook { background: #f7ebd6; color: #a87632; }
+  &__station.is-plate { background: #e7f0eb; color: #397864; }
+  &__station.is-burnt { background: #f1dfd1; color: #955e36; }
+  &__station-heading { display: flex; align-items: center; justify-content: center; gap: 6rpx; font-size: 26rpx; font-weight: 600; }
+  &__station-heading > text:first-child { font-size: 26rpx; color: #8da282; }
+  &__dish { min-height: 64rpx; display: flex; align-items: center; justify-content: center; padding: 8rpx 0; }
+  &__dish-icon { font-size: 26rpx; font-weight: 600; }
+  &__dish-name { display: none; }
+  &__station-state { font-size: 26rpx; min-height: 30rpx; }
+  &__progress { height: 8rpx; border-radius: 8rpx; background: #ffffffa0; overflow: hidden; margin: 8rpx 0; }
+  &__progress > view { height: 100%; border-radius: inherit; background: #85a273; }
+  &__quality { min-height: 28rpx; font-size: 26rpx; }
+  &__station-action { min-height: 84rpx; width: 100%; display: flex; align-items: center; justify-content: center; padding: 8rpx 3rpx !important; color: #fffdf6 !important; background: #3c7660 !important; font-size: 26rpx !important; margin-top: 6rpx !important; white-space: normal; border-radius: 14rpx !important; }
+  &__discard { min-height: 84rpx; font-size: 26rpx !important; padding-top: 10rpx !important; color: #7d7966 !important; }
+  &__station-tip { display: none; }
+  &__stations.is-two-zone { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 0; }
+  &__stations.is-two-zone .is-prep { border-radius: 22rpx 0 0 22rpx; border-right: 2rpx dashed #b3c5a0; }
+  &__stations.is-two-zone .is-plate { order: 1; background: #e8efdd; border-radius: 0 22rpx 22rpx 0; }
+  &__stations.is-two-zone .is-cook { order: 2; margin-left: 10rpx; }
+  &__prep-shelf { display: flex; align-items: center; flex-wrap: wrap; gap: 10rpx; padding: 8rpx 0; font-size: 26rpx; color: #6b8576; }
+  &__prep-shelf .pet-kitchen__buffer { min-height: 84rpx; background: #eaf0e4; padding: 10rpx 14rpx; font-size: 26rpx; border: 2rpx solid #c6d5b9; }
+  &__buffer-slot { display: flex; align-items: center; gap: 4rpx; }
+  &__prep-shelf .pet-kitchen__buffer-discard { width: 76rpx; min-height: 84rpx; color: #8e704b; font-size: 36rpx; background: #f3eadd; }
+  &__cleaning { color: #a1763d; }
+  &__prep-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10rpx; }
+  &__prep-options .pet-kitchen__prep-extra { min-height: 84rpx; display: flex; align-items: center; justify-content: center; padding: 8rpx; background: #edf3e8; border: 2rpx solid #d8e0cd; font-size: 26rpx; }
+  &__heat { margin-top: 14rpx; background: #f6f0e3; border-radius: 20rpx; padding: 12rpx; }
+  &__heat > .pet-kitchen__section-heading { display: none; }
   &__heat-buttons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10rpx; }
-  &__heat-buttons .pet-kitchen__heat-button { display: flex; flex-direction: column; width: 100%; min-height: 76rpx; gap: 5rpx; padding: 13rpx 3rpx; background: #f0e7d5; border: 2rpx solid #dfcfb3; font-size: 24rpx; }
-  &__heat-button text:last-child { font-size: 20rpx; color: #897657; }
-  &__heat-buttons .pet-kitchen__heat-button.is-selected { background: #e8edd8; border-color: #8a9d67; font-weight: 600; }
-  &__cook-meter { margin: 20rpx 4rpx 2rpx; }
-  &__cook-track { position: relative; height: 22rpx; border-radius: 12rpx; background: linear-gradient(90deg, #d5ceb8 0%, #e0d09f 62%, #bd936d 78%, #a66f50 100%); overflow: hidden; }
-  &__cook-perfect { position: absolute; left: 64.5%; width: 12.9%; top: 0; height: 100%; background: #8ca76a; border: 2rpx solid #55733b; }
-  &__cook-marker { position: absolute; top: 0; width: 6rpx; height: 100%; background: #fffef7; box-shadow: 0 0 0 2rpx #544733; transform: translateX(-50%); }
-  &__cook-labels { display: flex; justify-content: space-between; font-size: 20rpx; margin-top: 8rpx; color: #887151; }
-  &__cook-labels text:nth-child(2) { color: #58723f; padding-left: 120rpx; }
-
-  &__ingredients { margin-top: 22rpx; }
-  &__recipe-hint { display: block; padding: 13rpx 16rpx; border-radius: 14rpx; background: #ede1ca; color: #705d40; font-size: 23rpx; line-height: 1.6; margin-bottom: 16rpx; }
-  &__ingredient-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10rpx; }
-  &__ingredient-grid .pet-kitchen__ingredient-button { position: relative; display: flex; flex-direction: column; width: 100%; min-height: 76rpx; align-items: center; gap: 3rpx; padding: 13rpx 4rpx 11rpx; background: #fff8e9; border: 2rpx solid #dec8a5; font-size: 24rpx; }
-  &__ingredient-grid .pet-kitchen__ingredient-button.is-selected { border-color: #7b955a; background: #e9efd8; box-shadow: inset 0 0 0 2rpx #7b955a; }
-  &__ingredient-icon { font-size: 38rpx; line-height: 1.35; }
-  &__ingredient-check { position: absolute; top: 6rpx; right: 8rpx; font-size: 20rpx; color: #7f8e63; }
-  &__drag-ghost { position: fixed; z-index: 150; width: 82rpx; height: 82rpx; transform: translate(-50%, -90%); border-radius: 20rpx; background: #fff9ecee; border: 2rpx solid #8f9f74; box-shadow: 0 10rpx 20rpx #6e542f38; display: flex; align-items: center; justify-content: center; font-size: 47rpx; pointer-events: none; }
-
-  &__result { padding: 30rpx 24rpx 20rpx; text-align: center; border: 2rpx solid #ddc6a0; border-radius: 28rpx; background: #fff8e9; }
-  &__result-kicker { display: block; font-size: 24rpx; color: #8b7350; letter-spacing: 3rpx; }
-  &__result-stars { display: block; font-size: 65rpx; letter-spacing: 12rpx; color: #c2974d; margin: 24rpx 0 20rpx; }
-  &__result-title { display: block; font-size: 31rpx; font-family: 'Songti SC', SimSun, serif; font-weight: 600; }
-  &__result-score { display: block; font-size: 82rpx; font-weight: 700; color: #647b4c; margin: 22rpx 0; font-variant-numeric: tabular-nums; }
-  &__result-score > text { font-size: 27rpx; font-weight: 400; }
-  &__result-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10rpx; background: #f0e6d2; border-radius: 18rpx; padding: 18rpx 8rpx; }
-  &__result-stats > view { display: flex; flex-direction: column; gap: 8rpx; font-size: 20rpx; color: #817053; }
-  &__result-stats > view > text:first-child { font-size: 35rpx; color: #4e4935; font-weight: 600; }
-  &__review { display: flex; flex-direction: column; text-align: left; gap: 10rpx; padding: 20rpx; background: #edf1df; border-radius: 18rpx; margin: 22rpx 0; font-size: 23rpx; line-height: 1.6; color: #6d7150; }
-  &__review > text:first-child { font-weight: 600; font-size: 25rpx; color: #52643e; }
-  &__review > text:last-child { font-size: 21rpx; color: #8b785c; }
-
-  &__modal-mask { position: fixed; z-index: 120; inset: 0; background: #352c20a8; display: flex; align-items: center; justify-content: center; padding: 40rpx 28rpx calc(40rpx + env(safe-area-inset-bottom)); }
-  &__dialog { width: 100%; max-width: 660rpx; padding: 36rpx 30rpx 18rpx; background: #fff9ed; border: 2rpx solid #d5be95; border-radius: 30rpx; text-align: center; box-shadow: 0 24rpx 60rpx #221b2540; }
-  &__dialog-title { display: block; font-size: 35rpx; font-family: 'Songti SC', SimSun, serif; font-weight: 600; margin: 8rpx 0 20rpx; }
-  &__dialog > .pet-kitchen__primary { margin-top: 28rpx; }
-  &__dialog-kicker { display: block; font-size: 23rpx; color: #877150; letter-spacing: 2rpx; }
-  &__tutorial-icon { display: block; font-size: 84rpx; margin: 20rpx 0; }
-  &__tutorial-copy { display: block; font-size: 26rpx; text-align: left; line-height: 1.8; color: #7b684e; }
-  &__recipe-dialog { width: 100%; max-width: 690rpx; padding: 10rpx 24rpx 24rpx; background: #fff9ed; border-radius: 26rpx; border: 2rpx solid #d6c09a; }
-  &__recipe-scroll { max-height: 65vh; height: 780rpx; }
-  &__recipe-book > view { display: flex; gap: 18rpx; align-items: center; border-bottom: 2rpx solid #e4d5bb; padding: 18rpx 0; }
-  &__recipe-emoji { width: 105rpx; font-size: 32rpx; flex-shrink: 0; text-align: center; }
-  &__recipe-book > view > view { display: flex; flex-direction: column; gap: 5rpx; min-width: 0; }
-  &__recipe-book > view > view > text:first-child { font-size: 27rpx; font-weight: 600; }
-  &__recipe-book > view > view > text:not(:first-child) { font-size: 22rpx; line-height: 1.5; color: #897052; }
-  &__recipe-instructions { display: block; margin-top: 22rpx; font-size: 23rpx; line-height: 1.8; color: #7b694b; }
-
-  // Keep the worktop and ingredient tray together on a phone, with the worktop
-  // remaining visible if a shorter screen needs a little vertical scrolling.
-  &.is-round {
-    padding: 12rpx 18rpx calc(12rpx + env(safe-area-inset-bottom));
-    .pet-kitchen__header { min-height: 84rpx; gap: 12rpx; padding-bottom: 8rpx; }
-    .pet-kitchen__back { width: 84rpx; min-height: 84rpx; height: 84rpx; line-height: 72rpx !important; font-size: 46rpx !important; }
-    .pet-kitchen__eyebrow { display: none; }
-    .pet-kitchen__title { font-size: 29rpx; }
-    .pet-kitchen__host { width: 56rpx; height: 64rpx; }
-    .pet-kitchen__utility { min-height: 84rpx; min-width: 84rpx; padding: 10rpx 18rpx !important; font-size: 24rpx !important; }
-    .pet-kitchen__hud { padding: 10rpx 4rpx; border-radius: 16rpx; }
-    .pet-kitchen__hud > view { gap: 2rpx; }
-    .pet-kitchen__hud > view > text:first-child { font-size: 29rpx; }
-    .pet-kitchen__hud > view > text:last-child { font-size: 20rpx; }
-    .pet-kitchen__orders-heading { display: none; }
-    .pet-kitchen__orders { margin: 10rpx 0 4rpx; }
-    .pet-kitchen__order { min-height: 124rpx; width: 235rpx; flex-basis: 235rpx; padding: 10rpx 14rpx !important; border-radius: 14rpx; }
-    .pet-kitchen__order-top > text:first-child { font-size: 23rpx; }
-    .pet-kitchen__order-name { margin-top: 2rpx; font-size: 24rpx; }
-    .pet-kitchen__order-state { font-size: 20rpx; margin-top: 1rpx; }
-    .pet-kitchen__patience { height: 6rpx; margin-top: 7rpx; }
-    .pet-kitchen__order-empty { min-height: 124rpx; }
-    .pet-kitchen__feedback { margin: 4rpx 0 10rpx; padding: 8rpx 12rpx; min-height: 44rpx; font-size: 24rpx; border-radius: 12rpx; }
-    .pet-kitchen__guide { margin-bottom: 10rpx; padding: 8rpx 14rpx; }
-    .pet-kitchen__guide > view { margin-bottom: 3rpx; }
-    .pet-kitchen__guide > text { font-size: 24rpx; line-height: 1.4; }
-    .pet-kitchen__stations { position: sticky; top: 0; z-index: 2; gap: 8rpx; padding: 10rpx 8rpx; border-radius: 16rpx; }
-    .pet-kitchen__station { padding: 8rpx 6rpx 6rpx; border-radius: 12rpx; }
-    .pet-kitchen__station-heading { font-size: 24rpx; gap: 4rpx; }
-    .pet-kitchen__station-heading > text:first-child { width: 24rpx; height: 24rpx; line-height: 24rpx; font-size: 20rpx; }
-    .pet-kitchen__dish { min-height: 58rpx; height: 58rpx; margin: 6rpx 0 4rpx; border-radius: 9rpx; }
-    .pet-kitchen__dish-icon { font-size: 33rpx; }
-    .pet-kitchen__dish-name { display: none; }
-    .pet-kitchen__station-state { min-height: 28rpx; font-size: 24rpx; line-height: 1.2; }
-    .pet-kitchen__progress { height: 7rpx; margin: 6rpx 0; }
-    .pet-kitchen__quality { min-height: 24rpx; margin: 0 0 5rpx; font-size: 20rpx; }
-    .pet-kitchen__station-action { width: 100%; min-height: 76rpx; padding: 8rpx 1rpx !important; display: flex; align-items: center; justify-content: center; font-size: 24rpx !important; white-space: normal; }
-    .pet-kitchen__discard { padding: 6rpx 0 0 !important; font-size: 20rpx !important; }
-    .pet-kitchen__station-tip { display: none; }
-    .pet-kitchen__heat { margin-top: 12rpx; padding: 10rpx 12rpx; border-radius: 14rpx; }
-    .pet-kitchen__heat > .pet-kitchen__section-heading { display: none; }
-    .pet-kitchen__heat-buttons { gap: 8rpx; }
-    .pet-kitchen__heat-button { padding: 9rpx 2rpx; min-height: 76rpx; display: flex; justify-content: center; font-size: 24rpx; }
-    .pet-kitchen__heat-button text:last-child { display: none; }
-    .pet-kitchen__cook-meter { margin: 7rpx 2rpx 0; }
-    .pet-kitchen__cook-track { height: 15rpx; }
-    .pet-kitchen__cook-labels { font-size: 20rpx; margin-top: 3rpx; }
-    .pet-kitchen__cook-labels text:nth-child(2) { padding-left: 75rpx; }
-    .pet-kitchen__ingredients { margin-top: 10rpx; }
-    .pet-kitchen__ingredients > .pet-kitchen__section-heading { margin: 0 0 5rpx; font-size: 24rpx; }
-    .pet-kitchen__section-heading .pet-kitchen__button { font-size: 24rpx; padding: 3rpx 0; }
-    .pet-kitchen__recipe-hint { font-size: 24rpx; padding: 7rpx 11rpx; margin-bottom: 8rpx; border-radius: 10rpx; line-height: 1.4; }
-    .pet-kitchen__ingredient-grid { gap: 8rpx; }
-    .pet-kitchen__ingredient-button { min-height: 76rpx; padding: 6rpx 2rpx; flex-direction: row; justify-content: center; gap: 3rpx; font-size: 24rpx; border-radius: 12rpx; }
-    .pet-kitchen__ingredient-icon { font-size: 27rpx; }
-    .pet-kitchen__ingredient-check { top: 1rpx; right: 3rpx; font-size: 20rpx; }
-    .pet-kitchen__playing-help { padding: 8rpx 0 !important; font-size: 22rpx !important; }
-  }
+  &__heat-buttons .pet-kitchen__heat-button { display: flex; flex-direction: column; justify-content: center; min-height: 84rpx; width: 100%; padding: 10rpx 4rpx; background: #fdfaf2; border: 2rpx solid #e5dcc5; font-size: 26rpx; }
+  &__heat-button text:last-child { display: none; }
+  &__heat-buttons .pet-kitchen__heat-button.is-selected { background: #e4eecf; border-color: #86a170; }
+  &__cook-meter { margin-top: 10rpx; }
+  &__cook-track { position: relative; height: 20rpx; border-radius: 12rpx; background: #e0c899; overflow: hidden; }
+  &__cook-perfect { position: absolute; left: 64.5%; width: 12.9%; height: 100%; background: repeating-linear-gradient(90deg,#7e9e62 0,#7e9e62 5rpx,#acc18c 5rpx,#acc18c 10rpx); border-left: 3rpx solid #4f793e; border-right: 3rpx solid #4f793e; }
+  &__cook-marker { position: absolute; height: 100%; width: 5rpx; background: #fff; transform: translateX(-50%); }
+  &__cook-labels { display: flex; justify-content: space-between; gap: 8rpx; margin-top: 6rpx; color: #9a8152; font-size: 26rpx; }
+  &__cook-labels text:nth-child(2) { color: #47733d; font-weight: 600; }
+  &__ingredients { margin-top: 14rpx; }
+  &__ingredients .pet-kitchen__section-heading { margin: 0 0 8rpx; font-size: 28rpx; }
+  &__ingredients .pet-kitchen__section-heading .pet-kitchen__button { min-height: 84rpx; }
+  &__recipe-hint { display: block; padding: 10rpx 14rpx; margin-bottom: 12rpx; font-size: 26rpx; line-height: 1.5; border-radius: 14rpx; background: #efeee2; color: #617764; }
+  &__ingredient-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10rpx; }
+  &__ingredient-grid .pet-kitchen__ingredient-button { min-height: 84rpx; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6rpx; position: relative; background: #f1eddf; border: 2rpx solid #e3dccb; font-size: 26rpx; }
+  &__ingredient-grid .pet-kitchen__ingredient-button.is-selected { background: #e1ebd4; border-color: #7c9b66; }
+  &__ingredient-check { position: absolute; top: 3rpx; right: 7rpx; color: #789663; font-size: 26rpx; }
+  &__drag-ghost { position: fixed; z-index: 150; width: 84rpx; height: 84rpx; display: flex; justify-content: center; align-items: center; transform: translate(-50%, -90%); border: 2rpx solid #91a87a; border-radius: 20rpx; background: #fffdf4ef; font-size: 42rpx; pointer-events: none; }
+  &__result { padding: 30rpx 22rpx; text-align: center; border: 2rpx solid #e0dfd0; border-radius: 28rpx; background: #fffdf7; }
+  &__result-kicker { display: block; font-size: 26rpx; color: #7a8b76; }
+  &__result-stars { display: block; font-size: 62rpx; color: #b8914f; margin: 20rpx 0; letter-spacing: 10rpx; }
+  &__result-title { display: block; font-size: 34rpx; font-weight: 600; }
+  &__result-score { display: block; margin: 22rpx 0; font-size: 80rpx; color: #38725c; font-weight: 700; }
+  &__result-score > text { font-size: 28rpx; font-weight: 400; }
+  &__result-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8rpx; padding: 16rpx 0; border-radius: 20rpx; background: #eff3e9; }
+  &__result-stats > view { display: flex; flex-direction: column; gap: 8rpx; font-size: 26rpx; color: #73866c; }
+  &__result-stats > view > text:first-child { font-size: 36rpx; font-weight: 600; color: #254e44; }
+  &__review { display: flex; flex-direction: column; text-align: left; gap: 12rpx; margin: 20rpx 0; padding: 20rpx; background: #eef3e7; border-radius: 20rpx; font-size: 26rpx; color: #6b8370; line-height: 1.6; }
+  &__review > text:first-child { font-weight: 600; color: #274f3f; }
+  &__settlement { display: block; font-size: 26rpx; color: #61836c; margin: 12rpx 0; line-height: 1.5; }
+  &__settlement-spinner { width: 38rpx; height: 38rpx; border-radius: 50%; border: 4rpx solid #cfe0cc; border-top-color: #3c7860; animation: kitchen-turn 1s linear infinite; margin: 20rpx auto; }
+  &__modal-mask { position: fixed; inset: 0; z-index: 120; padding: 30rpx; background: #163c37aa; display: flex; align-items: center; justify-content: center; }
+  &__dialog, &__recipe-dialog { width: 100%; max-width: 680rpx; padding: 28rpx 22rpx; border-radius: 28rpx; background: #faf9f1; text-align: center; }
+  &__dialog-title { display: block; font-size: 36rpx; font-weight: 600; margin: 10rpx 0 22rpx; }
+  &__dialog > .pet-kitchen__primary { margin-top: 24rpx; }
+  &__dialog-kicker { display: block; font-size: 26rpx; color: #788d7a; }
+  &__tutorial-icon { display: block; font-size: 64rpx; margin: 24rpx 0; color: #9b7a40; }
+  &__tutorial-copy { display: block; font-size: 28rpx; line-height: 1.7; text-align: left; color: #617e6b; }
+  &__recipe-scroll { height: 750rpx; max-height: 62vh; text-align: left; }
+  &__recipe-book > view { display: flex; align-items: center; gap: 18rpx; padding: 18rpx 0; border-bottom: 2rpx solid #e2e2d6; }
+  &__recipe-emoji { width: 100rpx; flex-shrink: 0; font-size: 32rpx; }
+  &__recipe-book > view > view { display: flex; flex-direction: column; gap: 6rpx; font-size: 26rpx; color: #6d8271; }
+  &__recipe-book > view > view > text:first-child { color: #244b3b; font-size: 28rpx; font-weight: 600; }
+  &__recipe-instructions { display: block; font-size: 26rpx; line-height: 1.7; color: #6b8172; margin-top: 20rpx; }
+  &.is-round { padding: 12rpx 20rpx calc(20rpx + env(safe-area-inset-bottom)); }
+  &.is-round .pet-kitchen__header { min-height: 84rpx; padding-bottom: 8rpx; }
+  &.is-round .pet-kitchen__eyebrow { display: none; }
+  &.is-round .pet-kitchen__title { font-size: 32rpx; }
+  &.is-round .pet-kitchen__orders-heading { display: none; }
+  &.is-round .pet-kitchen__scene { height: 200rpx; }
+  &.is-round .pet-kitchen__scene-actor { width: 180rpx; height: 180rpx; bottom: 0; }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .pet-kitchen__patience > view, .pet-kitchen__progress > view { transition: none; }
-}
+@keyframes kitchen-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pet-kitchen__settlement-spinner { animation-duration: 2s; } }

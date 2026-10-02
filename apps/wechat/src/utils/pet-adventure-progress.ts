@@ -18,6 +18,8 @@ export interface AdventureProgress {
 export interface AdventureProgressUpdate { progress: AdventureProgress; ok: boolean; message: string }
 export interface AdventureSettlement extends AdventureProgressUpdate { earnedStars: number; earnedExperience: number }
 const DAILY_STAR_CAP = 60
+// V1 ran to a fixed timer. Keep those recorded results valid without changing their save format.
+const LEGACY_DURATION_MS: Record<number, number> = { 1: 45000, 2: 45000, 3: 50000, 4: 50000, 5: 60000, 6: 60000 }
 
 export function createAdventureProgress(): AdventureProgress {
   return { version: 1, xp: 0, starBalance: 0, unlockedLevels: [1], clearedLevels: [], storyChapters: [],
@@ -80,7 +82,23 @@ function validResult(result: AdventureResult): boolean {
     || !Number.isInteger(result.stars) || result.stars < 0 || result.stars > 3
     || !Number.isFinite(result.distance) || result.distance < 0
     || !Number.isFinite(result.elapsedMs) || result.elapsedMs < 1000 || result.elapsedMs > level.durationMs) return false
-  if (result.completed) return result.elapsedMs === level.durationMs && result.hearts > 0 && result.stars > 0
+  if (result.completedScenes !== undefined) {
+    const scenes = result.completedScenes
+    const totalScenes = level.scenes.length
+    const endpoint = totalScenes * level.sceneSpacing
+    // New results prove their endpoint with scene progress, rather than waiting out the timer.
+    // Each scene has six 10-point pickups, a 50-point mechanism, up to 30 timing points
+    // and a 100-point finish; the combo multiplier never exceeds 1.3.
+    if (!Number.isInteger(scenes) || scenes < 0 || scenes > totalScenes
+      || result.distance < scenes * level.sceneSpacing || result.distance > Math.min(totalScenes, scenes + 1) * level.sceneSpacing
+      || result.distance > result.elapsedMs * .05
+      || result.score > totalScenes * (60 + 50 + 30 + 100) * 1.3
+      || result.leaves > totalScenes * 5 || result.collectedStars > totalScenes) return false
+    if (result.completed) return scenes === totalScenes && result.distance === endpoint && result.score >= 100 && result.hearts > 0 && result.stars > 0
+    // Recoveries no longer consume hearts. Only the real time limit ends an unfinished new journey.
+    return scenes < totalScenes && result.distance < endpoint && result.elapsedMs === level.durationMs && result.stars === 0
+  }
+  if (result.completed) return (result.elapsedMs === LEGACY_DURATION_MS[result.levelId] || result.elapsedMs === level.durationMs) && result.hearts > 0 && result.stars > 0
   return result.hearts === 0 && result.stars === 0
 }
 

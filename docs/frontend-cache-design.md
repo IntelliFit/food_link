@@ -169,6 +169,10 @@
 
 ### 4.3 扩展「清除缓存」的注意事项
 
+#### 宠物本机存档保留（2026-10-02）
+
+普通清缓存保留 `pet_adventure_progress_v1:*`、`pet_studio_dressing_v1:*`、`pet_kitchen_best_v1:*`、`pet_growth_v2:*`、`pet_loadout_v2:*`。这些保存星光、经验、已收藏物品、穿搭和游戏成绩，并非可重新从服务端获取的临时缓存；旧 v1 也作为尚未迁移宠物的原始记录与恢复副本保留。用户图片、请求、首页和圈子缓存仍按原清单清理。不要通过扩展缓存前缀误删本机持久档案。
+
 当新增涉及用户感知数据的本地缓存时，应同步更新 `src/pages/profile/index.tsx` 中的 `handleClearCache` 函数，确保用户可以通过「清除缓存」重置该数据。当前已覆盖：
 
 - ✅ 首页 dashboard 相关（`home_dashboard_local_cache`, `body_metrics_storage`, `food_link_dashboard_targets_v1`, `home_poster_modal_visible`, `showRecordMenuModal`）

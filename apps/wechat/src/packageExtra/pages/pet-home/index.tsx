@@ -67,6 +67,11 @@ function isCandidateActive(candidate: PetAppearanceCandidate, pet?: PetProfile):
   return !pet.builtin_avatar_id && candidate.pet_seed === pet.pet_seed
 }
 
+interface ProfileRequest { account: string; sequence: number }
+function profileAccount(): string | null {
+  try { return String(Taro.getStorageSync('user_id') || '').trim() } catch { return null }
+}
+
 function PetHomePage() {
   const { scheme } = useAppColorScheme()
   const [claiming, setClaiming] = useState(false)
@@ -80,18 +85,51 @@ function PetHomePage() {
   const [playReward, setPlayReward] = useState<PetPlayRewardSummary>(readPetPlayRewardSummary)
   const pixelAvatarCustomizingRef = useRef(false)
   const renamingPetRef = useRef(false)
+  const alive = useRef(true)
+  const account = useRef(profileAccount() || '')
+  const loadSequence = useRef(0)
+  const profileSequence = useRef(0)
+  const changingProfile = useRef(false)
 
-  const syncPetProfile = useCallback((pet: PetProfile) => {
+  const ownsRequest = useCallback((request: ProfileRequest) => alive.current && account.current === request.account && profileAccount() === request.account, [])
+  const currentProfileRequest = useCallback((request: ProfileRequest) => ownsRequest(request) && profileSequence.current === request.sequence, [ownsRequest])
+  const beginProfileRequest = useCallback((): ProfileRequest | null => {
+    if (!alive.current || !account.current || !petSummary?.pet || profileAccount() !== account.current || changingProfile.current) return null
+    changingProfile.current = true
+    loadSequence.current += 1
+    return { account: account.current, sequence: ++profileSequence.current }
+  }, [petSummary?.pet])
+  // Ending a local spinner is safe even if identity storage is temporarily unreadable.
+  // A different owner/new request must never have its in-flight controls reset by this one.
+  const canEndProfileRequest = useCallback((request: ProfileRequest) => alive.current && account.current === request.account && profileSequence.current === request.sequence, [])
+
+  const syncPetProfile = useCallback((pet: PetProfile, request: ProfileRequest) => {
+    if (!currentProfileRequest(request)) return
+    loadSequence.current += 1
     setPetSummary((previous) => previous ? { ...previous, pet } : previous)
     Taro.eventCenter.trigger(HOME_PET_PROFILE_CHANGED_EVENT, pet)
-  }, [])
+  }, [currentProfileRequest])
 
   const loadData = useCallback(async () => {
-    try {
-      setPetSummary(await getPetSummary())
-    } catch (error) {
-      await showUnifiedApiError(error, '加载宠物档案失败')
+    const user = profileAccount()
+    if (!alive.current || !user) return
+    if (account.current !== user) {
+      account.current = user; profileSequence.current += 1; changingProfile.current = false
+      pixelAvatarCustomizingRef.current = false; renamingPetRef.current = false
+      setPetSummary(null); setPixelAvatarPreview(null); setSelectingCandidateId(''); setPixelAvatarCustomizing(false); setRenamingPet(false); setClaiming(false)
     }
+    const request = { account: user, sequence: ++loadSequence.current }
+    try {
+      const result = await getPetSummary()
+      if (ownsRequest(request) && loadSequence.current === request.sequence) setPetSummary(result)
+    } catch (error) {
+      if (ownsRequest(request) && loadSequence.current === request.sequence) await showUnifiedApiError(error, '加载宠物档案失败')
+    }
+  }, [ownsRequest])
+
+  useEffect(() => {
+    alive.current = true
+    return () => { alive.current = false; loadSequence.current += 1; profileSequence.current += 1; changingProfile.current = false }
   }, [])
 
   useDidShow(() => {
@@ -118,9 +156,13 @@ function PetHomePage() {
     && Boolean(petSummary?.pet?.needs_selection || petSummary?.pet?.free_profile_rematch_available)
   const handleClaim = useCallback(async () => {
     if (!petEvent?.id || claiming) return
+    const request = beginProfileRequest()
+    if (!request) return
     try {
       setClaiming(true)
       const result = await claimPetEvent(petEvent.id)
+      if (!currentProfileRequest(request)) return
+      loadSequence.current += 1
       setPetSummary((prev) => prev ? {
         ...prev,
         pet: result.pet,
@@ -135,29 +177,34 @@ function PetHomePage() {
         icon: 'success'
       })
     } catch (error) {
-      await showUnifiedApiError(error, '领取奖励失败')
+      if (currentProfileRequest(request)) await showUnifiedApiError(error, '领取奖励失败')
     } finally {
-      setClaiming(false)
+      if (canEndProfileRequest(request)) { changingProfile.current = false; setClaiming(false) }
     }
-  }, [claiming, petEvent?.id])
+  }, [claiming, petEvent?.id, beginProfileRequest, currentProfileRequest, canEndProfileRequest])
 
   const handleSelectCandidate = useCallback(async (candidate: PetAppearanceCandidate) => {
     if (!candidate?.id || selectingCandidateId) return
+    const request = beginProfileRequest()
+    if (!request) return
     try {
       setSelectingCandidateId(candidate.id)
       const result = await selectPetAppearance(candidate.id)
+      if (!currentProfileRequest(request)) return
       setHomeCompanionChoice('follow')
-      syncPetProfile(result.pet)
+      syncPetProfile(result.pet, request)
       Taro.showToast({ title: '宠物已选择', icon: 'success' })
     } catch (error) {
-      await showUnifiedApiError(error, '选择宠物失败')
+      if (currentProfileRequest(request)) await showUnifiedApiError(error, '选择宠物失败')
     } finally {
-      setSelectingCandidateId('')
+      if (canEndProfileRequest(request)) { changingProfile.current = false; setSelectingCandidateId('') }
     }
-  }, [selectingCandidateId, syncPetProfile])
+  }, [selectingCandidateId, syncPetProfile, beginProfileRequest, currentProfileRequest, canEndProfileRequest])
 
   const handleRenamePet = useCallback(async () => {
     if (renamingPetRef.current) return
+    const request = beginProfileRequest()
+    if (!request) return
     renamingPetRef.current = true
     try {
       const naming = await Taro.showModal({
@@ -170,6 +217,7 @@ function PetHomePage() {
         // @ts-ignore
         placeholderText: '请输入宠物名字（最多 12 个字）',
       })
+      if (!currentProfileRequest(request)) return
       if (!naming.confirm) return
       const petName = String((naming as any).content || '').trim()
       if (!petName) {
@@ -184,20 +232,23 @@ function PetHomePage() {
 
       setRenamingPet(true)
       const result = await updatePetName(petName)
-      syncPetProfile(result.pet)
+      if (!currentProfileRequest(request)) return
+      syncPetProfile(result.pet, request)
       Taro.showToast({ title: `以后就叫${result.pet.name}啦`, icon: 'success' })
     } catch (error) {
+      if (!currentProfileRequest(request)) return
       const message = String((error as any)?.errMsg || (error as any)?.message || '')
       if (message.toLowerCase().includes('cancel')) return
       await showUnifiedApiError(error, '宠物改名失败')
     } finally {
-      renamingPetRef.current = false
-      setRenamingPet(false)
+      if (canEndProfileRequest(request)) { changingProfile.current = false; renamingPetRef.current = false; setRenamingPet(false) }
     }
-  }, [petSummary?.pet?.name, syncPetProfile])
+  }, [petSummary?.pet?.name, syncPetProfile, beginProfileRequest, currentProfileRequest, canEndProfileRequest])
 
   const handleCustomizePixelAvatar = useCallback(async () => {
     if (pixelAvatarCustomizingRef.current) return
+    const request = beginProfileRequest()
+    if (!request) return
     pixelAvatarCustomizingRef.current = true
     setPixelAvatarCustomizing(true)
     try {
@@ -211,6 +262,7 @@ function PetHomePage() {
         // @ts-ignore
         placeholderText: '请输入宠物名字（最多 12 个字）',
       })
+      if (!currentProfileRequest(request)) return
       if (!naming.confirm) return
       const petName = String((naming as any).content || '').trim()
       if (!petName) {
@@ -228,19 +280,23 @@ function PetHomePage() {
         confirmText: '继续选择',
         cancelText: '暂不生成',
       })
+      if (!currentProfileRequest(request)) return
       if (!consent.confirm) return
       const result = await chooseImageWithPrivacy({
         count: 1,
         sizeType: ['original'],
         sourceType: ['album', 'camera'],
       })
+      if (!currentProfileRequest(request)) return
       const filePath = result.tempFilePaths?.[0]
       if (!filePath) return
       const customized = await customizePetPixelAvatar(filePath, petName)
+      if (!currentProfileRequest(request)) return
       setHomeCompanionChoice('follow')
-      syncPetProfile(customized.pet)
+      syncPetProfile(customized.pet, request)
       setPixelAvatarPreview(customized.pet)
     } catch (error) {
+      if (!currentProfileRequest(request)) return
       const message = String((error as any)?.errMsg || (error as any)?.message || '')
       if (message.toLowerCase().includes('cancel')) return
       if (isPrivacyAuthorizeError(error)) {
@@ -249,10 +305,9 @@ function PetHomePage() {
       }
       await showUnifiedApiError(error, '生成像素分身失败，请稍后重试')
     } finally {
-      pixelAvatarCustomizingRef.current = false
-      setPixelAvatarCustomizing(false)
+      if (canEndProfileRequest(request)) { changingProfile.current = false; pixelAvatarCustomizingRef.current = false; setPixelAvatarCustomizing(false) }
     }
-  }, [petSummary?.pet?.name, syncPetProfile])
+  }, [petSummary?.pet?.name, syncPetProfile, beginProfileRequest, currentProfileRequest, canEndProfileRequest])
 
   const closePixelAvatarPreview = useCallback(() => {
     setPixelAvatarPreview(null)

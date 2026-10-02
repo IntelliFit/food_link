@@ -2,13 +2,32 @@ import {
   ADVENTURE_SHOP_ITEMS, createAdventureProgress, deriveAdventureProgress, equipAdventureItem,
   normalizeAdventureProgress, placeAdventureItem, purchaseAdventureItem, settleAdventureRound,
 } from '../../src/utils/pet-adventure-progress'
-import type { AdventureResult } from '../../src/utils/pet-adventure-game'
+import { ADVENTURE_LEVELS, advanceAdventureGame, applyAdventureAction, createAdventureGame, type AdventureGameState, type AdventureResult } from '../../src/utils/pet-adventure-game'
 
 const today = '2026-10-01'
 const result = (overrides: Partial<AdventureResult> = {}): AdventureResult => ({
   levelId: 1, completed: true, score: 1000, stars: 3, leaves: 20, collectedStars: 10,
   hearts: 3, distance: 270, elapsedMs: 45000, experience: 50, ...overrides,
 })
+function reach(state: AdventureGameState, condition: (current: AdventureGameState) => boolean): AdventureGameState {
+  for (let frames = 0; frames < 900 && state.status === 'running' && !condition(state); frames += 1) state = advanceAdventureGame(state, 100)
+  if (!condition(state)) throw new Error('The test player could not reach the next route landmark')
+  return state
+}
+function shortJourney(): AdventureResult {
+  let state = applyAdventureAction(createAdventureGame(1, 0), { type: 'start' })
+  for (let scene = 0; scene < 3; scene += 1) {
+    state = reach(state, current => current.phase === 'fork')
+    state = applyAdventureAction(state, { type: 'choose-route', route: 'safe' })
+    state = reach(state, current => current.phase === 'mechanism')
+    state = applyAdventureAction(state, { type: 'jump' })
+    for (let moves = 0; moves < 12 && state.phase === 'mechanism'; moves += 1) state = applyAdventureAction(state, { type: 'move-forward' })
+    state = reach(state, current => current.phase === 'rest' || current.status === 'finished')
+    if (state.phase === 'rest') state = applyAdventureAction(state, { type: 'continue' })
+  }
+  if (!state.result) throw new Error('The third route must produce a real result')
+  return state.result
+}
 
 test('new pets have an independent starter journey and known fixed-price cosmetic catalog', () => {
   const first = createAdventureProgress()
@@ -73,6 +92,76 @@ test('failed journeys retain real collected items but do not unlock new levels o
   expect(settled.earnedExperience).toBe(4)
   expect(settled.progress.unlockedLevels).toEqual([1])
   expect(settled.progress.storyChapters).toEqual([])
+})
+
+test('a real three-scene finish settles before ninety seconds through the unchanged legacy API', () => {
+  const completed = shortJourney()
+  expect(completed.completed).toBe(true)
+  expect(completed.completedScenes).toBe(3)
+  expect(completed.distance).toBe(300)
+  expect(completed.elapsedMs).toBeLessThan(ADVENTURE_LEVELS[0].durationMs)
+  const saved = settleAdventureRound(createAdventureProgress(), 'short-scenes', completed, today)
+  expect(saved.ok).toBe(true)
+  expect(saved.progress.clearedLevels).toEqual([1])
+  expect(saved.progress.unlockedLevels).toEqual([1, 2])
+  expect(saved.earnedStars).toBe(completed.collectedStars + 3)
+  expect(saved.earnedExperience).toBe(completed.experience)
+  expect(settleAdventureRound(saved.progress, 'short-scenes', completed, today).ok).toBe(false)
+})
+
+test('scene proof, physical distance, score and elapsed time reject fabricated short completions without mutating a save', () => {
+  const completed = shortJourney()
+  const progress = createAdventureProgress()
+  for (const invalid of [
+    { ...completed, completedScenes: 2 }, { ...completed, completedScenes: 3.5 },
+    { ...completed, distance: 299 }, { ...completed, distance: 301 },
+    { ...completed, elapsedMs: 1000 }, { ...completed, score: 0 },
+    { ...completed, score: 100000 }, { ...completed, collectedStars: 4 },
+    { ...completed, leaves: 16 }, { ...completed, completedScenes: undefined },
+  ]) {
+    const rejected = settleAdventureRound(progress, 'invalid-scenes', invalid, today)
+    expect(rejected.ok).toBe(false)
+    expect(rejected.progress).toBe(progress)
+    expect(rejected.earnedStars).toBe(0)
+    expect(rejected.earnedExperience).toBe(0)
+  }
+})
+
+test('a real new-engine timeout retains pickups with intact hearts, but an early exit cannot settle', () => {
+  const state = advanceAdventureGame(applyAdventureAction(createAdventureGame(1, 0), { type: 'start' }), ADVENTURE_LEVELS[0].durationMs)
+  expect(state.result).not.toBeNull()
+  const timedOut = state.result!
+  expect(timedOut.completed).toBe(false)
+  expect(timedOut.hearts).toBe(3)
+  const saved = settleAdventureRound(createAdventureProgress(), 'scene-timeout', timedOut, today)
+  expect(saved.ok).toBe(true)
+  expect(saved.earnedExperience).toBe(timedOut.experience)
+  expect(saved.progress.clearedLevels).toEqual([])
+  expect(saved.progress.unlockedLevels).toEqual([1])
+  for (const invalid of [
+    { ...timedOut, elapsedMs: 5000 }, { ...timedOut, completedScenes: 3 },
+    { ...timedOut, completedScenes: 1, distance: 25 }, { ...timedOut, stars: 1 as const },
+  ]) expect(settleAdventureRound(createAdventureProgress(), 'early-scenes', invalid, today).ok).toBe(false)
+})
+
+test('legacy fixed-timer results remain valid at their original durations and at ninety seconds', () => {
+  for (let levelId = 1; levelId <= 6; levelId += 1) {
+    const progress = normalizeAdventureProgress({ ...createAdventureProgress(), clearedLevels: Array.from({ length: levelId - 1 }, (_, index) => index + 1) })
+    const oldDuration = levelId <= 2 ? 45000 : levelId <= 4 ? 50000 : 60000
+    for (const duration of [oldDuration, 90000]) {
+      expect(settleAdventureRound(progress, `legacy-${levelId}-${duration}`, result({ levelId, elapsedMs: duration }), today).ok).toBe(true)
+    }
+    expect(settleAdventureRound(progress, `legacy-early-${levelId}`, result({ levelId, elapsedMs: oldDuration - 1000 }), today).ok).toBe(false)
+  }
+})
+
+test('a valid v1 save keeps its balance, equipment, props, history and round IDs without migration', () => {
+  const legacy = settleAdventureRound(createAdventureProgress(), 'legacy-kept', result(), today).progress
+  legacy.inventory = ['plant', 'leafboard', 'explorer-scarf']
+  legacy.equipment = { board: 'leafboard', scarf: 'explorer-scarf' }
+  legacy.placements = { left: 'plant', center: null, right: null }
+  expect(normalizeAdventureProgress(JSON.parse(JSON.stringify(legacy)))).toEqual(legacy)
+  expect(legacy.version).toBe(1)
 })
 
 test('early exits, invalid results, locked stages and invalid dates cannot award currency or experience', () => {

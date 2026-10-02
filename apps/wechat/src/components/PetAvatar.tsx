@@ -17,6 +17,8 @@ interface PetAvatarProps {
   state?: string
   mealState?: string
   motion?: PetMotion
+  /** Existing screens keep animation by default; actors may suspend frame timers. */
+  active?: boolean
   className?: string
 }
 
@@ -268,7 +270,7 @@ function renderMoodGlow(mood: string | undefined, state: string | undefined): st
   return ''
 }
 
-export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState, motion = 'static', className }: PetAvatarProps) {
+export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState, motion = 'static', active = true, className }: PetAvatarProps) {
   const appearance = derivePetAppearance(pet)
   if (animal) appearance.animal = animal
   const palette = PET_PALETTE[appearance.color] || PET_PALETTE.mint
@@ -288,7 +290,7 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
   const [motionFrame, setMotionFrame] = useState<PetMotionFrame>('idle')
 
   useEffect(() => {
-    if (customAvatarURL && !customAvatarBlinkURL) {
+    if (!active || customAvatarURL && !customAvatarBlinkURL) {
       setBlinking(false)
       return undefined
     }
@@ -317,10 +319,10 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
       disposed = true
       if (timer) clearTimeout(timer)
     }
-  }, [customAvatarBlinkURL, customAvatarURL])
+  }, [active, customAvatarBlinkURL, customAvatarURL])
 
   useEffect(() => {
-    if (motion !== 'companion') {
+    if (!active || motion !== 'companion') {
       setMotionFrame('idle')
       return undefined
     }
@@ -357,7 +359,7 @@ export function PetAvatar({ pet, animal, size = 'medium', mood, state, mealState
       disposed = true
       if (timer) clearTimeout(timer)
     }
-  }, [motion])
+  }, [active, motion])
 
   const src = useMemo(() => {
     const svg = buildSvg({ appearance, palette, dimmed, mood, state, mealState })

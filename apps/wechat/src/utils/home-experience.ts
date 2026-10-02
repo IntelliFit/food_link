@@ -42,18 +42,18 @@ export function sanitizeHomeExperienceConfig(value: unknown): HomeExperienceConf
   }
 }
 
-export function getStoredHomeExperienceConfig(): HomeExperienceConfig {
+export function getStoredHomeExperienceConfig(options?: { syncDisplay?: boolean }): HomeExperienceConfig {
   try {
     const current = Taro.getStorageSync(getStorageKey(HOME_EXPERIENCE_STORAGE_KEY))
     if (current) {
       const sanitized = sanitizeHomeExperienceConfig(current)
-      syncHomeDisplayMode(sanitized.mode)
+      if (options?.syncDisplay !== false) syncHomeDisplayMode(sanitized.mode)
       return sanitized
     }
 
     const legacy = Taro.getStorageSync(getStorageKey(LEGACY_HOME_EXPERIENCE_STORAGE_KEY))
     const sanitized = sanitizeHomeExperienceConfig(legacy)
-    syncHomeDisplayMode(sanitized.mode)
+    if (options?.syncDisplay !== false) syncHomeDisplayMode(sanitized.mode)
     return sanitized
   } catch {
     return { ...DEFAULT_HOME_EXPERIENCE_CONFIG }

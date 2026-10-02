@@ -506,7 +506,7 @@ function ProfilePage() {
   const handleClearCache = () => {
     Taro.showModal({
       title: '提示',
-      content: '确定要清除缓存吗？这将重置首页、识别记录和朋友圈的本地数据，下次进入时会重新加载。',
+      content: '确定要清除缓存吗？首页、识别记录和朋友圈的缓存将重新加载，宠物成长、收藏、衣装和游戏成绩会保留。',
       success: async (res) => {
         if (!res.confirm) return
         try {
@@ -520,7 +520,8 @@ function ProfilePage() {
           Taro.removeStorageSync('showRecordMenuModal')
           Taro.removeStorageSync('home_pet_companion_collapsed_v1')
           Taro.removeStorageSync('home_pet_companion_float_position_v1')
-          Taro.getStorageInfoSync().keys.filter(key => key.startsWith('pet_studio_dressing_v1:') || key.startsWith('pet_kitchen_best_v1:') || key.startsWith('pet_adventure_progress_v1:')).forEach(key => Taro.removeStorageSync(key))
+          // Pet growth, outfits and scores are local saves, including v1 recovery copies.
+          // They cannot be downloaded again and must survive an ordinary cache clear.
           Taro.removeStorageSync('home_pet_meal_prompt_seen_v1')
 
           // 识别记录 / 结果页相关缓存

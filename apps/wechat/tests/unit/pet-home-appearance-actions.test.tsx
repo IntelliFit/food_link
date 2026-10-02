@@ -37,6 +37,7 @@ describe('pet home appearance actions', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     ;(Taro.useDidShow as jest.Mock).mockImplementation(() => {})
+    ;(Taro.getStorageSync as jest.Mock).mockImplementation(key => key === 'user_id' ? 'test-user' : '')
   })
 
   it('does not offer the retired random appearance action', () => {
