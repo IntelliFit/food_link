@@ -1,7 +1,10 @@
+import { PET_MILESTONES, milestoneProgress } from './pet-milestones'
+
 export type GrowthGame = 'kitchen' | 'merge' | 'adventure' | 'explore'
 export type RoomSlot = 'window' | 'table' | 'floor'
 export interface GrowthRound { game: GrowthGame; levelId: number; score: number; completed: boolean; stars: number; collectibles: string[]; landmarks?: string[]; detail?: Record<string, number> }
 export interface PetJourney {
+  badges: string[]; wish: string | null; milestoneProgress: Record<string, number>
   xp: number; affinity: number; cleared: Record<GrowthGame, number[]>; bests: Record<string, { score: number; stars: number }>
   landmarks: number; seenLandmarks: string[]; chapters: number[]; choices: Record<string, string>; occupation: 'cook' | 'explorer' | 'active' | null
   placements: Record<RoomSlot, string | null>; daily: { day: string; xp: number; affinity: number; touch: boolean }
@@ -31,7 +34,7 @@ const GAME_IDS = GROWTH_GAMES.map(item => item.id)
 const int = (n: unknown, max = Number.MAX_SAFE_INTEGER) => typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.min(max, Math.floor(n))) : 0
 const ids = (value: unknown) => Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string' && /^[a-zA-Z0-9:_./%-]{1,160}$/.test(id)))] : []
 const validDay = (day: string) => /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(Date.parse(`${day}T00:00:00Z`)) && new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) === day
-export function newPetJourney(): PetJourney { return { xp: 0, affinity: 0, cleared: { kitchen: [], merge: [], adventure: [], explore: [] }, bests: {}, landmarks: 0, seenLandmarks: [], chapters: [], choices: {}, occupation: null, placements: { window: null, table: null, floor: null }, daily: { day: '', xp: 0, affinity: 0, touch: false } } }
+export function newPetJourney(): PetJourney { return { badges: [], wish: null, milestoneProgress: {}, xp: 0, affinity: 0, cleared: { kitchen: [], merge: [], adventure: [], explore: [] }, bests: {}, landmarks: 0, seenLandmarks: [], chapters: [], choices: {}, occupation: null, placements: { window: null, table: null, floor: null }, daily: { day: '', xp: 0, affinity: 0, touch: false } } }
 export function newGrowthSave(): GrowthSave { return { version: 2, revision: 0, stars: 0, inventory: ['journey-card', 'cozy-scarf'], pets: {}, migratedPets: [], rounds: [], daily: { day: '', games: [], earned: 0 } } }
 export function normalizeGrowthSave(raw: unknown): GrowthSave {
   if (!raw || typeof raw !== 'object' || (raw as GrowthSave).version !== 2) throw new Error('成长存档格式无法读取，请保留原存档后重试')
@@ -47,6 +50,9 @@ export function normalizeGrowthSave(raw: unknown): GrowthSave {
     journey.chapters = (Array.isArray(value.chapters) ? value.chapters : []).filter(chapter => [1, 2, 3].includes(chapter))
     Object.entries(value.choices || {}).forEach(([chapter, choice]) => { if (GROWTH_CHAPTERS.find(item => String(item.id) === chapter)?.choices.includes(choice)) journey.choices[chapter] = choice })
     journey.occupation = ['cook', 'explorer', 'active'].includes(value.occupation || '') ? value.occupation : null
+    journey.badges = ids(value.badges).filter(id => PET_MILESTONES.some(item => item.id === id))
+    journey.wish = PET_MILESTONES.some(item => item.id === value.wish) ? value.wish : null
+    PET_MILESTONES.forEach(item => { const progress = int(value.milestoneProgress?.[item.id], item.target); if (progress) journey.milestoneProgress[item.id] = progress })
     const placed = new Set<string>()
     ;(['window', 'table', 'floor'] as RoomSlot[]).forEach(slot => { const item = value.placements?.[slot]; if (item && save.inventory.includes(item) && !placed.has(item)) { journey.placements[slot] = item; placed.add(item) } })
     if (value.daily && validDay(value.daily.day)) journey.daily = { day: value.daily.day, xp: int(value.daily.xp, 20), affinity: int(value.daily.affinity, 10), touch: value.daily.touch === true }
@@ -92,8 +98,22 @@ export function settleGrowthRound(source: GrowthSave, petId: string, round: Grow
   }
   const key = `${round.game}:${round.levelId}`; const best = pet.bests[key]
   if (!best || round.score > best.score || round.stars > best.stars) pet.bests[key] = { score: Math.max(round.score, best?.score || 0), stars: Math.max(round.stars, best?.stars || 0) }
+  const unlocked: string[] = []
+  if (meaningful) {
+    pet.badges ||= []; pet.milestoneProgress ||= {}
+    const progress = (id: string, value: number) => { const next = Math.max(pet.milestoneProgress[id] || 0, int(value, PET_MILESTONES.find(item => item.id === id)!.target)); if (next) pet.milestoneProgress[id] = next }
+    if (round.game === 'kitchen') progress('kitchen-combo', round.detail?.bestCombo || 0)
+    if (round.game === 'merge') progress('merge-rank', round.detail?.highestRank || 0)
+    if (round.game === 'adventure' && round.completed) progress('adventure-stars', round.stars)
+    PET_MILESTONES.filter(item => item.game === round.game).forEach(item => {
+      if (!pet.badges.includes(item.id) && milestoneProgress(pet, item) >= item.target) {
+        pet.badges.push(item.id); unlocked.push(item.name)
+        save.inventory = [...new Set([...save.inventory, `badge:${item.id}`])]
+      }
+    })
+  }
   save.rounds.push(roundId)
-  return { save, ok: true, message: reward ? `已带回 ${reward} 星光 · ${xp} 成长经验` : '本局与收藏已保存 · 可继续自由游玩' }
+  return { save, ok: true, message: (reward ? `已带回 ${reward} 星光 · ${xp} 成长经验` : '本局与收藏已保存 · 可继续自由游玩') + (unlocked.length ? ` · 新徽章：${unlocked.join('、')}，可在收藏中摆进小屋` : '') }
 }
 export function placeGrowthItem(source: GrowthSave, petId: string, slot: RoomSlot, item: string | null): GrowthUpdate {
   if (item && (!source.inventory.includes(item) || item.endsWith('scarf') || item === 'leafboard')) return { save: source, ok: false, message: '这件物品不能摆放' }
@@ -124,4 +144,11 @@ export function touchGrowthPet(source: GrowthSave, petId: string, day: string): 
   if (pet.daily.touch) return { save: source, ok: true, message: '伙伴记得今天的问候' }
   const reward = Math.min(2, 10 - pet.daily.affinity); pet.affinity += reward; pet.daily.affinity += reward; pet.daily.touch = true
   return { save, ok: true, message: '伙伴回应了你的问候 · 亲密 +2' }
+}
+
+export function choosePetWish(source: GrowthSave, petId: string, id: string | null): GrowthUpdate {
+  if (!petId || (id !== null && !PET_MILESTONES.some(item => item.id === id))) return { save: source, ok: false, message: '这个心愿暂不可用' }
+  const save = copy(source); const pet = save.pets[petId] ||= newPetJourney()
+  pet.wish = id
+  return { save, ok: true, message: id ? '心愿已记下，随时可以换；进度会一直保留' : '已取消追踪，收集进度仍然保留' }
 }

@@ -202,3 +202,25 @@ export function applyMergeAction(original: MergeGameState, action: MergeAction):
 export function exportMergeCheckpoint(state: MergeGameState): { version: 1; game: 'merge'; state: MergeGameState } {
   return { version: 1, game: 'merge', state: JSON.parse(JSON.stringify(state)) as MergeGameState }
 }
+
+export interface MergeHint { direction?: MergeDirection; recipeId?: string; cells: number[]; message: string }
+/** One-step suggestion only: simulations never mutate the player's board or random cursor. */
+export function getMergeHint(state: MergeGameState): MergeHint | null {
+  if (state.status !== 'running') return null
+  for (const recipe of getAvailableMergeRecipes(state)) {
+    const cells = getRecipeCells(state, recipe)
+    if (cells) return { recipeId: recipe.id, cells, message: `${recipe.name}的食材已经齐了。先交这份，能腾出 ${cells.length} 格。` }
+  }
+  const labels: Record<MergeDirection, string> = { up: '上', down: '下', left: '左', right: '右' }
+  const candidates = (['up', 'left', 'down', 'right'] as MergeDirection[]).map(direction => {
+    const next = applyMergeAction(state, { type: 'slide', direction })
+    const ready = getAvailableMergeRecipes(next).find(recipe => getRecipeCells(next, recipe))
+    const merges = next.merges - state.merges
+    const empty = next.board.filter(tile => !tile).length
+    const rating = (next.result?.completed ? 10000 : next.status === 'finished' ? -10000 : 0) + (ready ? 1000 : 0) + merges * 20 + empty
+    return { direction, next, ready, merges, rating }
+  }).filter(item => item.next !== state).sort((a, b) => b.rating - a.rating)
+  const best = candidates[0]
+  if (!best || (best.next.status === 'finished' && !best.next.result?.completed)) return { cells: [], message: state.undoAvailable && state.previous ? '这一步没有安全的滑动方向，可以考虑撤回一步重新安排。' : '暂时没有安全的滑动方向，看看已完成的餐盘，下次可以更早交菜腾空间。' }
+  return { direction: best.direction, cells: [], message: `可以试着向${labels[best.direction]}滑：${best.ready ? `下一步可备齐${best.ready.name}。` : best.merges ? `能合成 ${best.merges} 次，之后留意低级配方。` : '先整理位置，再观察下一枚食材。'}这是一步建议，不保证整局最优。` }
+}

@@ -615,3 +615,39 @@ test('unmounting a running adventure removes its timer and never settles the det
   act(() => { jest.advanceTimersByTime(120000) }); await flush()
   expect(saved().rounds).toEqual([]); expect(saved().stars).toBe(0)
 })
+
+it('tracks a chosen badge, earns it through actual merge inputs and displays it at home', async () => {
+  const { container } = await mount()
+  click(container, 'journey-wishes-open'); click(container, 'journey-badges-merge'); click(container, 'journey-wish-merge-first')
+  expect(saved().pets[pet.id].wish).toBe('merge-first')
+  startMerge(container); finishMerge(container); await flush()
+  expect(saved().pets[pet.id].badges).toContain('merge-first')
+  click(container, 'merge-result-exit')
+  expect(container.querySelector('#journey-current-wish')?.textContent).toContain('心愿达成')
+  click(container, 'journey-tab-collection')
+  const place = container.querySelector('[id="journey-place-badge:merge-first"]')
+  expect(place).not.toBeNull(); fireEvent.click(place as Element)
+  expect(saved().pets[pet.id].placements.window).toBe('badge:merge-first')
+  click(container, 'journey-tab-home')
+  expect(container.querySelector('.journey-room__prop')?.textContent).toContain('配方初成')
+})
+
+it('does not show an unsaved wish as selected', async () => {
+  const { container } = await mount()
+  click(container, 'journey-wishes-open'); failGrowthWrites = true
+  click(container, 'journey-wish-kitchen-combo')
+  expect(saved().pets[pet.id].wish).toBeNull()
+  expect(container.querySelector('#journey-wish-kitchen-combo')?.textContent).toBe('设为心愿')
+})
+
+it('offers a non-spending merge suggestion and clears it after a player decision', async () => {
+  const { container } = await mount(); startMerge(container)
+  const before = saved()
+  click(container, 'merge-hint')
+  expect(container.querySelector('#merge-hint-message')?.textContent).toContain('三色早餐')
+  expect(container.querySelector('#merge-board')?.getAttribute('data-steps')).toBe('0')
+  expect(saved()).toEqual(before)
+  click(container, 'merge-hint-recipe')
+  expect(container.querySelector('#merge-hint-message')).toBeNull()
+  expect(container.querySelector('#merge-recipe-breakfast')?.className).toContain('selected')
+})

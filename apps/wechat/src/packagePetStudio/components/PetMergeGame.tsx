@@ -5,7 +5,7 @@ import { PetActor } from '../../components/PetActor'
 import type { PetProfile } from '../../utils/api'
 import {
   MERGE_CATEGORIES, MERGE_LEVELS, applyMergeAction, createMergeGame, getAvailableMergeRecipes,
-  getMergePreview, mergeLevelFor, mergeRecipeFor,
+  getMergePreview, getMergeHint, mergeLevelFor, mergeRecipeFor,
   type MergeAction, type MergeDirection, type MergeGameState, type MergeResult,
 } from '../../utils/pet-merge-game'
 import './PetMergeGame.scss'
@@ -33,6 +33,7 @@ export function PetMergeGame({ pet, accountId, active, startLevel = 1, onFinishe
   const owner = `${accountId}:${pet.id}`
   const [state, setState] = useState<MergeGameState>(() => createMergeGame(startLevel))
   const [guide, setGuide] = useState(false)
+  const [hintOpen, setHintOpen] = useState(false)
   const [settling, setSettling] = useState(false)
   const [settlementError, setSettlementError] = useState(false)
   const [actorSize] = useState(actorPixels)
@@ -55,6 +56,8 @@ export function PetMergeGame({ pet, accountId, active, startLevel = 1, onFinishe
   const availableRecipes = getAvailableMergeRecipes(state)
   const selectedRecipe = mergeRecipeFor(state.selectedRecipeId || '')
   const preview = getMergePreview(state)
+  const hint = hintOpen ? getMergeHint(state) : null
+  useEffect(() => { setHintOpen(false) }, [state, owner])
   const dispatch = useCallback((action: MergeAction) => {
     if (!activeRef.current && action.type !== 'pause') return
     setState(previous => applyMergeAction(previous, action))
@@ -161,7 +164,8 @@ export function PetMergeGame({ pet, accountId, active, startLevel = 1, onFinishe
           return <Button key={cell} id={`merge-cell-${cell}`} className={`pet-merge__button pet-merge__cell${obstacle ? ' pet-merge__cell--obstacle' : tile ? ` pet-merge__cell--${tile.category}` : ' pet-merge__cell--empty'}${selectable ? ' pet-merge__cell--eligible' : ''}${state.selectedCells.includes(cell) ? ' pet-merge__cell--selected' : ''}`} disabled={!playing || !tile || !selectedRecipe} aria-label={obstacle ? '固定收纳篮' : tile ? `${MERGE_CATEGORIES[tile.category].name}${RANK_LABELS[tile.rank]}级${state.selectedCells.includes(cell) ? '已选中' : ''}` : '空格'} onClick={() => { if (Date.now() >= suppressClickUntil.current) dispatch({ type: 'toggle-cell', cell }) }}>{obstacle ? <Text className='pet-merge__obstacle-mark'>▤</Text> : tile ? <><Text className='pet-merge__tile-mark'>{MERGE_CATEGORIES[tile.category].mark}</Text><Text className='pet-merge__tile-rank'>{RANK_MARKS[tile.rank]} · {MERGE_CATEGORIES[tile.category].name}</Text></> : <Text className='pet-merge__empty-mark'>·</Text>}</Button>
         })}
       </View>
-      <View className='pet-merge__directions'>{directions.map(item => <Button key={item.direction} id={`merge-${item.direction}`} className='pet-merge__button pet-merge__direction' aria-label={item.label} disabled={!playing} onClick={() => dispatch({ type: 'slide', direction: item.direction })}>{item.mark}</Button>)}</View>
+      <View className='pet-merge__directions'>{directions.map(item => <Button key={item.direction} id={`merge-${item.direction}`} className={`pet-merge__button pet-merge__direction${hint?.direction === item.direction ? ' pet-merge__direction--hint' : ''}`} aria-label={item.label} disabled={!playing} onClick={() => dispatch({ type: 'slide', direction: item.direction })}>{item.mark}</Button>)}</View>
+      <View className='pet-merge__hint'><Button id='merge-hint' className='pet-merge__button pet-merge__secondary' disabled={!playing} onClick={() => setHintOpen(value => !value)}>{hintOpen ? '收起建议' : '一起想一步'}</Button>{hint && <View id='merge-hint-message'><Text>{hint.message}</Text>{hint.recipeId && <Button id='merge-hint-recipe' className='pet-merge__button pet-merge__quiet' onClick={() => dispatch({ type: 'choose-recipe', recipeId: hint.recipeId! })}>查看这份配方 ›</Button>}</View>}</View>
       <View className='pet-merge__actions'><Button id='merge-submit' className='pet-merge__button pet-merge__primary' disabled={!playing || !selectedRecipe} onClick={() => dispatch({ type: 'submit' })}>确认交菜{state.selectedCells.length ? ` · ${state.selectedCells.length}格` : ''}</Button><Button id='merge-undo' className='pet-merge__button pet-merge__secondary' disabled={!playing || !state.undoAvailable || !state.previous} onClick={() => dispatch({ type: 'undo' })}>{state.undoAvailable ? '撤回一步' : '已用撤回'}</Button></View>
       <Text className={`pet-merge__feedback${state.feedback.warning ? ' pet-merge__feedback--warning' : ''}`}>{state.feedback.message}</Text>
       <Text className='pet-merge__footnote'>等级是游戏收集阶，不代表真实食物的营养优劣。</Text>
