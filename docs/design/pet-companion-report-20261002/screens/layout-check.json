@@ -1,0 +1,46 @@
+{
+  "illustrationOnly": true,
+  "notMiniProgramVerification": true,
+  "bounds": [
+    {
+      "id": "01-space",
+      "children": []
+    },
+    {
+      "id": "02-map",
+      "children": []
+    },
+    {
+      "id": "03-kitchen",
+      "children": []
+    },
+    {
+      "id": "04-merge",
+      "children": []
+    },
+    {
+      "id": "05-adventure",
+      "children": []
+    },
+    {
+      "id": "06-explore",
+      "children": []
+    },
+    {
+      "id": "07-wardrobe",
+      "children": []
+    },
+    {
+      "id": "08-story",
+      "children": []
+    },
+    {
+      "id": "09-match",
+      "children": []
+    },
+    {
+      "id": "10-actions",
+      "children": []
+    }
+  ]
+}
