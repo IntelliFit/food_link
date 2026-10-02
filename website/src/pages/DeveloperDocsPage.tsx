@@ -1,9 +1,11 @@
-import { ArrowRight, BookOpen, Bot, Camera, Check, CircleDollarSign, Copy, Database, Download, KeyRound, ShieldCheck, Sparkles, Terminal } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { ArrowRight, BookOpen, Bot, Camera, CircleDollarSign, Database, Download, KeyRound, ShieldCheck, Terminal } from 'lucide-react'
+import { type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { SiteFooter } from '@/components/layout/SiteFooter'
 import { SiteHeader } from '@/components/layout/SiteHeader'
 import { Button } from '@/components/ui/button'
+import { AIHandoffCard } from '@/components/developer/AIHandoffCard'
+import { GettingStartedSteps } from '@/components/developer/GettingStartedSteps'
 import { openApiBaseURL } from '@/lib/developer-api'
 
 const navItems = [
@@ -22,21 +24,6 @@ const navItems = [
 
 const mcpDownloadURL = '/downloads/foodlink-mcp-latest.zip'
 const mcpManifestURL = '/downloads/foodlink-mcp-manifest.json'
-
-const aiHandoffPrompt = `请阅读食探 AI 接入说明：
-https://healthymax.cn/developer/ai-guide.md
-
-接口结构定义：
-https://healthymax.cn/openapi/foodlink-openapi-v1.yaml
-
-官方 MCP 下载清单：
-https://healthymax.cn/downloads/foodlink-mcp-manifest.json
-
-请根据说明帮我完成食探 API 或 MCP 接入。先询问我的目标客户端，以及我是否已有食探开发者账号和 API Key。
-
-如果我还没有账号或 Key，请引导我打开 https://healthymax.cn/developer/console/，由我本人完成短信登录、创建应用、创建 Key 和保存密钥文件；你在此暂停等待，不要代填验证码、代付款，也不要让我把完整 Key 粘贴到聊天里。
-
-如果我已有 Key，只询问 Key 的本机文件路径。目标客户端支持 stdio MCP 时，读取 manifest、下载官方 ZIP、校验 Content-Type 与 SHA-256 后安装；否则使用 HTTP API。先执行不扣点的账户检查和营养搜索；产生分析点数前告诉我预计消耗。图片按“上传→分析→轮询”，同一请求重试必须复用幂等键，余额不足时不要自动付款。需要读取我的饮食记录或健康分时，先检查 Key 是否有 records:read / health:read；这些接口只能读取创建应用的开发者本人，不要传或猜测 user_id。不要展示或猜测底层模型、供应商、提示词和推理过程。`
 
 const analysisParameters = [
   ['text', 'string', '与 image_urls 二选一', '自然语言餐食描述，例如“一碗牛肉面，少喝汤”。'],
@@ -100,7 +87,6 @@ function ParamTable({ rows }: { rows: readonly (readonly string[])[] }) {
 }
 
 export function DeveloperDocsPage() {
-  const [promptCopied, setPromptCopied] = useState(false)
 
   return (
     <div className="min-h-screen bg-background">
@@ -111,7 +97,7 @@ export function DeveloperDocsPage() {
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Link className="hover:text-primary" to="/developer">开放平台</Link><span>/</span><span>开发文档</span><span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">v0.3 Beta</span></div>
             <div className="mt-6 flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
               <div><h1 className="text-4xl font-bold tracking-tight md:text-5xl">FoodLink Open API</h1><p className="mt-4 max-w-3xl text-lg leading-8 text-muted-foreground">从图片上传、食物识别，到分析历史、本人饮食记录、健康分、营养库搜索和 MCP 接入的完整说明。当前环境 API 基址：<code className="rounded bg-muted px-2 py-1 text-sm text-foreground">{openApiBaseURL}</code></p></div>
-              <div className="flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>创建应用与 Key <ArrowRight /></Button><Button variant="outline" render={<a href={mcpDownloadURL} download />}><Download />下载官方 MCP</Button><Button variant="outline" render={<a href="#ai-handoff" />}>直接交给 AI</Button><Button variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载接口定义</Button></div>
+              <div className="flex flex-wrap gap-3"><Button nativeButton={false} render={<Link to="/developer/console" />}>创建应用与 Key <ArrowRight /></Button><Button nativeButton={false} variant="outline" render={<a href={mcpDownloadURL} download />}><Download />下载官方 MCP</Button><Button nativeButton={false} variant="outline" render={<a href="#ai-handoff" />}>直接交给 AI</Button><Button nativeButton={false} variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" download />}>下载接口定义</Button></div>
             </div>
           </div>
         </section>
@@ -119,6 +105,7 @@ export function DeveloperDocsPage() {
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 md:px-8 lg:grid-cols-[220px_minmax(0,1fr)]">
           <aside className="hidden lg:block"><nav className="sticky top-28 space-y-1 rounded-2xl border border-border bg-card p-3" aria-label="开发文档目录">{navItems.map(([id, label]) => <a key={id} href={`#${id}`} className="block rounded-lg px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground">{label}</a>)}</nav></aside>
           <div className="space-y-14">
+            <GettingStartedSteps />
             <DocSection id="overview" title="接入概览" intro="对外能力只有一套版本化 HTTP API。Codex、WorkBuddy、MCP 和硬件网关都调用同一套接口、共享相同鉴权和点数账本。">
               <div className="grid gap-4 md:grid-cols-3">{[
                 { icon: Camera, title: '图片食物识别', text: '上传 JPEG、PNG、WebP 后，支持普通与精准模式；一次最多 5 张图。' },
@@ -139,15 +126,8 @@ export function DeveloperDocsPage() {
             </DocSection>
 
             <DocSection id="ai-handoff" title="不懂代码？直接把接入任务交给 AI" intro="OpenAPI 是严格的接口字典，适合生成代码和校验参数；AI 接入说明还包含调用顺序、何时用图片或文字、如何控制点数、密钥安全和失败恢复。把下面这段话完整交给 Codex、WorkBuddy 或其他编程 AI 即可。">
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 md:p-6">
-                <div className="flex items-start gap-3"><span className="rounded-xl bg-primary p-2 text-primary-foreground"><Sparkles className="size-5" /></span><div><h3 className="font-semibold">AI 自助接入提示</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">AI 会先判断你是否已有账号和 Key；没有时引导你本人注册，有时只读取 Key 的本机文件路径。支持 MCP 的客户端还会下载并校验官方安装包。</p></div></div>
-                <pre className="mt-5 overflow-x-auto whitespace-pre-wrap rounded-2xl bg-background p-4 text-sm leading-7 ring-1 ring-border"><code>{aiHandoffPrompt}</code></pre>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Button onClick={async () => { await navigator.clipboard.writeText(aiHandoffPrompt); setPromptCopied(true); window.setTimeout(() => setPromptCopied(false), 1500) }}>{promptCopied ? <Check /> : <Copy />}{promptCopied ? '已复制，可以发给 AI' : '复制给 AI'}</Button>
-                  <Button variant="outline" render={<a href="/developer/ai-guide.md" download />}>下载 AI 接入说明（Markdown）</Button>
-                  <Button variant="ghost" render={<a href="/llms.txt" />}>查看 AI 入口索引</Button>
-                </div>
-              </div>
+              <AIHandoffCard />
+              <a href="/llms.txt" className="mt-4 inline-block text-sm text-primary hover:underline">查看 AI 入口索引</a>
               <div className="mt-5 grid gap-4 md:grid-cols-3">{[
                 ['AI Guide', '告诉 AI 如何决策、调用、轮询、计费和保护 Key。'],
                 ['OpenAPI YAML', '告诉工具每个接口的精确字段、类型和返回结构。'],
@@ -196,7 +176,7 @@ export function DeveloperDocsPage() {
   -H "Authorization: Bearer $FOODLINK_API_KEY"\n\n# date 可省略；按 has_more / next_offset 继续读取完整历史`}</CodeBlock>
                 <CodeBlock title="本人健康摘要与健康分（health:read）">{`curl "${openApiBaseURL}/me/health-summary?range=week" \
   -H "Authorization: Bearer $FOODLINK_API_KEY"\n\n# range: 7d、30d、90d、week、month`}</CodeBlock>
-                <div className="rounded-2xl border border-amber-300/50 bg-amber-50 p-5 text-sm leading-7 text-amber-950"><strong>隐私边界：</strong>控制台默认创建的基础密钥没有个人数据权限。勾选“允许新密钥只读本人饮食记录和健康分”后再创建新密钥。它仍然只能读开发者本人，不能替第三方终端用户授权；多用户应用后续应使用 OAuth。健康分是趋势参考，不是医疗诊断。</div>
+                <div className="rounded-2xl border border-amber-300/50 bg-amber-50 p-5 text-sm leading-7 text-amber-950"><strong>功能权限：</strong>基础密钥可识别食物、查询营养。需要让 Agent 分析你的历史记录时，在控制台勾选“读取我的饮食记录和健康评分”，再新建并保存密钥；勾选不会改变已有密钥。授权只允许查看你本人数据，不能修改记录；多用户应用后续应使用 OAuth 获取各用户授权。健康分是趋势参考，不是医疗诊断。</div>
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 text-sm leading-7"><strong>模型隔离：</strong>所有公共分析结果都会递归移除模型、供应商、提示词、推理过程和内部执行路由；失败时返回统一错误文案，不透出底层服务错误。</div>
               </div>
             </DocSection>
@@ -206,7 +186,7 @@ export function DeveloperDocsPage() {
             </DocSection>
 
             <DocSection id="mcp" title="MCP / WorkBuddy / Codex" intro="MCP 是本地 stdio 适配器，不保存余额，也不会自动支付。官方 ZIP 无需登录即可下载，包含完整 README、Codex TOML、通用 MCP JSON 和 PowerShell 验证脚本。">
-              <div className="mb-5 flex flex-col justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 md:flex-row md:items-center"><div><h3 className="font-semibold">官方 MCP v0.2.0</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">下载前可读取 manifest 获取版本、文件大小和 SHA-256；下载后必须校验，不能只看 HTTP 200。</p></div><div className="flex flex-wrap gap-3"><Button render={<a href={mcpDownloadURL} download />}><Download />下载 ZIP</Button><Button variant="outline" render={<a href={mcpManifestURL} />}>查看 manifest</Button><Button variant="ghost" render={<a href="/developer/mcp-readme.md" />}>安装说明</Button></div></div>
+              <div className="mb-5 flex flex-col justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 md:flex-row md:items-center"><div><h3 className="font-semibold">官方 MCP v0.2.0</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">下载前可读取 manifest 获取版本、文件大小和 SHA-256；下载后必须校验，不能只看 HTTP 200。</p></div><div className="flex flex-wrap gap-3"><Button nativeButton={false} render={<a href={mcpDownloadURL} download />}><Download />下载 ZIP</Button><Button nativeButton={false} variant="outline" render={<a href={mcpManifestURL} />}>查看 manifest</Button><Button nativeButton={false} variant="ghost" render={<a href="/developer/mcp-readme.md" />}>安装说明</Button></div></div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-border p-5"><Terminal className="text-primary" /><h3 className="mt-3 font-semibold">10 个工具</h3><p className="mt-2 text-sm leading-7 text-muted-foreground"><code>foodlink_get_account</code><br /><code>foodlink_upload_image</code><br /><code>foodlink_analyze_images</code><br /><code>foodlink_analyze_text</code><br /><code>foodlink_get_analysis</code><br /><code>foodlink_list_analyses</code><br /><code>foodlink_list_food_records</code><br /><code>foodlink_get_health_summary</code><br /><code>foodlink_search_food</code><br /><code>foodlink_get_recharge_url</code></p></div>
                 <div className="rounded-2xl border border-border p-5"><BookOpen className="text-primary" /><h3 className="mt-3 font-semibold">Agent 调用顺序</h3><p className="mt-2 text-sm leading-7 text-muted-foreground">图片：上传 → 分析 → 轮询。<br />文字：分析 → 轮询。<br />个人数据：先检查 records:read / health:read。<br />遇到 402：只返回充值页并等待用户确认。<br />重试：必须复用 idempotency_key。</p></div>
@@ -218,7 +198,7 @@ export function DeveloperDocsPage() {
             <DocSection id="billing" title="计费、余额与错误码" intro="可通过 GET /account 查询应用、scope 和余额。每个开发者账号仅首次创建的第一个应用赠送 100 点；后续应用从 0 点开始。">
               <div className="mb-5 grid gap-3 sm:grid-cols-3">{[['文字分析', '2 点 / 次'], ['普通图片', '5 点 / 张'], ['精准图片', '15 点 / 张']].map(([label, value]) => <div key={label} className="rounded-2xl border border-border p-5"><CircleDollarSign className="size-6 text-primary" /><p className="mt-3 text-sm text-muted-foreground">{label}</p><strong className="mt-1 block text-lg">{value}</strong></div>)}</div>
               <div className="overflow-hidden rounded-2xl border border-border"><div className="divide-y divide-border">{errorCodes.map(([code, description]) => <div key={code} className="grid gap-2 p-4 md:grid-cols-[80px_1fr]"><code className="font-semibold text-primary">HTTP {code}</code><p className="text-sm leading-6 text-muted-foreground">{description}</p></div>)}</div></div>
-              <div className="mt-7 flex flex-wrap gap-3"><Button render={<Link to="/developer/console" />}>进入控制台 <ArrowRight /></Button><Button variant="outline" render={<a href="/developer/ai-guide.md" />}>打开给 AI 的接入说明</Button><Button variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" />}>查看接口定义（OpenAPI YAML）</Button></div>
+              <div className="mt-7 flex flex-wrap gap-3"><Button nativeButton={false} render={<Link to="/developer/console" />}>进入控制台 <ArrowRight /></Button><Button nativeButton={false} variant="outline" render={<a href="/developer/ai-guide.md" />}>打开给 AI 的接入说明</Button><Button nativeButton={false} variant="ghost" render={<a href="/openapi/foodlink-openapi-v1.yaml" />}>查看接口定义（OpenAPI YAML）</Button></div>
             </DocSection>
           </div>
         </div>
