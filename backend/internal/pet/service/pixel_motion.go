@@ -65,7 +65,7 @@ func createPixelMotionPNGs(source []byte) (pixelMotionPNGs, error) {
 			frames[index] = buf.Bytes()
 		}
 	}
-	for _, pair := range [][2]int{{0, 1}, {2, 3}, {4, 5}, {8, 9}, {10, 11}, {12, 13}, {13, 14}, {14, 15}, {15, 12}} {
+	for _, pair := range [][2]int{{0, 1}, {2, 3}, {4, 5}, {8, 9}, {10, 11}, {12, 13}, {13, 14}, {14, 15}, {15, 12}, {12, 14}, {13, 15}} {
 		if bytes.Equal(posePixels[pair[0]], posePixels[pair[1]]) {
 			return pixelMotionPNGs{}, fmt.Errorf("%w: duplicated action cells %d/%d", ErrIncompletePixelMotion, pair[0], pair[1])
 		}

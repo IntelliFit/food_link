@@ -55,7 +55,7 @@ func TestPixelMotionPreservesFeetAndTransparentMargins(t *testing.T) {
 }
 
 func TestPixelMotionRejectsMissingClippedPortraitAndDuplicatedCells(t *testing.T) {
-	for _, kind := range []string{"missing", "clipped", "portrait", "duplicate"} {
+	for _, kind := range []string{"missing", "clipped", "portrait", "duplicate", "ride-half-cycle"} {
 		t.Run(kind, func(t *testing.T) {
 			decoded, err := png.Decode(bytes.NewReader(makeTestPixelMotionSheet(t)))
 			require.NoError(t, err)
@@ -89,6 +89,13 @@ func TestPixelMotionRejectsMissingClippedPortraitAndDuplicatedCells(t *testing.T
 				for y := 0; y < 64; y++ {
 					for x := 0; x < 64; x++ {
 						sheet.Set(x+192, y, decoded.At(x+128, y))
+					}
+				}
+			case "ride-half-cycle":
+				// Four cycling slots must not be just an ABAB two-pose loop.
+				for y := 192; y < 256; y++ {
+					for x := 0; x < 128; x++ {
+						sheet.Set(x+128, y, decoded.At(x, y))
 					}
 				}
 			}
