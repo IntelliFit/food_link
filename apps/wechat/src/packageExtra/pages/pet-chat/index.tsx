@@ -30,6 +30,7 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { openPetSettings } from '../../../utils/pet-navigation'
 import { PetAvatar } from '../../../components/PetAvatar'
+import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { PetMarkdown } from './pet-markdown'
 import { MealSuggestions } from './MealSuggestions'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -741,16 +742,13 @@ function PetChatPage() {
             <View id={`pet-chat-message-${message.id}`} key={message.id} className={`pet-chat-message ${message.role}`}>
               <View className='pet-chat-bubble'>
                 {message.role === 'user' && message.imageUrls?.length ? (
-                  <View className='pet-chat-message-images'>
-                    {message.imageUrls.map((url) => (
-                      <Image
-                        key={url}
-                        className='pet-chat-message-image'
-                        src={url}
-                        mode='aspectFill'
-                        onClick={() => previewImage(url, message.imageUrls || [])}
-                      />
-                    ))}
+                  <View className='pet-chat-message-gallery'>
+                    <AdaptiveImageGrid
+                      urls={message.imageUrls}
+                      imageClassName='pet-chat-message-image'
+                      compact
+                      onImageClick={(url, _index, urls) => previewImage(url, urls)}
+                    />
                   </View>
                 ) : null}
                 {message.role === 'pet' ? (

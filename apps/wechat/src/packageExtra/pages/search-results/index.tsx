@@ -6,6 +6,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
 import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
 import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
+import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { shouldRenderManualFoodCards } from '../../../utils/manual-food-source'
 import './index.scss'
 
@@ -320,18 +321,7 @@ function SearchResultsPage() {
                 <Text className='card-desc'>{item.description}</Text>
               </View>
             ) : null}
-            {feedImagePaths.length === 1 ? (
-              <View className='card-image-wrap'>
-                <Image src={feedImagePaths[0]} mode='aspectFill' className='card-image' />
-              </View>
-            ) : null}
-            {feedImagePaths.length > 1 && (
-              <View className='card-images-wrap'>
-                {feedImagePaths.slice(0, 3).map((p, i) => (
-                  <Image key={i} src={p} mode='aspectFill' className='card-image-multi' />
-                ))}
-              </View>
-            )}
+            <AdaptiveImageGrid urls={feedImagePaths} />
           </>
         )}
         <View className='content-card-actions'>

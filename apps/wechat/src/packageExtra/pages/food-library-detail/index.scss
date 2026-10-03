@@ -13,6 +13,17 @@
   position: relative;
 }
 
+.image-section--gallery {
+  height: auto;
+  padding: 24rpx;
+  box-sizing: border-box;
+  background: transparent;
+
+  .feed-photo-grid {
+    margin: 0;
+  }
+}
+
 .detail-swiper {
   width: 100%;
   height: 100%;

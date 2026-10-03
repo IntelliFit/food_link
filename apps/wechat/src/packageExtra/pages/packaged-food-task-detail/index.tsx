@@ -1,4 +1,4 @@
-import { Image, ScrollView, Text, View } from '@tarojs/components'
+import { ScrollView, Text, View } from '@tarojs/components'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { useMemo, useState } from 'react'
 import {
@@ -10,6 +10,7 @@ import {
   type PackagedUploadRewardResult,
 } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
+import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import './index.scss'
 
 const PACKAGED_FOOD_EDIT_DRAFT_KEY = 'packagedFoodEditDraft'
@@ -438,11 +439,7 @@ function PackagedFoodTaskDetailPage() {
         <View className='detail-card'>
           <Text className='detail-card-title'>上传图片</Text>
           {imageUrls.length > 0 ? (
-            <View className='image-grid'>
-              {imageUrls.map((url, index) => (
-                <Image key={`${url}-${index}`} className='uploaded-image' src={url} mode='aspectFill' />
-              ))}
-            </View>
+            <AdaptiveImageGrid urls={imageUrls} />
           ) : (
             <Text className='detail-card-desc'>暂无图片信息。</Text>
           )}

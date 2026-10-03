@@ -1,4 +1,4 @@
-import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Slider, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
@@ -34,6 +34,7 @@ import {
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
 import { ANALYSIS_ENGINE_OPTIONS, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
+import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { getRecommendedMealTypeWithFallback, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
 import { withAuth } from '../../../utils/withAuth'
@@ -45,8 +46,8 @@ import {
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { applyEnergyEdit } from '../../../utils/nutrition-edit'
-import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
+import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
@@ -554,7 +555,6 @@ function ResultPage() {
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
   const [textRecordInput, setTextRecordInput] = useState('')
   const [imagePaths, setImagePaths] = useState<string[]>([])
-  const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [imagePath, setImagePath] = useState<string>('') // Keep for compatibility/fallback logic
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
@@ -620,14 +620,6 @@ function ResultPage() {
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
   const [insightCollapsed, setInsightCollapsed] = useState(false)
 
-  useEffect(() => {
-    if (imagePaths.length <= 1) {
-      setCurrentImageIndex(0)
-      return
-    }
-    setCurrentImageIndex(prev => (prev >= imagePaths.length ? 0 : prev))
-  }, [imagePaths])
-
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
   const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(
@@ -635,13 +627,6 @@ function ResultPage() {
   )
 
   // 二次纠错抽屉状态
-  const [foodRecalculating, setFoodRecalculating] = useState(false)
-  const foodRecalculationBusyRef = useRef(false)
-  const foodEditorMountedRef = useRef(true)
-  useEffect(() => {
-    foodEditorMountedRef.current = true
-    return () => { foodEditorMountedRef.current = false }
-  }, [])
   const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
   const [quickRatioSheetVisible, setQuickRatioSheetVisible] = useState(false)
   const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
@@ -650,6 +635,13 @@ function ResultPage() {
   const [snackDraft, setSnackDraft] = useState<SnackContributionDraft | null>(null)
   const [savingSnackDraft, setSavingSnackDraft] = useState(false)
   const [foodEditDraft, setFoodEditDraft] = useState<FoodEditDraft | null>(null)
+  const [foodRecalculating, setFoodRecalculating] = useState(false)
+  const foodRecalculationBusyRef = useRef(false)
+  const foodEditorMountedRef = useRef(true)
+  useEffect(() => {
+    foodEditorMountedRef.current = true
+    return () => { foodEditorMountedRef.current = false }
+  }, [])
 
   /** 驱动头图收缩：与 ScrollView 的 scrollTop 同步 */
   const [resultScrollTop, setResultScrollTop] = useState(0)
@@ -1631,7 +1623,6 @@ function ResultPage() {
         } as NutritionItem
       })
       calculateNutritionStats(updatedItems)
-      itemId: item.id,
       return updatedItems
     })
   }
@@ -1640,6 +1631,7 @@ function ResultPage() {
     description,
     insight: healthAdvice,
     items: items.map(item => ({
+      itemId: item.id,
       name: item.name,
       estimatedWeightGrams: item.weight,
       originalWeightGrams: item.originalWeight,
@@ -1681,7 +1673,6 @@ function ResultPage() {
     Taro.setStorageSync('analyzeResult', JSON.stringify(nextResult))
     const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId')
     if (!sourceTaskId) return
-    if (foodRecalculationBusyRef.current) return
     try {
       await updateAnalysisTaskResult(sourceTaskId, nextResult)
     } catch (error) {
@@ -1690,12 +1681,12 @@ function ResultPage() {
   }
 
   const openFoodEditDrawer = (item: NutritionItem) => {
+    if (foodRecalculationBusyRef.current) return
     setFoodEditDraft({
       itemId: item.id,
       name: item.name,
       weight: String(roundToSingleDecimal(item.weight || 0)),
       calories: String(Math.round(item.calorie || 0)),
-    if (foodRecalculationBusyRef.current) return
       protein: formatMacroDisplay(item.protein || 0),
       carbs: formatMacroDisplay(item.carbs || 0),
       fat: formatMacroDisplay(item.fat || 0),
@@ -1704,6 +1695,7 @@ function ResultPage() {
   }
 
   const updateFoodEditDraftField = (field: keyof FoodEditDraft, value: string) => {
+    if (foodRecalculationBusyRef.current) return
     setFoodEditDraft(current => {
       if (!current) return current
       if (field !== 'calories' && field !== 'protein' && field !== 'carbs' && field !== 'fat') {
@@ -1744,6 +1736,14 @@ function ResultPage() {
     const fat = parseFoodEditNumber(foodEditDraft.fat)
     const waterMl = parseFoodEditNumber(foodEditDraft.waterMl)
 
+    if (!name) {
+      Taro.showToast({ title: '名称不能为空', icon: 'none' })
+      return
+    }
+    if (weight == null || weight <= 0) {
+      Taro.showToast({ title: '请输入大于0的重量', icon: 'none' })
+      return
+    }
     const targetIndex = nutritionItems.findIndex(item => item.id === foodEditDraft.itemId)
     const original = nutritionItems[targetIndex]
     if (!original) return
@@ -1787,20 +1787,12 @@ function ResultPage() {
       }
       return
     }
-    if (!name) {
-      Taro.showToast({ title: '名称不能为空', icon: 'none' })
-      return
-    }
-    if (weight == null || weight <= 0) {
-    nutritionAdjustedRef.current = true
-      Taro.showToast({ title: '请输入大于0的重量', icon: 'none' })
-      return
-    }
     if (calories == null || protein == null || carbs == null || fat == null || waterMl == null) {
       Taro.showToast({ title: '营养值需为不小于0的数字', icon: 'none' })
       return
     }
 
+    nutritionAdjustedRef.current = true
     const nextItems = nutritionItems.map(item => {
         if (item.id !== foodEditDraft.itemId) return item
 
@@ -2504,68 +2496,28 @@ function ResultPage() {
     })
   }
 
-  // 预览大图
-  const handlePreviewImage = (current: string) => {
-    if (imagePaths.length > 0) {
-      Taro.previewImage({
-        current,
-        urls: imagePaths
-      })
-    }
-  }
-
   const pendingPackagedChoiceCount = nutritionItems.filter(isPackagedChoicePending).length
 
   return (
     <View className={`result-page ${scheme === 'dark' ? 'result-page--dark' : ''}`}>
-      {/* 固定头图：不随列表平移；上滑时高度缩小，内层始终全宽无左右 margin */}
-      <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
-        <View
-          className='scanner-hero-inner'
-          style={{
-            borderRadius: `${resultHeroInnerRadiusRpx}rpx`
-          }}
-        >
-          {imagePaths.length > 0 ? (
-            <Swiper
-              className='scanner-hero-swiper'
-              circular
-              indicatorDots={false}
-              onChange={(e) => setCurrentImageIndex(e.detail.current)}
-              current={currentImageIndex}
-            >
-              {imagePaths.map((path, index) => (
-                <SwiperItem key={index} className='scanner-hero-swiper-item'>
-                  <Image
-                    src={path}
-                    mode='aspectFill'
-                    className='scanner-hero-image'
-                    onClick={() => handlePreviewImage(path)}
-                  />
-                </SwiperItem>
-              ))}
-            </Swiper>
-          ) : (
+      {imagePaths.length === 0 && (
+        <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
+          <View
+            className='scanner-hero-inner'
+            style={{
+              borderRadius: `${resultHeroInnerRadiusRpx}rpx`
+            }}
+          >
             <View className='scanner-hero-placeholder'>
               <View className='placeholder-icon-wrap'>
                 <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
               </View>
               <Text className='placeholder-text'>{textRecordInput || '文字记录，未提供实物照片'}</Text>
             </View>
-          )}
-          <View className='scanner-hero-gradient' />
-          {imagePaths.length > 1 && (
-            <View className='image-counter'>
-              <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
-            </View>
-          )}
-          {imagePaths.length > 1 && (
-            <View className='image-batch-badge result-batch-badge'>
-              <Text className='image-batch-badge-text'>共 {imagePaths.length} 张</Text>
-            </View>
-          )}
+            <View className='scanner-hero-gradient' />
+          </View>
         </View>
-      </View>
+      )}
 
       {/*
         iOS 微信小程序：scroll-view 上直接设 padding、或在 scroll-view 内嵌套 position:fixed，
@@ -2577,13 +2529,14 @@ function ResultPage() {
         scrollWithAnimation={false}
         enhanced={false}
         showScrollbar={false}
-        onScroll={handleResultScroll}
+        onScroll={imagePaths.length === 0 ? handleResultScroll : undefined}
       >
         <View
           className='result-scroll-inner'
-          style={{ paddingTop: `${resultScrollPaddingTopRpx}rpx` }}
+          style={{ paddingTop: imagePaths.length > 0 ? '24rpx' : `${resultScrollPaddingTopRpx}rpx` }}
         >
         <View className='content-container'>
+          <AdaptiveImageGrid urls={imagePaths} className='result-photo-gallery' />
           <View className='execution-mode-row'>
             <View className='execution-mode-left'>
               <View className={`execution-mode-tag ${executionMode}`}>
@@ -3223,7 +3176,6 @@ function ResultPage() {
               {saving ? (
                 <View className='btn-spinner' />
               ) : (
-                <Text className='food-edit-recalculation-hint'>修改名称后，保存时按当前重量重算这一项；其他食物和摄入比例保留。</Text>
                 <Text className='btn-text'>
                   {isAnalyzeSessionCommitted() || committedRecordId
                     ? '查看结果'
@@ -3271,6 +3223,7 @@ function ResultPage() {
             <ScrollView className='drawer-scroll food-edit-drawer-scroll' scrollY>
               <View className='food-edit-section'>
                 <Text className='food-edit-section-title'>基础信息</Text>
+                <Text className='food-edit-recalculation-hint'>修改名称后，保存时按当前重量重算这一项；其他食物和摄入比例保留。</Text>
                 <View className='food-edit-field'>
                   <Text className='food-edit-label'>名称</Text>
                   <Input

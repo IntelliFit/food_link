@@ -1,4 +1,4 @@
-import { View, Text, Image, ScrollView, Canvas, Button, Swiper, SwiperItem } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Canvas, Button } from '@tarojs/components'
 import React, { useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
@@ -25,6 +25,7 @@ import { IconBreakfast, IconCollapse, IconExpand, IconLunch, IconDinner, IconSna
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { COMMUNITY_FEED_CHANGED_EVENT, HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { MealRecordEditModal } from '../../../pages/index/components/MealRecordEditModal'
 import OnboardingGuide from '../../../components/OnboardingGuide'
@@ -218,7 +219,6 @@ function RecordDetailPage() {
   const [record, setRecord] = React.useState<FoodRecord | null>(null)
   const [posterGenerating, setPosterGenerating] = React.useState(false)
   const [posterImageUrl, setPosterImageUrl] = React.useState<string | null>(null)
-  const [currentImageIndex, setCurrentImageIndex] = React.useState(0)
   const [calorieCompare, setCalorieCompare] = React.useState<PosterCalorieCompare | null>(null)
   const [isProUser, setIsProUser] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
@@ -599,7 +599,6 @@ function RecordDetailPage() {
       ? [record.image_path]
       : []
   const hasRealRecordImage = recordImages.length > 0
-  const recordDisplayImage = recordImages[0] || ''
 
   /** 单条食物实际摄入热量（按 ratio） */
   const itemCalorie = (item: FoodRecord['items'][0]) => {
@@ -673,48 +672,16 @@ function RecordDetailPage() {
           </View>
         </View>
 
-        <View
-          className={`detail-image ${hasRealRecordImage ? '' : 'detail-image--logo'}`}
-          onClick={() => {
-            if (!recordImages.length) return
-            Taro.previewImage({
-              urls: recordImages,
-              current: recordImages[currentImageIndex]
-            })
-          }}
-        >
-          {hasRealRecordImage ? (
-            recordImages.length > 1 ? (
-              <Swiper
-                className='record-detail-swiper'
-                circular
-                indicatorDots={false}
-                onChange={(e) => setCurrentImageIndex(e.detail.current)}
-                current={currentImageIndex}
-              >
-                {recordImages.map((path, index) => (
-                  <SwiperItem key={index} className='record-detail-swiper-item'>
-                    <Image src={path} mode='aspectFill' className='record-detail-swiper-image' />
-                  </SwiperItem>
-                ))}
-              </Swiper>
-            ) : (
-              <Image src={recordDisplayImage} mode='aspectFill' />
-            )
-          ) : (
-            <>
-              <View className='detail-image-icon-wrap'>
-                <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
-              </View>
-              <Text className='detail-image-placeholder-text'>文字记录，未提供实物照片</Text>
-            </>
-          )}
-          {recordImages.length > 1 && (
-            <View className='record-detail-image-counter'>
-              <Text className='record-detail-image-counter-text'>{currentImageIndex + 1}/{recordImages.length}</Text>
+        {hasRealRecordImage ? (
+          <AdaptiveImageGrid urls={recordImages} />
+        ) : (
+          <View className='detail-image detail-image--logo'>
+            <View className='detail-image-icon-wrap'>
+              <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
             </View>
-          )}
-        </View>
+            <Text className='detail-image-placeholder-text'>文字记录，未提供实物照片</Text>
+          </View>
+        )}
 
         {/* 用户选择的目标与状态 */}
         {(record.diet_goal || record.activity_timing || record.eating_mood) && (

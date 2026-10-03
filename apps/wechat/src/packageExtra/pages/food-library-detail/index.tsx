@@ -1,5 +1,5 @@
 import { withAuth } from '../../../utils/withAuth'
-import { View, Text, ScrollView, Image, Textarea, Swiper, SwiperItem } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Textarea } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
 import {
@@ -26,9 +26,10 @@ import {
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
-
 import { campusNutritionState } from '../../../utils/campus-nutrition'
+
 function getLocalUserDisplay(): { nickname: string; avatar: string } {
   try {
     const raw = Taro.getStorageSync('userInfo')
@@ -187,7 +188,6 @@ function FoodLibraryDetailPage() {
   const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [showMicronutrients, setShowMicronutrients] = useState(false)
   const [contributingImages, setContributingImages] = useState(false)
   const [showRevisions, setShowRevisions] = useState(false)
@@ -239,7 +239,6 @@ function FoodLibraryDetailPage() {
 
   const loadDetail = useCallback(async () => {
     setLoading(true)
-    setCurrentImageIndex(0)
     try {
       const shouldPreferCampus = sceneRef.current === 'campus'
       if (shouldPreferCampus) {
@@ -449,7 +448,6 @@ function FoodLibraryDetailPage() {
       const nextImages = result.image_paths || []
       if (nextImages.length) {
         setItem({ ...item, image_path: nextImages[0], image_paths: nextImages })
-        setCurrentImageIndex(0)
       }
       await loadDetail()
       Taro.setStorageSync('food_library_need_refresh', '1')
@@ -669,10 +667,10 @@ function FoodLibraryDetailPage() {
     : (item.image_path ? [item.image_path] : [])
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
   const isOwner = Boolean(currentUserId && item.user_id === currentUserId)
-  const nutrition = campusNutritionState(item)
-  const nutritionPrefix = isCampusFoodItem(item) && (nutrition.estimated || nutrition.pending) ? '约 ' : ''
   const analyzing = isAnalyzingItem(item)
   const analysisFailed = isAnalysisFailedItem(item)
+  const nutrition = campusNutritionState(item)
+  const nutritionPrefix = isCampusFoodItem(item) && (nutrition.estimated || nutrition.pending) ? '约 ' : ''
   const nutritionPending = needsNutritionUpdate(item)
   const micronutrientRows = isCampusFoodItem(item) ? campusMicronutrientRows(item) : []
   const hasPreciseMicronutrients = nutrition.displayNutrition && !nutrition.pending && item.items?.length > 0 && item.items.every(food => food.micronutrient_analysis === 'ai_precise_v1')
@@ -753,36 +751,10 @@ function FoodLibraryDetailPage() {
   )
   return (
     <View className={pageClassName}>
-      {/* 图片（支持多图轮播） */}
-      <View className='image-section'>
+      {/* 单图与多图使用相同的有界比例布局，点击查看原图。 */}
+      <View className={`image-section${imageList.length > 0 ? ' image-section--gallery' : ''}`}>
         {imageList.length > 0 ? (
-          <>
-            <Swiper
-              className='detail-swiper'
-              indicatorDots
-              indicatorColor='rgba(255,255,255,0.5)'
-              indicatorActiveColor='#fff'
-              autoplay={false}
-              circular
-              onAnimationFinish={(e) => setCurrentImageIndex(e.detail.current)}
-            >
-              {imageList.map((src, index) => (
-                <SwiperItem key={index} className='detail-swiper-item'>
-                  <Image
-                    className='detail-image'
-                    src={src}
-                    mode='aspectFill'
-                    onClick={() => Taro.previewImage({ urls: imageList, current: src })}
-                  />
-                </SwiperItem>
-              ))}
-            </Swiper>
-            {imageList.length > 1 && (
-              <View className='image-counter'>
-                <Text className='image-counter-text'>{currentImageIndex + 1}/{imageList.length}</Text>
-              </View>
-            )}
-          </>
+          <AdaptiveImageGrid urls={imageList} />
         ) : (
           <View className='image-placeholder image-contribution-placeholder'>
             <Text className='iconfont icon-camera image-contribution-icon' />

@@ -9,8 +9,7 @@
   position: relative;
 }
 
-// 仅内容区滚动；头图 fixed 在底层。content-container 的 z-index:3 保证白卡在头图上方，
-// 头图顶部未被覆盖区域仍可接收 touch 事件（Swiper 左右滑动 / 点击预览）。
+// 照片随内容滚动；文字记录的占位头图保持固定。
 .result-scroll {
   flex: 1;
   min-height: 0;
@@ -3166,6 +3165,11 @@ transitiontransition
   line-height: 1.6;
   color: var(--fl-text-secondary, #64748b);
   margin-bottom: 20rpx;
+}
+
+.result-photo-gallery {
+  margin-top: 0;
+  margin-bottom: 24rpx;
 }
 
 .food-edit-recalculation-spinner {

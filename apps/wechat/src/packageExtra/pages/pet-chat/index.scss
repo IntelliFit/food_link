@@ -286,17 +286,11 @@ page {
   line-height: 48rpx;
 }
 
-.pet-chat-message-images {
-  display: grid;
-  grid-template-columns: repeat(3, 132rpx);
-  gap: 8rpx;
-  margin-bottom: 12rpx;
+.pet-chat-message-gallery {
+  margin-bottom: 10rpx;
 }
 
 .pet-chat-message-image {
-  width: 132rpx;
-  height: 132rpx;
-  border-radius: 16rpx;
   background: rgba(255, 255, 255, 0.16);
 }
 
