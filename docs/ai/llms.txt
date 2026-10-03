@@ -7,6 +7,8 @@ FoodLink provides food image analysis, text meal analysis, nutrition database se
 - Beginner onboarding: https://healthymax.cn/developer/#quickstart
 - The console can run a free account + nutrition-search connection check. It does not submit analysis or spend analysis credits.
 - An app is a named integration and credit ledger, not a separate mobile app. Creation shows a save-key dialog; download the complete key file and give the agent only its local path.
+- Created/imported keys can be copied again during the current page session. After refresh/logout the user must import the saved file; the server cannot recover a complete old key. Credentials are not persisted in browser storage.
+- Personal history/health scopes require choosing the personal-data purpose during new-key creation, not changing a checkbox beside existing keys. Stopped keys are collapsed by default.
 - Guide novice users one click at a time. Verify the client's real file/command/MCP capabilities; never claim installation or analysis success without executing the required checks.
 
 - AI integration guide: https://healthymax.cn/developer/ai-guide.md

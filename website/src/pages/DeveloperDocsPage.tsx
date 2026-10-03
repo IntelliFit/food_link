@@ -176,7 +176,7 @@ export function DeveloperDocsPage() {
   -H "Authorization: Bearer $FOODLINK_API_KEY"\n\n# date 可省略；按 has_more / next_offset 继续读取完整历史`}</CodeBlock>
                 <CodeBlock title="本人健康摘要与健康分（health:read）">{`curl "${openApiBaseURL}/me/health-summary?range=week" \
   -H "Authorization: Bearer $FOODLINK_API_KEY"\n\n# range: 7d、30d、90d、week、month`}</CodeBlock>
-                <div className="rounded-2xl border border-amber-300/50 bg-amber-50 p-5 text-sm leading-7 text-amber-950"><strong>功能权限：</strong>基础密钥可识别食物、查询营养。需要让 Agent 分析你的历史记录时，在控制台勾选“读取我的饮食记录和健康评分”，再新建并保存密钥；勾选不会改变已有密钥。授权只允许查看你本人数据，不能修改记录；多用户应用后续应使用 OAuth 获取各用户授权。健康分是趋势参考，不是医疗诊断。</div>
+                <div className="rounded-2xl border border-amber-300/50 bg-amber-50 p-5 text-sm leading-7 text-amber-950"><strong>功能权限：</strong>基础密钥可识别食物、查询营养。需要分析历史时，新建密钥并选择“以上功能 ＋ 查看我的饮食历史和健康评分”；不会改变已有密钥。授权仅可查看本人数据，不修改记录；多用户应用后续应使用 OAuth 获取各用户授权。健康分是趋势参考，不是医疗诊断。</div>
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 text-sm leading-7"><strong>模型隔离：</strong>所有公共分析结果都会递归移除模型、供应商、提示词、推理过程和内部执行路由；失败时返回统一错误文案，不透出底层服务错误。</div>
               </div>
             </DocSection>
