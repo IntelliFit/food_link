@@ -257,11 +257,15 @@ func (h *PublicFoodHandler) Get(c *gin.Context) {
 }
 
 func (h *PublicFoodHandler) GetCampusDetail(c *gin.Context) {
-	detail, err := h.svc.GetCampusDetail(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("item_id"))
+	ctx := c.Request.Context()
+	userID, itemID := c.GetString(authmw.ContextUserIDKey), c.Param("item_id")
+	logger.Info(ctx, "收到校园菜品详情请求", slog.String("user_id", userID), slog.String("item_id", itemID))
+	detail, err := h.svc.GetCampusDetail(ctx, userID, itemID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(ctx, "校园菜品详情请求完成", slog.String("user_id", userID), slog.String("item_id", itemID))
 	response.Success(c, detail)
 }
 

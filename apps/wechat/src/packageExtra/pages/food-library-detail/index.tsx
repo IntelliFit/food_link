@@ -28,6 +28,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 
+import { campusNutritionState } from '../../../utils/campus-nutrition'
 function getLocalUserDisplay(): { nickname: string; avatar: string } {
   try {
     const raw = Taro.getStorageSync('userInfo')
@@ -73,30 +74,16 @@ function getCampusLocationText(item: PublicFoodLibraryItem): string {
   return parts.join(' · ') || '校园食堂'
 }
 
-function normalizeStatus(value?: string | null): string {
-  return String(value || '').trim().toLowerCase()
-}
-
 function isAnalyzingItem(item: PublicFoodLibraryItem): boolean {
-  const status = normalizeStatus(item.analysis_status)
-  return status === 'pending' || status === 'processing' || status === 'stale'
+  return campusNutritionState(item).analyzing
 }
 
 function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
-  const status = normalizeStatus(item.analysis_status)
-  return status === 'failed' || status === 'timed_out'
-}
-
-function hasNutrition(item: PublicFoodLibraryItem): boolean {
-  const items = item.items || []
-  return ((item.total_calories || 0) > 0 || (item.total_protein || 0) > 0 || items.some(food => {
-    const nutrients = food.nutrients
-    return !!nutrients && ((nutrients.calories || 0) > 0 || (nutrients.protein || 0) > 0)
-  }))
+  return campusNutritionState(item).failed
 }
 
 function needsNutritionUpdate(item: PublicFoodLibraryItem): boolean {
-  return isCampusFoodItem(item) && !isAnalyzingItem(item) && !isAnalysisFailedItem(item) && !hasNutrition(item)
+  return isCampusFoodItem(item) && !campusNutritionState(item).displayNutrition
 }
 
 function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
@@ -386,8 +373,8 @@ function FoodLibraryDetailPage() {
       Taro.showToast({ title: '分析失败，暂不能记录', icon: 'none' })
       return
     }
-    if (needsNutritionUpdate(item)) {
-      Taro.showToast({ title: '营养信息待更新，暂不能记录', icon: 'none' })
+    if (isCampusFoodItem(item) && !campusNutritionState(item).canRecord) {
+      Taro.showToast({ title: '营养待核验，暂不能记录', icon: 'none' })
       return
     }
     Taro.setStorageSync('campus_quick_record_item', JSON.stringify(item))
@@ -682,11 +669,13 @@ function FoodLibraryDetailPage() {
     : (item.image_path ? [item.image_path] : [])
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
   const isOwner = Boolean(currentUserId && item.user_id === currentUserId)
+  const nutrition = campusNutritionState(item)
+  const nutritionPrefix = isCampusFoodItem(item) && (nutrition.estimated || nutrition.pending) ? '约 ' : ''
   const analyzing = isAnalyzingItem(item)
   const analysisFailed = isAnalysisFailedItem(item)
   const nutritionPending = needsNutritionUpdate(item)
   const micronutrientRows = isCampusFoodItem(item) ? campusMicronutrientRows(item) : []
-  const hasPreciseMicronutrients = item.items?.length > 0 && item.items.every(food => food.micronutrient_analysis === 'ai_precise_v1')
+  const hasPreciseMicronutrients = nutrition.displayNutrition && !nutrition.pending && item.items?.length > 0 && item.items.every(food => food.micronutrient_analysis === 'ai_precise_v1')
   const commentsTotal = countCommentTotal(comments)
   const openReplyModal = (parent: PublicFoodLibraryComment, target: PublicFoodLibraryComment = parent) => {
     openCommentModal({
@@ -821,7 +810,7 @@ function FoodLibraryDetailPage() {
           <Text className='info-title'>{item.food_name || item.description || '健康餐'}</Text>
           <View className='info-calories-badge'>
             <Text className='iconfont icon-huore info-calories-icon' />
-            <Text className='info-calories'>{nutritionPending ? '营养待更新' : `${item.total_calories.toFixed(0)} kcal`}</Text>
+            <Text className='info-calories'>{nutritionPending ? '营养待更新' : `${nutritionPrefix}${item.total_calories.toFixed(0)} kcal`}</Text>
           </View>
         </View>
         {item.description && (
@@ -885,26 +874,27 @@ function FoodLibraryDetailPage() {
                 ))}
               </View>
             )}
-            {analyzing && <Text className='campus-analysis-tip'>营养信息正在精确分析，完成后自动更新。</Text>}
+            {nutrition.estimated && <Text className='campus-analysis-tip'>营养估算：按{item.portion_description || '当前份量'}提供参考值；实际配方、糖度、冰量和加料会影响结果，精确微量营养待核验。</Text>}
+            {analyzing && <Text className='campus-analysis-tip'>营养信息待更新，完成后自动更新。</Text>}
             {nutritionPending && <Text className='campus-analysis-tip'>营养信息待更新，暂不建议一键记录。</Text>}
             {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>菜品资料已生效，但营养重算失败；稍后可重试或继续修正。</Text>}
           </View>
         )}
         <View className='nutrients-row'>
           <View className='nutrient-item'>
-            <Text className='nutrient-value'>{nutritionPending ? '--' : item.total_calories.toFixed(0)}</Text>
+            <Text className='nutrient-value'>{nutritionPending ? '--' : `${nutritionPrefix}${item.total_calories.toFixed(0)}`}</Text>
             <Text className='nutrient-label'>热量 kcal</Text>
           </View>
           <View className='nutrient-item'>
-            <Text className='nutrient-value'>{nutritionPending ? '--' : `${item.total_protein.toFixed(1)}g`}</Text>
+            <Text className='nutrient-value'>{nutritionPending ? '--' : `${nutritionPrefix}${item.total_protein.toFixed(1)}g`}</Text>
             <Text className='nutrient-label'>蛋白质</Text>
           </View>
           <View className='nutrient-item'>
-            <Text className='nutrient-value'>{nutritionPending ? '--' : `${item.total_carbs.toFixed(1)}g`}</Text>
+            <Text className='nutrient-value'>{nutritionPending ? '--' : `${nutritionPrefix}${item.total_carbs.toFixed(1)}g`}</Text>
             <Text className='nutrient-label'>碳水</Text>
           </View>
           <View className='nutrient-item'>
-            <Text className='nutrient-value'>{nutritionPending ? '--' : `${item.total_fat.toFixed(1)}g`}</Text>
+            <Text className='nutrient-value'>{nutritionPending ? '--' : `${nutritionPrefix}${item.total_fat.toFixed(1)}g`}</Text>
             <Text className='nutrient-label'>脂肪</Text>
           </View>
         </View>
@@ -1038,8 +1028,8 @@ function FoodLibraryDetailPage() {
       <View className='bottom-bar'>
         <View className='bottom-bar-row1'>
           {isCampusFoodItem(item) && (
-            <View className={`action-btn quick-record-btn ${analyzing || analysisFailed ? 'disabled' : ''}`} onClick={handleQuickRecord}>
-              <Text className='action-text'>{analyzing ? '分析中' : analysisFailed ? '暂不可记' : '一键记录'}</Text>
+            <View className={`action-btn quick-record-btn ${isCampusFoodItem(item) && !nutrition.canRecord ? 'disabled' : ''}`} onClick={handleQuickRecord}>
+              <Text className='action-text'>{isCampusFoodItem(item) && !nutrition.canRecord ? '营养待核验' : '一键记录'}</Text>
             </View>
           )}
           <View className='bottom-bar-actions'>

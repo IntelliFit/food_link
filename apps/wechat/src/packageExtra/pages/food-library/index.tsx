@@ -163,8 +163,8 @@ function FoodLibraryPage() {
     latitude: spot.latitude,
     longitude: spot.longitude,
     iconPath: FOOD_MAP_MARKER_ICON,
-    width: selectedMapSpotKey === spot.key ? 52 : 44,
-    height: selectedMapSpotKey === spot.key ? 52 : 44,
+    width: selectedMapSpotKey === spot.key ? 30 : 24,
+    height: selectedMapSpotKey === spot.key ? 30 : 24,
     zIndex: selectedMapSpotKey === spot.key ? 10 : 2,
     anchor: { x: 0.5, y: 1 },
     callout: {

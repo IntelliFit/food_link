@@ -14,6 +14,7 @@ import {
   getPublicFoodLibraryList,
   getSchoolCampuses,
   getSchoolCanteens,
+  getUserProfile,
   showUnifiedApiError,
   submitStructuredFeedback,
   type FeedbackSource,
@@ -33,7 +34,9 @@ import CampusPicker from "../../../components/CampusPicker";
 import CanteenPicker from "../../../components/CanteenPicker";
 import FloorPicker from "../../../components/FloorPicker";
 import WindowPicker from "../../../components/WindowPicker";
-import { CAFETERIA_HERO_BG_URL } from "../../../utils/static-asset-cdn-url";
+import { ArrowDown, ArrowRight, Ellipsis, FilterOutlined, Plus, Search } from "@taroify/icons";
+import "@taroify/icons/style";
+import { campusNutritionState } from "../../../utils/campus-nutrition";
 
 type SortBy = "hot" | "high_protein" | "low_calorie" | "value";
 
@@ -69,47 +72,12 @@ function getPriceText(item: PublicFoodLibraryItem): string {
   return `${item.price}${unit.replace(/^\d+/, "")}`;
 }
 
-function getCampusTags(item: PublicFoodLibraryItem): string[] {
-  if (isAnalyzingItem(item)) return ["正在分析中"];
-  if (isAnalysisFailedItem(item)) return ["分析失败"];
-  const tags: string[] = [];
-  if (item.total_protein >= 25) tags.push("高蛋白");
-  if (item.total_calories > 0 && item.total_calories <= 450)
-    tags.push("低热量");
-  if (item.suitable_for_fat_loss) tags.push("减脂友好");
-  if (!item.price || item.price <= 0) tags.push("价格待补充");
-  return tags.slice(0, 3);
-}
-
 function isAnalyzingItem(item: PublicFoodLibraryItem): boolean {
-  const status = normalizeText(item.analysis_status);
-  return status === "pending" || status === "processing" || status === "stale";
+  return campusNutritionState(item).analyzing;
 }
 
 function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
-  const status = normalizeText(item.analysis_status);
-  return status === "failed" || status === "timed_out";
-}
-
-function hasNutrition(item: PublicFoodLibraryItem): boolean {
-  const items = item.items || [];
-  return (
-    (item.total_calories || 0) > 0 ||
-    (item.total_protein || 0) > 0 ||
-    items.some((food) => {
-      const nutrients = food.nutrients;
-      return (
-        !!nutrients &&
-        ((nutrients.calories || 0) > 0 || (nutrients.protein || 0) > 0)
-      );
-    })
-  );
-}
-
-function needsNutritionUpdate(item: PublicFoodLibraryItem): boolean {
-  return (
-    !isAnalyzingItem(item) && !isAnalysisFailedItem(item) && !hasNutrition(item)
-  );
+  return campusNutritionState(item).failed;
 }
 
 function isClientReadyCampusItem(item: PublicFoodLibraryItem): boolean {
@@ -174,7 +142,20 @@ function CampusCanteenPage() {
   const [showCanteenPicker, setShowCanteenPicker] = useState(false);
   const [showFloorPicker, setShowFloorPicker] = useState(false);
   const [showWindowPicker, setShowWindowPicker] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [profilePending, setProfilePending] = useState(true);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [directoryExpanded, setDirectoryExpanded] = useState(false);
+  const [listError, setListError] = useState(false);
+  const [directoryError, setDirectoryError] = useState(false);
+  const [directoryRevision, setDirectoryRevision] = useState(0);
+  const schoolChosenByUser = useRef(false);
+  const searchRequestedBeforeSchool = useRef(false);
+  const listRequestId = useRef(0);
+  const [listScope, setListScope] = useState("");
+  const scopeKey = [selectedSchool?.id, selectedCampus?.id, selectedCanteen?.id,
+    selectedWindow?.id, floorName, windowName, sortBy, appliedSearchKeyword].join("|");
+  const currentScope = useRef(scopeKey);
+  currentScope.current = scopeKey;
   const lastRefreshTime = useRef<number>(0);
 
   const fetchReadyCampusItems = useCallback(
@@ -235,25 +216,57 @@ function CampusCanteenPage() {
       force = false,
       keyword = appliedSearchKeyword,
     ) => {
-      if (!getAccessToken()) return;
+      if (!getAccessToken() || !selectedSchool?.id) {
+        listRequestId.current += 1;
+        setList([]);
+        setLoading(false);
+        return;
+      }
       const now = Date.now();
       if (!force && now - lastRefreshTime.current < 30000) return;
+      const requestId = ++listRequestId.current;
       if (!silent) setLoading(true);
+      setListError(false);
       try {
-        setList(await fetchReadyCampusItems(keyword));
+        const items = await fetchReadyCampusItems(keyword);
+        if (requestId !== listRequestId.current || currentScope.current !== scopeKey) return;
+        setList(items);
+        setListScope(scopeKey);
         lastRefreshTime.current = Date.now();
       } catch (e: any) {
+        if (requestId !== listRequestId.current || currentScope.current !== scopeKey) return;
         console.error("加载校园食堂失败:", e);
+        setListError(true);
+        // 同范围手动刷新失败时保留旧菜品，不清空列表或改变滚动位置。
         if (!silent) {
           await showUnifiedApiError(e, "获取列表失败");
         }
       } finally {
-        if (!silent) setLoading(false);
-        setRefreshing(false);
+        if (requestId === listRequestId.current && currentScope.current === scopeKey) {
+          if (!silent) setLoading(false);
+        }
       }
     },
-    [fetchReadyCampusItems, appliedSearchKeyword],
+    [fetchReadyCampusItems, appliedSearchKeyword, selectedSchool?.id, scopeKey],
   );
+
+  useEffect(() => {
+    if (!loggedIn) { setProfilePending(false); return; }
+    let cancelled = false;
+    setProfilePending(true);
+    getUserProfile()
+      .then((profile) => {
+        if (cancelled || schoolChosenByUser.current) return;
+        const condition = profile.health_condition;
+        const preference = condition?.campus_dining_preference;
+        if (condition?.is_student !== true || !preference?.school_id || !preference.school_name) return;
+        setSelectedSchool({ id: preference.school_id, name: preference.school_name });
+        // 校区需在真实目录中核验；不凭名称构造不存在的校区。
+      })
+      .catch(() => { /* 偏好不可用时仍可主动选择学校，不默认任意高校。 */ })
+      .finally(() => { if (!cancelled) setProfilePending(false); });
+    return () => { cancelled = true; };
+  }, [loggedIn]);
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme);
@@ -271,13 +284,7 @@ function CampusCanteenPage() {
     }
   }, [
     loggedIn,
-    sortBy,
-    selectedSchool,
-    selectedCampus,
-    selectedCanteen,
-    floorName,
-    selectedWindow?.id,
-    appliedSearchKeyword,
+    loadList,
   ]);
 
   useEffect(() => {
@@ -287,12 +294,14 @@ function CampusCanteenPage() {
       setDirectoryCampuses([]);
       setDirectoryCanteens([]);
       setDirectoryLoading(false);
+      setDirectoryError(false);
       return () => {
         cancelled = true;
       };
     }
 
     setDirectoryLoading(true);
+    setDirectoryError(false);
     setDirectoryCampuses([]);
     setDirectoryCanteens([]);
     Promise.all([getSchoolCampuses(schoolId), getSchoolCanteens(schoolId)])
@@ -306,6 +315,7 @@ function CampusCanteenPage() {
         console.error("加载已收录食堂目录失败:", e);
         setDirectoryCampuses([]);
         setDirectoryCanteens([]);
+        setDirectoryError(true);
         await showUnifiedApiError(e, "获取食堂目录失败");
       })
       .finally(() => {
@@ -315,19 +325,26 @@ function CampusCanteenPage() {
     return () => {
       cancelled = true;
     };
-  }, [loggedIn, selectedSchool?.id]);
+  }, [loggedIn, selectedSchool?.id, directoryRevision]);
 
-  const handleRefresherRefresh = useCallback(() => {
-    if (!getAccessToken()) {
-      setRefreshing(false);
+  useEffect(() => {
+    const keyword = searchKeyword.trim();
+    if (!selectedSchool?.id || keyword === appliedSearchKeyword) return;
+    const timer = setTimeout(() => {
+      lastRefreshTime.current = 0;
+      setAppliedSearchKeyword(keyword);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchKeyword, appliedSearchKeyword, selectedSchool?.id]);
+
+  const handleSearch = (value = searchKeyword) => {
+    const kw = value.trim();
+    setSearchKeyword(value);
+    if (!selectedSchool?.id) {
+      searchRequestedBeforeSchool.current = true;
+      setShowSchoolPicker(true);
       return;
     }
-    setRefreshing(true);
-    loadList(false, true);
-  }, [loadList]);
-
-  const handleSearch = () => {
-    const kw = searchKeyword.trim();
     lastRefreshTime.current = 0;
     if (kw === appliedSearchKeyword) {
       void loadList(false, true, kw);
@@ -361,7 +378,7 @@ function CampusCanteenPage() {
       Taro.showToast({ title: "请填写反馈内容", icon: "none" });
       return;
     }
-    Taro.showLoading({ title: "提交中...", mask: true });
+    Taro.showLoading({ title: "", mask: true });
     try {
       await submitStructuredFeedback({
         source: "campus_location" as FeedbackSource,
@@ -399,6 +416,18 @@ function CampusCanteenPage() {
     Taro.navigateTo({ url: extraPkgUrl("/pages/campus-food-collector/index") });
   };
 
+  const openMore = async () => {
+    try {
+      const { tapIndex } = await Taro.showActionSheet({
+        itemList: ["补充菜品", "批量采集", "地点纠错", ...(selectedSchool ? ["刷新菜品"] : [])],
+      });
+      if (tapIndex === 0) goUpload();
+      if (tapIndex === 1) goCollector();
+      if (tapIndex === 2) void handleLocationFeedback();
+      if (tapIndex === 3) void loadList(false, true);
+    } catch { /* 取消更多菜单不执行操作。 */ }
+  };
+
   const openCanteenPicker = () => {
     if (!selectedSchool?.id) {
       Taro.showToast({ title: "请先选择学校", icon: "none" });
@@ -417,6 +446,10 @@ function CampusCanteenPage() {
 
   const quickRecord = (e: any, item: PublicFoodLibraryItem) => {
     e.stopPropagation();
+    if (campusNutritionState(item).estimated) {
+      goDetail(item.id);
+      return;
+    }
     if (isAnalyzingItem(item)) {
       Taro.showToast({ title: "营养信息分析中", icon: "none" });
       return;
@@ -425,7 +458,7 @@ function CampusCanteenPage() {
       Taro.showToast({ title: "分析失败，暂不能记录", icon: "none" });
       return;
     }
-    if (needsNutritionUpdate(item)) {
+    if (!campusNutritionState(item).canRecord) {
       Taro.showToast({ title: "营养信息待更新，暂不能记录", icon: "none" });
       return;
     }
@@ -438,8 +471,7 @@ function CampusCanteenPage() {
 
   const selectedSchoolName = selectedSchool?.name || "选择学校";
   const hasActiveFilters = Boolean(
-    selectedSchool ||
-      selectedCampus ||
+    selectedCampus ||
       selectedCanteen ||
       floorName ||
       selectedWindow ||
@@ -449,7 +481,7 @@ function CampusCanteenPage() {
     lastRefreshTime.current = 0;
     setSearchKeyword("");
     setAppliedSearchKeyword("");
-    setSelectedSchool(null);
+    // 重置当前学校内的范围，不清除学校或修改个人档案。
     setSelectedCampus(null);
     setSelectedCanteen(null);
     setSelectedWindow(null);
@@ -459,7 +491,7 @@ function CampusCanteenPage() {
   const visibleList = useMemo(() => {
     const floorKeyword = normalizeText(floorName);
     const windowKeyword = normalizeText(windowName);
-    return list.filter((item) => {
+    return (listScope === scopeKey ? list : []).filter((item) => {
       if (!isClientReadyCampusItem(item)) return false;
       if (
         floorKeyword &&
@@ -477,7 +509,7 @@ function CampusCanteenPage() {
       }
       return true;
     });
-  }, [floorName, list, windowName]);
+  }, [floorName, list, windowName, listScope, scopeKey]);
   const visibleDirectoryCanteens = useMemo(
     () =>
       selectedCampus?.id
@@ -487,11 +519,6 @@ function CampusCanteenPage() {
         : directoryCanteens,
     [directoryCanteens, selectedCampus?.id],
   );
-  const publishedCanteenIds = useMemo(
-    () => new Set(list.map((item) => item.canteen_id).filter(Boolean)),
-    [list],
-  );
-
   const selectDirectoryCanteen = (canteen: SchoolCanteenItem) => {
     const campus = canteen.campus_id
       ? directoryCampuses.find((item) => item.id === canteen.campus_id) || null
@@ -501,197 +528,70 @@ function CampusCanteenPage() {
     setSelectedWindow(null);
     setFloorName("");
     setWindowName("");
+    setDirectoryExpanded(false);
+  };
+  const searchWholeSchool = () => {
+    setSelectedCampus(null);
+    setSelectedCanteen(null);
+    setSelectedWindow(null);
+    setFloorName("");
+    setWindowName("");
   };
 
-  const analyzedList = useMemo(
-    () => visibleList.filter(hasNutrition),
-    [visibleList],
-  );
-  const hotItems = useMemo(() => analyzedList.slice(0, 6), [analyzedList]);
-  const highProteinItems = useMemo(
-    () =>
-      [...analyzedList]
-        .sort((a, b) => (b.total_protein || 0) - (a.total_protein || 0))
-        .slice(0, 6),
-    [analyzedList],
-  );
-  const lowCalorieItems = useMemo(
-    () =>
-      [...analyzedList]
-        .filter((item) => item.total_calories > 0)
-        .sort((a, b) => a.total_calories - b.total_calories)
-        .slice(0, 6),
-    [analyzedList],
-  );
-  const valueItems = useMemo(
-    () =>
-      [...analyzedList]
-        .filter(
-          (item) => item.price && item.price > 0 && item.total_protein > 0,
-        )
-        .sort(
-          (a, b) =>
-            (b.total_protein || 0) / (b.price || 1) -
-            (a.total_protein || 0) / (a.price || 1),
-        )
-        .slice(0, 6),
-    [analyzedList],
-  );
-
-  const renderMiniCard = (item: PublicFoodLibraryItem) => (
-    <View
-      key={item.id}
-      className='recommend-card'
-      onClick={() => goDetail(item.id)}
-    >
-      {item.image_path ? (
-        <Image
-          className='recommend-card-image'
-          src={item.image_path}
-          mode='aspectFill'
-        />
-      ) : (
-        <View className='recommend-card-image placeholder'>暂无图片</View>
-      )}
-      <Text className='recommend-card-title'>
-        {item.food_name || "未命名菜品"}
-      </Text>
-      <Text className='recommend-card-meta'>
-        {getPriceText(item)} · 蛋白 {item.total_protein.toFixed(0)}g
-      </Text>
-    </View>
-  );
+  const openMealMore = async (e: any, item: PublicFoodLibraryItem) => {
+    e.stopPropagation();
+    const nutrition = campusNutritionState(item);
+    const actions = [{ label: "查看详情", run: () => goDetail(item.id) }];
+    if (nutrition.canRecord || nutrition.estimated) {
+      actions.push({
+        label: nutrition.estimated ? "查看营养估算" : "记录这道菜",
+        run: () => quickRecord(e, item),
+      });
+    }
+    const authorId = item.author?.id;
+    if (authorId) {
+      actions.push({ label: "查看贡献者", run: () => {
+        Taro.navigateTo({ url: extraPkgUrl(`/pages/profile-settings/index?user_id=${encodeURIComponent(authorId)}`) });
+      } });
+    }
+    try {
+      const { tapIndex } = await Taro.showActionSheet({ itemList: actions.map((action) => action.label) });
+      actions[tapIndex]?.run();
+    } catch { /* 关闭菜单不保存记录或跳转。 */ }
+  };
 
   const renderCampusCard = (item: PublicFoodLibraryItem) => {
-    const analyzing = isAnalyzingItem(item);
-    const failed = isAnalysisFailedItem(item);
-    const nutritionPending = needsNutritionUpdate(item);
+    const nutrition = campusNutritionState(item);
+    const photo = item.image_path || item.image_paths?.find(Boolean);
+    const location = [item.canteen_name, item.floor, item.window_name].filter(Boolean).join(" · ")
+      || item.campus_location_text || item.campus_name || "地点待补充";
+    const nutritionText = nutrition.displayNutrition
+      ? `${nutrition.estimated || nutrition.pending ? "约 " : ""}${item.total_calories.toFixed(0)} kcal`
+      : nutrition.failed ? "营养待重试" : "营养待更新";
     return (
       <View
         key={item.id}
-        className={`campus-card ${analyzing || nutritionPending ? "campus-card--analyzing" : ""} ${failed ? "campus-card--failed" : ""}`}
+        className='campus-meal-card'
         onClick={() => goDetail(item.id)}
       >
-        <View className='campus-card-main'>
-          <View className='campus-image-wrap'>
-            {item.image_path ? (
-              <Image
-                className='campus-image'
-                src={item.image_path}
-                mode='aspectFill'
-              />
-            ) : (
-              <View className='campus-image-placeholder'>暂无图片</View>
-            )}
-          </View>
-          <View className='campus-info'>
-            <Text className='campus-title'>
-              {item.food_name || "未命名菜品"}
-            </Text>
-            <View className='campus-location-row'>
-              <Text className='iconfont icon-dizhi campus-location-icon' />
-              <Text className='campus-location'>
-                {getLocationText(item) || selectedSchoolName}
-              </Text>
+        <View className='campus-meal-image'>
+          {photo ? (
+            <Image className='campus-meal-photo' src={photo} mode='aspectFill' />
+          ) : (
+            <View className='campus-meal-no-photo'>
+              <Text className='iconfont icon-shiwu' />
+              <Text>暂无餐照</Text>
             </View>
-            <View className='campus-nutrition-row'>
-              <Text className='campus-price'>{getPriceText(item)}</Text>
-              {analyzing ? (
-                <Text className='campus-analysis-text'>正在分析中</Text>
-              ) : failed ? (
-                <Text className='campus-analysis-failed'>
-                  分析失败，稍后重试
-                </Text>
-              ) : nutritionPending ? (
-                <Text className='campus-analysis-text'>营养待更新</Text>
-              ) : (
-                <View className='campus-calorie-badge'>
-                  <Text className='campus-calorie-num'>
-                    {item.total_calories.toFixed(0)}
-                  </Text>
-                  <Text className='campus-calorie-unit'>kcal</Text>
-                </View>
-              )}
-            </View>
-            <View className='campus-tags'>
-              {getCampusTags(item).map((tag) => (
-                <Text
-                  key={tag}
-                  className={`campus-tag ${tag === "减脂友好" ? "fat-loss" : ""}`}
-                >
-                  {tag}
-                </Text>
-              ))}
-            </View>
-          </View>
+          )}
+          <Button className='campus-meal-record' ariaLabel='餐食详情、记录与贡献者' onClick={(e) => void openMealMore(e, item)}>
+            <Ellipsis />
+          </Button>
         </View>
-        <View className='campus-card-footer'>
-          <View className='campus-author-row'>
-            {item.author?.avatar ? (
-              <View
-                className='campus-author-avatar'
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (item.author?.id) {
-                    Taro.navigateTo({
-                      url: extraPkgUrl(
-                        `/pages/profile-settings/index?user_id=${encodeURIComponent(item.author.id)}`,
-                      ),
-                    });
-                  }
-                }}
-              >
-                <Image
-                  className='campus-author-avatar-img'
-                  src={item.author.avatar}
-                  mode='aspectFill'
-                />
-              </View>
-            ) : (
-              <View className='campus-author-avatar'>
-                <Text className='iconfont icon-user campus-author-avatar-icon' />
-              </View>
-            )}
-            <Text
-              className='campus-author-name'
-              onClick={(e) => {
-                e.stopPropagation();
-                if (item.author?.id) {
-                  Taro.navigateTo({
-                    url: extraPkgUrl(
-                      `/pages/profile-settings/index?user_id=${encodeURIComponent(item.author.id)}`,
-                    ),
-                  });
-                }
-              }}
-            >
-              {item.author?.nickname || "用户"}
-            </Text>
-          </View>
-          <View className='campus-actions'>
-            <View className='campus-stat'>
-              <Text
-                className={`iconfont ${item.liked ? "icon-like_fill" : "icon-like"} campus-like-btn ${item.liked ? "liked" : ""}`}
-              />
-              <Text className='stat-count'>{item.like_count}</Text>
-            </View>
-            <View className='campus-stat'>
-              <View className='campus-comment-btn'>
-                <Text className='stat-icon iconfont icon-comment' />
-              </View>
-              {(item.comment_count || 0) > 0 && (
-                <Text className='stat-count'>{item.comment_count}</Text>
-              )}
-            </View>
-            <View
-              className='campus-record-btn'
-              onClick={(e) => quickRecord(e, item)}
-            >
-              <Text className='campus-record-btn-text'>
-                {analyzing || nutritionPending ? "待更新" : "一键记录"}
-              </Text>
-            </View>
-          </View>
+        <View className='campus-meal-body'>
+          <Text className='campus-meal-name'>{item.food_name || "未命名菜品"}</Text>
+          <Text className='campus-meal-location'>{location}</Text>
+          <Text className='campus-meal-price'>{getPriceText(item)}</Text>
+          <Text className='campus-meal-nutrition'>{nutritionText}</Text>
         </View>
       </View>
     );
@@ -717,128 +617,36 @@ function CampusCanteenPage() {
 
   return (
     <FlPageThemeRoot>
-      <View className='campus-canteen-page'>
-        <View className='campus-hero'>
-          <Image
-            className='campus-hero-bg'
-            src={CAFETERIA_HERO_BG_URL}
-            mode='aspectFill'
-          />
-          <View>
-            <Text className='campus-hero-title'>食探校园食堂计划</Text>
-            <Text className='campus-hero-subtitle'>
-              选学校，查菜品、价格和营养
-            </Text>
+      <View className='campus-canteen-page campus-canteen-page--directory'>
+        <View className='campus-browse-header'>
+          <View className='campus-school-row'>
+            <View className='campus-school-select' onClick={() => setShowSchoolPicker(true)}>
+              <Text className='campus-school-name'>{selectedSchoolName}</Text>
+              <ArrowDown className='campus-chevron' />
+            </View>
+            <Button className='campus-more-button' ariaLabel={selectedSchool ? "补充食堂菜品" : "校园食堂更多操作"} onClick={() => selectedSchool ? goUpload() : void openMore()}>
+              {selectedSchool ? <Plus /> : <Ellipsis />}
+            </Button>
           </View>
-          <View className='campus-hero-upload' onClick={goUpload}>
-            <Text className='campus-hero-upload-text'>补充菜品</Text>
-          </View>
-        </View>
-
-        {/* 头部筛选区 */}
-        <View className='campus-header'>
-          <View className='filter-guide'>
-            <View>
-              <Text className='filter-guide-title'>按地点筛选</Text>
-              <Text className='filter-guide-hint'>学校、校区、食堂、楼层、窗口</Text>
-            </View>
-            {hasActiveFilters && (
-              <Text className='filter-clear-btn' onClick={clearFilters}>
-                清除筛选
-              </Text>
-            )}
-          </View>
-          <View className='filter-row filter-row--equal'>
-            <View
-              className='filter-chip filter-chip--entity'
-              onClick={() => setShowSchoolPicker(true)}
-            >
-              <Text className='filter-chip-text'>
-                {selectedSchool?.name || "选择学校"}
-              </Text>
-              <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
-            </View>
-            <View className='filter-chip filter-chip--area' onClick={openCampusPicker}>
-              <Text className='filter-chip-text'>
-                {selectedCampus?.name || "选择校区"}
-              </Text>
-              <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
-            </View>
-          </View>
-          <View className='filter-row filter-row--equal'>
-            <View className='filter-chip' onClick={openCanteenPicker}>
-              <Text className='filter-chip-text'>
-                {selectedCanteen?.name || "选择食堂"}
-              </Text>
-              <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
-            </View>
-            <View className='filter-chip' onClick={() => selectedCanteen?.id ? setShowFloorPicker(true) : Taro.showToast({ title: '请先选择食堂', icon: 'none' })}>
-              <Text className='filter-chip-text'>{floorName || '选择楼层'}</Text>
-              <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
-            </View>
-            <View className='filter-chip' onClick={() => !selectedCanteen?.id ? Taro.showToast({ title: '请先选择食堂', icon: 'none' }) : !floorName ? Taro.showToast({ title: '请先选择楼层', icon: 'none' }) : setShowWindowPicker(true)}>
-              <Text className='filter-chip-text'>{windowName || '选择窗口'}</Text>
-              <Text className='iconfont icon-xiajiantou filter-chip-arrow' />
-            </View>
-          </View>
-          <View className='search-row'>
+          <View className='campus-browse-search'>
             <View className='search-input-wrap'>
-              <Text className='search-input-icon iconfont icon-sousuo' />
-              <Input
-                className='search-input'
-                placeholder='搜菜名、学校、食堂或地点'
-                value={searchKeyword}
-                onInput={(e) => setSearchKeyword(e.detail.value)}
-                onConfirm={handleSearch}
+              <Search className='search-input-icon' />
+              <Input className='search-input' placeholder={selectedSchool ? "搜菜名、食堂" : "选学校后搜菜名"} value={searchKeyword}
+                confirmType='search' onInput={(e) => setSearchKeyword(e.detail.value)} onConfirm={(e) => handleSearch(e.detail.value)}
               />
+              <Button className='campus-search-submit' onClick={() => handleSearch()}>搜索</Button>
             </View>
-            <Button className='search-btn' onClick={handleSearch}>
-              搜索
+            <Button className='campus-area-button' onClick={openCampusPicker}>
+              <Text>{selectedCampus?.name || "校区"}</Text>
+              <ArrowDown className='campus-chevron' />
             </Button>
           </View>
           {appliedSearchKeyword && (
             <View className='search-active-row'>
-              <Text className='search-active-text'>
-                正在搜索“{appliedSearchKeyword}”
-              </Text>
-              <Text className='search-active-clear' onClick={clearSearch}>
-                清除搜索
-              </Text>
+              <Text className='search-active-text'>“{appliedSearchKeyword}”的结果</Text>
+              <Text className='search-active-clear' onClick={clearSearch}>清除</Text>
             </View>
           )}
-          <View className='campus-feedback-row' onClick={() => void handleLocationFeedback()}>
-            <Text className='iconfont icon-edit campus-feedback-icon' />
-            <Text className='campus-feedback-text'>学校、校区或食堂信息有误？点击反馈</Text>
-          </View>
-        </View>
-
-        {/* 排序区 */}
-        <View className='sort-section'>
-          <Text className='sort-label'>排序</Text>
-          <View
-            className={`sort-item ${sortBy === "hot" ? "active" : ""}`}
-            onClick={() => setSortBy("hot")}
-          >
-            热门
-          </View>
-          <View
-            className={`sort-item ${sortBy === "high_protein" ? "active" : ""}`}
-            onClick={() => setSortBy("high_protein")}
-          >
-            高蛋白
-          </View>
-          <View
-            className={`sort-item ${sortBy === "low_calorie" ? "active" : ""}`}
-            onClick={() => setSortBy("low_calorie")}
-          >
-            低热量
-          </View>
-          <View
-            className={`sort-item ${sortBy === "value" ? "active" : ""}`}
-            onClick={() => setSortBy("value")}
-          >
-            性价比
-          </View>
         </View>
 
         {/* 列表 */}
@@ -847,37 +655,51 @@ function CampusCanteenPage() {
           scrollY
           enhanced
           showScrollbar={false}
-          refresherEnabled
-          refresherTriggered={refreshing}
-          onRefresherRefresh={handleRefresherRefresh}
-          refresherDefaultStyle='black'
+          refresherEnabled={false}
         >
           <View className='list-content'>
-            {selectedSchool && (
+            {!selectedSchool ? (
+              profilePending ? (
+                <View className='loading-state'><View className='loading-spinner-md' /></View>
+              ) : (
+                <View className='campus-school-empty'>
+                  <Text className='iconfont icon-shiwu' />
+                  <Text className='campus-empty-title'>先选学校，再找好吃的</Text>
+                  <Text className='campus-empty-hint'>查看食堂、菜品和价格</Text>
+                  <Button className='campus-primary-button' onClick={() => setShowSchoolPicker(true)}>选择学校</Button>
+                </View>
+              )
+            ) : (
+              <>
               <View className='campus-directory-section'>
                 <View className='section-head campus-directory-head'>
-                  <Text className='section-title'>已收录食堂</Text>
-                  <Text className='section-subtitle'>
-                    {selectedSchool.name} · {visibleDirectoryCanteens.length} 个
-                  </Text>
+                  <Text className='section-title'>食堂</Text>
+                  {selectedCanteen ? (
+                    <Text className='campus-text-button' onClick={() => setDirectoryExpanded(!directoryExpanded)}>
+                      {directoryExpanded ? "收起" : "换食堂"}
+                    </Text>
+                  ) : visibleDirectoryCanteens.length > 4 && (
+                    <Text className='campus-text-button' onClick={() => setDirectoryExpanded(!directoryExpanded)}>
+                      {directoryExpanded ? "收起" : "全部食堂"}
+                    </Text>
+                  )}
                 </View>
                 {directoryLoading ? (
                   <View className='campus-directory-loading'>
                     <View className='loading-spinner-md' />
                   </View>
+                ) : directoryError ? (
+                  <View className='campus-directory-empty'>
+                    <Text>食堂目录暂时不可用</Text>
+                    <Text className='campus-text-button' onClick={() => setDirectoryRevision((n) => n + 1)}>重试</Text>
+                  </View>
                 ) : visibleDirectoryCanteens.length === 0 ? (
                   <View className='campus-directory-empty'>
                     该学校暂无已审核食堂
                   </View>
-                ) : (
-                  <ScrollView
-                    scrollX
-                    enhanced
-                    showScrollbar={false}
-                    className='campus-directory-scroll'
-                  >
+                ) : (!selectedCanteen || directoryExpanded) && (
                     <View className='campus-directory-list'>
-                      {visibleDirectoryCanteens.map((canteen) => {
+                      {(directoryExpanded ? visibleDirectoryCanteens : visibleDirectoryCanteens.slice(0, 4)).map((canteen) => {
                         const locationText = [
                           canteen.campus_name,
                           canteen.building_or_floor,
@@ -889,9 +711,6 @@ function CampusCanteenPage() {
                               values.indexOf(value) === index,
                           )
                           .join(" · ");
-                        const hasPublishedDish = publishedCanteenIds.has(
-                          canteen.id,
-                        );
                         const isSelected = selectedCanteen?.id === canteen.id;
                         return (
                           <View
@@ -899,147 +718,103 @@ function CampusCanteenPage() {
                             className={`campus-directory-card ${isSelected ? "active" : ""}`}
                             onClick={() => selectDirectoryCanteen(canteen)}
                           >
-                            <View className='campus-directory-card-top'>
+                            <Text className='iconfont icon-shiwu campus-directory-icon' />
+                            <View className='campus-directory-card-copy'>
                               <Text className='campus-directory-name'>
                                 {canteen.name}
                               </Text>
-                              {!hasPublishedDish && (
-                                <Text className='campus-directory-badge'>
-                                  待补菜品
-                                </Text>
-                              )}
-                            </View>
                             <Text className='campus-directory-location'>
                               {locationText || "位置待补充"}
                             </Text>
+                            </View>
+                            <ArrowRight className='campus-directory-arrow' />
                           </View>
                         );
                       })}
                     </View>
-                  </ScrollView>
                 )}
               </View>
-            )}
 
-            {analyzedList.length > 0 && (
-              <>
-                <View className='section-block'>
-                  <View className='section-head'>
-                    <Text className='section-title'>热门菜品</Text>
-                    <Text className='section-subtitle'>
-                      按收藏、点赞和发布时间排序
-                    </Text>
-                  </View>
-                  <ScrollView
-                    scrollX
-                    enhanced
-                    showScrollbar={false}
-                    className='recommend-scroll'
-                  >
-                    <View className='recommend-list'>
-                      {hotItems.map(renderMiniCard)}
-                    </View>
-                  </ScrollView>
+              <View className='campus-results-header'>
+                <View className='campus-results-copy'>
+                  <Text className='campus-results-title'>{selectedCanteen?.name || "校园菜品"}</Text>
+                  <Text className='campus-results-location'>
+                    {[selectedSchool.name, selectedCampus?.name, floorName, windowName].filter(Boolean).join(" · ")}
+                  </Text>
                 </View>
-                <View className='section-block'>
-                  <View className='section-head'>
-                    <Text className='section-title'>高蛋白推荐</Text>
-                    <Text className='section-subtitle'>
-                      适合训练后或想吃扎实一点
-                    </Text>
-                  </View>
-                  <ScrollView
-                    scrollX
-                    enhanced
-                    showScrollbar={false}
-                    className='recommend-scroll'
-                  >
-                    <View className='recommend-list'>
-                      {highProteinItems.map(renderMiniCard)}
-                    </View>
-                  </ScrollView>
+                {loading && visibleList.length > 0 && <View className='campus-refresh-indicator'><View className='loading-spinner-md' /></View>}
+                <Button className='campus-more-button' ariaLabel='菜品更多操作' onClick={() => void openMore()}><Ellipsis /></Button>
+              </View>
+              <View className='campus-sort-row'>
+                {([
+                  ["hot", "热门"], ["high_protein", "高蛋白"], ["low_calorie", "低热量"], ["value", "性价比"],
+                ] as const).map(([value, label]) => (
+                  <View key={value} className={`campus-sort-tab ${sortBy === value ? "active" : ""}`} onClick={() => setSortBy(value)}>{label}</View>
+                ))}
+                <View className={`campus-filter-toggle ${filtersExpanded || hasActiveFilters ? "active" : ""}`} onClick={() => setFiltersExpanded(!filtersExpanded)}>
+                  <FilterOutlined className='campus-filter-icon' /><Text>筛选</Text>
                 </View>
-                <View className='recommend-grid'>
-                  <View className='recommend-panel'>
-                    <Text className='recommend-panel-title'>低热量推荐</Text>
-                    {lowCalorieItems.slice(0, 3).map((item) => (
-                      <Text
-                        key={item.id}
-                        className='recommend-panel-line'
-                        onClick={() => goDetail(item.id)}
-                      >
-                        {item.food_name} · {item.total_calories.toFixed(0)} kcal
-                      </Text>
-                    ))}
+              </View>
+              {filtersExpanded && (
+                <View className='campus-filter-panel'>
+                  <View className='filter-row filter-row--equal'>
+                    <View className='filter-chip' onClick={openCampusPicker}><Text className='filter-chip-text'>{selectedCampus?.name || "全部校区"}</Text><ArrowDown className='filter-chip-arrow' /></View>
+                    <View className='filter-chip' onClick={openCanteenPicker}><Text className='filter-chip-text'>{selectedCanteen?.name || "全部食堂"}</Text><ArrowDown className='filter-chip-arrow' /></View>
                   </View>
-                  <View className='recommend-panel'>
-                    <Text className='recommend-panel-title'>性价比推荐</Text>
-                    {valueItems.slice(0, 3).map((item) => (
-                      <Text
-                        key={item.id}
-                        className='recommend-panel-line'
-                        onClick={() => goDetail(item.id)}
-                      >
-                        {item.food_name} ·{" "}
-                        {(item.total_protein / (item.price || 1)).toFixed(1)}
-                        g/元
-                      </Text>
-                    ))}
+                  <View className='filter-row filter-row--equal'>
+                    <View className='filter-chip' onClick={() => selectedCanteen?.id ? setShowFloorPicker(true) : openCanteenPicker()}><Text className='filter-chip-text'>{floorName || "楼层"}</Text><ArrowDown className='filter-chip-arrow' /></View>
+                    <View className='filter-chip' onClick={() => !selectedCanteen?.id ? openCanteenPicker() : !floorName ? setShowFloorPicker(true) : setShowWindowPicker(true)}><Text className='filter-chip-text'>{windowName || "窗口"}</Text><ArrowDown className='filter-chip-arrow' /></View>
+                  </View>
+                  <View className='campus-filter-actions'>
+                    <Text className='campus-text-button' onClick={clearFilters}>重置</Text>
+                    <Text className='campus-text-button' onClick={() => setFiltersExpanded(false)}>收起筛选</Text>
                   </View>
                 </View>
-              </>
+              )}
+            {listError && visibleList.length > 0 && (
+              <View className='campus-refresh-error'>
+                <Text>刷新未成功，已保留原列表</Text>
+                <Text className='campus-text-button' onClick={() => void loadList(false, true)}>重试</Text>
+              </View>
             )}
-
-            <View className='section-head all-list-head'>
-              <Text className='section-title'>全部校园菜品</Text>
-              <Text className='section-subtitle'>
-                {[
-                  selectedSchool?.name || "全部高校",
-                  selectedCampus?.name,
-                  selectedCanteen?.name,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Text>
-            </View>
-            {loading && visibleList.length === 0 ? (
+            {(loading && visibleList.length === 0) || (listScope !== scopeKey && !listError) ? (
               <View className='loading-state'>
                 <View className='loading-spinner-md' />
+              </View>
+            ) : listError && visibleList.length === 0 ? (
+              <View className='empty-state'>
+                <Text className='empty-text'>菜品暂时不可用</Text>
+                <Button className='campus-primary-button' onClick={() => void loadList(false, true)}>重试</Button>
               </View>
             ) : visibleList.length === 0 ? (
               <View className='empty-state'>
                 <Text className='empty-icon iconfont icon-shiwu' />
                 <Text className='empty-text'>
-                  {selectedSchool && directoryCanteens.length > 0
-                    ? "该食堂目录已上线，暂无已分析菜品"
-                    : "暂无校园食堂数据"}
+                  {appliedSearchKeyword || floorName || windowName ? "没有找到匹配的菜品" : "这里还没有收录菜品"}
                 </Text>
                 <Text className='empty-subtext'>
-                  {selectedSchool && directoryCanteens.length > 0
-                    ? "可以补充第一份菜品，AI 分析后会在这里显示"
-                    : "快来上传第一份食堂菜品吧"}
+                  {hasActiveFilters ? "试试换个食堂或重置筛选" : "你可以补充第一份菜品"}
                 </Text>
-                <View className='empty-btn' onClick={goUpload}>
-                  去上传
-                </View>
+                <Button className='campus-primary-button' onClick={hasActiveFilters ? clearFilters : goUpload}>{hasActiveFilters ? "重置筛选" : "补充菜品"}</Button>
+                {appliedSearchKeyword && (selectedCampus || selectedCanteen || floorName || selectedWindow) && (
+                  <Button className='campus-school-search-button' onClick={searchWholeSchool}>搜索全校</Button>
+                )}
               </View>
             ) : (
-              visibleList.map(renderCampusCard)
+              <View className='campus-meal-grid'>{visibleList.map(renderCampusCard)}</View>
+            )}
+              </>
             )}
           </View>
         </ScrollView>
 
-        {/* 浮动上传按钮 */}
-        <View className='collector-channel-button' onClick={goCollector}>
-          批量采集
-        </View>
-        <View className='fab-button' onClick={goUpload}>
-          <Text className='fab-icon'>+</Text>
-        </View>
-
         <SchoolPicker
           visible={showSchoolPicker}
+          value={selectedSchool?.id}
           onSelect={(school) => {
+            const requestedKeyword = searchRequestedBeforeSchool.current ? searchKeyword.trim() : "";
+            searchRequestedBeforeSchool.current = false;
+            schoolChosenByUser.current = true;
             setSelectedSchool(school);
             setSelectedCampus(null);
             setSelectedCanteen(null);
@@ -1047,8 +822,11 @@ function CampusCanteenPage() {
             setShowSchoolPicker(false);
             setFloorName("");
             setWindowName("");
+            setDirectoryExpanded(false);
+            setSearchKeyword(requestedKeyword);
+            setAppliedSearchKeyword(requestedKeyword);
           }}
-          onCancel={() => setShowSchoolPicker(false)}
+          onCancel={() => { searchRequestedBeforeSchool.current = false; setShowSchoolPicker(false); }}
         />
         <CampusPicker
           visible={showCampusPicker}
@@ -1061,6 +839,7 @@ function CampusCanteenPage() {
             setFloorName("");
             setWindowName("");
             setShowCampusPicker(false);
+            setDirectoryExpanded(false);
           }}
           onCancel={() => setShowCampusPicker(false)}
         />
@@ -1076,6 +855,7 @@ function CampusCanteenPage() {
             setFloorName("");
             setWindowName("");
             setShowCanteenPicker(false);
+            setDirectoryExpanded(false);
           }}
           onCancel={() => setShowCanteenPicker(false)}
         />
