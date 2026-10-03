@@ -443,6 +443,32 @@ func (r *Repository) GetOwnedApp(ctx context.Context, ownerUserID, appID string)
 	return &app, err
 }
 
+// SetOwnedAppStatus keeps balances, keys and billing history intact for recovery.
+func (r *Repository) SetOwnedAppStatus(ctx context.Context, ownerUserID, appID, status string) (bool, error) {
+	if status != domain.AppStatusActive && status != domain.AppStatusDisabled {
+		return false, fmt.Errorf("unsupported app status")
+	}
+	found := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var app domain.App
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND owner_user_id = ?", appID, ownerUserID).First(&app).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		found = true
+		if app.Status == status {
+			return nil
+		}
+		return tx.Model(&domain.App{}).Where("id = ? AND owner_user_id = ?", app.ID, ownerUserID).
+			Updates(map[string]any{"status": status, "updated_at": time.Now()}).Error
+	})
+	return found, err
+}
+
 func (r *Repository) ListKeys(ctx context.Context, appID string) ([]domain.APIKey, error) {
 	var keys []domain.APIKey
 	err := r.db.WithContext(ctx).Where("app_id = ?", appID).Order("created_at DESC").Find(&keys).Error
