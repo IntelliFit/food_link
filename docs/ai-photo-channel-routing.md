@@ -1,5 +1,35 @@
 # 餐照三渠道路由与真实请求评估
 
+## 2026-10-03：当前非流式均分方案
+
+用户确认每家等待 **18秒完整业务有效回答**，而非首字节。普通和精准各自按任务/会话键确定性分配初始渠道，三家凭证就绪时长期约各1/3，不承诺每三个请求严格轮转。
+
+| 渠道 | 普通 | 精准 |
+| --- | --- | --- |
+| 万界方舟 | gemini-3-flash-preview | gemini-3.5-flash |
+| OpenLux | gemini-3-flash-preview | gemini-3.7-flash |
+| A6 | gemini-3-flash-preview | gemini-3.7-flash |
+
+快速国产模式、文字/有效期等其它识别和营养处理不改。保持FoodLink食物业务提示词；不加入忽略Antigravity的指令，也不根据模型自称认证真实身份。
+
+```yaml
+external:
+  vision_routing:
+    balanced_routing_enabled: true
+    response_wait_seconds: 18
+```
+
+新版代码默认启用此方案；Apollo已有其它字段不必删除。显式false可关闭新方案，继续下述历史路由。配置在服务启动时读取；上线环境由用户明确选择，未部署不能认为真机已生效。
+
+- 首先只发一家；HTTP错误、退役文字、坏JSON或业务无效立即换另一家，18秒未完成也取消后换。每阶段最多三家、各调用一次、总模型预算54秒（父请求更短时遵守父截止）。没有并行竞速、影子、同渠道重试或Lite/国产降级；剩余备援优先较便宜的A6、OpenLux、万界。
+- 18秒包括本次图片下载和完整模型返回/业务校验，不代表整个拍照流程18秒；精准可能多轮规划/估重，营养补全、上传、排队和轮询另计。失败即提前切换，三家全失败明确失败。
+- 三家使用已验证的Gemini原生非流式格式及inlineData图片。万界路径/api/v1beta/models/...；OpenLux路径/v1beta/models/...、Bearer、sort=success_rate；A6路径/v1beta/models/...、x-goog-api-key。忽略响应中的thought片段，仅拼接最终文本做JSON校验。
+- 精准规划允许有效的补拍/问题/待补充信息；估重必须有名称和有效重量。通过结构校验不等于识别正确，仍需人工照片核对。
+- 沿用每Pod按模式+渠道+型号的熔断。均分为初始分配，缺Key/熔断/失败切换会使最终成功量不再三等分。OpenLux/A6可能同源，本方案不将a6_independent_upstream设true，不保证100%成功。
+- 正常一次模型调用；切换最多三次。取消请求仍可能由上游计费。记录状态、耗时、型号和已报告token，不记录完整题目、照片URL或密钥。
+
+下列内容为 `balanced_routing_enabled: false` 时的旧影子/竞速策略，不能当作新版默认行为。
+
 ## 当前实现与启用边界
 
 模型档位沿用产品已有配置：普通 Gemini 3 Flash Preview；精准万界 3.5 Flash / OpenLux 3.6 Flash；快速 Qwen3.8。A6 不改变模式或模型，按当前请求的实际 Gemini 型号重放。快速模式、文字任务不参与此 Gemini 路由；精准既有 Qwen 回退边界不变，普通模式所有 Gemini 渠道失败后明确失败。

@@ -141,6 +141,8 @@ type ExternalConfig struct {
 
 // VisionRoutingConfig controls channel scheduling, without changing product models.
 type VisionRoutingConfig struct {
+	BalancedRoutingEnabled bool     `mapstructure:"balanced_routing_enabled"`
+	ResponseWaitSeconds    int      `mapstructure:"response_wait_seconds"`
 	A6ShadowPercent        int      `mapstructure:"a6_shadow_percent"`
 	ShadowMaxConcurrent    int      `mapstructure:"shadow_max_concurrent"`
 	ShadowTimeoutSeconds   int      `mapstructure:"shadow_timeout_seconds"`
@@ -1540,6 +1542,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.qwen38_precision_traffic_percent", 20)
 	v.SetDefault("external.openlux_base_url", "https://api.openlux.ai/v1")
 	v.SetDefault("external.a6_base_url", "https://api.a6api.com")
+	v.SetDefault("external.vision_routing.balanced_routing_enabled", true)
+	v.SetDefault("external.vision_routing.response_wait_seconds", 18)
 	v.SetDefault("external.vision_routing.a6_shadow_percent", 10)
 	v.SetDefault("external.vision_routing.shadow_max_concurrent", 2)
 	v.SetDefault("external.vision_routing.shadow_timeout_seconds", 35)

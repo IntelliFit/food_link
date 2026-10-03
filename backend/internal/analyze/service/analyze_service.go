@@ -217,6 +217,12 @@ func (s *AnalyzeService) ConfigureImageProvider(provider string) {
 }
 
 func (s *AnalyzeService) ConfigureImageModelTraffic(ordinaryQwenPercent, precisionQwenPercent int) {
+	if s.balancedVisionEnabled() {
+		logger.Info(context.Background(), "食物图片三渠道模型映射已配置",
+			slog.String("ordinary_model", gemini3FlashModel), slog.String("wanjie_precision_model", gemini35FlashModel),
+			slog.String("relay_precision_model", relayGemini37FlashModel), slog.String("initial_traffic", "equal_available_channels"))
+		return
+	}
 	logger.Info(context.Background(), "食物图片模型路由已配置",
 		slog.Int("qwen38_ordinary_traffic_percent_ignored", clampTrafficPercent(ordinaryQwenPercent)),
 		slog.Int("qwen38_precision_traffic_percent_ignored", clampTrafficPercent(precisionQwenPercent)),
@@ -245,6 +251,11 @@ func (s *AnalyzeService) ConfigureOpenLuxGeminiLLMClients(gemini3Client, precisi
 func (s *AnalyzeService) ConfigureGeminiUpstreamTraffic(ordinaryOpenLuxPercent, precisionOpenLuxPercent int) {
 	s.ordinaryOpenLuxPercent = clampTrafficPercent(ordinaryOpenLuxPercent)
 	s.precisionOpenLuxPercent = clampTrafficPercent(precisionOpenLuxPercent)
+	if s.balancedVisionEnabled() {
+		logger.Info(context.Background(), "Gemini 三渠道均分已启用，旧双渠道比例不参与选路",
+			slog.Int("response_wait_seconds", s.visionChannels.config.ResponseWaitSeconds))
+		return
+	}
 	logger.Info(context.Background(), "Gemini 双上游混合路由已配置",
 		slog.Int("openlux_ordinary_gemini_traffic_percent", s.ordinaryOpenLuxPercent),
 		slog.Int("openlux_precision_gemini_traffic_percent", s.precisionOpenLuxPercent),
@@ -260,6 +271,9 @@ func (s *AnalyzeService) SelectFoodImageModel(executionMode, routingKey string) 
 	mode := normalizeExecutionMode(&executionMode)
 	if isFastExecutionMode(mode) {
 		return qwen38FlashModel
+	}
+	if s.balancedVisionEnabled() && (isPrecisionLikeExecutionMode(mode) || isGemini35ExecutionMode(mode) || isOrdinaryFoodImageMode(mode)) {
+		return s.selectBalancedVisionModel(mode, routingKey)
 	}
 	if isPrecisionLikeExecutionMode(mode) || isGemini35ExecutionMode(mode) {
 		if s.openLuxPrecisionGeminiClient != nil && stableTrafficHit("precision_gemini_openlux", routingKey, s.precisionOpenLuxPercent) {
@@ -307,6 +321,9 @@ func isOpenLuxGeminiRoute(modelName string) bool {
 }
 
 func geminiRouteName(model, upstream string) string {
+	if upstream == geminiA6Upstream || model == relayGemini37FlashModel {
+		return upstream + ":" + model
+	}
 	if upstream != geminiOpenLuxUpstream {
 		return model
 	}
@@ -317,6 +334,12 @@ func geminiRouteName(model, upstream string) string {
 }
 
 func (s *AnalyzeService) geminiClientForRoute(model, requestedModel string) (LLMClient, string) {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(requestedModel)), "a6:") && s.visionChannels != nil {
+		return s.visionChannels.a6, geminiA6Upstream
+	}
+	if model == relayGemini37FlashModel {
+		return s.openLuxPrecisionGeminiClient, geminiOpenLuxUpstream
+	}
 	if isOpenLuxGeminiRoute(requestedModel) {
 		if model == precisionGeminiFlashModel {
 			return s.openLuxPrecisionGeminiClient, geminiOpenLuxUpstream
@@ -422,6 +445,9 @@ func (s *AnalyzeService) geminiVisionTimeout(upstream string) time.Duration {
 // keep that upstream's own timeout; ordinary mode fails instead of accepting a
 // lower-quality Qwen recognition result.
 func (s *AnalyzeService) geminiVisionRouteContext(ctx context.Context, model, primaryUpstream string, primaryClient LLMClient) (context.Context, context.CancelFunc) {
+	if s.balancedVisionApplies(ctx, model) {
+		return context.WithTimeout(ctx, 3*time.Duration(s.visionChannels.config.ResponseWaitSeconds)*time.Second)
+	}
 	if s.visionChannels != nil {
 		return context.WithTimeout(ctx, time.Duration(s.visionChannels.config.OverallTimeoutSeconds)*time.Second)
 	}
@@ -915,7 +941,7 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	var err error
 	geminiRouteCtx := callCtx
 	geminiRouteCancel := func() {}
-	if allowFallback && provider == "gemini" && len(imageURLs) > 0 {
+	if (allowFallback || s.balancedVisionApplies(ctx, model)) && provider == "gemini" && len(imageURLs) > 0 {
 		geminiRouteCtx, geminiRouteCancel = s.geminiVisionRouteContext(callCtx, model, geminiUpstream, client)
 		defer geminiRouteCancel()
 		outcome, hedgeErr := s.runHedgedGeminiVision(
@@ -928,6 +954,9 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 			temperature,
 			client,
 			func(result map[string]any) error {
+				if s.balancedVisionApplies(ctx, model) {
+					return validateBalancedPrecisionPayload(result)
+				}
 				if len(result) == 0 {
 					return fmt.Errorf("精准模式未返回有效 JSON 内容")
 				}
@@ -955,7 +984,7 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 			return primaryCall(attemptCtx)
 		})
 	}
-	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) {
+	if allowFallback && !s.balancedVisionApplies(ctx, model) && err != nil && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) {
 		if s.dashscopeClient == nil {
 			return nil, err
 		}
@@ -2626,8 +2655,11 @@ func resolveModelConfig(modelName string) (provider, model string) {
 		normalized == "gemini-3-flash-preview" || normalized == "google/gemini-3-flash-preview" {
 		return "gemini", gemini3FlashModel
 	}
-	if normalized == openLuxGemini3Route {
+	if normalized == openLuxGemini3Route || normalized == "a6:"+gemini3FlashModel {
 		return "gemini", gemini3FlashModel
+	}
+	if normalized == relayGemini37FlashModel || normalized == "openlux:"+relayGemini37FlashModel || normalized == "a6:"+relayGemini37FlashModel {
+		return "gemini", relayGemini37FlashModel
 	}
 	if normalized == gemini31FlashLiteModel || normalized == "gemini31-flash-lite" || normalized == "gemini31_flash_lite" {
 		return "gemini", gemini31FlashLiteModel
@@ -2926,7 +2958,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			attribute.String("analysis.fallback_policy", "gemini_only"),
 		)
 	}
-	if err != nil && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) && !isOrdinaryFoodImageMode(executionMode) && s.dashscopeClient != nil {
+	if err != nil && !s.balancedVisionApplies(ctx, model) && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) && !isOrdinaryFoodImageMode(executionMode) && s.dashscopeClient != nil {
 		primaryErr := err
 		fallbackCtx, fallbackCancel := context.WithTimeout(geminiRouteCtx, visionFallbackTimeout)
 		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen38FlashModel)
@@ -3465,8 +3497,11 @@ func (s *AnalyzeService) refineImageWithLowCostWebSearch(ctx context.Context, in
 
 func (s *AnalyzeService) refineGemini35GroupedEstimate(ctx context.Context, input AnalyzeInput, plan map[string]any, imageURLs []string) (map[string]any, map[string]any) {
 	modelName := precisionGeminiFlashModel
+	if s.balancedVisionEnabled() {
+		_, modelName = s.resolveImageModelConfig(input.ModelName)
+	}
 	client, upstream := s.geminiClientForRoute(modelName, input.ModelName)
-	if configuredClient, ok := client.(*OfoxAIClient); ok && strings.TrimSpace(configuredClient.Model) != "" {
+	if configuredClient, ok := client.(*OfoxAIClient); ok && !s.balancedVisionEnabled() && strings.TrimSpace(configuredClient.Model) != "" {
 		modelName = configuredClient.Model
 	}
 	meta := map[string]any{
@@ -3504,9 +3539,17 @@ func (s *AnalyzeService) refineGemini35GroupedEstimate(ctx context.Context, inpu
 	prompt := buildGemini35GroupedWeightPrompt(input, plan)
 	callCtx, cancel := context.WithTimeout(ctx, standardHybridTimeout)
 	defer cancel()
-	weightResult, err := analyzeWithJSONParseRetry(callCtx, "gemini35_grouped_weight", "gemini", modelName, func(retryCtx context.Context) (map[string]any, error) {
-		return analyzeWithImagesTemperature(retryCtx, client, prompt, imageURLs, 0)
-	})
+	var weightResult map[string]any
+	var err error
+	if s.balancedVisionEnabled() {
+		outcome, callErr := s.runHedgedGeminiVision(callCtx, "gemini35_grouped_weight", upstream, modelName, prompt, imageURLs, 0, client, validateNonEmptyFoodAnalysisResult)
+		weightResult, err = outcome.parsed, callErr
+		meta["review_model"], meta["review_upstream"] = outcome.model, outcome.upstream
+	} else {
+		weightResult, err = analyzeWithJSONParseRetry(callCtx, "gemini35_grouped_weight", "gemini", modelName, func(retryCtx context.Context) (map[string]any, error) {
+			return analyzeWithImagesTemperature(retryCtx, client, prompt, imageURLs, 0)
+		})
+	}
 	if err != nil {
 		logger.Warn(ctx, "精准 Gemini 分组重量估算失败",
 			logger.Err(err),

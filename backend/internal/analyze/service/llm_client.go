@@ -169,7 +169,7 @@ func (c *OfoxAIClient) NewAnalyzeWithImagesAndTemperatureModelCall(prompt string
 	if model == "" {
 		model = c.Model
 	}
-	if !isWanjieGeminiNativeModel(model, c.BaseURL) {
+	if !isGeminiNativeModel(model, c.BaseURL) {
 		return func(ctx context.Context) (map[string]any, error) {
 			return c.AnalyzeWithImagesAndTemperatureModel(ctx, prompt, imageURLs, temperature, modelName)
 		}
@@ -257,7 +257,7 @@ func (c *OfoxAIClient) analyzeWithImagesAndTemperatureMeta(ctx context.Context, 
 	if model == "" {
 		model = c.Model
 	}
-	if isWanjieGeminiNativeModel(model, c.BaseURL) {
+	if isGeminiNativeModel(model, c.BaseURL) {
 		return c.doGeminiNativeRequest(ctx, model, prompt, imageURLs, temperature)
 	}
 	content := []map[string]any{
@@ -323,6 +323,19 @@ func isDashScopeQwenModel(model, baseURL string) bool {
 func isWanjieGeminiNativeModel(model, baseURL string) bool {
 	return strings.Contains(strings.ToLower(baseURL), "maas-openapi.wanjiedata.com") &&
 		strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gemini-")
+}
+
+func isGeminiNativeModel(model, baseURL string) bool {
+	endpoint, err := url.Parse(baseURL)
+	if err != nil || !strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gemini-") {
+		return false
+	}
+	switch strings.ToLower(endpoint.Hostname()) {
+	case "maas-openapi.wanjiedata.com", "api.openlux.ai", "api.a6api.com":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *OfoxAIClient) doGeminiNativeRequest(ctx context.Context, model, prompt string, imageURLs []string, temperature float64) (map[string]any, map[string]any, error) {
@@ -398,6 +411,10 @@ func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model 
 		return nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	if req.URL.Hostname() == "api.a6api.com" {
+		req.Header.Del("Authorization")
+		req.Header.Set("x-goog-api-key", c.APIKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -425,18 +442,23 @@ func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model 
 		return nil, nil, &LLMJSONParseError{Err: fmt.Errorf("Gemini 响应因 token 上限截断")}
 	}
 	content := mapFromAny(firstCandidate["content"])
+	var answer strings.Builder
 	for _, part := range anyListFromAny(content["parts"]) {
-		text := stringFromAny(mapFromAny(part)["text"])
+		partMap := mapFromAny(part)
+		if thought, _ := partMap["thought"].(bool); thought {
+			continue
+		}
+		text := stringFromAny(partMap["text"])
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
-		parsed, err := parseLLMJSON(text)
-		if err != nil {
-			return nil, nil, err
-		}
-		return parsed, raw, nil
+		answer.WriteString(text)
 	}
-	return nil, nil, fmt.Errorf("empty response from Gemini")
+	if strings.TrimSpace(answer.String()) == "" {
+		return nil, nil, fmt.Errorf("empty response from Gemini")
+	}
+	parsed, err := parseLLMJSON(answer.String())
+	return parsed, raw, err
 }
 
 func geminiNativeEndpoint(baseURL, model string) string {
@@ -446,6 +468,12 @@ func geminiNativeEndpoint(baseURL, model string) string {
 	}
 	endpoint.Path = "/api/v1beta/models/" + url.PathEscape(model) + ":generateContent"
 	endpoint.RawQuery = ""
+	if endpoint.Hostname() == "api.openlux.ai" || endpoint.Hostname() == "api.a6api.com" {
+		endpoint.Path = "/v1beta/models/" + url.PathEscape(model) + ":generateContent"
+	}
+	if endpoint.Hostname() == "api.openlux.ai" {
+		endpoint.RawQuery = "sort=success_rate"
+	}
 	return endpoint.String()
 }
 

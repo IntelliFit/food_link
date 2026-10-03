@@ -91,6 +91,13 @@ func normalizeVisionRouting(c config.VisionRoutingConfig) config.VisionRoutingCo
 		c.CircuitCooldownSeconds = 60
 	}
 	c.A6ApprovedModels = append([]string(nil), c.A6ApprovedModels...)
+	if c.ResponseWaitSeconds <= 0 || c.ResponseWaitSeconds > 60 {
+		c.ResponseWaitSeconds = 18
+	}
+	if c.BalancedRoutingEnabled {
+		// Sequential attempts: one response budget per channel, no paid shadows.
+		c.A6ShadowPercent = 0
+	}
 	return c
 }
 
@@ -106,6 +113,8 @@ func (s *AnalyzeService) ConfigureA6VisionRouting(apiKey, baseURL string, c conf
 	}
 	s.visionChannels = r
 	logger.Info(context.Background(), "餐照渠道调度已配置",
+		slog.Bool("balanced_routing_enabled", c.BalancedRoutingEnabled), slog.Int("response_wait_seconds", c.ResponseWaitSeconds),
+		slog.Int("balanced_overall_timeout_seconds", 3*c.ResponseWaitSeconds),
 		slog.Bool("a6_configured", r.a6 != nil), slog.Int("a6_shadow_percent", c.A6ShadowPercent),
 		slog.Bool("cost_routing_enabled", c.CostRoutingEnabled), slog.Any("a6_approved_models", c.A6ApprovedModels),
 		slog.Bool("a6_independent_upstream", c.A6IndependentUpstream), slog.Int("shadow_max_concurrent", c.ShadowMaxConcurrent),
@@ -226,6 +235,9 @@ type channelResult struct {
 }
 
 func (s *AnalyzeService) runChannelGeminiVision(ctx context.Context, stage, primaryUpstream, primaryModel, prompt string, imageURLs []string, temperature float64, primaryClient LLMClient, validate func(map[string]any) error) (outcome geminiVisionHedgeOutcome, err error) {
+	if s.balancedVisionApplies(ctx, primaryModel) {
+		return s.runBalancedGeminiVision(ctx, stage, primaryUpstream, primaryModel, prompt, imageURLs, temperature, validate)
+	}
 	r := s.visionChannels
 	req, _ := ctx.Value(visionRequestKey{}).(*visionRequest)
 	if req == nil {
