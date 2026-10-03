@@ -66,6 +66,10 @@ export type RootStackParamList = {
     redirectTab?: keyof MainTabParamList
   } | undefined
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined
+  ReminderSettings: undefined
+  CampusDiningSettings: undefined
+  SleepRecord: { date?: string } | undefined
+  MealSuggestions: { mealType?: 'breakfast' | 'lunch' | 'dinner' } | undefined
   Analyze: {
     source?: 'camera' | 'library'
     mealType?: MealType
@@ -128,6 +132,7 @@ export type RootStackParamList = {
     | { returnTo?: 'PublicFoodShare'; editId?: string; mode?: 'campus' | 'public'; draft?: PublicFoodShareDraft }
     | undefined
   CampusCanteen: undefined
+  CampusFoodCollector: undefined
   PrivacySettings: undefined
   MembershipAgreement: undefined
   UserGroup: undefined

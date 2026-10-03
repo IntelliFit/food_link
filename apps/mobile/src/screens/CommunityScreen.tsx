@@ -51,6 +51,7 @@ import { useAuth } from '../providers/AuthProvider'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { compactFont, radius } from '../theme'
 import { formatDateTime, todayKey } from '../utils/date'
+import { formatFeedTime } from '../utils/feedTime'
 import { userFacingErrorMessage } from '../utils/errors'
 
 const hairline = 'rgba(92,184,150,0.14)'
@@ -1980,7 +1981,7 @@ function feedMeta(item: CommunityFeedItem): string {
       : type === 'campus_food'
         ? '校园食堂'
         : mealLabel(item.record.meal_type)
-  return `${label} · ${formatDateTime(item.record.record_time || item.record.created_at)}`
+  return `${label} · ${formatFeedTime(String(item.record.record_time || item.record.created_at || ''))}`
 }
 
 function feedTag(item: CommunityFeedItem): string {

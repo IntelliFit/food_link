@@ -7,15 +7,6 @@ const smokeTestEnabled = process.env.EXPO_PUBLIC_NOTIFICATION_SMOKE_TEST === '1'
 
 let smokeTestStarted = false
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-})
-
 async function ensureNotificationPermission(): Promise<boolean> {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNEL_ID, {
