@@ -104,6 +104,13 @@ wechat:
     app_id: ""
     app_secret: ""
 
+  # 发布内容安全：复用小程序 AppID/Secret；图片结果需启用公众平台“消息推送”。
+  content_security:
+    # 不填时复用下方 xpay.message_token；必须与公众平台 Token 一致。
+    message_token: ""
+    # 安全/兼容模式时填写公众平台 EncodingAESKey；真实值仅放 Apollo / 环境变量。
+    encoding_aes_key: ""
+
   # 小程序虚拟支付：仅在 Apollo / 部署环境中填写真实密钥，禁止提交真实值。
   xpay:
     offer_id: ""
@@ -132,7 +139,7 @@ wechat:
     analysis_subscribe_template_id: ""
 
 redis:
-  # 短信验证码存储与节流。
+  # 短信验证码与内容安全图片审核票据存储；多副本图片审核必须配置共享 Redis。
   # mode: auto 有 url 时使用 Redis；development 无 url 时使用本地内存；production 建议显式用 redis。
   # mode: redis 强制使用 Redis；mode: memory 仅用于本地开发。
   mode: "auto"

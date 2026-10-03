@@ -15,6 +15,7 @@ import (
 	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/common/dateutil"
 	commonerrors "food_link/backend/internal/common/errors"
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/internal/foodrecord/repo"
 	healthdomain "food_link/backend/internal/health/domain"
@@ -36,11 +37,16 @@ var mealDisplayOrder = []string{
 }
 
 type FoodRecordService struct {
-	recordRepo *repo.FoodRecordRepo
-	taskRepo   *repo.AnalysisTaskRepo
-	userRepo   *authrepo.UserRepo
-	storage    *storage.Client
-	rewards    InviteRewardActivator
+	recordRepo      *repo.FoodRecordRepo
+	taskRepo        *repo.AnalysisTaskRepo
+	userRepo        *authrepo.UserRepo
+	storage         *storage.Client
+	rewards         InviteRewardActivator
+	contentSecurity *contentsecurity.Service
+}
+
+func (s *FoodRecordService) ConfigureContentSecurity(checker *contentsecurity.Service) {
+	s.contentSecurity = checker
 }
 
 type InviteRewardActivator interface {
@@ -211,6 +217,11 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		EntryType:        entryType,
 		RecipeID:         recipeID,
 		RecordTime:       recordTime,
+	}
+	if s.contentSecurity != nil {
+		if err := s.contentSecurity.CheckValue(ctx, userID, 4, record, s.storage); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.recordRepo.Create(ctx, record); err != nil {
 		if input.SourceTaskID != nil && isDuplicateRecordError(err) {
@@ -739,6 +750,40 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	}
 	if len(updates) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "没有需要更新的字段", HTTPStatus: 400}
+	}
+	if s.contentSecurity != nil {
+		if existing == nil {
+			var err error
+			existing, err = s.recordRepo.GetByID(ctx, recordID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if existing == nil || existing.UserID != userID {
+			return nil, commonerrors.ErrNotFound
+		}
+		raw, err := json.Marshal(existing)
+		if err != nil {
+			return nil, err
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return nil, err
+		}
+		updateJSON, err := json.Marshal(updates)
+		if err != nil {
+			return nil, err
+		}
+		var values map[string]any
+		if err := json.Unmarshal(updateJSON, &values); err != nil {
+			return nil, err
+		}
+		for key, value := range values {
+			doc[key] = value
+		}
+		if err := s.contentSecurity.CheckDocument(ctx, userID, 4, doc, s.storage); err != nil {
+			return nil, err
+		}
 	}
 	record, err := s.recordRepo.Update(ctx, userID, recordID, updates)
 	if err != nil {

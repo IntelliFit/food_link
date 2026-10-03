@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	commonerrors "food_link/backend/internal/common/errors"
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	"food_link/backend/internal/recipe/domain"
 	"food_link/backend/internal/recipe/repo"
 	"food_link/backend/pkg/logger"
@@ -21,6 +22,11 @@ type RecipeService struct {
 	storage                         *storage.Client
 	blockChecker                    BlockChecker
 	favoriteRecipeVisibilityChecker FavoriteRecipeVisibilityChecker
+	contentSecurity                 *contentsecurity.Service
+}
+
+func (s *RecipeService) ConfigureContentSecurity(checker *contentsecurity.Service) {
+	s.contentSecurity = checker
 }
 
 func NewRecipeService(repo *repo.RecipeRepo, storageClient ...*storage.Client) *RecipeService {
@@ -115,6 +121,11 @@ func (s *RecipeService) Create(ctx context.Context, userID string, input CreateI
 		MealType:         normalizeMealPtr(input.MealType),
 		IsFavorite:       input.IsFavorite,
 		SourceTaskID:     input.SourceTaskID,
+	}
+	if s.contentSecurity != nil {
+		if err := s.contentSecurity.CheckValue(ctx, userID, 4, recipe, s.storage); err != nil {
+			return "", err
+		}
 	}
 	if err := s.repo.Create(ctx, recipe); err != nil {
 		if input.SourceTaskID != nil && repo.IsUserSourceTaskUniqueViolation(err) {
@@ -244,6 +255,18 @@ func (s *RecipeService) Update(ctx context.Context, userID, recipeID string, inp
 	if len(updates) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "没有要更新的字段", HTTPStatus: 400}
 	}
+	if s.contentSecurity != nil {
+		current, err := s.repo.Get(ctx, recipeID, userID)
+		if err != nil {
+			return nil, err
+		}
+		if current == nil {
+			return nil, commonerrors.ErrNotFound
+		}
+		if err := s.contentSecurity.CheckUpdate(ctx, userID, 4, current, updates, s.storage); err != nil {
+			return nil, err
+		}
+	}
 	recipe, err := s.repo.Update(ctx, recipeID, userID, updates)
 	if err != nil {
 		return nil, err
@@ -297,6 +320,11 @@ func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealTy
 		TotalWeightGrams: int(recipe.TotalWeightGrams),
 		EntryType:        recordEntryType,
 		RecipeID:         &recipe.ID,
+	}
+	if s.contentSecurity != nil {
+		if err := s.contentSecurity.CheckValue(ctx, userID, 4, record, s.storage); err != nil {
+			return "", err
+		}
 	}
 	if err := s.repo.InsertFoodRecord(ctx, record); err != nil {
 		return "", err

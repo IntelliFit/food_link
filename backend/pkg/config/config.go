@@ -173,10 +173,16 @@ type AppAuthConfig struct {
 }
 
 type WechatConfig struct {
-	MiniProgram WechatMiniProgramConfig `mapstructure:"mini_program"`
-	MobileApp   WechatMobileAppConfig   `mapstructure:"mobile_app"`
-	Pay         WechatPayConfig         `mapstructure:"pay"`
-	XPay        WechatXPayConfig        `mapstructure:"xpay"`
+	MiniProgram     WechatMiniProgramConfig     `mapstructure:"mini_program"`
+	MobileApp       WechatMobileAppConfig       `mapstructure:"mobile_app"`
+	Pay             WechatPayConfig             `mapstructure:"pay"`
+	XPay            WechatXPayConfig            `mapstructure:"xpay"`
+	ContentSecurity WechatContentSecurityConfig `mapstructure:"content_security"`
+}
+
+type WechatContentSecurityConfig struct {
+	MessageToken   string `mapstructure:"message_token"`
+	EncodingAESKey string `mapstructure:"encoding_aes_key"`
 }
 
 type WechatMiniProgramConfig struct {
@@ -1169,6 +1175,8 @@ var cloudConfigKeyAliases = map[string]string{
 	"WECHAT_XPAY_APP_KEY":                      "wechat.xpay.app_key",
 	"WECHAT_XPAY_SANDBOX":                      "wechat.xpay.sandbox",
 	"WECHAT_XPAY_MESSAGE_TOKEN":                "wechat.xpay.message_token",
+	"WECHAT_CONTENT_SECURITY_MESSAGE_TOKEN":    "wechat.content_security.message_token",
+	"WECHAT_CONTENT_SECURITY_ENCODING_AES_KEY": "wechat.content_security.encoding_aes_key",
 	"COS_REGION":                               "storage.cos_region",
 	"COS_SECRET_ID":                            "storage.cos_secret_id",
 	"COS_SECRET_KEY":                           "storage.cos_secret_key",
@@ -1668,6 +1676,8 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("wechat.xpay.app_key", "WECHAT_XPAY_APP_KEY")
 	_ = v.BindEnv("wechat.xpay.sandbox", "WECHAT_XPAY_SANDBOX")
 	_ = v.BindEnv("wechat.xpay.message_token", "WECHAT_XPAY_MESSAGE_TOKEN")
+	_ = v.BindEnv("wechat.content_security.message_token", "WECHAT_CONTENT_SECURITY_MESSAGE_TOKEN")
+	_ = v.BindEnv("wechat.content_security.encoding_aes_key", "WECHAT_CONTENT_SECURITY_ENCODING_AES_KEY")
 	_ = v.BindEnv("wechat_pay.app_pay_app_id", "WECHAT_PAY_APP_PAY_APP_ID")
 	_ = v.BindEnv("wechat_pay.app_id", "WECHAT_PAY_APP_ID")
 	_ = v.BindEnv("wechat_pay.mchid", "WECHAT_PAY_MCHID")
