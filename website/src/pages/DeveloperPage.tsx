@@ -28,7 +28,7 @@ export function DeveloperPage() {
               { icon: Camera, title: '发一张餐照', example: '“分析这顿饭的热量和蛋白质。我只吃了一半米饭。”', note: '返回食物明细、估算重量、营养与不确定性说明。' },
               { icon: Database, title: '查一种食物', example: '“查一下鸡胸肉的营养信息。”', note: '查询食探营养库，Beta 期免费。' },
               { icon: History, title: '回顾我的饮食', example: '“读取我最近一周的记录，看看蛋白质和健康评分。”', note: '需主动开启个人数据读取权限，并已有食探记录；只读，不修改记录。' },
-            ].map(({icon: Icon, title, example, note}) => <article key={title} className="border-b border-border pb-5 last:border-0 last:pb-0"><div className="flex items-center gap-2 font-semibold"><Icon className="size-5 text-primary" />{title}</div><p className="mt-2 text-sm leading-7">{example}</p><p className="mt-1 text-xs leading-6 text-muted-foreground">{note}</p></article>)}
+            ].map(({icon: Icon, title, example, note}) => <article key={title} className="border-b border-border pb-5 last:border-0 last:pb-0"><div className="flex items-center gap-2 font-semibold"><Icon className="size-5 text-primary" />{title}</div><p className="mt-2 text-base leading-7">{example}</p><details className="mt-2"><summary className="cursor-pointer text-base text-muted-foreground">了解功能</summary><p className="mt-2 text-base leading-6 text-muted-foreground">{note}</p></details></article>)}
           </div>
         </div>
       </section>
@@ -40,8 +40,8 @@ export function DeveloperPage() {
           {[
             ['“应用”是什么？', '它是这次接入的名字和独立账本，比如“我的饮食助手”，不需要开发或下载一个新 App。多台电脑可接入同一应用；重新创建密钥不会再赠送点数。'],
             ['API、MCP 要选哪个？', '先把任务交给 AI。API 是食探提供能力的接口，MCP 是让 AI 使用这些接口的一套现成工具。AI 会根据当前客户端能力选择；两种方式用同一应用余额。'],
-            ['密钥列表为什么不能复制？', '列表只显示标识。完整密钥在创建时弹出的窗口里复制或下载；遗失后需新建一把，不扣点。不要点“吊销”，除非你确定要停用旧密钥。'],
-            ['怎样知道接入成功？', '先在控制台免费验证连接，再让 AI 查一次余额和“鸡胸肉”营养。成功后发一张餐照，确认收到最终食物明细，而不是只看到任务编号。'],
+            ['旧密钥怎么再次复制？', '点击列表里的“复制”。本页新建的密钥可直接查看；刷新后先导入已保存文件。服务器无法找回完整旧密钥，没有文件就新建一把，余额不变。'],
+            ['怎样知道接入成功？', '在密钥弹窗展开“测试连接（免费）”，或让 AI 查一次余额和“鸡胸肉”营养。成功后发一张餐照，确认收到最终食物明细，而不是只看到任务编号。'],
             ['余额不足会突然弹出支付吗？', '不会。AI 会告诉你余额不足，由你到控制台选择套餐并主动扫码充值。API 点数与食探小程序会员积分独立。'],
             ['识别结果会自动写进我的饮食记录吗？', '不会。食物分析属于当前应用的分析历史；读取个人饮食记录需要你额外授权。这些只读接口不提供修改或删除个人记录的能力。'],
           ].map(([question,answer]) => <details key={question} className="py-4"><summary className="cursor-pointer font-medium">{question}</summary><p className="mt-3 text-sm leading-7 text-muted-foreground">{answer}</p></details>)}

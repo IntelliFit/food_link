@@ -108,10 +108,12 @@ export async function loginWithSMS(phone: string, code: string) {
 }
 
 export const developerApi = {
-  listApps: () => request<{ apps: DeveloperApp[] }>('/api/developer/apps'),
+  listApps: () => request<{ apps: DeveloperApp[]; capabilities?: string[] }>('/api/developer/apps'),
   createApp: (name: string) => request<KeyMaterial>('/api/developer/apps', { method: 'POST', body: JSON.stringify({ name }) }),
   createKey: (appId: string, name: string, scopes: string[]) => request<KeyMaterial>(`/api/developer/apps/${appId}/keys`, { method: 'POST', body: JSON.stringify({ name, scopes }) }),
   revokeKey: (appId: string, keyId: string) => request<{ revoked: boolean }>(`/api/developer/apps/${appId}/keys/${keyId}`, { method: 'DELETE' }),
+  recycleApp: (appId: string) => request<{ recycled: boolean }>(`/api/developer/apps/${appId}`, { method: 'DELETE' }),
+  restoreApp: (appId: string) => request<{ restored: boolean }>(`/api/developer/apps/${appId}/restore`, { method: 'POST' }),
   listLedger: (appId: string) => request<{ entries: Array<{ id: string; entry_type: string; delta_units: number; balance_after: number; description: string; created_at?: string }> }>(`/api/developer/apps/${appId}/ledger?limit=50`),
   listPackages: () => request<{ packages: CreditPackage[] }>('/api/developer/packages', {}, false),
   createPayment: (appId: string, packageCode: string) => request<PaymentOrder>('/api/developer/payment-orders', { method: 'POST', body: JSON.stringify({ app_id: appId, package_code: packageCode }) }),
