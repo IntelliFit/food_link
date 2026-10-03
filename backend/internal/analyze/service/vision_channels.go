@@ -92,7 +92,7 @@ func normalizeVisionRouting(c config.VisionRoutingConfig) config.VisionRoutingCo
 	}
 	c.A6ApprovedModels = append([]string(nil), c.A6ApprovedModels...)
 	if c.ResponseWaitSeconds <= 0 || c.ResponseWaitSeconds > 60 {
-		c.ResponseWaitSeconds = 18
+		c.ResponseWaitSeconds = 45
 	}
 	if c.BalancedRoutingEnabled {
 		// Sequential attempts: one response budget per channel, no paid shadows.

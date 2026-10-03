@@ -25,6 +25,12 @@ func finalizeAIDirectNutrition(resp map[string]any, engine string) map[string]an
 			if len(unit) == 0 && weight > 0 {
 				unit = nutritionUnitFromTotals(nutrients, weight)
 			}
+			// Macro display defaults are not evidence that missing micronutrients were supplied.
+			if missing, ok := next["visionMissingNutrientKeys"].([]string); ok {
+				for _, key := range missing {
+					delete(unit, key)
+				}
+			}
 			next["unit_nutrition_per_100g"] = unit
 			next["nutrition_source"] = engine
 			next["resolve_status"] = engine

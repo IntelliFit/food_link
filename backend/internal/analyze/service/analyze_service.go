@@ -881,6 +881,9 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 		provider = "doubao"
 		model = ""
 	}
+	if sourceType == "image" && provider == "gemini" && s.balancedVisionApplies(ctx, model) {
+		timeout = 3 * time.Duration(s.visionChannels.config.ResponseWaitSeconds) * time.Second
+	}
 	traceCtx, span := apm.StartSpan(ctx, "analysis.precision.llm",
 		attribute.String("analysis.source_type", sourceType),
 		attribute.String("analysis.provider", provider),
@@ -1741,7 +1744,7 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 		if len(compactTags) > 0 {
 			compact = strings.Join(compactTags, "\n") + "\n"
 		}
-		return fmt.Sprintf(`识别图片中的食物，估算重量和营养，仅返回 JSON。
+		prompt := fmt.Sprintf(`识别图片中的食物，估算重量和营养，仅返回 JSON。
 	%s%s%s
 
 `+imageMealComponentSeparationRules()+`
@@ -1774,6 +1777,10 @@ JSON:
   "context_advice":"",
   "uncertaintyNotes":[]
 	}`, compact, imageInputHint, additionalLine)
+		if isOrdinaryFoodImageMode(executionMode) && analysisEngineProducesNutrition(input.AnalysisEngine) {
+			return combinedOrdinaryPhotoPrompt(prompt)
+		}
+		return prompt
 	}
 
 	// strict mode prompt
@@ -5505,6 +5512,8 @@ func parseItems(parsed map[string]any) []map[string]any {
 	for _, v := range raw {
 		if item, ok := v.(map[string]any); ok {
 			next := copyAnyMap(item)
+			// Validate before defaults/calibration can manufacture a seemingly complete estimate.
+			next["visionEdiblePortionValidated"] = validVisualEdiblePortion(item)
 			name := "未知食物"
 			if n, ok := item["name"].(string); ok && n != "" {
 				name = n
@@ -5578,6 +5587,22 @@ func parseItems(parsed map[string]any) []map[string]any {
 					if v2, ok := n[k].(float64); ok {
 						nutrients[k] = v2
 					}
+				}
+				missing := []string{}
+				hasExtraMicronutrients := false
+				for _, key := range preciseMicronutrientKeys {
+					value, valid := finiteNutritionNumber(n[key])
+					if !valid {
+						missing = append(missing, key)
+						continue
+					}
+					nutrients[key] = value
+					if key != "fiber" && key != "sugar" {
+						hasExtraMicronutrients = true
+					}
+				}
+				if hasExtraMicronutrients {
+					next["visionMissingNutrientKeys"] = missing
 				}
 			}
 			suggestedRatio := numberFromAny(item["suggestedRatio"])
@@ -5933,8 +5958,39 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 		return resp
 	}
 	base := withDefaultEdiblePortions(items, "default")
-	if !needsEdiblePortionModel(base, input) {
-		resp["items"] = withDefaultEdiblePortions(base, "deterministic")
+	// A complete image estimate already contains gross/net weight and edible structure.
+	// Only incomplete items enter the auxiliary model, retaining original item indexes.
+	missingIndexes := []int{}
+	modelItems := base
+	reuseVisual := strings.TrimSpace(input.Text) == "" && isOrdinaryFoodImageMode(normalizeExecutionMode(input.ExecutionMode)) && analysisEngineProducesNutrition(input.AnalysisEngine)
+	if reuseVisual {
+		modelItems = []map[string]any{}
+		for index, item := range base {
+			if valid, _ := item["visionEdiblePortionValidated"].(bool); valid {
+				item["ediblePortionSource"] = "vision"
+				continue
+			}
+			missingIndexes = append(missingIndexes, index)
+			modelItems = append(modelItems, item)
+		}
+		if len(modelItems) == 0 {
+			resp["items"] = base
+			resp["edible_portion_status"] = "vision_reused"
+			resp["edible_portion_applied_count"] = 0
+			logger.Info(ctx, "复用餐照完整可食结构", slog.Int("item_count", len(base)))
+			return resp
+		}
+	}
+	if !needsEdiblePortionModel(modelItems, input) {
+		out := withDefaultEdiblePortions(base, "deterministic")
+		if reuseVisual {
+			for _, item := range out {
+				if valid, _ := item["visionEdiblePortionValidated"].(bool); valid {
+					item["ediblePortionSource"] = "vision"
+				}
+			}
+		}
+		resp["items"] = out
 		resp["edible_portion_status"] = "deterministic"
 		resp["edible_portion_applied_count"] = 0
 		return resp
@@ -5949,7 +6005,7 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 		resp["edible_portion_status"] = "unavailable"
 		return resp
 	}
-	prompt := buildEdiblePortionPrompt(base, input)
+	prompt := buildEdiblePortionPrompt(modelItems, input)
 	callCtx, cancel := context.WithTimeout(ctx, ediblePortionTimeout)
 	defer cancel()
 	parsed, err := analyzePostprocess(callCtx, client, prompt)
@@ -5970,6 +6026,15 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 		return resp
 	}
 	rows := parseEdiblePortionRows(parsed)
+	if len(missingIndexes) > 0 {
+		mapped := make(map[int]ediblePortionRow, len(rows))
+		for index, row := range rows {
+			if index >= 0 && index < len(missingIndexes) {
+				mapped[missingIndexes[index]] = row
+			}
+		}
+		rows = mapped
+	}
 	out := make([]map[string]any, 0, len(base))
 	applied := 0
 	for index, item := range base {

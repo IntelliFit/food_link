@@ -1558,7 +1558,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.openlux_base_url", "https://api.openlux.ai/v1")
 	v.SetDefault("external.a6_base_url", "https://api.a6api.com")
 	v.SetDefault("external.vision_routing.balanced_routing_enabled", true)
-	v.SetDefault("external.vision_routing.response_wait_seconds", 18)
+	v.SetDefault("external.vision_routing.response_wait_seconds", 45)
 	v.SetDefault("external.vision_routing.a6_shadow_percent", 10)
 	v.SetDefault("external.vision_routing.shadow_max_concurrent", 2)
 	v.SetDefault("external.vision_routing.shadow_timeout_seconds", 35)

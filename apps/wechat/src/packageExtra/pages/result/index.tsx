@@ -2536,7 +2536,7 @@ function ResultPage() {
           style={{ paddingTop: imagePaths.length > 0 ? '24rpx' : `${resultScrollPaddingTopRpx}rpx` }}
         >
         <View className='content-container'>
-          <AdaptiveImageGrid urls={imagePaths} className='result-photo-gallery' />
+          <AdaptiveImageGrid urls={imagePaths} className='result-photo-gallery' presentation='detail' />
           <View className='execution-mode-row'>
             <View className='execution-mode-left'>
               <View className={`execution-mode-tag ${executionMode}`}>

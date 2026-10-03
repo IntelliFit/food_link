@@ -50,3 +50,18 @@
   font-size: 42rpx;
   font-weight: 600;
 }
+
+.feed-photo-grid.is-detail .feed-photo-grid-item {
+  border-radius: 20rpx;
+}
+
+.feed-photo-grid-original {
+  position: absolute;
+  right: 16rpx;
+  bottom: 16rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 24rpx;
+  color: #fff;
+  background: rgb(15 23 42 / 55%);
+  font-size: 22rpx;
+}

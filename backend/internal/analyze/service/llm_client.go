@@ -8,13 +8,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"food_link/backend/pkg/logger"
 )
 
 // LLMClient defines the interface for LLM-based analysis.
@@ -347,6 +351,10 @@ func (c *OfoxAIClient) doGeminiNativeRequest(ctx context.Context, model, prompt 
 }
 
 func (c *OfoxAIClient) prepareGeminiNativeRequest(ctx context.Context, prompt string, imageURLs []string, temperature float64) ([]byte, error) {
+	started := time.Now()
+	defer func() {
+		logger.Info(ctx, "餐照原生请求图片准备结束", slog.Int("image_count", len(imageURLs)), slog.Int64("duration_ms", time.Since(started).Milliseconds()))
+	}()
 	parts := []map[string]any{{"text": prompt}}
 	inlineImages, err := c.downloadGeminiInlineImages(ctx, imageURLs)
 	if err != nil {
@@ -416,6 +424,30 @@ func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model 
 		req.Header.Set("x-goog-api-key", c.APIKey)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	started := time.Now()
+	var phaseMu sync.Mutex
+	sentMs, firstByteMs := int64(-1), int64(-1)
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err == nil {
+				phaseMu.Lock()
+				sentMs = time.Since(started).Milliseconds()
+				phaseMu.Unlock()
+			}
+		},
+		GotFirstResponseByte: func() {
+			phaseMu.Lock()
+			firstByteMs = time.Since(started).Milliseconds()
+			phaseMu.Unlock()
+		},
+	}))
+	defer func() {
+		phaseMu.Lock()
+		sent, firstByte := sentMs, firstByteMs
+		phaseMu.Unlock()
+		logger.Info(ctx, "餐照原生请求网络阶段结束", slog.String("upstream_host", req.URL.Hostname()), slog.String("model", model),
+			slog.Int("request_bytes", len(body)), slog.Int64("sent_ms", sent), slog.Int64("first_byte_ms", firstByte), slog.Int64("total_ms", time.Since(started).Milliseconds()))
+	}()
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, nil, err
