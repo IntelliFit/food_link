@@ -1,8 +1,10 @@
 import * as React from 'react'
-import { useDidShow } from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { FloatingPetAssistant } from '../../src/components/FloatingPetAssistant'
 import { JIANWEN_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
+import type { PetProfile } from '../../src/utils/api'
+import { PET_TRANSPORT_CHANGED, petTransportStorageKey } from '../../src/utils/pet-transport-storage'
 
 let mockWellness = false
 jest.mock('../../src/components/InkWellness', () => ({ useInkWellness: () => mockWellness }))
@@ -12,8 +14,16 @@ jest.mock('../../src/components/PetChatContent', () => ({ PetChatContent: () => 
 
 const advance = (ms: number) => act(() => { jest.advanceTimersByTime(ms) })
 const mount = () => render(<FloatingPetAssistant companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={jest.fn()} />)
+let storage: Map<string, unknown>
+let listeners: Map<string, Set<() => void>>
 
 beforeEach(() => {
+  jest.clearAllMocks()
+  storage = new Map(); listeners = new Map()
+  ;(Taro.getStorageSync as jest.Mock).mockImplementation(key => storage.get(key))
+  ;(Taro.setStorageSync as jest.Mock).mockImplementation((key, value) => storage.set(key, value))
+  ;(Taro.eventCenter.on as jest.Mock).mockImplementation((event, callback) => { if (!listeners.has(event)) listeners.set(event, new Set()); listeners.get(event)!.add(callback) })
+  ;(Taro.eventCenter.off as jest.Mock).mockImplementation((event, callback) => listeners.get(event)?.delete(callback))
   mockWellness = false
   jest.useFakeTimers()
   // Page visibility callbacks fire after mount in WeChat, not during React render.
@@ -83,4 +93,31 @@ test('a photo with no measured seated anchors uses its own walk and no borrowed 
   expect(container.querySelector('.pet-assistant-ride')).toBeNull()
   expect(container.querySelector('.pet-assistant-rider-arms')).toBeNull()
   expect(container.querySelector('.pet-assistant-rider-limbs')).toBeNull()
+})
+test.each(['scooter', 'skateboard'])('the confirmed %s is used for the actual departure and return', vehicle => {
+  storage.set('user_id', 'a')
+  storage.set(petTransportStorageKey('a', 'p', JIANWEN_COMPANION_SRC), { version: 1, appearance: JIANWEN_COMPANION_SRC, vehicle })
+  const { container } = render(<FloatingPetAssistant pet={{ id: 'p', name: '健文', builtin_avatar_id: 'jianwen-01' } as PetProfile} companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={jest.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', vehicle)
+  expect(container.querySelector('.pet-transport-actor__sheet')).toHaveAttribute('src', '/assets/pets/transport/jianwen-transport-v1.png')
+  expect(container.querySelector('.pet-assistant-ride--fitted')).toBeNull()
+  advance(980)
+  fireEvent.click(screen.getByRole('button', { name: '叫回宠物' }))
+  expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', vehicle)
+  advance(1800)
+  expect(container.querySelector('.pet-transport-actor')).toBeNull()
+})
+test('changing preference mid-trip waits for the next trip instead of popping a different vehicle', () => {
+  storage.set('user_id', 'a')
+  const key = petTransportStorageKey('a', 'p', JIANWEN_COMPANION_SRC)
+  storage.set(key, { version: 1, appearance: JIANWEN_COMPANION_SRC, vehicle: 'skateboard' })
+  const { container } = render(<FloatingPetAssistant pet={{ id: 'p', name: '健文', builtin_avatar_id: 'jianwen-01' } as PetProfile} companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={jest.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  storage.set(key, { version: 1, appearance: JIANWEN_COMPANION_SRC, vehicle: 'scooter' })
+  act(() => { for (const callback of listeners.get(PET_TRANSPORT_CHANGED) || []) callback() })
+  expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'skateboard')
+  advance(980)
+  fireEvent.click(screen.getByRole('button', { name: '叫回宠物' }))
+  expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'scooter')
 })

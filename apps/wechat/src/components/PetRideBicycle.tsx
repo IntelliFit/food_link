@@ -1,4 +1,5 @@
 import { View } from '@tarojs/components'
+import './PetRideBicycle.scss'
 
 type Point = { x: number; y: number }
 export interface PetRideAnchors { hand: Point; seat: Point; foot: Point }

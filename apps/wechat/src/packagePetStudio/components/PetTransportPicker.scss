@@ -1,0 +1,15 @@
+.journey-transport { margin: 12rpx 0 38rpx; }
+.journey-transport .journey-section-heading { margin-top: 0; }
+.journey-transport__stage { position: relative; height: 440rpx; overflow: hidden; border-radius: 26rpx; border: 1rpx solid #d6d9bd; background: linear-gradient(#e6efe5, #f6f0d9); }
+.journey-transport__sun { position: absolute; width: 96rpx; height: 96rpx; border-radius: 50%; top: 30rpx; right: 40rpx; background: #fff5ce; box-shadow: 0 0 60rpx #fff5ce88; }
+.journey-transport__actor { position: absolute; bottom: 96rpx; left: 50%; transform: translateX(-50%); }
+.journey-transport__caption { position: absolute; bottom: 16rpx; left: 18rpx; right: 18rpx; display: flex; align-items: center; flex-direction: column; gap: 8rpx; }
+.journey-transport__caption > text { font-size: 27rpx; font-weight: 600; color: #415a42; }
+.journey-transport__caption > text:last-child { font-size: 23rpx; font-weight: 400; color: #69684e; }
+.journey-transport__choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10rpx; margin: 18rpx 0; }
+.journey-transport__choice { padding: 16rpx 4rpx; min-width: 0; }
+.journey-transport__choice > text { display: block; font-size: 24rpx; }
+.journey-transport__choice > .journey-transport__mark { font-size: 34rpx; line-height: 48rpx; color: #6c8560; }
+.journey-transport__choice > text:last-child { font-size: 19rpx; color: #80745e; margin-top: 8rpx; }
+.journey-transport__note { display: block; font-size: 22rpx; line-height: 1.7; color: #84765e; margin-top: 16rpx; }
+.journey-transport__notice { display: block; margin-top: 16rpx; padding: 18rpx; background: #e8eedb; border-radius: 16rpx; color: #40573b; font-size: 25rpx; }

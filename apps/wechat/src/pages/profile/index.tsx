@@ -520,7 +520,7 @@ function ProfilePage() {
           Taro.removeStorageSync('showRecordMenuModal')
           Taro.removeStorageSync('home_pet_companion_collapsed_v1')
           Taro.removeStorageSync('home_pet_companion_float_position_v1')
-          // Pet growth, outfits and scores are local saves, including v1 recovery copies.
+          // Pet growth, outfits, pet_transport_v1 choices and scores are local saves, including v1 recovery copies.
           // They cannot be downloaded again and must survive an ordinary cache clear.
           Taro.removeStorageSync('home_pet_meal_prompt_seen_v1')
 

@@ -14,8 +14,12 @@ export type PetAction = PetMotionAction
 export interface PetActorProps {
   pet?: Partial<PetProfile> | null; size?: number; action?: PetAction; active?: boolean
   followAppearance?: boolean; spriteOverride?: string; showStatus?: boolean
+  followLoadout?: boolean
+  holdPoseWhenPaused?: boolean
+  unavailableAtlas?: string
   scarf?: 'cozy-scarf' | 'explorer-scarf' | null
   coasting?: boolean
+  onMotionUnavailable?: () => void
 }
 
 /** A requested action never replaces the selected character with another character's frames. */
@@ -26,7 +30,7 @@ export function petActionCapabilities(pet?: Partial<PetProfile> | null, sprite?:
   return ['idle', ...(pet?.pixel_avatar_blink_url ? ['blink' as const] : []), ...(pet?.pixel_avatar_jump_url ? ['jump' as const] : [])]
 }
 
-export function PetActor({ pet, size = 96, action = 'idle', active = true, followAppearance = true, spriteOverride, showStatus = false, scarf, coasting }: PetActorProps) {
+export function PetActor({ pet, size = 96, action = 'idle', active = true, followAppearance = true, followLoadout = followAppearance, holdPoseWhenPaused = false, unavailableAtlas, spriteOverride, showStatus = false, scarf, coasting, onMotionUnavailable }: PetActorProps) {
   const [, refresh] = useState(0)
   const [failedAtlas, setFailedAtlas] = useState('')
   useEffect(() => {
@@ -39,14 +43,14 @@ export function PetActor({ pet, size = 96, action = 'idle', active = true, follo
   const atlas = petMotionAtlas(pet, sprite)
   const capabilities = petActionCapabilities(pet, sprite)
   const supported = capabilities.includes(action)
-  const pose = active && supported ? action : 'idle'
-  const loadout = followAppearance && pet?.id ? readPetLoadout(pet.id, sprite || pet.builtin_avatar_id || pet.pixel_avatar_url || '') : null
+  const pose = (active || holdPoseWhenPaused) && supported ? action : 'idle'
+  const loadout = followLoadout && pet?.id ? readPetLoadout(pet.id, sprite || pet.builtin_avatar_id || pet.pixel_avatar_url || '') : null
   const clothing = scarf === undefined ? loadout?.scarf : scarf
-  const useAtlas = Boolean(atlas && atlas !== failedAtlas && pose !== 'idle')
+  const useAtlas = Boolean(atlas && atlas !== failedAtlas && atlas !== unavailableAtlas && pose !== 'idle')
   const width = useAtlas ? size : sprite ? size * 160 / 208 : size
   const customFrame = pose === 'blink' ? pet?.pixel_avatar_blink_url : pose === 'jump' ? pet?.pixel_avatar_jump_url : undefined
   return <View className={`pet-actor pet-actor--${sprite === JIANWEN_COMPANION_SRC ? 'jianwen' : sprite ? 'original' : 'custom'} pet-actor--${pose}${useAtlas ? ' pet-actor--atlas' : ''}${active ? '' : ' pet-actor--paused'}`} style={{ width: `${width}px`, height: `${size}px` }} role='img' aria-label={`${pet?.name || '伙伴'}，${supported ? action : '原有形象'}`}>
-    {useAtlas ? <PetMotionAtlas key={atlas} src={atlas!} action={pose} active={active} coasting={coasting} onError={() => setFailedAtlas(atlas!)} /> : sprite ? <View className='pet-actor__frame'><Image className='pet-actor__sheet' src={sprite} mode='scaleToFill' /></View> : customFrame ? <Image className='pet-actor__custom' src={customFrame} mode='aspectFit' /> : <PetAvatar pet={pet} size={size} motion='static' active={active} />}
+    {useAtlas ? <PetMotionAtlas key={atlas} src={atlas!} action={pose} active={active} coasting={coasting} onError={() => { setFailedAtlas(atlas!); onMotionUnavailable?.() }} /> : sprite ? <View className='pet-actor__frame'><Image className='pet-actor__sheet' src={sprite} mode='scaleToFill' /></View> : customFrame ? <Image className='pet-actor__custom' src={customFrame} mode='aspectFit' /> : <PetAvatar pet={pet} size={size} motion='static' active={active} />}
     {sprite === ORIGINAL_COMPANION_SRC && clothing && pose !== 'ride' && pose !== 'jump' && <Image className='pet-actor__scarf' src={clothing === 'cozy-scarf' ? '/assets/pets/clothing/cozy-scarf.png' : '/assets/pets/clothing/explorer-scarf.png'} mode='aspectFit' />}
     {showStatus && !supported && <Text className='pet-actor__status'>这套形象暂未提供此动作</Text>}
     {showStatus && atlas === failedAtlas && <Text className='pet-actor__status'>动作图片暂不可用，保留原有形象</Text>}

@@ -25,7 +25,7 @@ beforeEach(() => {
 })
 
 test('the actual clear-cache action removes reloadable caches while preserving every account pet save and v1 recovery copy', async () => {
-  const prefixes = ['pet_growth_v2:', 'pet_loadout_v2:', 'pet_adventure_progress_v1:', 'pet_studio_dressing_v1:', 'pet_kitchen_best_v1:']
+  const prefixes = ['pet_growth_v2:', 'pet_loadout_v2:', 'pet_transport_v1:', 'pet_adventure_progress_v1:', 'pet_studio_dressing_v1:', 'pet_kitchen_best_v1:']
   const preserved = new Map<string, unknown>()
   for (const account of ['user-a', 'user-b']) for (const prefix of prefixes) {
     const key = `${prefix}${account}:pet:appearance`

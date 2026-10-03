@@ -7,6 +7,7 @@ import { GROWTH_CHANGED, growthStorageKey, readGrowth, writeGrowth } from '../..
 import { HOME_COMPANION_PREFERENCE_KEY, ORIGINAL_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../src/utils/pet-events'
 import { PET_LOADOUT_CHANGED, readPetLoadout } from '../../src/utils/pet-loadout'
+import { PET_TRANSPORT_CHANGED, petTransportStorageKey } from '../../src/utils/pet-transport-storage'
 import { extraPkgUrl } from '../../src/utils/subpackage-extra'
 import { createAdventureProgress } from '../../src/utils/pet-adventure-progress'
 
@@ -309,7 +310,7 @@ test('collection placement moves a single item and explicit outfit confirmation 
   ;(Taro.setStorageSync as jest.Mock).mockClear()
   click(container, 'journey-tab-collection')
   click(container, 'journey-outfit-cozy-scarf')
-  expect(screen.getByTestId('hub-pet')).toHaveAttribute('data-scarf', 'cozy-scarf')
+  expect(container.querySelector('.journey-dressing-stage [data-testid="hub-pet"]')).toHaveAttribute('data-scarf', 'cozy-scarf')
   expect(Taro.setStorageSync).not.toHaveBeenCalled()
   click(container, 'journey-save-outfit')
   expect(Taro.setStorageSync).toHaveBeenCalledWith(loadoutKey(), { version: 2, appearance: ORIGINAL_COMPANION_SRC, scarf: 'cozy-scarf' })
@@ -330,7 +331,7 @@ test('a template with no scarf anchors cannot preview or buy original-character 
   expect(container.querySelector('#journey-outfit-cozy-scarf')).toBeDisabled()
   expect(container.querySelector('#journey-buy-explorer-scarf')).toBeDisabled()
   click(container, 'journey-outfit-cozy-scarf')
-  expect(screen.getByTestId('hub-pet')).toHaveAttribute('data-scarf', '')
+  expect(container.querySelector('.journey-dressing-stage [data-testid="hub-pet"]')).toHaveAttribute('data-scarf', '')
   expect(storage.has(loadoutKey())).toBe(false)
 })
 
@@ -368,8 +369,7 @@ test('account switching cancels an old outfit preview and never writes it to eit
   ;(getPetSummary as jest.Mock).mockResolvedValue({ pet: { ...pet, id: 'pet-b', name: '小松' } })
   storage.set(preferenceKey('account-b'), { selected: 'original', enabledOriginal: true })
   await act(async () => { show?.(); await Promise.resolve(); await Promise.resolve() })
-  expect(screen.getByTestId('hub-pet')).toHaveTextContent('小松')
-  expect(screen.getByTestId('hub-pet')).toHaveAttribute('data-scarf', '')
+  for (const actor of screen.getAllByTestId('hub-pet')) { expect(actor).toHaveTextContent('小松'); expect(actor).toHaveAttribute('data-scarf', '') }
   expect(storage.has(loadoutKey())).toBe(false)
   expect(storage.has(loadoutKey('account-b', 'pet-b'))).toBe(false)
 })
@@ -412,7 +412,21 @@ test('a profile-changed event refreshes the same account after the existing temp
   ;(getPetSummary as jest.Mock).mockResolvedValue({ pet: { ...pet, name: '换了名字的小麦', builtin_avatar_id: '', pixel_avatar_url: 'https://example.com/my-pet.png' } })
   await act(async () => { Taro.eventCenter.trigger(HOME_PET_PROFILE_CHANGED_EVENT); show?.(); await Promise.resolve(); await Promise.resolve() })
   expect(getPetSummary).toHaveBeenCalledTimes(2)
-  expect(screen.getByTestId('hub-pet')).toHaveTextContent('换了名字的小麦')
+  for (const actor of screen.getAllByTestId('hub-pet')) expect(actor).toHaveTextContent('换了名字的小麦')
+})
+
+test('the house transport shortcut opens trial and confirms under the actual selected original identity', async () => {
+  const { container } = await mount()
+  const ledger = saved()
+  ;(Taro.setStorageSync as jest.Mock).mockClear()
+  click(container, 'journey-transport-open'); click(container, 'journey-transport-skateboard')
+  expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'skateboard')
+  expect(container.querySelector('.pet-transport-actor__sheet')).toHaveAttribute('src', '/assets/pets/transport/guigui-transport-v1.png')
+  expect(Taro.setStorageSync).not.toHaveBeenCalled()
+  click(container, 'journey-save-transport')
+  expect(storage.get(petTransportStorageKey(user, pet.id, ORIGINAL_COMPANION_SRC))).toEqual({ version: 1, appearance: ORIGINAL_COMPANION_SRC, vehicle: 'skateboard' })
+  expect(Taro.eventCenter.trigger).toHaveBeenCalledWith(PET_TRANSPORT_CHANGED)
+  expect(saved()).toEqual(ledger)
 })
 
 test('ordinary background/foreground freezes the same game instead of resetting the board or refetching the pet', async () => {

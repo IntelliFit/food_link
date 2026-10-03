@@ -19,6 +19,7 @@ import { PetKitchenGame } from '../../components/PetKitchenGame'
 import { PetAdventureGame } from '../../components/PetAdventureGame'
 import { PetMergeGame } from '../../components/PetMergeGame'
 import { PetExploreGame } from '../../components/PetExploreGame'
+import { PetTransportPicker } from '../../components/PetTransportPicker'
 import { PET_MILESTONES, milestoneProgress } from '../../../utils/pet-milestones'
 import './index.scss'
 
@@ -140,6 +141,7 @@ function PetStudioPage() {
         <View className='journey-level'><View><Text>成长 Lv.{growth.level}</Text><Text>{journey.xp} 经验 · 亲密 {journey.affinity}</Text></View><View className='journey-progress'><View style={{ width: `${growth.next ? Math.min(100, growth.current / growth.next * 100) : 100}%` }} /></View><Text>{growth.next ? `再积累 ${growth.next - growth.current} 经验，打开下一段成长` : '已来到首期成长里程碑'}</Text></View>
         <View className='journey-wish' id='journey-current-wish'><Text className='journey-wish__title'>{wish ? `我的心愿 · ${wish.name}` : '挑一个想赢回来的纪念'}</Text><Text>{wish ? `${wish.condition} · ${milestoneProgress(journey, wish)}/${wish.target}` : '12 枚技巧徽章，靠亲手完成挑战获得，永久珍藏。'}</Text>{wish && <View className='journey-progress'><View style={{ width: `${milestoneProgress(journey, wish) / wish.target * 100}%` }} /></View>}<Button id='journey-wishes-open' className='journey-button journey-text' onClick={() => setTab('collection')}>{wish && journey.badges.includes(wish.id) ? '心愿达成，去摆放徽章 ›' : '查看心愿与徽章 ›'}</Button></View>
         <View className='journey-two-actions'><Button id='journey-map-open' className='journey-button journey-primary' onClick={() => setTab('map')}>去小镇玩一局 ↗</Button><Button id='journey-collection-open' className='journey-button journey-secondary' onClick={() => setTab('collection')}>布置与换装</Button></View>
+        <Button id='journey-transport-open' className='journey-button journey-text' onClick={() => setTab('collection')}>给 {pet.name} 选一辆出行工具 ›</Button>
         <View className='journey-chapter-card'><View className='journey-section-heading'><Text>第 {latest.id} 章 · {latest.title}</Text><Button className='journey-button journey-text' onClick={() => { setChapter(latest.id); setTab('story') }}>查看 ›</Button></View>{chapterTasks(save, pet.id, latest.id).map(task => <View className={`journey-task${task.done ? ' is-done' : ''}`} key={task.label}><Text>{task.done ? '✓' : '○'}</Text><Text>{task.label}</Text></View>)}</View>
         <View className='journey-life-card'><Text>生活里的进步，也值得记下来</Text><Text>一顿饭、一次运动，或认真休息的一天。</Text><Button id='journey-record-open' className='journey-button journey-text' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })}>去记录今天 ›</Button></View>
       </>}
@@ -149,6 +151,7 @@ function PetStudioPage() {
         <View className='journey-fair-note'><Text>每款游戏当天首次有效游玩可得 6 星光。</Text><Text>之后可自由挑战与收集，装扮不增加战力。</Text></View><View className='journey-match-card'><Text>匹配 PK</Text><Text>真人匹配与服务器成绩核验尚未开放。</Text></View>
       </>}
       {tab === 'collection' && <>
+        <PetTransportPicker key={`${scope}:${appearance}`} pet={pet} sprite={current?.sprite} account={account} active={active} canSave={() => isCurrent(scope) && !profileDirty.current} />
         <View className='journey-section-heading'><Text>技巧徽章 · {journey.badges.length}/12</Text><Text className='journey-muted'>属于 {pet.name} 的成长</Text></View>
         <Text className='journey-muted'>选择一个心愿，按自己的节奏挑战。徽章不会过期，星光达上限后仍可获得。</Text>
         <View className='journey-actions'>{GROWTH_GAMES.map(entry => <Button key={entry.id} id={`journey-badges-${entry.id}`} className={`journey-button${badgeGame === entry.id ? ' is-selected' : ''}`} onClick={() => setBadgeGame(entry.id)}>{entry.name}</Button>)}</View>

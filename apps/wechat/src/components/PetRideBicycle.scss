@@ -1,0 +1,11 @@
+// Self-contained fitted bicycle skin, also needed when previewing outside the home page.
+.pet-assistant-ride.pet-assistant-ride--fitted { position: absolute; z-index: 0; left: 0; top: 0; width: 176rpx; height: 190rpx; opacity: 1; pointer-events: none; transform: none; animation: none; }
+.pet-assistant-ride--fitted .pet-assistant-ride__wheel { position: absolute; width: 42rpx; height: 42rpx; box-sizing: border-box; border: 5rpx solid #5f656c; border-radius: 50%; background: repeating-conic-gradient(from 0deg, #c5d7dc 0deg 3deg, transparent 3deg 45deg), #ffffff30; animation: pet-fitted-wheel 400ms linear infinite; }
+.pet-assistant-ride--fitted .pet-assistant-ride__hub { position: absolute; width: 8rpx; height: 8rpx; left: 12rpx; top: 12rpx; margin: 0; background: #67747b; border-radius: 50%; }
+.pet-assistant-ride--fitted .pet-assistant-ride__frame { position: absolute; height: 5rpx; border-radius: 5rpx; background: #658a92; transform-origin: 0 50%; }
+.pet-assistant-ride--fitted .pet-assistant-ride__seat { position: absolute; width: 27rpx; height: 6rpx; border-radius: 6rpx; background: #535c64; }
+.pet-assistant-ride--fitted .pet-assistant-ride__grip, .pet-assistant-ride--fitted .pet-assistant-ride__footrest { position: absolute; z-index: 4; width: 22rpx; height: 4rpx; border-radius: 4rpx; background: #626b75; }
+.pet-assistant-ride--fitted .pet-assistant-ride__footrest { width: 14rpx; }
+.pet-assistant-ride--fitted .pet-assistant-ride__pedal { position: absolute; width: 15rpx; height: 15rpx; box-sizing: border-box; border: 3rpx solid #747c85; border-radius: 50%; background: #f4f5f6; animation: none; }
+@keyframes pet-fitted-wheel { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pet-assistant-ride--fitted .pet-assistant-ride__wheel { animation: none !important; } }

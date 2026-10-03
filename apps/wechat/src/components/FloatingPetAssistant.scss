@@ -543,6 +543,7 @@
   .pet-assistant-ride__pedal-arm { transform: none; }
   .pet-assistant-ride__wheel { animation-duration: 400ms; }
 }
+.pet-assistant--refined-motion .pet-assistant-transport { position: absolute; top: 0; left: -8rpx; width: 200rpx; height: 220rpx; }
 .pet-assistant--refined-motion .pet-assistant-float .pet-assistant-ride--fitted {
   top: 0; left: 0; width: 176rpx; height: 190rpx;
   transform: none; animation: none;
