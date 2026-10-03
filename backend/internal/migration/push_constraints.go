@@ -3,8 +3,38 @@ package migration
 import (
 	"context"
 	"fmt"
+
+	migrationdo "food_link/backend/internal/migration/do"
+
 	"gorm.io/gorm"
 )
+
+// MigratePushReminders only migrates the three reminder tables and their
+// constraints. The transaction avoids running unrelated full-schema migrations.
+func MigratePushReminders(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("提醒迁移数据库 schema 无效: %q", schema)
+	}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SET LOCAL search_path TO " + quoteIdent(schema)).Error; err != nil {
+			return fmt.Errorf("设置提醒迁移 schema 失败: %w", err)
+		}
+		if err := tx.Exec("SET LOCAL lock_timeout = '5s'").Error; err != nil {
+			return fmt.Errorf("设置提醒迁移锁等待上限失败: %w", err)
+		}
+		if err := tx.AutoMigrate(
+			&migrationdo.PushPreferencesDO{},
+			&migrationdo.PushDeviceDO{},
+			&migrationdo.PushDeliveryDO{},
+		); err != nil {
+			return fmt.Errorf("提醒三表迁移失败: %w", err)
+		}
+		return ensurePushConstraints(ctx, tx)
+	})
+}
 
 // Keep stable names and repeat-safe foreign keys in the normal migration command.
 func ensurePushConstraints(ctx context.Context, db *gorm.DB) error {
