@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Input, Switch, Checkbox } from '@tarojs/components'
+import { View, Text, ScrollView, Input, Switch, Checkbox, Image } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
@@ -28,6 +28,7 @@ import {
   type PendingCustomFocusTask,
 } from '../../utils/custom-focus-task'
 import { IconExpand, IconCollapse } from '../../components/iconfont'
+import healthScoreForest from '../../assets/stats/health-score-forest.webp'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
@@ -1296,6 +1297,7 @@ function StatsPage() {
         ) : analysisPanel === 'health' ? (
           <>
             <View className='stats-card risk-overview-card'>
+              <Image className='risk-overview-background' src={healthScoreForest} mode='aspectFill' aria-hidden />
               <View className='risk-overview-top'>
                 <View className='risk-overview-copy'>
                   <View className='risk-overview-title-line'>
@@ -1313,14 +1315,22 @@ function StatsPage() {
               </View>
 
               <View className='risk-overview-compact-row'>
-              <View className='risk-overview-score-row'>
-                <Text className='risk-overview-score'>{focusOverallScore}</Text>
-                <Text className='risk-overview-score-unit'>/ 100</Text>
-              </View>
-              <View className='risk-overview-records'>
-                <Text className='risk-overview-record-days'>已记录 {recordedDays} 天</Text>
-                <Text className='risk-overview-record-caption'>基于全部关注指标</Text>
-              </View>
+                <View className='risk-overview-score-column'>
+                  <View className='risk-overview-score-row'>
+                    <Text className='risk-overview-score'>{focusOverallScore}</Text>
+                    <Text className='risk-overview-score-unit'>/ 100</Text>
+                  </View>
+                  <View className='risk-overview-scale' aria-hidden>
+                    <View className='risk-overview-scale-track'>
+                      <View className='risk-overview-scale-fill' style={{ width: `${clampPercent(focusOverallScore)}%` }} />
+                    </View>
+                    <View className='risk-overview-scale-labels'><Text>0</Text><Text>100</Text></View>
+                  </View>
+                </View>
+                <View className='risk-overview-records'>
+                  <Text className='risk-overview-record-days'>已记录 {recordedDays} 天</Text>
+                  <Text className='risk-overview-record-caption'>基于全部关注指标</Text>
+                </View>
               </View>
               {overviewExpanded ? <View className='risk-overview-expanded'>
                 <Text className='risk-overview-score-hint'>{focusScoreHint}</Text>
@@ -1343,12 +1353,19 @@ function StatsPage() {
           <>
         <View className='stats-card stats-actions-card'>
           <Text className='card-title'>优先调整</Text>
-          {actionList.length > 0 ? (actionsExpanded ? actionList : actionList.slice(0, 2)).map((action, index) => (
-            <View className='stats-priority-item' key={`${index}-${action}`}>
-              <Text className='stats-priority-number'>{index + 1}</Text>
-              <Text className='stats-priority-text'>{action}</Text>
-            </View>
-          )) : <Text className='stats-empty-copy'>暂无额外调整建议，继续记录即可。</Text>}
+          {actionList.length > 0 ? (actionsExpanded ? actionList : actionList.slice(0, 2)).map((action, index) => {
+            const separatorIndex = action.search(/[，。；,;]/)
+            const emphasisEnd = separatorIndex > 0 ? separatorIndex + 1 : action.length
+            return (
+              <View className='stats-priority-item' key={`${index}-${action}`}>
+                <Text className='stats-priority-number'>{index + 1}</Text>
+                <View className='stats-priority-text'>
+                  <Text className='stats-priority-headline'>{action.slice(0, emphasisEnd)}</Text>
+                  {emphasisEnd < action.length ? <Text className='stats-priority-followup'>{action.slice(emphasisEnd)}</Text> : null}
+                </View>
+              </View>
+            )
+          }) : <Text className='stats-empty-copy'>暂无额外调整建议，继续记录即可。</Text>}
           {actionList.length > 2 ? <View className='stats-text-action' onClick={() => setActionsExpanded(value => !value)}><Text>{actionsExpanded ? '收起' : `展开全部 ${actionList.length} 项`}</Text><Text className='iconfont icon-right-arrow' /></View> : null}
         </View>
         <View className='risk-section-header'>
@@ -1389,7 +1406,7 @@ function StatsPage() {
               ) : null}
               <Text className='risk-card-summary'>{card.brief}</Text>
               </View>
-              <View className='risk-card-score-wrap'>
+              <View className={`risk-card-score-wrap tone-${isPendingRiskCard(card) ? 'pending' : scoreToTone(card.score)}`}>
                 <Text className='risk-card-score'>{isPendingRiskCard(card) ? '—' : card.score}</Text>
                 {!isPendingRiskCard(card) ? <Text className='risk-card-score-unit'>分</Text> : null}
               </View>
