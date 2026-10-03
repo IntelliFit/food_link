@@ -24,6 +24,7 @@ import (
 )
 
 type Config struct {
+	Push           PushConfig           `mapstructure:"push"`
 	ConfigSource   string               `mapstructure:"config_source"`
 	App            AppConfig            `mapstructure:"app"`
 	Log            LogConfig            `mapstructure:"log"`
@@ -43,6 +44,12 @@ type Config struct {
 	TaskQueue      TaskQueueConfig      `mapstructure:"task_queue"`
 	AIUsagePricing AIUsagePricingConfig `mapstructure:"ai_usage_pricing"`
 	Apollo         ApolloConfig         `mapstructure:"apollo"`
+}
+
+type PushConfig struct {
+	Enabled         bool   `mapstructure:"enabled"`
+	ExpoProjectID   string `mapstructure:"expo_project_id"`
+	ExpoAccessToken string `mapstructure:"expo_access_token"`
 }
 
 type AppConfig struct {
@@ -345,6 +352,8 @@ func Load(baseDir string) (*Config, error) {
 	trimRedisConfig(&cfg.Redis)
 	trimSMSConfig(&cfg.SMS)
 	trimFeedbackBotConfig(&cfg.FeedbackBot)
+	cfg.Push.ExpoProjectID = strings.TrimSpace(cfg.Push.ExpoProjectID)
+	cfg.Push.ExpoAccessToken = strings.TrimSpace(cfg.Push.ExpoAccessToken)
 	if err := applyConfigFileOnlyValues(v, &cfg); err != nil {
 		return nil, err
 	}
@@ -1089,6 +1098,9 @@ func configKeyForSecret(secretKey string) string {
 }
 
 var cloudConfigKeyAliases = map[string]string{
+	"PUSH_ENABLED":                             "push.enabled",
+	"PUSH_EXPO_PROJECT_ID":                     "push.expo_project_id",
+	"PUSH_EXPO_ACCESS_TOKEN":                   "push.expo_access_token",
 	"PORT":                                     "app.port",
 	"APPID":                                    "external.appid",
 	"SECRET":                                   "external.secret",
@@ -1499,6 +1511,9 @@ func (c *Config) ListenAddr() string {
 }
 
 func setDefaults(v *viper.Viper) {
+	v.SetDefault("push.enabled", false)
+	v.SetDefault("push.expo_project_id", "454db191-c9ba-42f1-a486-f42535774c3b")
+	v.SetDefault("push.expo_access_token", "")
 	v.SetDefault("app.name", "food_link-backend")
 	v.SetDefault("app.env", "development")
 	v.SetDefault("app.host", "0.0.0.0")
@@ -1587,6 +1602,9 @@ func setDefaults(v *viper.Viper) {
 }
 
 func bindLegacyEnv(v *viper.Viper) {
+	_ = v.BindEnv("push.enabled", "PUSH_ENABLED")
+	_ = v.BindEnv("push.expo_project_id", "PUSH_EXPO_PROJECT_ID")
+	_ = v.BindEnv("push.expo_access_token", "PUSH_EXPO_ACCESS_TOKEN")
 	_ = v.BindEnv("app.port", "PORT")
 	_ = v.BindEnv("external.appid", "APPID")
 	_ = v.BindEnv("external.secret", "SECRET")

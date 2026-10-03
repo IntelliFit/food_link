@@ -187,7 +187,9 @@ export function ProfileScreen() {
       confirmText: '退出',
       kind: 'danger',
     })
-    if (confirmed) void logout()
+    if (confirmed) {
+      try { await logout() } catch (error) { void dialog.alert('退出未完成', userFacingErrorMessage(error), 'danger') }
+    }
   }, [dialog, logout])
 
   const openHealthProfile = () => {
@@ -230,6 +232,7 @@ export function ProfileScreen() {
   ]
 
   const settingsItems: MenuEntry[] = [
+    { title: '消息提醒', subtitle: '用餐、漏记和临期提醒', iconClass: 'icon-shizhong', tone: 'green', onPress: privateAction(() => navigation.navigate('ReminderSettings')) },
     { title: '账号安全', subtitle: '手机号密码与备用登录方式', iconClass: 'icon-user', tone: 'blue', onPress: privateAction(() => navigation.navigate('AccountSecurity')) },
     { title: '隐私设置', subtitle: '搜索可见性和公开记录', iconClass: 'icon-jiesuo', tone: 'green', onPress: privateAction(() => navigation.navigate('PrivacySettings')) },
     { title: '关于我们', subtitle: '应用说明、协议和联系方式', iconClass: 'icon-all', tone: 'gold', onPress: () => navigation.navigate('About') },

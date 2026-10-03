@@ -27,6 +27,7 @@ import {
   type PetAppearanceCandidate,
   type PetAnimal,
   type PetSummary,
+  type PublicFoodItem,
   type RecipeItem,
 } from '@food-link/core'
 import { apiClient } from '../api'
@@ -296,7 +297,7 @@ export function CheckinLeaderboardScreen() {
               饮食质量{healthScoringRule?.diet_quality_points || 75}分 + 记录连续性{healthScoringRule?.continuity_points || 15}分 + 日间稳定性{healthScoringRule?.stability_points || 10}分
             </Text>
             <Text style={styles.healthScoreRule}>
-              至少记录{healthScoringRule?.minimum_recorded_days || 4}天入榜；{healthScoringRule?.continuity_description || '连续性按本周已过去天数计算'}
+              {healthScoringRule?.continuity_description || '历史连续记录3天后长期有效；本周按已有记录计算'}
             </Text>
             {me?.dietQualityPoints != null && me.continuityPoints != null && me.stabilityPoints != null ? (
               <Text style={styles.healthScoreMine}>
@@ -818,30 +819,18 @@ export function PublicFoodShareScreen() {
   const [latitude, setLatitude] = useState('')
   const [longitude, setLongitude] = useState('')
   const [loading, setLoading] = useState(false)
-  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
-  const [membershipLoading, setMembershipLoading] = useState(true)
+  const [baseVersion, setBaseVersion] = useState(0)
+  const [schoolId, setSchoolId] = useState('')
+  const [campusId, setCampusId] = useState('')
+  const [canteenId, setCanteenId] = useState('')
+  const [windowId, setWindowId] = useState<string | null>(null)
+  const [availabilityStatus, setAvailabilityStatus] = useState<NonNullable<PublicFoodItem['availability_status']>>('available')
   const isCampus = sourceKind === 'campus'
   const isHomemade = sourceKind === 'homemade'
   const incomingDraft = route.params?.draft
   const selectedLocation = route.params?.selectedLocation
   const restoredDraftRef = useRef<string | null>(null)
   const appliedLocationRef = useRef<string | null>(null)
-
-  const loadMembership = useCallback(async () => {
-    setMembershipLoading(true)
-    try {
-      setMembershipStatus(await apiClient.getMyMembership())
-    } catch (error) {
-      setMembershipStatus(null)
-      showError('获取会员状态失败', error)
-    } finally {
-      setMembershipLoading(false)
-    }
-  }, [])
-
-  useFocusEffect(useCallback(() => {
-    void loadMembership()
-  }, [loadMembership]))
 
   const load = useCallback(async () => {
     if (!editId) return
@@ -858,6 +847,12 @@ export function PublicFoodShareScreen() {
       setCarbs(String(Math.round(item.total_carbs || 0)))
       setFat(String(Math.round(item.total_fat || 0)))
       setSourceKind(Boolean(item.is_campus_food) ? 'campus' : item.user_tags?.includes('自制') ? 'homemade' : 'restaurant')
+      setBaseVersion(Number(item.content_version || 1))
+      setSchoolId(item.school_id || '')
+      setCampusId(item.campus_id || '')
+      setCanteenId(item.canteen_id || '')
+      setWindowId(item.window_id || null)
+      setAvailabilityStatus(item.availability_status || 'available')
       setSchoolName(item.school_name || '')
       setCampusName(item.campus_name || '')
       setCanteenName(item.canteen_name || '')
@@ -998,9 +993,10 @@ export function PublicFoodShareScreen() {
 
   const pickImages = async () => {
     const currentUrls = splitTextList(imageUrls)
-    const remaining = PUBLIC_FOOD_MAX_IMAGES - currentUrls.length
+    const maxImages = isCampus ? 5 : PUBLIC_FOOD_MAX_IMAGES
+    const remaining = maxImages - currentUrls.length
     if (remaining <= 0) {
-      Alert.alert('图片已满', `最多上传 ${PUBLIC_FOOD_MAX_IMAGES} 张图片。`)
+      Alert.alert('图片已满', `最多上传 ${maxImages} 张图片。`)
       return
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
@@ -1015,14 +1011,18 @@ export function PublicFoodShareScreen() {
     try {
       const uploaded: string[] = []
       for (const asset of picked.assets.slice(0, remaining)) {
-        const data = await apiClient.uploadAnalyzeImageFile({
+        const data = await (isCampus ? apiClient.uploadCampusFoodImageFile({
+          fileUri: asset.uri,
+          fileName: asset.fileName || 'campus-food.jpg',
+          mimeType: asset.mimeType || 'image/jpeg',
+        }) : apiClient.uploadAnalyzeImageFile({
           fileUri: asset.uri,
           fileName: asset.fileName || 'public-food.jpg',
           mimeType: asset.mimeType || 'image/jpeg',
-        })
+        }))
         uploaded.push(data.imageUrl)
       }
-      setImageUrls([...currentUrls, ...uploaded].slice(0, PUBLIC_FOOD_MAX_IMAGES).join('\n'))
+      setImageUrls([...currentUrls, ...uploaded].slice(0, maxImages).join('\n'))
     } catch (error) {
       showError('上传图片失败', error)
     } finally {
@@ -1035,7 +1035,7 @@ export function PublicFoodShareScreen() {
   }
 
   const submit = async () => {
-    const imagePaths = splitTextList(imageUrls).slice(0, PUBLIC_FOOD_MAX_IMAGES)
+    const imagePaths = splitTextList(imageUrls).slice(0, isCampus ? 5 : PUBLIC_FOOD_MAX_IMAGES)
     const finalFoodName = foodName.trim()
     const finalTasteRating = optionalNumber(tasteRating)
     const finalPriceType = priceType
@@ -1044,20 +1044,6 @@ export function PublicFoodShareScreen() {
     const finalPriceMax = optionalNumber(priceMax)
     const finalLatitude = optionalNumber(latitude)
     const finalLongitude = optionalNumber(longitude)
-
-    if (isCampus) {
-      try {
-        const latestMembership = await apiClient.getMyMembership()
-        setMembershipStatus(latestMembership)
-        if (!latestMembership?.is_pro) {
-          Alert.alert('校园食堂为会员专属', '开通食探会员后，可以分享或编辑校园食堂菜品。')
-          return
-        }
-      } catch (error) {
-        showError('验证会员状态失败', error)
-        return
-      }
-    }
 
     if (!imagePaths.length) {
       Alert.alert('请先上传图片', isCampus ? '请上传校园菜品图片。' : '请上传这份食物的图片。')
@@ -1142,9 +1128,37 @@ export function PublicFoodShareScreen() {
         userNotes: notes,
         campusLocationText,
       }
-      const itemId = editId
-        ? (await apiClient.updatePublicFood(editId, input), editId)
-        : (await apiClient.createPublicFood(input)).id
+      let itemId = editId
+      if (editId && isCampus) {
+        await apiClient.correctCampusFood(editId, {
+          base_version: baseVersion,
+          patch: {
+            name: finalFoodName,
+            description: description.trim(),
+            image_paths: imagePaths,
+            school_id: schoolId,
+            campus_id: campusId,
+            canteen_id: canteenId,
+            window_id: windowId,
+            floor: floor.trim(),
+            window_name: windowName.trim(),
+            price_type: finalPriceType,
+            price: finalPriceType !== 'range' ? finalPrice ?? null : null,
+            price_min: finalPriceType === 'range' ? finalPriceMin ?? null : null,
+            price_max: finalPriceType === 'range' ? finalPriceMax ?? null : null,
+            price_unit: priceUnit.trim(),
+            price_collected_at: priceCollectedAt.trim() ? `${priceCollectedAt.trim()}T00:00:00+08:00` : null,
+            portion_description: portionDescription.trim(),
+            availability_status: availabilityStatus,
+          },
+          evidence_image_paths: imagePaths,
+          reason: '用户修正校园菜品信息',
+        })
+      } else if (editId) {
+        await apiClient.updatePublicFood(editId, input)
+      } else {
+        itemId = (await apiClient.createPublicFood(input)).id
+      }
       if (itemId) navigation.replace('PublicFoodDetail', { itemId, isCampus })
       else navigation.goBack()
     } catch (error) {
@@ -1155,6 +1169,7 @@ export function PublicFoodShareScreen() {
   }
 
   const imageList = splitTextList(imageUrls)
+  const maxImages = isCampus ? 5 : PUBLIC_FOOD_MAX_IMAGES
   const selectedPriceOption = publicFoodPriceTypeOptions.find((option) => option.value === priceType)
   const submitLabel = editId ? '保存修改' : isCampus ? '提交并后台分析' : '发布到公共库'
   const tagList = splitTextList(tags)
@@ -1178,35 +1193,7 @@ export function PublicFoodShareScreen() {
   }
 
   const selectCampusSource = () => {
-    if (membershipStatus?.is_pro) {
-      setSourceKind('campus')
-      return
-    }
-    Alert.alert('校园食堂为会员专属', '开通食探会员后，可以分享校园食堂菜品。', [
-      { text: '暂不开通', style: 'cancel' },
-      { text: '查看会员方案', onPress: () => navigation.navigate('MembershipCenter') },
-    ])
-  }
-
-  if (isCampus && membershipLoading) {
-    return (
-      <View style={styles.publicFoodShareGatePage}>
-        <ActivityIndicator color={colors.brand} />
-      </View>
-    )
-  }
-
-  if (isCampus && !membershipStatus?.is_pro) {
-    return (
-      <View style={styles.publicFoodShareGatePage}>
-        <View style={styles.publicFoodShareGateCard}>
-          <Text style={styles.publicFoodShareGateTitle}>校园食堂为会员专属</Text>
-          <Text style={styles.publicFoodShareGateText}>开通食探会员后，可以分享校园食堂菜品并绑定已审核食堂。普通公共食物库分享仍可继续使用。</Text>
-          <AppButton label="查看会员方案" onPress={() => navigation.navigate('MembershipCenter')} />
-          {!campusDefault ? <AppButton label="返回普通分享" variant="secondary" onPress={() => setSourceKind('restaurant')} /> : null}
-        </View>
-      </View>
-    )
+    setSourceKind('campus')
   }
 
   return (
@@ -1225,8 +1212,8 @@ export function PublicFoodShareScreen() {
             </View>
           ) : null}
 
-          <PublicFoodShareSection title={isCampus ? '菜品图片' : '食物图片'} required meta={`${imageList.length}/${PUBLIC_FOOD_MAX_IMAGES}`}>
-            <ImagePickerGrid urls={imageList} onAdd={pickImages} onRemove={removeImage} loading={loading} max={PUBLIC_FOOD_MAX_IMAGES} />
+          <PublicFoodShareSection title={isCampus ? '菜品图片' : '食物图片'} required meta={`${imageList.length}/${maxImages}`}>
+            <ImagePickerGrid urls={imageList} onAdd={pickImages} onRemove={removeImage} loading={loading} max={maxImages} />
           </PublicFoodShareSection>
 
           {!isCampus ? (
@@ -1316,6 +1303,17 @@ export function PublicFoodShareScreen() {
                 </View>
               </View>
               <Field label="份量说明（可选）" value={portionDescription} onChangeText={setPortionDescription} placeholder="如：大份、小份、约一人份" />
+              <Text style={styles.fieldLabel}>供应状态</Text>
+              <View style={styles.segment}>
+                {([
+                  ['available', '正常供应'],
+                  ['temporarily_unavailable', '暂时无售'],
+                  ['discontinued', '已停售'],
+                  ['unknown', '待确认'],
+                ] as const).map(([value, label]) => (
+                  <SegmentButton key={value} label={label} active={availabilityStatus === value} onPress={() => setAvailabilityStatus(value)} />
+                ))}
+              </View>
             </PublicFoodShareSection>
           ) : null}
 

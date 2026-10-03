@@ -31,6 +31,7 @@ const CACHE_KEY_PREFIXES = [
   'onboarding_home_record_guide_v1:user:',
   'home_experience_config_v1:',
   'home_experience_config_v2:',
+  'home_hidden_micronutrients_v1:',
 ]
 
 /**

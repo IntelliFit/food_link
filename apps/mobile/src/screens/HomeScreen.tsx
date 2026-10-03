@@ -9,6 +9,8 @@ import { useAuth } from '../providers/AuthProvider'
 import { apiClient, getStoredUserId } from '../api'
 import { PetAvatar } from '../components/PetAvatar'
 import { HomeMicrosSection } from '../components/HomeMicrosSection'
+import { NextMealCard, nextMealType } from '../components/NextMealCard'
+import { SleepCard } from './SleepRecordScreen'
 import { TodaySupplementsCard } from './SupplementScreens'
 import { IconfontText } from '../components/Iconfont'
 import { RecordActionSheet, type RecordAction } from '../components/RecordActionSheet'
@@ -34,8 +36,16 @@ import {
 import { getHomePetHidden } from '../utils/petPreferences'
 import { hasSeenHomePetMealPrompt, markHomePetMealPromptSeen } from '../utils/homePetReminders'
 import { needsPrecisionUserAction } from '../utils/precisionTask'
+import {
+  MICRONUTRIENT_PREFERENCE_CONFIGS,
+  getHiddenMicronutrientKeys,
+  saveHiddenMicronutrientKeys,
+  type HomeMicronutrientKey,
+  type MicroTargetKey,
+} from '../utils/micronutrientPreferences'
 
-type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
+type MacroTargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
+type TargetField = MacroTargetField | MicroTargetKey
 type TargetForm = Record<TargetField, string>
 type MacroKey = 'protein' | 'carbs' | 'fat'
 type WeekCell = {
@@ -76,7 +86,7 @@ type HomePetMealReminder = {
 }
 type HomePetReminder = HomePetAnalyzeReminder | HomePetMealReminder
 
-const targetFieldMeta: Array<{ key: TargetField; label: string; unit: string; step: number }> = [
+const targetFieldMeta: Array<{ key: MacroTargetField; label: string; unit: string; step: number }> = [
   { key: 'calorieTarget', label: '基础摄入目标', unit: 'kcal', step: 100 },
   { key: 'proteinTarget', label: '蛋白质目标', unit: 'g', step: 50 },
   { key: 'carbsTarget', label: '碳水目标', unit: 'g', step: 50 },
@@ -106,6 +116,7 @@ export function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions()
   const { isDark } = useColorScheme()
   const [selectedDate, setSelectedDate] = useState(() => todayKey())
+  const [mealPreviewRefresh, setMealPreviewRefresh] = useState(0)
   const {
     recordDate,
     dashboard,
@@ -137,6 +148,7 @@ export function HomeScreen() {
   const [homePetHidden, setHomePetHidden] = useState(false)
   const [nutritionExpanded, setNutritionExpanded] = useState(false)
   const [currentUserId, setCurrentUserId] = useState('')
+  const [hiddenMicronutrientKeys, setHiddenMicronutrientKeys] = useState<HomeMicronutrientKey[]>([])
   const [homeExperienceMode, setHomeExperienceMode] = useState<HomeExperienceMode>(DEFAULT_HOME_EXPERIENCE_CONFIG.mode)
   const [modeFeedback, setModeFeedback] = useState<string | null>(null)
   const [reduceMotion, setReduceMotion] = useState(false)
@@ -291,6 +303,13 @@ export function HomeScreen() {
     return () => {
       active = false
     }
+  }, [currentUserId])
+  useEffect(() => {
+    let active = true
+    void getHiddenMicronutrientKeys(currentUserId).then((keys) => {
+      if (active) setHiddenMicronutrientKeys(keys)
+    })
+    return () => { active = false }
   }, [currentUserId])
   useEffect(() => {
     let active = true
@@ -669,12 +688,25 @@ export function HomeScreen() {
 
   const adjustTargetField = useCallback((key: TargetField, direction: -1 | 1) => {
     const meta = targetFieldMeta.find((item) => item.key === key)
+      || MICRONUTRIENT_PREFERENCE_CONFIGS.find((item) => item.targetFormKey === key)
     const step = meta?.step || 10
     setTargetForm((current) => ({
       ...current,
       [key]: formatTargetNumber(Math.max(0, numberFrom(current[key], 0) + step * direction)),
     }))
   }, [])
+
+  const toggleMicronutrientVisibility = useCallback((key: HomeMicronutrientKey) => {
+    setHiddenMicronutrientKeys((current) => {
+      const next = current.includes(key)
+        ? current.filter((item) => item !== key)
+        : MICRONUTRIENT_PREFERENCE_CONFIGS
+          .map((item) => item.nutrientKey)
+          .filter((item) => item === key || current.includes(item))
+      void saveHiddenMicronutrientKeys(currentUserId, next)
+      return next
+    })
+  }, [currentUserId])
 
   const applyCalibrationSuggestion = useCallback(() => {
     const suggestedKcal = numberFrom(calibrationSuggestion?.suggested_kcal, 0)
@@ -684,6 +716,7 @@ export function HomeScreen() {
     const currentKcal = currentTargets.calorie_target > 0 ? currentTargets.calorie_target : suggestedKcal
     const ratio = currentKcal > 0 ? suggestedKcal / currentKcal : 1
     setTargetForm({
+      ...targetForm,
       calorieTarget: formatTargetNumber(suggestedKcal),
       proteinTarget: formatTargetNumber(currentTargets.protein_target * ratio),
       carbsTarget: formatTargetNumber(currentTargets.carbs_target * ratio),
@@ -771,7 +804,7 @@ export function HomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={loading}
-            onRefresh={loadHome}
+            onRefresh={() => { setMealPreviewRefresh((value) => value + 1); void loadHome() }}
             tintColor={colors.brand}
             colors={[colors.brand]}
             title=""
@@ -842,6 +875,8 @@ export function HomeScreen() {
               isGuest={!isAuthenticated}
               supplementSummary={dashboard?.supplementSummary}
               reduceMotion={reduceMotion}
+              hiddenMicronutrientKeys={hiddenMicronutrientKeys}
+              onManageMicronutrients={openTargetEditor}
             />
           ) : (
             <HomeCalorieCard
@@ -860,9 +895,12 @@ export function HomeScreen() {
               isGuest={!isAuthenticated}
               supplementSummary={dashboard?.supplementSummary}
               reduceMotion={reduceMotion}
+              hiddenMicronutrientKeys={hiddenMicronutrientKeys}
+              onManageMicronutrients={openTargetEditor}
             />
           )}
 </Animated.View>
+        {isAuthenticated && recordDate === todayDateKey ? <NextMealCard mealType={nextMealType()} compact refreshKey={String(mealPreviewRefresh)} /> : null}
         {!isAuthenticated ? (
           <HomeDietRecommendationEntry
             remaining={calorieRemaining}
@@ -893,6 +931,7 @@ export function HomeScreen() {
           onExercise={() => navigation.navigate('BodyMetricRecord', { type: 'exercise', date: recordDate })}
           themeColors={themeColors}
         />
+        {isAuthenticated ? <SleepCard date={recordDate} /> : null}
         <HomeMealsSection
           meals={dashboard?.meals || []}
           onOpenAll={() => requireAuth(() => navigation.navigate('DayRecord', { date: recordDate }))}
@@ -932,6 +971,12 @@ export function HomeScreen() {
                 <Text style={[styles.targetModalCloseText, { color: themeColors.textSecondary }]}>×</Text>
               </Pressable>
             </View>
+            <ScrollView
+              style={styles.targetModalScroll}
+              contentContainerStyle={styles.targetModalScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
             {calibrationSuggestion?.available ? (
               <View style={[styles.calibrationCard, { backgroundColor: themeColors.calibrationCard }]}>
                 <Text style={styles.calibrationTitle}>建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal</Text>
@@ -958,6 +1003,67 @@ export function HomeScreen() {
                 themeColors={themeColors}
               />
             ))}
+            <View style={[styles.targetMicroSection, { borderTopColor: themeColors.cardBorder }]}>
+              <View style={styles.targetMicroHeading}>
+                <View style={styles.targetMicroHeadingCopy}>
+                  <Text style={[styles.targetMicroTitle, { color: themeColors.text }]}>微量元素目标</Text>
+                  <Text style={[styles.targetMicroDesc, { color: themeColors.textSecondary }]}>这里只保留首页关注项，隐藏后目标设置也会同步精简。</Text>
+                </View>
+                <View style={[styles.targetMicroCount, { backgroundColor: themeColors.nutritionAffordanceBg }]}>
+                  <Text style={[styles.targetMicroCountText, { color: themeColors.nutritionAffordanceText }]}>
+                    {MICRONUTRIENT_PREFERENCE_CONFIGS.length - hiddenMicronutrientKeys.length}/{MICRONUTRIENT_PREFERENCE_CONFIGS.length}
+                  </Text>
+                </View>
+              </View>
+              {MICRONUTRIENT_PREFERENCE_CONFIGS
+                .filter((field) => !hiddenMicronutrientKeys.includes(field.nutrientKey))
+                .map((field) => (
+                  <View key={field.nutrientKey} style={styles.targetMicroItem}>
+                    <View style={styles.targetMicroItemHeading}>
+                      <Text style={[styles.targetMicroLabel, { color: themeColors.text }]}>{field.label}</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`隐藏${field.label}`}
+                        onPress={() => toggleMicronutrientVisibility(field.nutrientKey)}
+                        style={({ pressed }) => [styles.targetMicroHide, { backgroundColor: themeColors.surfaceMuted }, pressed && styles.pressed]}
+                      >
+                        <Text style={[styles.targetMicroHideText, { color: themeColors.textSecondary }]}>隐藏</Text>
+                      </Pressable>
+                    </View>
+                    <TargetFieldRow
+                      label=""
+                      unit={field.unit}
+                      value={targetForm[field.targetFormKey]}
+                      onChangeText={(value) => updateTargetField(field.targetFormKey, value)}
+                      onDecrease={() => adjustTargetField(field.targetFormKey, -1)}
+                      onIncrease={() => adjustTargetField(field.targetFormKey, 1)}
+                      themeColors={themeColors}
+                    />
+                  </View>
+                ))}
+              {hiddenMicronutrientKeys.length ? (
+                <View style={[styles.targetHiddenMicros, { borderColor: themeColors.cardBorder, backgroundColor: themeColors.surfaceMuted }]}>
+                  <Text style={[styles.targetHiddenTitle, { color: themeColors.textSecondary }]}>已隐藏 · 点击添加回来</Text>
+                  <View style={styles.targetHiddenList}>
+                    {MICRONUTRIENT_PREFERENCE_CONFIGS
+                      .filter((field) => hiddenMicronutrientKeys.includes(field.nutrientKey))
+                      .map((field) => (
+                        <Pressable
+                          key={field.nutrientKey}
+                          accessibilityRole="button"
+                          accessibilityLabel={`显示${field.label}`}
+                          onPress={() => toggleMicronutrientVisibility(field.nutrientKey)}
+                          style={({ pressed }) => [styles.targetHiddenChip, { borderColor: themeColors.cardBorder, backgroundColor: themeColors.sheetBackground }, pressed && styles.pressed]}
+                        >
+                          <Text style={styles.targetHiddenPlus}>＋</Text>
+                          <Text style={[styles.targetHiddenChipText, { color: themeColors.textSecondary }]}>{field.label}</Text>
+                        </Pressable>
+                      ))}
+                  </View>
+                </View>
+              ) : null}
+            </View>
+            </ScrollView>
             <View style={styles.targetSaveRow}>
               <Pressable style={[styles.targetSaveButton, savingTargets && styles.disabledButton]} disabled={savingTargets} onPress={() => void saveTargets()}>
                 {savingTargets ? <ActivityIndicator color="#fff" /> : <Text style={styles.targetSaveButtonText}>保存目标</Text>}
@@ -1514,9 +1620,9 @@ function TargetFieldRow({
 }) {
   return (
     <View style={styles.targetField}>
-      <Text style={[styles.targetFieldLabel, { color: themeColors.textSecondary }]}>{label}</Text>
+      {label ? <Text style={[styles.targetFieldLabel, { color: themeColors.textSecondary }]}>{label}</Text> : null}
       <View style={styles.targetInputRow}>
-        <Pressable style={[styles.targetAdjustButton, { backgroundColor: themeColors.surfaceMuted }]} onPress={onDecrease}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${label || '目标'}减少`} style={({ pressed }) => [styles.targetAdjustButton, { backgroundColor: themeColors.surfaceMuted }, pressed && styles.pressed]} onPress={onDecrease}>
           <Text style={styles.targetAdjustButtonText}>-</Text>
         </Pressable>
         <View style={[styles.targetInputWrap, { borderColor: themeColors.border, backgroundColor: themeColors.surfaceMuted }]}>
@@ -1530,7 +1636,7 @@ function TargetFieldRow({
           />
           <Text style={[styles.targetInputUnit, { color: themeColors.textSecondary }]}>{unit}</Text>
         </View>
-        <Pressable style={[styles.targetAdjustButton, { backgroundColor: themeColors.surfaceMuted }]} onPress={onIncrease}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${label || '目标'}增加`} style={({ pressed }) => [styles.targetAdjustButton, { backgroundColor: themeColors.surfaceMuted }, pressed && styles.pressed]} onPress={onIncrease}>
           <Text style={styles.targetAdjustButtonText}>+</Text>
         </Pressable>
       </View>
@@ -1752,6 +1858,8 @@ function HomeWellnessCalorieCard({
   isGuest,
   supplementSummary,
   reduceMotion,
+  hiddenMicronutrientKeys,
+  onManageMicronutrients,
 }: {
   current: number
   target: number
@@ -1767,6 +1875,8 @@ function HomeWellnessCalorieCard({
   isGuest: boolean
   supplementSummary?: HomeDashboard['supplementSummary']
   reduceMotion: boolean
+  hiddenMicronutrientKeys: HomeMicronutrientKey[]
+  onManageMicronutrients: () => void
 }) {
   const size = 122
   const stroke = 9
@@ -1884,6 +1994,8 @@ function HomeWellnessCalorieCard({
             isGuest={isGuest}
             supplementSummary={supplementSummary}
             reduceMotion={reduceMotion}
+            hiddenMicronutrientKeys={hiddenMicronutrientKeys}
+            onManageMicronutrients={onManageMicronutrients}
           />
         ) : null}
       </View>
@@ -1906,6 +2018,8 @@ function HomeCalorieCard({
   isGuest,
   supplementSummary,
   reduceMotion,
+  hiddenMicronutrientKeys,
+  onManageMicronutrients,
 }: {
   current: number
   target: number
@@ -1922,6 +2036,8 @@ function HomeCalorieCard({
   isGuest: boolean
   supplementSummary?: HomeDashboard['supplementSummary']
   reduceMotion: boolean
+  hiddenMicronutrientKeys: HomeMicronutrientKey[]
+  onManageMicronutrients: () => void
 }) {
   return (
     <View style={[styles.mainCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }]}>
@@ -1981,6 +2097,8 @@ function HomeCalorieCard({
             isGuest={isGuest}
             supplementSummary={supplementSummary}
             reduceMotion={reduceMotion}
+            hiddenMicronutrientKeys={hiddenMicronutrientKeys}
+            onManageMicronutrients={onManageMicronutrients}
           />
         ) : null}
       </View>
@@ -2338,32 +2456,50 @@ function HomeMiniAction({ label, onPress, themeColors }: {
 }
 
 function targetFormFromDashboard(dashboard: HomeDashboard | null): TargetForm {
-  return {
+  const micros = dashboard?.intakeData.micros
+  const form = {
     calorieTarget: formatTargetNumber(dashboard?.intakeData.target || dashboard?.nutritionTarget?.suggested_calorie_target || 0),
     proteinTarget: formatTargetNumber(dashboard?.intakeData.macros.protein.target || 0),
     carbsTarget: formatTargetNumber(dashboard?.intakeData.macros.carbs.target || 0),
     fatTarget: formatTargetNumber(dashboard?.intakeData.macros.fat.target || 0),
+  } as TargetForm
+  for (const config of MICRONUTRIENT_PREFERENCE_CONFIGS) {
+    const raw = micros?.[config.nutrientKey]
+    const target = raw && typeof raw === 'object' ? Number((raw as unknown as Record<string, unknown>).target) : NaN
+    form[config.targetFormKey] = formatTargetNumber(Number.isFinite(target) && target > 0 ? target : config.defaultTarget)
   }
+  return form
 }
 
 function targetFormFromTargets(targets: Record<string, number>, dashboard: HomeDashboard | null): TargetForm {
   const fallback = targetFormFromDashboard(dashboard)
-  return {
+  const form = {
     calorieTarget: formatTargetNumber(targets.calorie_target ?? numberFrom(fallback.calorieTarget, 0)),
     proteinTarget: formatTargetNumber(targets.protein_target ?? numberFrom(fallback.proteinTarget, 0)),
     carbsTarget: formatTargetNumber(targets.carbs_target ?? numberFrom(fallback.carbsTarget, 0)),
     fatTarget: formatTargetNumber(targets.fat_target ?? numberFrom(fallback.fatTarget, 0)),
+  } as TargetForm
+  for (const config of MICRONUTRIENT_PREFERENCE_CONFIGS) {
+    form[config.targetFormKey] = formatTargetNumber(targets[config.apiTargetKey] ?? numberFrom(fallback[config.targetFormKey], config.defaultTarget))
   }
+  return form
 }
 
-function parseTargetForm(form: TargetForm): { calorie_target: number; protein_target: number; carbs_target: number; fat_target: number } | null {
+function parseTargetForm(form: TargetForm): { calorie_target: number; protein_target: number; carbs_target: number; fat_target: number; micro_targets: Record<string, number> } | null {
+  const microTargets: Record<string, number> = {}
+  for (const config of MICRONUTRIENT_PREFERENCE_CONFIGS) {
+    const value = Number(form[config.targetFormKey])
+    if (!Number.isFinite(value) || value < 0 || value > 100000) return null
+    microTargets[config.apiTargetKey] = value
+  }
   const payload = {
     calorie_target: Number(form.calorieTarget),
     protein_target: Number(form.proteinTarget),
     carbs_target: Number(form.carbsTarget),
     fat_target: Number(form.fatTarget),
+    micro_targets: microTargets,
   }
-  return Object.values(payload).every(Number.isFinite) ? payload : null
+  return [payload.calorie_target, payload.protein_target, payload.carbs_target, payload.fat_target].every(Number.isFinite) ? payload : null
 }
 
 function validateTargetPayload(payload: { calorie_target: number; protein_target: number; carbs_target: number; fat_target: number }): string {
@@ -2846,8 +2982,8 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   targetAdjustButton: {
-    width: 38,
-    height: 38,
+    width: 48,
+    height: 48,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2882,6 +3018,119 @@ const styles = StyleSheet.create({
   targetSaveRow: {
     gap: 10,
     marginTop: 16,
+  },
+  targetModalScroll: {
+    flexShrink: 1,
+    marginTop: 4,
+  },
+  targetModalScrollContent: {
+    paddingBottom: 8,
+  },
+  targetMicroSection: {
+    marginTop: 20,
+    paddingTop: 18,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  targetMicroHeading: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 4,
+  },
+  targetMicroHeadingCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  targetMicroTitle: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  targetMicroDesc: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  targetMicroCount: {
+    minHeight: 28,
+    minWidth: 48,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  targetMicroCountText: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  targetMicroItem: {
+    marginTop: 14,
+  },
+  targetMicroItemHeading: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  targetMicroLabel: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  targetMicroHide: {
+    minWidth: 48,
+    minHeight: 36,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  targetMicroHideText: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  targetHiddenMicros: {
+    marginTop: 18,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderStyle: 'dashed',
+    borderRadius: 14,
+  },
+  targetHiddenTitle: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginBottom: 10,
+  },
+  targetHiddenList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  targetHiddenChip: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  targetHiddenPlus: {
+    color: colors.brand,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  targetHiddenChipText: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
   },
   badge: {
     color: colors.warning,

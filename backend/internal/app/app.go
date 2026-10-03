@@ -76,6 +76,9 @@ import (
 	publicfoodhandler "food_link/backend/internal/publicfood/handler"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
+	pushhandler "food_link/backend/internal/push/handler"
+	pushrepo "food_link/backend/internal/push/repo"
+	pushservice "food_link/backend/internal/push/service"
 	recipehandler "food_link/backend/internal/recipe/handler"
 	reciperepo "food_link/backend/internal/recipe/repo"
 	recipeservice "food_link/backend/internal/recipe/service"
@@ -130,6 +133,8 @@ type App struct {
 	catalogBackfillDone   chan struct{}
 	openPlatformCancel    context.CancelFunc
 	openPlatformDone      chan struct{}
+	pushCancel            context.CancelFunc
+	pushDone              chan struct{}
 	taskQueue             taskqueue.Queue
 	campusCatalogService  *campuscatalogservice.CatalogService
 }
@@ -469,6 +474,8 @@ func New(cfg *config.Config) (*App, error) {
 	expirySvc.ConfigureCreditGuard(membershipSvc)
 	expirySvc.ConfigureStorage(storageClient)
 	expiryHandler := expiryhandler.NewExpiryHandler(expirySvc)
+	pushSvc := pushservice.New(pushrepo.New(db), cfg.Push)
+	pushHandler := pushhandler.New(pushSvc)
 
 	// Utility module DI
 	locationSvc := utilityservice.NewLocationService(cfg)
@@ -506,6 +513,16 @@ func New(cfg *config.Config) (*App, error) {
 	}
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campusCatalogRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, statsSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
+		if cfg.Push.Enabled {
+			pushCtx, pushCancel := context.WithCancel(context.Background())
+			app.pushCancel = pushCancel
+			app.pushDone = make(chan struct{})
+			go func() {
+				defer close(app.pushDone)
+				pushSvc.Run(pushCtx)
+			}()
+			logger.Info(context.Background(), "APP 业务提醒巡检已启动")
+		}
 		app.startOpenPlatformReconciliation(openPlatformSvc)
 		app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
 	}
@@ -530,6 +547,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/ws/stats/insight", statsInsightWebsocket(statsSvc))
 
 	// User routes
+	pushHandler.RegisterRoutes(engine.Group("/api/push", authmw.RequireJWT(jwtSvc)))
 	engine.GET("/api/user/profile", authmw.RequireJWT(jwtSvc), userHandler.GetProfile)
 	engine.PUT("/api/user/profile", authmw.RequireJWT(jwtSvc), userHandler.UpdateProfile)
 	engine.POST("/api/user/bind-phone", authmw.RequireJWT(jwtSvc), userHandler.BindPhone)
@@ -1376,6 +1394,16 @@ func embeddedWorkerID(cfg *config.Config) string {
 }
 
 func (a *App) Close(ctx context.Context) error {
+	if a.pushCancel != nil {
+		a.pushCancel()
+	}
+	if a.pushDone != nil {
+		select {
+		case <-a.pushDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "APP 业务提醒巡检关闭超时", logger.Err(ctx.Err()))
+		}
+	}
 	if a.openPlatformCancel != nil {
 		a.openPlatformCancel()
 	}

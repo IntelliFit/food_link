@@ -1,6 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
+import { AppState } from 'react-native'
+import * as Notifications from 'expo-notifications'
 import { apiClient, hasStoredToken } from '../api'
 import { authorizeWithWechat, isNativeWechatAuthAvailable } from '../native/wechatAuth'
+import { refreshReminderDevice, revokeReminderDevice, setReminderSessionActive } from '../utils/businessNotifications'
 
 const DEFAULT_DEBUG_OPENID = 'mobile-poc-debug-openid'
 const DEFAULT_APP_WECHAT_DEV_CODE = process.env.EXPO_PUBLIC_APP_WECHAT_DEV_CODE || 'expo-go-dev-wechat-code'
@@ -29,6 +32,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
       .then(setIsAuthenticated)
       .finally(() => setIsBootstrapping(false))
   }, [])
+
+  useEffect(() => {
+    setReminderSessionActive(isAuthenticated)
+    if (!isAuthenticated) return undefined
+    const refresh = () => { void refreshReminderDevice().catch(() => undefined) }
+    refresh()
+    const foreground = AppState.addEventListener('change', (state) => { if (state === 'active') refresh() })
+    const tokenChange = Notifications.addPushTokenListener(refresh)
+    return () => {
+      setReminderSessionActive(false)
+      foreground.remove()
+      tokenChange.remove()
+    }
+  }, [isAuthenticated])
 
   const loginWithDebugAccount = useCallback(async () => {
     await apiClient.debugLoginWithTestOpenID(DEFAULT_DEBUG_OPENID)
@@ -74,6 +91,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   const logout = useCallback(async () => {
+    await revokeReminderDevice()
     await apiClient.clearTokens()
     setIsAuthenticated(false)
   }, [])
