@@ -6,6 +6,7 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -25,11 +26,12 @@ import * as ImagePicker from 'expo-image-picker'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Bookmark, Camera, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Copy, Crown, Edit3, Flag, Heart, Image as ImageIcon, Leaf, Lightbulb, Maximize2, MessageCircle, MoreHorizontal, NotebookPen, Plus, Search, Send, Share2, SlidersHorizontal, Star, Store, Trash2, UserRound, UtensilsCrossed, X, type LucideIcon } from 'lucide-react-native'
+import { Bookmark, Camera, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Copy, Crown, Edit3, Flag, Heart, Image as ImageIcon, Leaf, Lightbulb, LocateFixed, MapPin, Maximize2, MessageCircle, MoreHorizontal, Navigation, NotebookPen, Plus, Search, Send, Share2, SlidersHorizontal, Sparkles, Star, Store, Trash2, UserRound, UtensilsCrossed, X, type LucideIcon } from 'lucide-react-native'
 import {
   getMealTypeLabel,
   inferDefaultMealTypeFromLocalTime,
   type CampusRelatedFeedItem,
+  type CampusFoodRevision,
   type CommunityFeedContext,
   type CommunityFeedTargetType,
   type ConversationSummary,
@@ -55,6 +57,7 @@ import { formatDateTime, todayKey } from '../utils/date'
 import { emitHomeIntakeDataChangedEvent } from '../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../utils/home-dashboard-local-cache'
 import { userFacingErrorMessage } from '../utils/errors'
+import { buildFoodMapSpots, type FoodMapSpot } from '../utils/foodMap'
 
 const mealOptions: MealType[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
 const SYSTEM_MESSAGE_USER_ID = '00000000-0000-0000-0000-000000000000'
@@ -62,6 +65,26 @@ const privateConversationPageSize = 20
 const privateMessagePageSize = 20
 const privateMessagePollMs = 3000
 const loginLogoUrl = 'https://cdn-food-images.coachlink.fit/wechat/source-login-logo.png'
+
+const campusRevisionFieldLabels: Record<string, string> = {
+  name: '菜品名称', image_paths: '菜品照片', school_id: '学校', campus_id: '校区', canteen_id: '食堂',
+  window_id: '窗口', floor: '楼层', window_name: '窗口名称', price: '价格', price_min: '最低价', price_max: '最高价',
+  price_type: '计价方式', price_unit: '价格单位', price_collected_at: '采集日期', portion_description: '份量说明',
+  availability_status: '供应状态', description: '菜品说明', meal_periods: '供应餐时', available_weekdays: '供应日期',
+}
+
+function campusRevisionSummary(revision: CampusFoodRevision): string {
+  if (revision.action_type === 'create') return '创建菜品资料'
+  if (revision.action_type === 'rollback') return '管理员回滚错误更新'
+  const labels = (revision.changed_fields || []).map((field) => campusRevisionFieldLabels[field] || field)
+  return labels.length ? `更新${labels.slice(0, 4).join('、')}${labels.length > 4 ? '等' : ''}` : '更新菜品资料'
+}
+
+function campusAvailabilityLabel(status?: PublicFoodItem['availability_status']): string {
+  return ({
+    available: '正常供应', temporarily_unavailable: '暂时无售', discontinued: '已停售', unknown: '供应状态待确认',
+  } as Record<string, string>)[status || 'unknown'] || '供应状态待确认'
+}
 
 type MembershipTierKey = 'light' | 'standard' | 'advanced'
 type MembershipPeriodKey = 'monthly' | 'quarterly' | 'yearly'
@@ -848,6 +871,7 @@ export function RecipesScreen() {
 
 type PublicFoodMode = 'all' | 'campus' | 'mine' | 'collections'
 type PublicFoodSort = 'latest' | 'hot' | 'rating'
+type PublicFoodViewMode = 'map' | 'list'
 type PublicFoodBusyKind = 'like' | 'collect' | 'delete'
 type PublicFoodItemsByMode = Record<PublicFoodMode, PublicFoodItem[]>
 type PublicFoodLoadingByMode = Record<PublicFoodMode, boolean>
@@ -877,6 +901,30 @@ function isCampusPublicFoodItem(item: PublicFoodItem | null | undefined): boolea
   return Boolean(item && (item.is_campus_food || String(item.type || '').trim().toLowerCase() === 'campus'))
 }
 
+function publicFoodMapPlace(item: PublicFoodItem): string {
+  return String(item.merchant_name || item.canteen_name || item.school_name || item.city || '已点亮地点').trim()
+}
+
+function publicFoodMapAddress(item: PublicFoodItem): string {
+  return String(item.detail_address || item.merchant_address || item.campus_location_text || publicFoodMapPlace(item)).trim()
+}
+
+function publicFoodMapPoint(spots: FoodMapSpot[], spot: FoodMapSpot): { x: number; y: number } {
+  if (spots.length <= 1) return { x: 0.5, y: 0.44 }
+  const latitudes = spots.map((entry) => entry.latitude)
+  const longitudes = spots.map((entry) => entry.longitude)
+  const minLatitude = Math.min(...latitudes)
+  const maxLatitude = Math.max(...latitudes)
+  const minLongitude = Math.min(...longitudes)
+  const maxLongitude = Math.max(...longitudes)
+  const latitudeSpan = Math.max(maxLatitude - minLatitude, 0.0001)
+  const longitudeSpan = Math.max(maxLongitude - minLongitude, 0.0001)
+  return {
+    x: 0.08 + ((spot.longitude - minLongitude) / longitudeSpan) * 0.84,
+    y: 0.08 + ((maxLatitude - spot.latitude) / latitudeSpan) * 0.62,
+  }
+}
+
 export function PublicFoodScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'PublicFood'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -885,8 +933,12 @@ export function PublicFoodScreen() {
   const { isDark } = useColorScheme()
   const initialMode: PublicFoodMode = route.params?.mode || 'all'
   const [mode, setMode] = useState<PublicFoodMode>(initialMode)
+  const [viewMode, setViewMode] = useState<PublicFoodViewMode>('map')
   const [itemsByMode, setItemsByMode] = useState<PublicFoodItemsByMode>(createPublicFoodItemsByMode)
   const [loadingByMode, setLoadingByMode] = useState<PublicFoodLoadingByMode>(createPublicFoodLoadingByMode)
+  const [mapItems, setMapItems] = useState<PublicFoodItem[]>([])
+  const [mapLoading, setMapLoading] = useState(false)
+  const [selectedMapSpotKey, setSelectedMapSpotKey] = useState('')
   const [sortBy, setSortBy] = useState<PublicFoodSort>('latest')
   const [filterFatLoss, setFilterFatLoss] = useState<boolean | undefined>(undefined)
   const [searchKeyword, setSearchKeyword] = useState('')
@@ -896,13 +948,19 @@ export function PublicFoodScreen() {
   const [busyAction, setBusyAction] = useState<{ itemId: string; kind: PublicFoodBusyKind } | null>(null)
   const activeModeRef = useRef(mode)
   const actionBusyRef = useRef(false)
+  const mapLoadedRef = useRef(false)
   const requestSequenceRef = useRef<Record<PublicFoodMode, number>>({ all: 0, campus: 0, collections: 0, mine: 0 })
 
   const items = itemsByMode[mode]
   const loading = loadingByMode[mode]
   const browseMode = mode === 'all' || mode === 'campus'
-  const showBrowseFilters = mode === 'all'
+  const showBrowseFilters = mode === 'all' && viewMode === 'list'
   const compactLayout = screenWidth < 380 || fontScale > 1.15
+  const mapSpots = useMemo(() => buildFoodMapSpots(mapItems), [mapItems])
+  const selectedMapSpot = useMemo(
+    () => mapSpots.find((spot) => spot.key === selectedMapSpotKey) || null,
+    [mapSpots, selectedMapSpotKey],
+  )
 
   useEffect(() => {
     activeModeRef.current = mode
@@ -953,12 +1011,35 @@ export function PublicFoodScreen() {
     }
   }, [appliedMerchant, filterFatLoss, sortBy])
 
+  const loadMap = useCallback(async (force = false) => {
+    if (!force && mapLoadedRef.current) return
+    mapLoadedRef.current = true
+    setMapLoading(true)
+    try {
+      const data = await apiClient.listPublicFoods({ hasLocation: true, sortBy: 'hot', limit: 100 })
+      setMapItems(data.list || [])
+    } catch (error) {
+      mapLoadedRef.current = false
+      showError('获取美食地图失败', error)
+    } finally {
+      setMapLoading(false)
+    }
+  }, [])
+
   useFocusEffect(useCallback(() => {
-    void load(mode)
-  }, [load, mode]))
+    if (mode === 'all' && viewMode === 'map') void loadMap()
+    else void load(mode)
+  }, [load, loadMap, mode, viewMode]))
 
   const switchMode = (nextMode: PublicFoodMode) => {
     setMode(nextMode)
+    setFilterOpen(false)
+    setSelectedMapSpotKey('')
+    Keyboard.dismiss()
+  }
+
+  const selectViewMode = (nextMode: PublicFoodViewMode) => {
+    setViewMode(nextMode)
     setFilterOpen(false)
     Keyboard.dismiss()
   }
@@ -1086,6 +1167,34 @@ export function PublicFoodScreen() {
     navigation.navigate('PublicFoodDetail', { itemId: item.id, isCampus: isCampusPublicFoodItem(item) })
   }
 
+  const navigateToMapFood = async (item: PublicFoodItem) => {
+    const latitude = Number(item.latitude)
+    const longitude = Number(item.longitude)
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return
+    const label = publicFoodMapPlace(item)
+    const url = Platform.OS === 'ios'
+      ? `maps://?daddr=${latitude},${longitude}&q=${encodeURIComponent(label)}`
+      : `geo:${latitude},${longitude}?q=${latitude},${longitude}(${encodeURIComponent(label)})`
+    try {
+      await Linking.openURL(url)
+    } catch (error) {
+      showError('无法打开系统地图', error)
+    }
+  }
+
+  const searchMapFoodDelivery = async (item: PublicFoodItem) => {
+    const keyword = [publicFoodMapPlace(item), publicFoodTitle(item)].filter(Boolean).join(' ')
+    const encoded = encodeURIComponent(keyword)
+    const nativeUrl = `imeituan://www.meituan.com/search?q=${encoded}`
+    const webUrl = `https://www.meituan.com/s/${encoded}/`
+    try {
+      if (await Linking.canOpenURL(nativeUrl)) await Linking.openURL(nativeUrl)
+      else await Linking.openURL(webUrl)
+    } catch (error) {
+      showError('无法打开外卖搜索', error)
+    }
+  }
+
   const listEmpty = loading ? (
     mode === 'all'
       ? <PublicFoodSkeletonList isDark={isDark} compact={compactLayout} />
@@ -1122,6 +1231,34 @@ export function PublicFoodScreen() {
           )
         })}
       </View>
+
+      {mode === 'all' ? (
+        <View style={[styles.publicFoodDiscoveryHeader, isDark ? styles.publicFoodSurfaceDark : null]}>
+          <View style={styles.publicFoodDiscoveryCopy}>
+            <Text style={[styles.publicFoodDiscoveryEyebrow, isDark ? styles.publicFoodAccentTextDark : null]}>FOOD MAP</Text>
+            <Text style={[styles.publicFoodDiscoveryTitle, isDark ? styles.publicFoodTextPrimaryDark : null]}>点亮美食</Text>
+            <Text style={[styles.publicFoodDiscoverySubtitle, isDark ? styles.publicFoodTextSecondaryDark : null]}>看看附近被真实吃过的好味道</Text>
+          </View>
+          <View style={[styles.publicFoodViewSwitch, isDark ? styles.publicFoodFieldDark : null]} accessibilityRole="radiogroup">
+            {(['map', 'list'] as PublicFoodViewMode[]).map((option) => {
+              const active = viewMode === option
+              const label = option === 'map' ? '地图' : '列表'
+              return (
+                <Pressable
+                  key={option}
+                  style={({ pressed }) => [styles.publicFoodViewOption, active ? styles.publicFoodViewOptionActive : null, active && isDark ? styles.publicFoodViewOptionActiveDark : null, pressed ? styles.publicFoodControlPressed : null]}
+                  onPress={() => selectViewMode(option)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: active }}
+                  accessibilityLabel={`切换到${label}视图`}
+                >
+                  <Text style={[styles.publicFoodViewOptionText, isDark ? styles.publicFoodTextSecondaryDark : null, active ? styles.publicFoodViewOptionTextActive : null, active && isDark ? styles.publicFoodAccentTextDark : null]}>{label}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        </View>
+      ) : null}
 
       {showBrowseFilters ? (
         <>
@@ -1226,38 +1363,55 @@ export function PublicFoodScreen() {
         </>
       ) : null}
 
-      <FlatList<PublicFoodItem>
-        data={items}
-        keyExtractor={(item) => item.id}
-        style={styles.publicFoodListScroll}
-        contentContainerStyle={[styles.publicFoodListScrollerContent, items.length === 0 && !loading ? styles.publicFoodListScrollerEmpty : null, { paddingBottom: insets.bottom + 100 }]}
-        renderItem={({ item, index }) => (
-          <PublicFoodCard
-            item={item}
-            latest={sortBy === 'latest' && index === 0 && browseMode}
-            isDark={isDark}
-            compact={compactLayout}
-            isOwner={Boolean(currentUserId && publicFoodOwnerId(item) === currentUserId)}
-            busyKind={busyAction?.itemId === item.id ? busyAction.kind : null}
-            actionsDisabled={Boolean(busyAction)}
-            onPress={() => openDetail(item)}
-            onAuthorPress={item.author?.id ? () => navigation.navigate('ProfileSettings', { userId: String(item.author?.id) }) : undefined}
-            onLike={() => void toggleLike(item)}
-            onCollect={() => void toggleCollect(item)}
-            onComment={() => openDetail(item)}
-            onDelete={() => confirmDelete(item)}
-          />
-        )}
-        ListEmptyComponent={listEmpty}
-        refreshControl={<RefreshControl refreshing={loading && items.length > 0} onRefresh={() => void load(mode)} colors={[isDark ? '#6ee7b7' : colors.brand]} tintColor={isDark ? '#6ee7b7' : colors.brand} />}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        initialNumToRender={8}
-        maxToRenderPerBatch={10}
-        windowSize={7}
-        removeClippedSubviews={Platform.OS === 'android'}
-      />
+      {mode === 'all' && viewMode === 'map' ? (
+        <PublicFoodMapExperience
+          spots={mapSpots}
+          selectedSpot={selectedMapSpot}
+          loading={mapLoading}
+          isDark={isDark}
+          bottomInset={insets.bottom}
+          onRefresh={() => void loadMap(true)}
+          onSelect={(spot) => setSelectedMapSpotKey(spot.key)}
+          onFocusFirst={() => setSelectedMapSpotKey(mapSpots[0]?.key || '')}
+          onOpen={(item) => openDetail(item)}
+          onSearchDelivery={(item) => void searchMapFoodDelivery(item)}
+          onNavigate={(item) => void navigateToMapFood(item)}
+          onLight={() => navigation.navigate('PublicFoodShare', { mode: 'public' })}
+        />
+      ) : (
+        <FlatList<PublicFoodItem>
+          data={items}
+          keyExtractor={(item) => item.id}
+          style={styles.publicFoodListScroll}
+          contentContainerStyle={[styles.publicFoodListScrollerContent, items.length === 0 && !loading ? styles.publicFoodListScrollerEmpty : null, { paddingBottom: insets.bottom + 100 }]}
+          renderItem={({ item, index }) => (
+            <PublicFoodCard
+              item={item}
+              latest={sortBy === 'latest' && index === 0 && browseMode}
+              isDark={isDark}
+              compact={compactLayout}
+              isOwner={Boolean(currentUserId && publicFoodOwnerId(item) === currentUserId)}
+              busyKind={busyAction?.itemId === item.id ? busyAction.kind : null}
+              actionsDisabled={Boolean(busyAction)}
+              onPress={() => openDetail(item)}
+              onAuthorPress={item.author?.id ? () => navigation.navigate('ProfileSettings', { userId: String(item.author?.id) }) : undefined}
+              onLike={() => void toggleLike(item)}
+              onCollect={() => void toggleCollect(item)}
+              onComment={() => openDetail(item)}
+              onDelete={() => confirmDelete(item)}
+            />
+          )}
+          ListEmptyComponent={listEmpty}
+          refreshControl={<RefreshControl refreshing={loading && items.length > 0} onRefresh={() => void load(mode)} colors={[isDark ? '#6ee7b7' : colors.brand]} tintColor={isDark ? '#6ee7b7' : colors.brand} />}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          initialNumToRender={8}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
+        />
+      )}
 
       <Pressable
         style={({ pressed }) => [styles.publicFoodFab, { bottom: insets.bottom + 18 }, pressed ? styles.publicFoodFabPressed : null]}
@@ -1268,6 +1422,146 @@ export function PublicFoodScreen() {
         <Plus size={26} color="#fff" strokeWidth={2.4} />
       </Pressable>
     </View>
+  )
+}
+
+function PublicFoodMapExperience({
+  spots,
+  selectedSpot,
+  loading,
+  isDark,
+  bottomInset,
+  onRefresh,
+  onSelect,
+  onFocusFirst,
+  onOpen,
+  onSearchDelivery,
+  onNavigate,
+  onLight,
+}: {
+  spots: FoodMapSpot[]
+  selectedSpot: FoodMapSpot | null
+  loading: boolean
+  isDark: boolean
+  bottomInset: number
+  onRefresh: () => void
+  onSelect: (spot: FoodMapSpot) => void
+  onFocusFirst: () => void
+  onOpen: (item: PublicFoodItem) => void
+  onSearchDelivery: (item: PublicFoodItem) => void
+  onNavigate: (item: PublicFoodItem) => void
+  onLight: () => void
+}) {
+  const { width } = useWindowDimensions()
+  const canvasWidth = Math.max(280, width - 32)
+  const canvasHeight = 480
+
+  return (
+    <ScrollView
+      style={styles.publicFoodMapScroll}
+      contentContainerStyle={[styles.publicFoodMapExperience, { paddingBottom: bottomInset + 100 }]}
+      refreshControl={<RefreshControl refreshing={loading && spots.length > 0} onRefresh={onRefresh} colors={[isDark ? '#6ee7b7' : colors.brand]} tintColor={isDark ? '#6ee7b7' : colors.brand} />}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={[styles.publicFoodMapSummary, isDark ? styles.publicFoodSurfaceDark : null]}>
+        <View style={styles.publicFoodMapSummaryCopy}>
+          <Text style={[styles.publicFoodMapSummaryTitle, isDark ? styles.publicFoodTextPrimaryDark : null]}>已点亮 {spots.length} 个地点</Text>
+          <Text style={[styles.publicFoodMapSummaryMeta, isDark ? styles.publicFoodTextSecondaryDark : null]}>全图共 {spots.length} 个 · 点击标记看美食</Text>
+        </View>
+        <Pressable
+          style={({ pressed }) => [styles.publicFoodMapLocateButton, isDark ? styles.publicFoodMapLocateButtonDark : null, pressed ? styles.publicFoodControlPressed : null]}
+          onPress={spots.length ? onFocusFirst : onRefresh}
+          accessibilityRole="button"
+          accessibilityLabel={spots.length ? '查看已点亮地点' : '刷新美食地图'}
+        >
+          {loading ? <ActivityIndicator size="small" color={isDark ? '#6ee7b7' : colors.brandDark} /> : <LocateFixed size={18} color={isDark ? '#6ee7b7' : colors.brandDark} strokeWidth={2.3} />}
+          <Text style={[styles.publicFoodMapLocateText, isDark ? styles.publicFoodAccentTextDark : null]}>{spots.length ? '我附近' : '刷新'}</Text>
+        </Pressable>
+      </View>
+
+      <View style={[styles.publicFoodMapCanvas, { width: canvasWidth, height: canvasHeight }, isDark ? styles.publicFoodMapCanvasDark : null]}>
+        <View style={[styles.publicFoodMapBlock, styles.publicFoodMapBlockOne, isDark ? styles.publicFoodMapBlockDark : null]} />
+        <View style={[styles.publicFoodMapBlock, styles.publicFoodMapBlockTwo, isDark ? styles.publicFoodMapBlockDark : null]} />
+        <View style={[styles.publicFoodMapBlock, styles.publicFoodMapBlockThree, isDark ? styles.publicFoodMapBlockDark : null]} />
+        <View style={[styles.publicFoodMapRoad, styles.publicFoodMapRoadOne, isDark ? styles.publicFoodMapRoadDark : null]} />
+        <View style={[styles.publicFoodMapRoad, styles.publicFoodMapRoadTwo, isDark ? styles.publicFoodMapRoadDark : null]} />
+        <View style={[styles.publicFoodMapRoad, styles.publicFoodMapRoadThree, isDark ? styles.publicFoodMapRoadDark : null]} />
+        <View style={[styles.publicFoodMapWater, isDark ? styles.publicFoodMapWaterDark : null]} />
+
+        {spots.map((spot) => {
+          const point = publicFoodMapPoint(spots, spot)
+          const active = selectedSpot?.key === spot.key
+          return (
+            <Pressable
+              key={spot.key}
+              style={({ pressed }) => [
+                styles.publicFoodMapMarker,
+                { left: point.x * (canvasWidth - 52), top: 18 + point.y * 265 },
+                active ? styles.publicFoodMapMarkerActive : null,
+                pressed ? styles.publicFoodMapMarkerPressed : null,
+              ]}
+              onPress={() => onSelect(spot)}
+              accessibilityRole="button"
+              accessibilityLabel={`${publicFoodMapPlace(spot.featuredItem)}，${spot.items.length}道美食`}
+              accessibilityState={{ selected: active }}
+            >
+              <MapPin size={active ? 37 : 32} color="#fff" fill={active ? '#2f9d73' : '#5cba96'} strokeWidth={2} />
+              {spot.items.length > 1 ? <Text style={styles.publicFoodMapMarkerCount}>{Math.min(spot.items.length, 99)}</Text> : null}
+            </Pressable>
+          )
+        })}
+
+        {loading && spots.length === 0 ? (
+          <View style={[styles.publicFoodMapLoadingMask, isDark ? styles.publicFoodMapLoadingMaskDark : null]} accessibilityLabel="正在读取美食地图">
+            <ActivityIndicator size="large" color={isDark ? '#6ee7b7' : colors.brand} />
+          </View>
+        ) : null}
+
+        {!loading && selectedSpot ? (
+          <View style={[styles.publicFoodMapSheet, isDark ? styles.publicFoodMapSheetDark : null]}>
+            <Pressable style={({ pressed }) => [styles.publicFoodMapSheetMain, pressed ? styles.publicFoodControlPressed : null]} onPress={() => onOpen(selectedSpot.featuredItem)} accessibilityRole="button" accessibilityLabel={`查看${publicFoodTitle(selectedSpot.featuredItem)}详情`}>
+              <View style={[styles.publicFoodMapSheetImageWrap, isDark ? styles.publicFoodMapSheetPlaceholderDark : null]}>
+                {publicFoodImageList(selectedSpot.featuredItem)[0] ? (
+                  <Image source={{ uri: publicFoodImageList(selectedSpot.featuredItem)[0] }} style={styles.publicFoodMapSheetImage} />
+                ) : (
+                  <UtensilsCrossed size={26} color={isDark ? '#6ee7b7' : colors.brandDark} strokeWidth={2} />
+                )}
+                {selectedSpot.items.length > 1 ? <Text style={styles.publicFoodMapFoodCount}>{selectedSpot.items.length} 道</Text> : null}
+              </View>
+              <View style={styles.publicFoodMapSheetCopy}>
+                <Text style={[styles.publicFoodMapSheetTitle, isDark ? styles.publicFoodTextPrimaryDark : null]} numberOfLines={1}>{publicFoodTitle(selectedSpot.featuredItem)}</Text>
+                <Text style={[styles.publicFoodMapSheetPlace, isDark ? styles.publicFoodTextSecondaryDark : null]} numberOfLines={1}>{publicFoodMapPlace(selectedSpot.featuredItem)}</Text>
+                <Text style={[styles.publicFoodMapSheetMeta, isDark ? styles.publicFoodTextSecondaryDark : null]} numberOfLines={1}>{Math.round(Number(selectedSpot.featuredItem.total_calories) || 0)} kcal · {publicFoodMapAddress(selectedSpot.featuredItem)}</Text>
+              </View>
+              <ChevronRight size={20} color={isDark ? '#91a39b' : colors.textMuted} />
+            </Pressable>
+            <View style={styles.publicFoodMapSheetActions}>
+              <Pressable style={({ pressed }) => [styles.publicFoodMapAction, styles.publicFoodMapActionSecondary, isDark ? styles.publicFoodMapActionSecondaryDark : null, pressed ? styles.publicFoodControlPressed : null]} onPress={() => onSearchDelivery(selectedSpot.featuredItem)} accessibilityRole="button" accessibilityLabel="搜索这道美食的外卖">
+                <Search size={17} color={isDark ? '#d5eee4' : colors.brandDark} strokeWidth={2.2} />
+                <Text style={[styles.publicFoodMapActionSecondaryText, isDark ? styles.publicFoodTextPrimaryDark : null]}>搜外卖</Text>
+              </Pressable>
+              <Pressable style={({ pressed }) => [styles.publicFoodMapAction, styles.publicFoodMapActionPrimary, pressed ? styles.publicFoodPrimaryPressed : null]} onPress={() => onNavigate(selectedSpot.featuredItem)} accessibilityRole="button" accessibilityLabel="使用系统地图导航去吃">
+                <Navigation size={17} color="#fff" fill="#fff" strokeWidth={2.1} />
+                <Text style={styles.publicFoodMapActionPrimaryText}>导航去吃</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {!loading && !selectedSpot ? (
+          <View style={[styles.publicFoodMapDiscoverySheet, isDark ? styles.publicFoodMapSheetDark : null]}>
+            <View style={[styles.publicFoodMapDiscoveryIcon, isDark ? styles.publicFoodMapDiscoveryIconDark : null]}><Sparkles size={22} color={isDark ? '#6ee7b7' : colors.brandDark} fill={isDark ? '#6ee7b7' : colors.brandSoft} /></View>
+            <View style={styles.publicFoodMapDiscoveryCopy}>
+              <Text style={[styles.publicFoodMapDiscoveryTitle, isDark ? styles.publicFoodTextPrimaryDark : null]}>{spots.length ? '点一个标记，看看这里有什么好吃的' : '附近还没有被点亮的美食'}</Text>
+              <Text style={[styles.publicFoodMapDiscoverySubtitle, isDark ? styles.publicFoodTextSecondaryDark : null]}>{spots.length ? '可以看看已点亮地点，或成为第一个分享的人' : '拍下你吃过的一餐，让这张地图从这里亮起来'}</Text>
+            </View>
+            <Pressable style={({ pressed }) => [styles.publicFoodMapDiscoveryButton, pressed ? styles.publicFoodPrimaryPressed : null]} onPress={spots.length ? onFocusFirst : onLight} accessibilityRole="button" accessibilityLabel={spots.length ? '查看已点亮地点' : '点亮一家美食'}>
+              <Text style={styles.publicFoodMapDiscoveryButtonText}>{spots.length ? '看已点亮' : '点亮一家'}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
+    </ScrollView>
   )
 }
 
@@ -1294,6 +1588,10 @@ export function PublicFoodDetailScreen() {
   const [submittingComment, setSubmittingComment] = useState(false)
   const [submittingFeedback, setSubmittingFeedback] = useState(false)
   const [contributingImages, setContributingImages] = useState(false)
+  const [revisions, setRevisions] = useState<CampusFoodRevision[]>([])
+  const [revisionTotal, setRevisionTotal] = useState(0)
+  const [showRevisions, setShowRevisions] = useState(false)
+  const [revisionLoading, setRevisionLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [actionBusy, setActionBusy] = useState<'like' | 'collect' | ''>('')
   const [currentUserId, setCurrentUserId] = useState('')
@@ -1326,6 +1624,10 @@ export function PublicFoodDetailScreen() {
     void load()
   }, [load])
 
+  useFocusEffect(useCallback(() => {
+    void load(true)
+  }, [load]))
+
   useEffect(() => {
     setCurrentImageIndex(0)
     setPreviewImageIndex(0)
@@ -1334,6 +1636,9 @@ export function PublicFoodDetailScreen() {
     setCommentModalVisible(false)
     setActionSheetVisible(false)
     setFeedbackModalVisible(false)
+    setRevisions([])
+    setRevisionTotal(0)
+    setShowRevisions(false)
   }, [route.params.itemId])
 
   useEffect(() => {
@@ -1557,8 +1862,9 @@ export function PublicFoodDetailScreen() {
     setContributingImages(true)
     try {
       const uploaded: string[] = []
-      for (const asset of assets.slice(0, 5)) {
-        const result = await apiClient.uploadAnalyzeImageFile({
+      const remaining = Math.max(0, 5 - publicFoodImageList(item).length)
+      for (const asset of assets.slice(0, remaining)) {
+        const result = await apiClient.uploadCampusFoodImageFile({
           fileUri: asset.uri,
           fileName: asset.fileName || 'campus-food.jpg',
           mimeType: asset.mimeType || 'image/jpeg',
@@ -1566,15 +1872,9 @@ export function PublicFoodDetailScreen() {
         uploaded.push(result.imageUrl)
       }
       const result = await apiClient.contributeCampusFoodImages(item.id, uploaded)
-      if (result.image_paths.length) {
-        setItem((current) => current ? {
-          ...current,
-          image_path: result.image_paths[0],
-          image_paths: result.image_paths,
-        } : current)
-        setCurrentImageIndex(0)
-      }
-      Alert.alert(result.accepted ? '感谢共建' : '已有用户补图', result.accepted ? '照片已补充到这道校园餐。' : '这道菜已经有可用照片了。')
+      await load(true)
+      setCurrentImageIndex(0)
+      Alert.alert(result.accepted ? '感谢共建' : '无需重复补图', result.accepted ? '照片已加入新版本。' : '这道菜已经有可用照片了。')
     } catch (error) {
       showError('补充照片失败', error)
     } finally {
@@ -1583,19 +1883,47 @@ export function PublicFoodDetailScreen() {
   }
 
   const pickContributionImages = async (source: 'camera' | 'library') => {
+    if (!item) return
+    const remaining = Math.max(0, 5 - publicFoodImageList(item).length)
+    if (!remaining) {
+      Alert.alert('照片已满', '每道校园菜品最多保留 5 张实拍。')
+      return
+    }
     const result = source === 'camera'
       ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.86, allowsEditing: false })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 5, quality: 0.86, allowsEditing: false })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: remaining, quality: 0.86, allowsEditing: false })
     if (!result.canceled) await uploadContributionAssets(result.assets)
   }
 
   const openContributionSource = () => {
     if (contributingImages) return
-    Alert.alert('补充真实照片', '选择照片来源，最多补充 5 张。', [
+    const remaining = Math.max(0, 5 - publicFoodImageList(item).length)
+    Alert.alert('追加真实照片', `选择照片来源，还可补充 ${remaining} 张。`, [
       { text: '拍照', onPress: () => void pickContributionImages('camera') },
       { text: '从相册选择', onPress: () => void pickContributionImages('library') },
       { text: '取消', style: 'cancel' },
     ])
+  }
+
+  const toggleRevisions = async () => {
+    if (!item) return
+    if (showRevisions) {
+      setShowRevisions(false)
+      return
+    }
+    setShowRevisions(true)
+    if (revisions.length || revisionLoading) return
+    setRevisionLoading(true)
+    try {
+      const result = await apiClient.getCampusFoodRevisions(item.id, 1, 20)
+      setRevisions(result.items || [])
+      setRevisionTotal(result.total || 0)
+    } catch (error) {
+      setShowRevisions(false)
+      showError('获取更新记录失败', error)
+    } finally {
+      setRevisionLoading(false)
+    }
   }
 
   const openImagePreview = (index: number) => {
@@ -1780,6 +2108,63 @@ export function PublicFoodDetailScreen() {
                 <Text style={[styles.publicFoodDetailCampusPortion, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>{item.portion_description || '约 1 份'}</Text>
               </View>
               <Text style={[styles.publicFoodDetailMuted, isDark ? styles.publicFoodDetailMutedTextDark : null]}>价格更新于 {dateText(item.price_collected_at)}</Text>
+              <View style={styles.publicFoodDetailCommunityMeta}>
+                <Text style={[styles.publicFoodDetailAvailability, item.availability_status === 'available' ? styles.publicFoodDetailAvailabilityReady : null, isDark ? styles.publicFoodDetailAvailabilityDark : null]}>
+                  {campusAvailabilityLabel(item.availability_status)}
+                </Text>
+                <Text style={[styles.publicFoodDetailVersion, isDark ? styles.publicFoodDetailMutedTextDark : null]}>当前版本 v{item.content_version || 1}</Text>
+                {item.last_verified_at ? <Text style={[styles.publicFoodDetailVersion, isDark ? styles.publicFoodDetailMutedTextDark : null]}>核实于 {dateText(item.last_verified_at)}</Text> : null}
+              </View>
+              <View style={styles.publicFoodDetailCommunityActions}>
+                {imageList.length < 5 ? (
+                  <Pressable
+                    disabled={contributingImages}
+                    style={({ pressed }) => [styles.publicFoodDetailCommunityAction, isDark ? styles.publicFoodDetailCommunityActionDark : null, contributingImages ? styles.publicFoodDetailActionDisabled : null, pressed ? styles.pressed : null]}
+                    onPress={openContributionSource}
+                    accessibilityRole="button"
+                    accessibilityLabel={`追加实拍，还可添加 ${6 - imageList.length} 张`}
+                    accessibilityState={{ disabled: contributingImages, busy: contributingImages }}
+                  >
+                    {contributingImages ? <ActivityIndicator size="small" color={isDark ? '#7dd3b0' : colors.brand} /> : <Camera size={16} color={isDark ? '#7dd3b0' : colors.brandDark} strokeWidth={2.1} />}
+                    {!contributingImages ? <Text style={[styles.publicFoodDetailCommunityActionText, isDark ? styles.publicFoodDetailCaloriesTextDark : null]}>追加实拍</Text> : null}
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  style={({ pressed }) => [styles.publicFoodDetailCommunityAction, isDark ? styles.publicFoodDetailCommunityActionDark : null, pressed ? styles.pressed : null]}
+                  onPress={() => navigation.navigate('PublicFoodShare', { editId: item.id, mode: 'campus' })}
+                  accessibilityRole="button"
+                  accessibilityLabel="修正校园菜品资料"
+                >
+                  <Edit3 size={16} color={isDark ? '#7dd3b0' : colors.brandDark} strokeWidth={2.1} />
+                  <Text style={[styles.publicFoodDetailCommunityActionText, isDark ? styles.publicFoodDetailCaloriesTextDark : null]}>修正资料</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.publicFoodDetailCommunityAction, isDark ? styles.publicFoodDetailCommunityActionDark : null, pressed ? styles.pressed : null]}
+                  onPress={() => void toggleRevisions()}
+                  accessibilityRole="button"
+                  accessibilityLabel={showRevisions ? '收起更新记录' : '查看更新记录'}
+                  accessibilityState={{ expanded: showRevisions, busy: revisionLoading }}
+                >
+                  <Text style={[styles.publicFoodDetailCommunityActionText, isDark ? styles.publicFoodDetailCaloriesTextDark : null]}>{showRevisions ? '收起记录' : `更新记录${revisionTotal > 0 ? ` · ${revisionTotal}` : ''}`}</Text>
+                </Pressable>
+              </View>
+              {showRevisions ? (
+                <View style={[styles.publicFoodDetailRevisionList, isDark ? styles.publicFoodDetailRevisionListDark : null]}>
+                  {revisionLoading ? <ActivityIndicator size="small" color={isDark ? '#7dd3b0' : colors.brand} /> : revisions.length === 0 ? (
+                    <Text style={[styles.publicFoodDetailRevisionEmpty, isDark ? styles.publicFoodDetailMutedTextDark : null]}>还没有更新记录</Text>
+                  ) : revisions.map((revision) => (
+                    <View key={revision.id} style={[styles.publicFoodDetailRevisionItem, isDark ? styles.publicFoodDetailRevisionItemDark : null]}>
+                      <View style={styles.publicFoodDetailRevisionHeading}>
+                        <Text style={[styles.publicFoodDetailRevisionVersion, isDark ? styles.publicFoodDetailCaloriesTextDark : null]}>v{revision.result_version}</Text>
+                        <Text style={[styles.publicFoodDetailRevisionActor, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>{revision.actor_type === 'admin' ? '管理员' : revision.actor_type === 'user' ? '用户共建' : '系统迁移'}</Text>
+                        <Text style={[styles.publicFoodDetailRevisionTime, isDark ? styles.publicFoodDetailMutedTextDark : null]}>{formatDateTime(revision.created_at || '')}</Text>
+                      </View>
+                      <Text style={[styles.publicFoodDetailRevisionSummary, isDark ? styles.publicFoodDetailTitleDark : null]}>{campusRevisionSummary(revision)}</Text>
+                      {revision.reason ? <Text style={[styles.publicFoodDetailRevisionReason, isDark ? styles.publicFoodDetailTextSecondaryDark : null]}>{revision.reason}</Text> : null}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
               {analyzing ? <Text style={[styles.publicFoodDetailAnalysisTip, isDark ? styles.publicFoodDetailAnalysisTipDark : null]}>营养信息正在精确分析，完成后自动更新。</Text> : null}
               {nutritionPending ? <Text style={[styles.publicFoodDetailAnalysisTip, isDark ? styles.publicFoodDetailAnalysisTipDark : null]}>营养信息待更新，暂不建议一键记录。</Text> : null}
               {analysisFailed ? <Text style={[styles.publicFoodDetailAnalysisTip, styles.publicFoodDetailAnalysisTipError, isDark ? styles.publicFoodDetailAnalysisTipErrorDark : null]}>营养分析失败，可通过纠错入口反馈。</Text> : null}
@@ -1930,7 +2315,7 @@ export function PublicFoodDetailScreen() {
         </View>
         <View style={styles.publicFoodDetailCorrectionBar}>
           <Text style={[styles.publicFoodDetailCorrectionHint, isDark ? styles.publicFoodDetailMutedTextDark : null]}>信息有误？</Text>
-          <Pressable style={({ pressed }) => [styles.publicFoodDetailCorrectionButton, pressed ? styles.pressed : null]} onPress={() => setFeedbackModalVisible(true)} accessibilityRole="button" accessibilityLabel="修正食物信息">
+          <Pressable style={({ pressed }) => [styles.publicFoodDetailCorrectionButton, pressed ? styles.pressed : null]} onPress={() => isCampusDetail ? navigation.navigate('PublicFoodShare', { editId: item.id, mode: 'campus' }) : setFeedbackModalVisible(true)} accessibilityRole="button" accessibilityLabel="修正食物信息">
             <Text style={[styles.publicFoodDetailCorrectionLink, isDark ? styles.publicFoodDetailCaloriesTextDark : null]}>点击修正</Text>
           </Pressable>
         </View>
@@ -7404,6 +7789,441 @@ const styles = StyleSheet.create({
     color: colors.brandDark,
     fontWeight: '900',
   },
+  publicFoodDiscoveryHeader: {
+    minHeight: 104,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: colors.surface,
+  },
+  publicFoodDiscoveryCopy: {
+    flex: 1,
+  },
+  publicFoodDiscoveryEyebrow: {
+    color: colors.brand,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+  },
+  publicFoodDiscoveryTitle: {
+    marginTop: 2,
+    color: colors.text,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '900',
+  },
+  publicFoodDiscoverySubtitle: {
+    marginTop: 2,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  publicFoodViewSwitch: {
+    padding: 4,
+    flexDirection: 'row',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#e3ece8',
+    backgroundColor: '#f3f7f5',
+  },
+  publicFoodViewOption: {
+    minWidth: 52,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  publicFoodViewOptionActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#133229',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  publicFoodViewOptionActiveDark: {
+    backgroundColor: '#28443a',
+  },
+  publicFoodViewOptionText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  publicFoodViewOptionTextActive: {
+    color: colors.brandDark,
+    fontWeight: '900',
+  },
+  publicFoodMapScroll: {
+    flex: 1,
+  },
+  publicFoodMapExperience: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  publicFoodMapSummary: {
+    minHeight: 72,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#17382f',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  publicFoodMapSummaryCopy: {
+    flex: 1,
+  },
+  publicFoodMapSummaryTitle: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  publicFoodMapSummaryMeta: {
+    marginTop: 2,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  publicFoodMapLocateButton: {
+    minHeight: 44,
+    minWidth: 92,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#e9f7f1',
+  },
+  publicFoodMapLocateButtonDark: {
+    backgroundColor: '#20382f',
+  },
+  publicFoodMapLocateText: {
+    color: colors.brandDark,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  publicFoodMapCanvas: {
+    position: 'relative',
+    alignSelf: 'center',
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#e9f3ee',
+    borderWidth: 1,
+    borderColor: '#d9e9e2',
+  },
+  publicFoodMapCanvasDark: {
+    backgroundColor: '#17231f',
+    borderColor: '#2b3a35',
+  },
+  publicFoodMapBlock: {
+    position: 'absolute',
+    borderRadius: 18,
+    backgroundColor: '#f7faf8',
+    borderWidth: 1,
+    borderColor: 'rgba(120,160,145,0.10)',
+  },
+  publicFoodMapBlockDark: {
+    backgroundColor: '#22302b',
+    borderColor: 'rgba(255,255,255,0.04)',
+  },
+  publicFoodMapBlockOne: {
+    left: -20,
+    top: 22,
+    width: 162,
+    height: 118,
+    transform: [{ rotate: '-8deg' }],
+  },
+  publicFoodMapBlockTwo: {
+    right: -24,
+    top: 42,
+    width: 180,
+    height: 144,
+    transform: [{ rotate: '11deg' }],
+  },
+  publicFoodMapBlockThree: {
+    left: 56,
+    top: 174,
+    width: 228,
+    height: 120,
+    transform: [{ rotate: '-3deg' }],
+  },
+  publicFoodMapRoad: {
+    position: 'absolute',
+    height: 12,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#dfe9e4',
+  },
+  publicFoodMapRoadDark: {
+    backgroundColor: '#2a3934',
+    borderColor: '#354640',
+  },
+  publicFoodMapRoadOne: {
+    left: -24,
+    right: -24,
+    top: 128,
+    transform: [{ rotate: '17deg' }],
+  },
+  publicFoodMapRoadTwo: {
+    left: 88,
+    width: 350,
+    top: 76,
+    transform: [{ rotate: '76deg' }],
+  },
+  publicFoodMapRoadThree: {
+    left: -42,
+    width: 330,
+    top: 246,
+    transform: [{ rotate: '-19deg' }],
+  },
+  publicFoodMapWater: {
+    position: 'absolute',
+    right: -44,
+    top: 182,
+    width: 122,
+    height: 82,
+    borderRadius: 48,
+    backgroundColor: '#cfe9e6',
+    transform: [{ rotate: '17deg' }],
+  },
+  publicFoodMapWaterDark: {
+    backgroundColor: '#244541',
+  },
+  publicFoodMapMarker: {
+    position: 'absolute',
+    zIndex: 5,
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  publicFoodMapMarkerActive: {
+    zIndex: 8,
+    transform: [{ scale: 1.14 }],
+  },
+  publicFoodMapMarkerPressed: {
+    transform: [{ scale: 0.92 }],
+  },
+  publicFoodMapMarkerCount: {
+    position: 'absolute',
+    top: 7,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: '#fff',
+    color: colors.brandDark,
+    fontSize: 10,
+    lineHeight: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  publicFoodMapLoadingMask: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(247,251,249,0.72)',
+  },
+  publicFoodMapLoadingMaskDark: {
+    backgroundColor: 'rgba(16,23,21,0.72)',
+  },
+  publicFoodMapSheet: {
+    position: 'absolute',
+    zIndex: 20,
+    left: 12,
+    right: 12,
+    bottom: 12,
+    minHeight: 156,
+    borderRadius: 20,
+    padding: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#102b23',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  publicFoodMapSheetDark: {
+    backgroundColor: '#1d2925',
+    borderWidth: 1,
+    borderColor: '#30423b',
+  },
+  publicFoodMapSheetMain: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  publicFoodMapSheetImageWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef8f4',
+  },
+  publicFoodMapSheetPlaceholderDark: {
+    backgroundColor: '#263832',
+  },
+  publicFoodMapSheetImage: {
+    width: '100%',
+    height: '100%',
+  },
+  publicFoodMapFoodCount: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    overflow: 'hidden',
+    color: '#fff',
+    backgroundColor: 'rgba(17,48,39,0.78)',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  publicFoodMapSheetCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  publicFoodMapSheetTitle: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  publicFoodMapSheetPlace: {
+    marginTop: 2,
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  publicFoodMapSheetMeta: {
+    marginTop: 3,
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  publicFoodMapSheetActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  publicFoodMapAction: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  publicFoodMapActionSecondary: {
+    borderWidth: 1,
+    borderColor: '#d8e8e1',
+    backgroundColor: '#f5faf8',
+  },
+  publicFoodMapActionSecondaryDark: {
+    borderColor: '#385048',
+    backgroundColor: '#263832',
+  },
+  publicFoodMapActionSecondaryText: {
+    color: colors.brandDark,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  publicFoodMapActionPrimary: {
+    backgroundColor: colors.brand,
+  },
+  publicFoodMapActionPrimaryText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  publicFoodMapDiscoverySheet: {
+    position: 'absolute',
+    zIndex: 20,
+    left: 12,
+    right: 12,
+    bottom: 12,
+    minHeight: 104,
+    borderRadius: 20,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#fff',
+    shadowColor: '#102b23',
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  publicFoodMapDiscoveryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e8f7f1',
+  },
+  publicFoodMapDiscoveryIconDark: {
+    backgroundColor: '#263d35',
+  },
+  publicFoodMapDiscoveryCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  publicFoodMapDiscoveryTitle: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  publicFoodMapDiscoverySubtitle: {
+    marginTop: 3,
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  publicFoodMapDiscoveryButton: {
+    minWidth: 78,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  publicFoodMapDiscoveryButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
   publicFoodSearchSection: {
     zIndex: 8,
     paddingHorizontal: 16,
@@ -9940,5 +10760,121 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 15,
     fontWeight: '700',
+  },
+  publicFoodDetailCommunityMeta: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  publicFoodDetailAvailability: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    color: '#92400e',
+    backgroundColor: '#fef3c7',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  publicFoodDetailAvailabilityReady: {
+    color: '#047857',
+    backgroundColor: '#d1fae5',
+  },
+  publicFoodDetailAvailabilityDark: {
+    color: '#a7f3d0',
+    backgroundColor: '#20352d',
+  },
+  publicFoodDetailVersion: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  publicFoodDetailCommunityActions: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  publicFoodDetailCommunityAction: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: '#cceadd',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#f0fdf8',
+  },
+  publicFoodDetailCommunityActionDark: {
+    borderColor: '#315849',
+    backgroundColor: '#20352d',
+  },
+  publicFoodDetailCommunityActionText: {
+    color: colors.brandDark,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  publicFoodDetailRevisionList: {
+    marginTop: 10,
+    borderRadius: 12,
+    padding: 10,
+    gap: 8,
+    backgroundColor: '#ffffff',
+  },
+  publicFoodDetailRevisionListDark: {
+    backgroundColor: '#121714',
+  },
+  publicFoodDetailRevisionItem: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: '#f8fafc',
+  },
+  publicFoodDetailRevisionItemDark: {
+    borderColor: '#2b3530',
+    backgroundColor: '#171d1a',
+  },
+  publicFoodDetailRevisionHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  publicFoodDetailRevisionVersion: {
+    color: colors.brandDark,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  publicFoodDetailRevisionActor: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  publicFoodDetailRevisionTime: {
+    marginLeft: 'auto',
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  publicFoodDetailRevisionSummary: {
+    marginTop: 6,
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  publicFoodDetailRevisionReason: {
+    marginTop: 4,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  publicFoodDetailRevisionEmpty: {
+    paddingVertical: 10,
+    color: colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
   },
 })

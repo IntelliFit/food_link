@@ -2731,21 +2731,7 @@ export function CampusCanteenScreen() {
     })
   }
 
-  const goUpload = async () => {
-    try {
-      const membership = await apiClient.getMyMembership()
-      if (!membership?.is_pro) {
-        Alert.alert('分享校园菜品需开通会员', '校园食堂菜品分享、食堂绑定和申请新增食堂目前仅向食探会员开放。', [
-          { text: '暂不开通', style: 'cancel' },
-          { text: '查看会员方案', onPress: () => navigation.navigate('MembershipCenter') },
-        ])
-        return
-      }
-      navigation.navigate('PublicFoodShare', { mode: 'campus' })
-    } catch (error) {
-      showError('验证会员状态失败', error)
-    }
-  }
+  const goUpload = () => navigation.navigate('PublicFoodShare', { mode: 'campus' })
   const goDetail = (item: PublicFoodItem) => navigation.navigate('PublicFoodDetail', { itemId: item.id, isCampus: true })
   const goAuthor = (item: PublicFoodItem) => {
     if (item.author?.id) {
@@ -2972,6 +2958,14 @@ export function CampusCanteenScreen() {
 
       <Pressable style={styles.campusFabButton} onPress={goUpload}>
         <Text style={styles.campusFabIcon}>+</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="打开校园代理批量采集"
+        style={({ pressed }) => [styles.campusCollectorButton, pressed && { opacity: 0.72 }]}
+        onPress={() => navigation.navigate('CampusFoodCollector')}
+      >
+        <Text style={styles.campusCollectorButtonText}>批量采集</Text>
       </Pressable>
     </View>
   )
@@ -4494,7 +4488,7 @@ function campusPriceText(item: PublicFoodItem): string {
 
 function campusIsAnalyzing(item: PublicFoodItem): boolean {
   const status = normalizeCampusText(item.analysis_status)
-  return status === 'pending' || status === 'processing' || status === 'running'
+  return status === 'pending' || status === 'processing' || status === 'running' || status === 'stale'
 }
 
 function campusAnalysisFailed(item: PublicFoodItem): boolean {
@@ -7687,6 +7681,31 @@ const styles = StyleSheet.create({
     fontSize: 28,
     lineHeight: 30,
     fontWeight: '300',
+  },
+  campusCollectorButton: {
+    position: 'absolute',
+    right: 72,
+    bottom: 24,
+    minWidth: 96,
+    height: 48,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(92,184,150,0.45)',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    shadowColor: '#17543f',
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  campusCollectorButtonText: {
+    color: '#167355',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '800',
   },
   buttonRow: {
     flexDirection: 'row',

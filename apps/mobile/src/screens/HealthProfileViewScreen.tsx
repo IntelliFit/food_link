@@ -690,6 +690,7 @@ export function HealthProfileViewScreen() {
               <EditableRow label="既往病史" value={listLabel(medicalHistory, medicalLabel)} onPress={() => openEditor('medical_history', medicalHistory)} palette={palette} />
               <EditableRow label="饮食偏好" value={listLabel(dietPreference, dietPreferenceLabel)} onPress={() => openEditor('diet_preference', dietPreference)} palette={palette} />
               <EditableRow label="过敏源" value={listLabel(allergies, allergyLabel)} onPress={() => openEditor('allergies', allergies)} palette={palette} />
+              <EditableRow label="学生身份 / 校园就餐" value={profile.health_condition?.is_student === true ? ['学生', profile.health_condition.campus_dining_preference?.school_name || '未选择学校', profile.health_condition.campus_dining_preference?.campus_name].filter(Boolean).join(' · ') : profile.health_condition?.is_student === false ? '非学生' : '未设置'} onPress={() => navigation.navigate('CampusDiningSettings')} column palette={palette} />
               <EditableRow label="特殊情况和补充" value={String(profile.health_condition?.health_notes || '无')} onPress={() => openEditor('health_notes', profile.health_condition?.health_notes)} column palette={palette} />
             </InfoBlock>
 

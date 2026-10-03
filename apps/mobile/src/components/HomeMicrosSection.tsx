@@ -16,29 +16,10 @@ import type {
 } from '@food-link/core'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
-
-export type HomeMicronutrientKey =
-  | 'fiber'
-  | 'sugar'
-  | 'saturatedFat'
-  | 'cholesterolMg'
-  | 'sodiumMg'
-  | 'potassiumMg'
-  | 'calciumMg'
-  | 'ironMg'
-  | 'magnesiumMg'
-  | 'zincMg'
-  | 'vitaminARaeMcg'
-  | 'vitaminCMg'
-  | 'vitaminDMcg'
-  | 'vitaminEMg'
-  | 'vitaminKMcg'
-  | 'thiaminMg'
-  | 'riboflavinMg'
-  | 'niacinMg'
-  | 'vitaminB6Mg'
-  | 'folateMcg'
-  | 'vitaminB12Mcg'
+import {
+  MICRONUTRIENT_PREFERENCE_CONFIGS,
+  type HomeMicronutrientKey,
+} from '../utils/micronutrientPreferences'
 
 type MicronutrientCard = {
   key: HomeMicronutrientKey
@@ -53,35 +34,6 @@ type MicronutrientCard = {
 }
 
 type MicrosPalette = ReturnType<typeof createMicrosPalette>
-
-const MICRONUTRIENT_CONFIGS: Array<{
-  key: HomeMicronutrientKey
-  label: string
-  unit: string
-  accent: string
-}> = [
-  { key: 'fiber', label: '膳食纤维', unit: 'g', accent: '#5dbb8a' },
-  { key: 'sugar', label: '糖', unit: 'g', accent: '#e88cb8' },
-  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g', accent: '#d4a373' },
-  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg', accent: '#bc8f8f' },
-  { key: 'sodiumMg', label: '钠', unit: 'mg', accent: '#ef8b73' },
-  { key: 'potassiumMg', label: '钾', unit: 'mg', accent: '#57a99a' },
-  { key: 'calciumMg', label: '钙', unit: 'mg', accent: '#6aa7d8' },
-  { key: 'ironMg', label: '铁', unit: 'mg', accent: '#d88d5a' },
-  { key: 'magnesiumMg', label: '镁', unit: 'mg', accent: '#7eb8da' },
-  { key: 'zincMg', label: '锌', unit: 'mg', accent: '#a8a4ce' },
-  { key: 'vitaminARaeMcg', label: '维A', unit: 'mcg', accent: '#e0a14a' },
-  { key: 'vitaminCMg', label: '维C', unit: 'mg', accent: '#71c16f' },
-  { key: 'vitaminDMcg', label: '维D', unit: 'mcg', accent: '#8a7be0' },
-  { key: 'vitaminEMg', label: '维E', unit: 'mg', accent: '#c0a46e' },
-  { key: 'vitaminKMcg', label: '维K', unit: 'mcg', accent: '#8fbc8f' },
-  { key: 'thiaminMg', label: '维B1', unit: 'mg', accent: '#d4a5a5' },
-  { key: 'riboflavinMg', label: '维B2', unit: 'mg', accent: '#9fb4cc' },
-  { key: 'niacinMg', label: '烟酸', unit: 'mg', accent: '#b8a9c9' },
-  { key: 'vitaminB6Mg', label: '维B6', unit: 'mg', accent: '#a3c4a3' },
-  { key: 'folateMcg', label: '叶酸', unit: 'mcg', accent: '#d8b4a0' },
-  { key: 'vitaminB12Mcg', label: '维B12', unit: 'mcg', accent: '#9ecae1' },
-]
 
 function clampPercentage(value: number): number {
   if (!Number.isFinite(value)) return 0
@@ -141,12 +93,20 @@ function formatMicronutrientValue(value: number): string {
   return formatDisplayNumber(rounded)
 }
 
-function useMicronutrients(intakeData: HomeDashboard['intakeData'] | undefined) {
+function useMicronutrients(
+  intakeData: HomeDashboard['intakeData'] | undefined,
+  hiddenMicronutrientKeys: readonly HomeMicronutrientKey[],
+) {
   return useMemo<MicronutrientCard[]>(() => (
-    MICRONUTRIENT_CONFIGS.map((item) => {
-      const parsed = parseMicronutrientValue(intakeData?.micros?.[item.key])
+    MICRONUTRIENT_PREFERENCE_CONFIGS
+      .filter((item) => !hiddenMicronutrientKeys.includes(item.nutrientKey))
+      .map((item) => {
+      const parsed = parseMicronutrientValue(intakeData?.micros?.[item.nutrientKey])
       return {
-        ...item,
+        key: item.nutrientKey,
+        label: item.label,
+        unit: item.unit,
+        accent: item.accent,
         current: parsed.current,
         foodCurrent: parsed.foodCurrent,
         supplementCurrent: parsed.supplementCurrent,
@@ -154,7 +114,7 @@ function useMicronutrients(intakeData: HomeDashboard['intakeData'] | undefined) 
         progress: parsed.progress,
       }
     })
-  ), [intakeData?.micros])
+  ), [hiddenMicronutrientKeys, intakeData?.micros])
 }
 
 function createMicrosPalette(isDark: boolean) {
@@ -232,6 +192,8 @@ export interface HomeMicrosSectionProps {
   isGuest?: boolean
   supplementSummary?: SupplementDashboardSummary | null
   reduceMotion?: boolean
+  hiddenMicronutrientKeys?: HomeMicronutrientKey[]
+  onManageMicronutrients?: () => void
 }
 
 export function HomeMicrosSection({
@@ -240,12 +202,14 @@ export function HomeMicrosSection({
   isGuest = false,
   supplementSummary,
   reduceMotion = false,
+  hiddenMicronutrientKeys = [],
+  onManageMicronutrients,
 }: HomeMicrosSectionProps) {
   const { isDark } = useColorScheme()
   const insets = useSafeAreaInsets()
   const palette = createMicrosPalette(isDark)
   const [sourceDetailKey, setSourceDetailKey] = useState<HomeMicronutrientKey | null>(null)
-  const micronutrients = useMicronutrients(intakeData)
+  const micronutrients = useMicronutrients(intakeData, hiddenMicronutrientKeys)
   const hasMicros = micronutrients.length > 0
   const sourceDetail = sourceDetailKey
     ? micronutrients.find((item) => item.key === sourceDetailKey) || null
@@ -270,16 +234,32 @@ export function HomeMicrosSection({
         <View style={styles.copy}>
           <Text style={[styles.kicker, { color: palette.text }]}>微量营养</Text>
         </View>
-        <View style={[styles.status, { backgroundColor: palette.statusBackground }]}>
-          {dashboardBusy ? (
-            <ActivityIndicator size="small" color={palette.statusText} />
-          ) : (
-            <Text style={[styles.statusText, { color: palette.statusText }]}>{statusText}</Text>
-          )}
+        <View style={styles.headActions}>
+          <View style={[styles.status, { backgroundColor: palette.statusBackground }]}>
+            {dashboardBusy ? (
+              <ActivityIndicator size="small" color={palette.statusText} />
+            ) : (
+              <Text style={[styles.statusText, { color: palette.statusText }]}>{statusText}</Text>
+            )}
+          </View>
+          {onManageMicronutrients ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="管理首页微量营养"
+              onPress={onManageMicronutrients}
+              style={({ pressed }) => [
+                styles.manageButton,
+                { backgroundColor: palette.statusBackground, borderColor: palette.statusText + '47' },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={[styles.manageButtonText, { color: palette.statusText }]}>管理</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
-      <View style={styles.legend} accessibilityLabel="进度条颜色：绿色代表食物，蓝色代表补剂">
+      {hasMicros ? <View style={styles.legend} accessibilityLabel="进度条颜色：绿色代表食物，蓝色代表补剂">
         <View style={styles.legendItem}>
           <View style={[styles.sourceDot, styles.foodSource]} />
           <Text style={[styles.legendText, { color: palette.textMuted }]}>食物</Text>
@@ -288,11 +268,11 @@ export function HomeMicrosSection({
           <View style={[styles.sourceDot, styles.supplementSource]} />
           <Text style={[styles.legendText, { color: palette.textMuted }]}>补剂</Text>
         </View>
-      </View>
+      </View> : null}
 
       {dashboardBusy ? (
         <View style={styles.grid}>
-          {MICRONUTRIENT_CONFIGS.map((item) => (
+          {micronutrients.map((item) => (
             <View
               key={item.key}
               style={[
@@ -401,7 +381,9 @@ export function HomeMicrosSection({
       ) : (
         <View style={styles.empty}>
           <Text style={[styles.emptyText, { color: palette.textMuted }]}>
-            {isGuest ? '登录后显示微量营养' : '记录饮食后显示微量营养'}
+            {hiddenMicronutrientKeys.length === MICRONUTRIENT_PREFERENCE_CONFIGS.length
+              ? '已隐藏全部微量元素，点击“管理”可添加回来'
+              : isGuest ? '登录后显示微量营养' : '记录饮食后显示微量营养'}
           </Text>
         </View>
       )}
@@ -553,6 +535,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  headActions: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   kicker: {
     fontSize: 12,
     lineHeight: 16,
@@ -572,6 +560,20 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 12,
     fontWeight: '700',
+  },
+  manageButton: {
+    minWidth: 44,
+    minHeight: 28,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  manageButtonText: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '800',
   },
   legend: {
     minHeight: 24,

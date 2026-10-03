@@ -24,6 +24,13 @@ jwt:
   access_token_ttl_seconds: 3153600000
   refresh_token_ttl_seconds: 3153600000
 
+# Run cmd/migration on the explicitly confirmed target database before enabling.
+# FCM/APNs credentials remain in Expo, never in the mobile bundle or this repository.
+push:
+  enabled: false
+  expo_project_id: "454db191-c9ba-42f1-a486-f42535774c3b"
+  expo_access_token: "" # Server-only; set via private config if Expo enhanced security is enabled.
+
 otel:
   enabled: false
   traces_enabled: true

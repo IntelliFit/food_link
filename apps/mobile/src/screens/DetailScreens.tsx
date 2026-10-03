@@ -4587,6 +4587,9 @@ export function HealthProfileScreen() {
       case 'notes':
         return (
           <>
+            <Pressable style={styles.healthProfileInputCard} accessibilityRole="button" onPress={() => navigation.navigate('CampusDiningSettings')}>
+              <Text style={{ color: colors.brand }}>设置学生身份与校园就餐偏好</Text>
+            </Pressable>
             <HealthProfileStepHeader title="补充信息" subtitle="有其他特殊情况需要补充吗？（选填）" />
             <View style={[styles.healthProfileInputCard, isDark && healthProfileDarkStyles.inputCardSurface]}>
               <TextInput

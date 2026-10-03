@@ -73,6 +73,13 @@ function formatAmount(value: number): string {
   if (!Number.isFinite(value)) return '0'
   return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(3)))
 }
+function formatSupplementDose(defaultServings: number, servingLabel: string): string {
+  const servings = Number(defaultServings)
+  const normalizedServings = Number.isFinite(servings) && servings > 0 ? servings : 1
+  const normalizedLabel = servingLabel.trim() || '1份'
+  if (normalizedServings === 1) return normalizedLabel
+  return `${Number(normalizedServings.toFixed(3))} × ${normalizedLabel}`
+}
 function catalogSummary(item: SupplementCatalogItem): string {
   return (item.components || []).slice(0, 3)
     .map((component) => `${component.name} ${formatAmount(component.amount)}${component.unit}`).join(' · ')
@@ -144,7 +151,7 @@ export function TodaySupplementsCard({ summary, embedded = false }: { summary?: 
         <View style={[styles.todayPending, { backgroundColor: palette.cardSoft }]}>
           <View style={[styles.todayPill, { backgroundColor: palette.card }]}><Pill size={20} color={palette.brand} /></View>
           <View style={styles.todayCopy}>
-            <Text style={[styles.todayName, { color: palette.text }]} numberOfLines={1}>{pending.name} · {pending.serving_label}</Text>
+            <Text style={[styles.todayName, { color: palette.text }]} numberOfLines={1}>{pending.name} · 每次 {formatSupplementDose(pending.default_servings, pending.serving_label)}</Text>
             <Text style={[styles.todayMeta, { color: palette.textSecondary }]}>{scheduleText(pending)}</Text>
           </View>
           <Pressable
@@ -306,7 +313,7 @@ export function SupplementsScreen() {
                   <View style={[styles.bottleIcon, { backgroundColor: palette.brandSoft }]}><Pill size={24} color={palette.brand} /></View>
                   <View style={styles.supplementCopy}>
                     <Text style={[styles.supplementName, { color: palette.text }]}>{item.name}</Text>
-                    <Text style={[styles.supplementMeta, { color: palette.textSecondary }]}>{item.serving_label} · {scheduleText(item)}</Text>
+                    <Text style={[styles.supplementMeta, { color: palette.textSecondary }]}>每次 {formatSupplementDose(item.default_servings, item.serving_label)} · {scheduleText(item)} · 可调整</Text>
                     <Text style={[styles.supplementComponents, { color: palette.textMuted }]} numberOfLines={1}>
                       {item.components.slice(0, 3).map((component) => component.name).join(' · ') || '待补充成分'}
                     </Text>
@@ -338,7 +345,7 @@ export function SupplementsScreen() {
               <View style={styles.historyCopy}>
                 <Text style={[styles.supplementName, { color: palette.text }]}>{item.supplement_name}</Text>
                 <Text style={[styles.supplementMeta, { color: palette.textSecondary }]}>
-                  {formatAmount(item.servings)} × {item.serving_label} · {new Date(item.taken_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                  {formatSupplementDose(item.servings, item.serving_label)} · {new Date(item.taken_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               </View>
               <Pressable accessibilityRole="button" accessibilityLabel={`删除${item.supplement_name}记录`} onPress={() => removeIntake(item.id)} style={({ pressed }) => [styles.deleteButton, { backgroundColor: palette.dangerSoft }, pressed && styles.pressed]}>
@@ -449,6 +456,7 @@ export function SupplementEditScreen() {
   const [name, setName] = useState('')
   const [brand, setBrand] = useState('')
   const [servingLabel, setServingLabel] = useState('1粒')
+  const [defaultServings, setDefaultServings] = useState('1')
   const [scheduleEnabled, setScheduleEnabled] = useState(true)
   const [scheduleTime, setScheduleTime] = useState('08:00')
   const [components, setComponents] = useState<SupplementComponent[]>([emptyComponent()])
@@ -470,6 +478,7 @@ export function SupplementEditScreen() {
         setName(item.name)
         setBrand(item.brand || '')
         setServingLabel(item.serving_label || '1份')
+        setDefaultServings(String(item.default_servings > 0 ? item.default_servings : 1))
         setScheduleEnabled(item.schedule_enabled)
         setScheduleTime(item.schedule_time || '08:00')
         setComponents(item.components?.length ? item.components.map((component) => ({ ...component })) : [emptyComponent()])
@@ -490,6 +499,7 @@ export function SupplementEditScreen() {
     setName(item.name)
     setBrand(item.brand || '')
     setServingLabel(item.serving_label || '1份')
+    setDefaultServings('1')
     setComponents((item.components || []).map((component) => ({ ...component })))
     setImages(item.image_url ? [{ uri: item.image_url, remoteUrl: item.image_url }] : [])
     setOcrHint('已从公共补剂库预填，请按照自己的瓶身标签核对含量。')
@@ -582,6 +592,11 @@ export function SupplementEditScreen() {
       Alert.alert('计划时间格式不正确', '请使用 24 小时格式，例如 08:00。')
       return
     }
+    const normalizedDefaultServings = Number(defaultServings)
+    if (!Number.isFinite(normalizedDefaultServings) || normalizedDefaultServings <= 0 || normalizedDefaultServings > 100) {
+      Alert.alert('请填写有效的服用份数', '每次服用份数应大于 0 且不超过 100。')
+      return
+    }
     const normalized = components
       .filter((item) => item.name.trim() && Number(item.amount) > 0 && item.unit.trim())
       .map((item) => ({
@@ -596,7 +611,7 @@ export function SupplementEditScreen() {
       return
     }
     if (!confirmed) {
-      Alert.alert('请先核对标签成分', '确认名称、一次用量和全部成分无误后，再勾选核对项。')
+      Alert.alert('请先核对标签成分', '确认名称、标签每份用量、计划剂量和全部成分无误后，再勾选核对项。')
       return
     }
     setSaving(true)
@@ -607,7 +622,7 @@ export function SupplementEditScreen() {
         brand: brand.trim(),
         image_url: imageUrls[0] || null,
         image_urls: imageUrls,
-        default_servings: 1,
+        default_servings: normalizedDefaultServings,
         serving_label: servingLabel.trim() || '1份',
         schedule_enabled: scheduleEnabled,
         schedule_time: scheduleEnabled ? scheduleTime.trim() : null,
@@ -706,7 +721,7 @@ export function SupplementEditScreen() {
               style={[styles.input, { color: palette.text, backgroundColor: palette.input, borderColor: palette.border }]}
             />
           </FormField>
-          <FormField label="一次用量" palette={palette}>
+          <FormField label="标签每份" palette={palette}>
             <TextInput
               value={servingLabel}
               onChangeText={(value) => { setServingLabel(value); setConfirmed(false) }}
@@ -715,6 +730,21 @@ export function SupplementEditScreen() {
               style={[styles.input, { color: palette.text, backgroundColor: palette.input, borderColor: palette.border }]}
             />
           </FormField>
+          <FormField label="每次服用" palette={palette}>
+            <View style={styles.doseInputRow}>
+              <TextInput
+                value={defaultServings}
+                onChangeText={(value) => { setDefaultServings(value); setConfirmed(false) }}
+                placeholder="如：0.5 / 1 / 2"
+                placeholderTextColor={palette.textMuted}
+                keyboardType="decimal-pad"
+                style={[styles.doseInput, { color: palette.text, backgroundColor: palette.input, borderColor: palette.border }]}
+                accessibilityLabel="每次服用份数"
+              />
+              <Text style={[styles.doseUnit, { color: palette.textSecondary }]}>份</Text>
+            </View>
+          </FormField>
+          <Text style={[styles.dosePreview, { color: palette.brand, backgroundColor: palette.brandSoft }]}>快速记录将按每次 {Number(defaultServings) > 0 ? formatSupplementDose(Number(defaultServings), servingLabel) : '—'} 计入营养统计</Text>
         </Section>
 
         <Section palette={palette}>
@@ -843,7 +873,7 @@ export function SupplementEditScreen() {
           <View style={[styles.confirmBox, { borderColor: confirmed ? palette.brand : palette.textMuted, backgroundColor: confirmed ? palette.brand : 'transparent' }]}>
             {confirmed ? <Check size={17} color="#fff" strokeWidth={3} /> : null}
           </View>
-          <Text style={[styles.confirmText, { color: palette.text }]}>我已核对名称、每次用量和全部标签成分</Text>
+          <Text style={[styles.confirmText, { color: palette.text }]}>我已核对名称、标签每份用量、计划剂量和全部标签成分</Text>
         </Pressable>
         <Text style={[styles.disclaimer, { color: palette.textMuted }]}>本功能仅用于营养与成分记录，不提供诊断、处方或停药建议。</Text>
       </ScrollView>
@@ -1050,6 +1080,10 @@ const styles = StyleSheet.create({
   field: { gap: 7 },
   fieldLabel: { fontSize: 13, fontWeight: '700' },
   input: { minHeight: 50, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingHorizontal: 13, fontSize: 15 },
+  doseInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  doseInput: { flex: 1, minHeight: 50, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingHorizontal: 13, fontSize: 15 },
+  doseUnit: { width: 28, fontSize: 14, fontWeight: '800' },
+  dosePreview: { overflow: 'hidden', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, fontSize: 12, lineHeight: 18, fontWeight: '700' },
   switchRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 12 },
   switchCopy: { flex: 1, minHeight: 58, justifyContent: 'center', gap: 5 },
   timeInputWrap: { minHeight: 50, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, paddingHorizontal: 13, flexDirection: 'row', alignItems: 'center', gap: 9 },
