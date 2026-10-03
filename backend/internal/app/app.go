@@ -656,6 +656,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Community routes
 	engine.GET("/api/community/public-feed", authmw.OptionalJWT(jwtSvc), communityHandler.PublicFeed)
 	engine.GET("/api/community/feed", authmw.RequireJWT(jwtSvc), communityHandler.Feed)
+	engine.GET("/api/community/comments/mine", authmw.RequireJWT(jwtSvc), communityHandler.OwnComments)
 	engine.GET("/api/community/checkin-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.CheckinLeaderboard)
 	engine.GET("/api/community/health-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.HealthLeaderboard)
 	engine.GET("/api/community/food-nutrient-leaderboard", authmw.OptionalJWT(jwtSvc), communityHandler.FoodNutrientLeaderboard)

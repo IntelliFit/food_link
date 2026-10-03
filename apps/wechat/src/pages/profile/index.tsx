@@ -265,6 +265,13 @@ function ProfilePage() {
 
   const services = [
     {
+      id: 13,
+      iconClass: 'icon-pinglun',
+      title: '我的评论',
+      desc: '查看自己发出的评论与回复',
+      path: extraPkgUrl('/pages/comment-history/index')
+    },
+    {
       id: 0,
       iconClass: 'icon-shentinianling',
       title: '健康档案',
@@ -340,7 +347,7 @@ function ProfilePage() {
   const quickServices = services.filter(service => [5, 9, 0, 4].includes(service.id))
     .sort((a, b) => [5, 9, 0, 4].indexOf(a.id) - [5, 9, 0, 4].indexOf(b.id))
   const serviceGroups = [
-    { title: '记录与奖励', items: services.filter(service => [2, 6, 12].includes(service.id)) },
+    { title: '记录与奖励', items: services.filter(service => [13, 2, 6, 12].includes(service.id)) },
     { title: '帮助与邀请', items: services.filter(service => [11, 8, 10].includes(service.id)) },
   ]
 

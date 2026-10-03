@@ -48,6 +48,7 @@ const extraSubpackagePages = [
   'pages/standard-food-contribution/index',
   'pages/my-vouchers/index',
   'pages/interaction-notifications/index',
+  'pages/comment-history/index',
   'pages/interaction-feed-detail/index',
   'pages/circle-post-edit/index',
   'pages/location-search/index',

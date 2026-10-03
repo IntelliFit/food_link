@@ -4464,6 +4464,28 @@ export async function deleteSupplement(itemId: string): Promise<void> {
   }
 }
 
+export type OwnCommentHistoryItem = {
+  id: string
+  content: string
+  created_at: string | null
+  parent_comment_id?: string
+  target_type: string
+  target_id: string
+  target_available: boolean
+  target_preview?: string
+}
+
+export async function communityGetOwnComments(cursor = ''): Promise<{
+  list: OwnCommentHistoryItem[]; has_more: boolean; next_cursor?: string
+}> {
+  const query = `limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+  const res = await authenticatedRequest(`/api/community/comments/mine?${query}`, { method: 'GET', timeout: 15000 })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '获取评论历史失败')
+  }
+  return unwrapResponse(res)
+}
+
 export async function getPetSummary(date?: string): Promise<PetSummary> {
   const apiDate = mapCalendarDateToApi(date)
   const query = apiDate ? `?date=${encodeURIComponent(apiDate)}` : ''
