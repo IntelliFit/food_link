@@ -562,6 +562,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/supplements/label/recognize", authmw.RequireJWT(jwtSvc), supplementHandler.RecognizeLabel)
 	engine.POST("/api/supplements", authmw.RequireJWT(jwtSvc), supplementHandler.Create)
 	engine.PUT("/api/supplements/:item_id", authmw.RequireJWT(jwtSvc), supplementHandler.Update)
+	engine.DELETE("/api/supplements/:item_id", authmw.RequireJWT(jwtSvc), supplementHandler.Delete)
 	engine.GET("/api/supplements/dashboard", authmw.RequireJWT(jwtSvc), supplementHandler.Dashboard)
 	engine.POST("/api/supplements/:item_id/intakes", authmw.RequireJWT(jwtSvc), supplementHandler.Record)
 	engine.DELETE("/api/supplement-intakes/:intake_id", authmw.RequireJWT(jwtSvc), supplementHandler.DeleteIntake)

@@ -4454,6 +4454,15 @@ export async function deleteSupplementIntake(intakeId: string): Promise<void> {
   }
 }
 
+export async function deleteSupplement(itemId: string): Promise<void> {
+  const res = await authenticatedRequest(`/api/supplements/${encodeURIComponent(itemId)}`, {
+    method: 'DELETE', timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '移除补剂失败')
+  }
+}
+
 export async function getPetSummary(date?: string): Promise<PetSummary> {
   const apiDate = mapCalendarDateToApi(date)
   const query = apiDate ? `?date=${encodeURIComponent(apiDate)}` : ''

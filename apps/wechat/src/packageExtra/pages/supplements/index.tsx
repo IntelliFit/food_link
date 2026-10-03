@@ -1,7 +1,8 @@
 import { ScrollView, Text, View } from '@tarojs/components'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
+  deleteSupplement,
   deleteSupplementIntake,
   getSupplementDashboard,
   recordSupplementIntake,
@@ -34,7 +35,9 @@ export default function SupplementsPage() {
   const [tab, setTab] = useState<Tab>('cabinet')
   const [loading, setLoading] = useState(true)
   const [recordingId, setRecordingId] = useState('')
+  const [deletingId, setDeletingId] = useState('')
   const [dashboard, setDashboard] = useState<SupplementDashboard | null>(null)
+  const cabinetMutationBusyRef = useRef(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,12 +61,14 @@ export default function SupplementsPage() {
   )
 
   const openEditor = (itemId?: string) => {
+    if (cabinetMutationBusyRef.current) return
     const path = extraPkgUrl('/pages/supplement-edit/index')
     Taro.navigateTo({ url: itemId ? `${path}?id=${encodeURIComponent(itemId)}` : path })
   }
 
   const record = async (item: UserSupplement) => {
-    if (recordingId) return
+    if (cabinetMutationBusyRef.current) return
+    cabinetMutationBusyRef.current = true
     setRecordingId(item.id)
     try {
       await recordSupplementIntake(item.id, {
@@ -77,6 +82,7 @@ export default function SupplementsPage() {
     } catch (error) {
       await showUnifiedApiError(error, '记录失败')
     } finally {
+      cabinetMutationBusyRef.current = false
       setRecordingId('')
     }
   }
@@ -90,6 +96,29 @@ export default function SupplementsPage() {
       await load()
     } catch (error) {
       await showUnifiedApiError(error, '删除失败')
+    }
+  }
+
+  const removeSupplement = async (item: UserSupplement) => {
+    if (cabinetMutationBusyRef.current) return
+    cabinetMutationBusyRef.current = true
+    setDeletingId(item.id)
+    try {
+      const result = await Taro.showModal({
+        title: '删除补剂',
+        content: `从补剂柜移除「${item.name}」并停止它的计划？已记录的摄入和营养统计会保留。`,
+        confirmText: '删除', confirmColor: '#bd5a5a',
+      })
+      if (!result.confirm) return
+      await deleteSupplement(item.id)
+      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, { date: todayKey(), force: true })
+      await load()
+      Taro.showToast({ title: '已删除', icon: 'success' })
+    } catch (error) {
+      await showUnifiedApiError(error, '删除补剂失败')
+    } finally {
+      cabinetMutationBusyRef.current = false
+      setDeletingId('')
     }
   }
 
@@ -145,8 +174,13 @@ export default function SupplementsPage() {
                         <Text className='supplement-components'>{item.components.slice(0, 3).map((c) => c.name).join(' · ') || '待补充成分'}</Text>
                       </View>
                     </View>
+                    <View className='supplement-card-actions'>
                     <View className={`supplement-log${completed ? ' is-completed' : ''}${recordingId === item.id ? ' is-busy' : ''}`} onClick={() => { if (!completed) void record(item) }}>
-                      <Text>{completed ? '今日已记' : recordingId === item.id ? '记录中' : '记录一次'}</Text>
+                      {recordingId === item.id ? <View className='supplement-delete-spinner' /> : <Text>{completed ? '今日已记' : '记录一次'}</Text>}
+                    </View>
+                    <View className='supplement-delete' onClick={() => void removeSupplement(item)}>
+                      {deletingId === item.id ? <View className='supplement-delete-spinner' /> : <Text>删除</Text>}
+                    </View>
                     </View>
                   </View>
                 )

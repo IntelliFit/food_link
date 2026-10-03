@@ -30,6 +30,10 @@ type SupplementService interface {
 
 type SupplementHandler struct{ svc SupplementService }
 
+type supplementDeletionService interface {
+	Delete(context.Context, string, string) error
+}
+
 func NewSupplementHandler(svc SupplementService) *SupplementHandler {
 	return &SupplementHandler{svc: svc}
 }
@@ -183,6 +187,22 @@ func (h *SupplementHandler) DeleteIntake(c *gin.Context) {
 	}
 	logger.Info(c.Request.Context(), "删除补剂摄入完成", slog.String("user_id", userID), slog.String("intake_id", c.Param("intake_id")))
 	response.Success(c, gin.H{"message": "记录已删除"})
+}
+
+func (h *SupplementHandler) Delete(c *gin.Context) {
+	userID, itemID := c.GetString(authmw.ContextUserIDKey), c.Param("item_id")
+	logger.Info(c.Request.Context(), "收到移除补剂柜条目请求", slog.String("user_id", userID), slog.String("supplement_id", itemID))
+	svc, ok := h.svc.(supplementDeletionService)
+	if !ok {
+		response.Error(c, commonerrors.ErrInternal)
+		return
+	}
+	if err := svc.Delete(c.Request.Context(), userID, itemID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "移除补剂柜条目完成", slog.String("user_id", userID), slog.String("supplement_id", itemID))
+	response.Success(c, gin.H{"message": "补剂已移除，摄入历史已保留"})
 }
 
 func toUpsertInput(body supplementBody) service.UpsertInput {

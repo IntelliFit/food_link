@@ -1,6 +1,6 @@
 import { Image, Input, Picker, ScrollView, Switch, Text, View } from '@tarojs/components'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   compressImagePathForUpload,
   createSupplement,
@@ -56,6 +56,8 @@ export default function SupplementEditPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [initializing, setInitializing] = useState(Boolean(itemId))
+  const recognitionBusyRef = useRef(false)
+  const saveBusyRef = useRef(false)
 
   useEffect(() => {
     if (!itemId) return
@@ -143,7 +145,8 @@ export default function SupplementEditPage() {
   }
 
   const recognizeLabel = async () => {
-    if (recognizing) return
+    if (recognitionBusyRef.current || saveBusyRef.current) return
+    recognitionBusyRef.current = true
     try {
       const localPaths = await chooseLabelLocalPaths()
       if (!localPaths.length) return
@@ -171,6 +174,7 @@ export default function SupplementEditPage() {
         await showUnifiedApiError(error, '标签识别失败')
       }
     } finally {
+      recognitionBusyRef.current = false
       setRecognizing(false)
     }
   }
@@ -198,7 +202,7 @@ export default function SupplementEditPage() {
   }
 
   const save = async () => {
-    if (saving) return
+    if (saveBusyRef.current || recognitionBusyRef.current) return
     setSaveError('')
     if (!name.trim()) {
       setSaveError('请填写补剂名称')
@@ -224,7 +228,9 @@ export default function SupplementEditPage() {
       Taro.showToast({ title: '请先确认标签成分', icon: 'none' })
       return
     }
+    saveBusyRef.current = true
     setSaving(true)
+    let saved = false
     try {
       const payload = {
         name: name.trim(), brand: brand.trim(), image_url: imageUrl || null, image_urls: labelImageUrls,
@@ -234,6 +240,7 @@ export default function SupplementEditPage() {
       }
       if (itemId) await updateSupplement(itemId, payload)
       else await createSupplement(payload)
+      saved = true
       Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
       Taro.showToast({ title: '已保存', icon: 'success' })
       setTimeout(() => Taro.navigateBack(), 450)
@@ -241,7 +248,10 @@ export default function SupplementEditPage() {
       setSaveError(sanitizeUserFacingErrorMessage((error as Error)?.message, '保存失败，请稍后重试'))
       await showUnifiedApiError(error, '保存失败')
     } finally {
-      setSaving(false)
+      if (!saved) {
+        saveBusyRef.current = false
+        setSaving(false)
+      }
     }
   }
 
@@ -260,7 +270,7 @@ export default function SupplementEditPage() {
                 </View>
                 <View className='supplement-capture-actions'>
                   {!itemId && <View className='supplement-capture-action primary' onClick={openCatalog}><Text>从补剂库选择</Text></View>}
-                  <View className={`supplement-capture-action${itemId ? ' primary' : ''}${recognizing ? ' is-busy' : ''}`} onClick={() => void recognizeLabel()}><Text>{recognizing ? '识别中' : labelImageUrls.length ? '重新拍/选标签' : '拍标签添加'}</Text></View>
+                  <View className={`supplement-capture-action${itemId ? ' primary' : ''}${recognizing ? ' is-busy' : ''}`} onClick={() => void recognizeLabel()}>{recognizing ? <View className='supplement-edit-spinner' /> : <Text>{labelImageUrls.length ? '重新拍/选标签' : '拍标签添加'}</Text>}</View>
                 </View>
                 {!!labelImageUrls.length && (
                   <View className='supplement-label-thumbs'>
