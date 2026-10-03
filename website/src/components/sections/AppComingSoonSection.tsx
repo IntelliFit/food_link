@@ -12,10 +12,11 @@ export function AppComingSoonSection() {
     stable: stable.manifest,
     beta: beta.manifest,
   }
-  const stableApk = stable.manifest?.artifacts?.apk
-  const resolvedVersion = stable.manifest?.version ?? appDownload.version
-  const resolvedBuild = stable.manifest?.buildNumber ?? appDownload.build
-  const releaseManifestHref = stable.manifest?.releaseManifestUrl ?? stable.manifest?.url
+  const primaryManifest = manifests[appDownload.primaryChannel]
+  const primaryApk = primaryManifest?.artifacts?.apk
+  const resolvedVersion = primaryManifest?.version ?? appDownload.version
+  const resolvedBuild = primaryManifest?.buildNumber ?? appDownload.build
+  const releaseManifestHref = primaryManifest?.releaseManifestUrl ?? primaryManifest?.url
 
   const options = appDownload.options
     .map((option): AppDownloadOption | null => {
@@ -26,8 +27,8 @@ export function AppComingSoonSection() {
         return null
       }
 
-      const version = manifest?.version ?? appDownload.version
-      const build = manifest?.buildNumber ?? appDownload.build
+      const version = manifest?.version ?? appDownload.fallbackReleases[option.channel].version
+      const build = manifest?.buildNumber ?? appDownload.fallbackReleases[option.channel].build
 
       return {
         ...option,
@@ -39,6 +40,7 @@ export function AppComingSoonSection() {
       }
     })
     .filter((option): option is AppDownloadOption => Boolean(option))
+    .sort((a, b) => Number(Boolean(b.primary)) - Number(Boolean(a.primary)))
 
   return (
     <section id="app-soon" className="scroll-mt-header border-t border-border bg-muted/50 py-12 md:py-24">
@@ -61,9 +63,9 @@ export function AppComingSoonSection() {
             <span className="rounded-full border border-border bg-background px-3 py-1">
               build {resolvedBuild}
             </span>
-            {stableApk?.sha256 ? (
+            {primaryApk?.sha256 ? (
               <span className="rounded-full border border-border bg-background px-3 py-1">
-                SHA256 {stableApk.sha256.slice(0, 8)}
+                SHA256 {primaryApk.sha256.slice(0, 8)}
               </span>
             ) : null}
             <span className="rounded-full border border-border bg-background px-3 py-1">
