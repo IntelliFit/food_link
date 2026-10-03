@@ -533,18 +533,24 @@
   &.is-far { opacity: .8; animation-delay: -650ms; }
 }
 .pet-assistant-rider-limbs.is-jianwen .pet-assistant-rider-leg { background: #676b72; border-color: #4d5158; }
-// Full-body riding frames already contain the hands and bent legs. The crank
-// advances through the same four 200 ms phases as the character's pedal cycle.
+// The floating companion coasts in its own seated pose; no independent leg/crank loop.
 .pet-assistant--refined-motion .pet-assistant-float.has-ride-pose.pet-assistant-float--running,
 .pet-assistant--refined-motion .pet-assistant-float.has-ride-pose.pet-assistant-float--returning {
   .pet-assistant-traveler { left: -10rpx; top: 14rpx; width: 156rpx; height: 156rpx; transform: none; }
   .pet-assistant-facing { width: 156rpx; height: 156rpx; }
   .pet-assistant-look .pet-actor { width: 156rpx !important; height: 156rpx !important; }
-  .pet-assistant-ride__pedal { animation: pet-assistant-pedal-cycle 800ms step-end infinite; }
+  .pet-assistant-ride__pedal { animation: none; }
   .pet-assistant-ride__pedal-arm { transform: none; }
   .pet-assistant-ride__wheel { animation-duration: 400ms; }
 }
-@keyframes pet-assistant-pedal-cycle { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(90deg); } 50% { transform: rotate(180deg); } 75% { transform: rotate(270deg); } }
+.pet-assistant--refined-motion .pet-assistant-float .pet-assistant-ride--fitted {
+  top: 0; left: 0; width: 176rpx; height: 190rpx;
+  transform: none; animation: none;
+  .pet-assistant-ride__wheel { animation: pet-assistant-wheel-spin 400ms linear infinite; }
+  .pet-assistant-ride__pedal { animation: none; }
+  .pet-assistant-ride__grip, .pet-assistant-ride__footrest { position: absolute; z-index: 4; width: 22rpx; height: 4rpx; border-radius: 4rpx; background: #626b75; }
+  .pet-assistant-ride__footrest { width: 14rpx; }
+}
 @media (prefers-reduced-motion: reduce) {
   .pet-assistant--refined-motion .has-ride-pose .pet-assistant-ride__pedal,
   .pet-assistant--refined-motion .has-ride-pose .pet-assistant-ride__wheel { animation: none !important; }

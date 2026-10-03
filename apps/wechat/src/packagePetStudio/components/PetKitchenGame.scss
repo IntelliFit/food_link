@@ -94,8 +94,8 @@
   &__station-tip { display: none; }
   &__stations.is-two-zone { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 0; }
   &__stations.is-two-zone .is-prep { border-radius: 22rpx 0 0 22rpx; border-right: 2rpx dashed #b3c5a0; }
-  &__stations.is-two-zone .is-plate { order: 1; background: #e8efdd; border-radius: 0 22rpx 22rpx 0; }
-  &__stations.is-two-zone .is-cook { order: 2; margin-left: 10rpx; }
+  &__stations.is-two-zone .is-plate { background: #e8efdd; border-radius: 0 22rpx 22rpx 0; }
+  &__stations.is-two-zone .is-cook { margin-left: 10rpx; }
   &__prep-shelf { display: flex; align-items: center; flex-wrap: wrap; gap: 10rpx; padding: 8rpx 0; font-size: 26rpx; color: #6b8576; }
   &__prep-shelf .pet-kitchen__buffer { min-height: 84rpx; background: #eaf0e4; padding: 10rpx 14rpx; font-size: 26rpx; border: 2rpx solid #c6d5b9; }
   &__buffer-slot { display: flex; align-items: center; gap: 4rpx; }
@@ -158,6 +158,23 @@
   // Packed poses extend slightly beyond the actor box; keep feet and raised hands inside the clipped scene.
   &.is-round .pet-kitchen__scene { height: 220rpx; }
   &.is-round .pet-kitchen__scene-actor { width: 180rpx; height: 180rpx; bottom: 16rpx; }
+  &__service-strip { display: flex; align-items: center; justify-content: space-between; padding: 16rpx 12rpx; margin: 12rpx 0; border-radius: 20rpx; background: #eef2e8; }
+  &__service-strip > view { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 6rpx; font-size: 24rpx; color: #637a6e; }
+  &__service-strip > view > text:first-child { font-size: 26rpx; font-weight: 600; color: #294e43; }
+  &__service-strip > .is-current > text:first-child { color: #9b6628; }
+  &__service-arrow { color: #93a08a; font-size: 30rpx; }
+  &__stove { padding: 24rpx; border: 2rpx solid #e2d6b9; border-radius: 28rpx; background: #fffaf0; }
+  &__stove.is-perfect { border-color: #77a479; background: #edf5e6; }
+  &__stove.is-burnt { border-color: #c89879; background: #f9eee3; }
+  &__stove-heading { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+  &__stove-heading > view { display: flex; flex-direction: column; gap: 8rpx; }
+  &__stove-kicker { color: #827d65; font-size: 24rpx; }
+  &__stove-name { font-size: 34rpx; font-weight: 600; }
+  &__pot { font-size: 62rpx; }
+  &__stove .pet-kitchen__cook-meter { margin: 22rpx 0; }
+  &__stove .pet-kitchen__cook-track { height: 28rpx; }
+  &__stove .pet-kitchen__cook-labels { font-size: 22rpx; }
+  &__stove-tip { display: block; margin-top: 14rpx; text-align: center; font-size: 24rpx; line-height: 1.5; color: #6c806c; }
 }
 @keyframes kitchen-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .pet-kitchen__settlement-spinner { animation-duration: 2s; } }

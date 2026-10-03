@@ -15,6 +15,7 @@ export interface PetActorProps {
   pet?: Partial<PetProfile> | null; size?: number; action?: PetAction; active?: boolean
   followAppearance?: boolean; spriteOverride?: string; showStatus?: boolean
   scarf?: 'cozy-scarf' | 'explorer-scarf' | null
+  coasting?: boolean
 }
 
 /** A requested action never replaces the selected character with another character's frames. */
@@ -25,7 +26,7 @@ export function petActionCapabilities(pet?: Partial<PetProfile> | null, sprite?:
   return ['idle', ...(pet?.pixel_avatar_blink_url ? ['blink' as const] : []), ...(pet?.pixel_avatar_jump_url ? ['jump' as const] : [])]
 }
 
-export function PetActor({ pet, size = 96, action = 'idle', active = true, followAppearance = true, spriteOverride, showStatus = false, scarf }: PetActorProps) {
+export function PetActor({ pet, size = 96, action = 'idle', active = true, followAppearance = true, spriteOverride, showStatus = false, scarf, coasting }: PetActorProps) {
   const [, refresh] = useState(0)
   const [failedAtlas, setFailedAtlas] = useState('')
   useEffect(() => {
@@ -45,7 +46,7 @@ export function PetActor({ pet, size = 96, action = 'idle', active = true, follo
   const width = useAtlas ? size : sprite ? size * 160 / 208 : size
   const customFrame = pose === 'blink' ? pet?.pixel_avatar_blink_url : pose === 'jump' ? pet?.pixel_avatar_jump_url : undefined
   return <View className={`pet-actor pet-actor--${sprite === JIANWEN_COMPANION_SRC ? 'jianwen' : sprite ? 'original' : 'custom'} pet-actor--${pose}${useAtlas ? ' pet-actor--atlas' : ''}${active ? '' : ' pet-actor--paused'}`} style={{ width: `${width}px`, height: `${size}px` }} role='img' aria-label={`${pet?.name || '伙伴'}，${supported ? action : '原有形象'}`}>
-    {useAtlas ? <PetMotionAtlas key={atlas} src={atlas!} action={pose} active={active} onError={() => setFailedAtlas(atlas!)} /> : sprite ? <View className='pet-actor__frame'><Image className='pet-actor__sheet' src={sprite} mode='scaleToFill' /></View> : customFrame ? <Image className='pet-actor__custom' src={customFrame} mode='aspectFit' /> : <PetAvatar pet={pet} size={size} motion='static' active={active} />}
+    {useAtlas ? <PetMotionAtlas key={atlas} src={atlas!} action={pose} active={active} coasting={coasting} onError={() => setFailedAtlas(atlas!)} /> : sprite ? <View className='pet-actor__frame'><Image className='pet-actor__sheet' src={sprite} mode='scaleToFill' /></View> : customFrame ? <Image className='pet-actor__custom' src={customFrame} mode='aspectFit' /> : <PetAvatar pet={pet} size={size} motion='static' active={active} />}
     {sprite === ORIGINAL_COMPANION_SRC && clothing && pose !== 'ride' && pose !== 'jump' && <Image className='pet-actor__scarf' src={clothing === 'cozy-scarf' ? '/assets/pets/clothing/cozy-scarf.png' : '/assets/pets/clothing/explorer-scarf.png'} mode='aspectFit' />}
     {showStatus && !supported && <Text className='pet-actor__status'>这套形象暂未提供此动作</Text>}
     {showStatus && atlas === failedAtlas && <Text className='pet-actor__status'>动作图片暂不可用，保留原有形象</Text>}

@@ -52,6 +52,8 @@ test('manual docking leaves a working recall button and does not return automati
   const { container } = mount()
   fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
   expect(container.querySelector('.pet-motion-atlas')).toHaveClass('pet-motion-atlas--ride')
+  expect(container.querySelector('.pet-motion-atlas')).toHaveClass('is-coasting')
+  expect(container.querySelector('.pet-assistant-ride--fitted')).not.toBeNull()
   expect(container.querySelector('.pet-assistant-rider-limbs')).toBeNull()
   expect(container.querySelector('.pet-assistant-rider-arms')).toBeNull()
   advance(980)
@@ -71,4 +73,14 @@ test('wellness retains its existing movement cycle', () => {
   expect(container.querySelector('.pet-assistant--refined-motion')).toBeNull()
   advance(1200)
   expect(container.querySelector('#home-floating-pet')).toHaveClass('is-walking')
+})
+
+test('a photo with no measured seated anchors uses its own walk and no borrowed bicycle or limbs', () => {
+  const { container } = render(<FloatingPetAssistant pet={{ id: 'photo', name: '照片伙伴', pet_seed: 'photo', color: 'blue', shape: 'round', pattern: 'none', accessory: 'none', personality: 'gentle', level: 1, experience: 0, level_exp: 0, next_level_exp: 100, level_progress: 0, total_events: 0, avatar_type: 'pixel_self', pixel_avatar_url: 'photo.png', pixel_motion_version: 1, pixel_motion_atlas_url: 'photo-atlas.png' }} onChatOpenChange={jest.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  expect(container.querySelector('.pet-motion-atlas')).toHaveClass('pet-motion-atlas--walk')
+  expect(container.querySelector('.pet-motion-atlas__sheet')).toHaveAttribute('src', 'photo-atlas.png')
+  expect(container.querySelector('.pet-assistant-ride')).toBeNull()
+  expect(container.querySelector('.pet-assistant-rider-arms')).toBeNull()
+  expect(container.querySelector('.pet-assistant-rider-limbs')).toBeNull()
 })

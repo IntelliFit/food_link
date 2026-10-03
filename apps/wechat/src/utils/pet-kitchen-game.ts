@@ -29,6 +29,7 @@ export interface KitchenResult {
   collectibleIds?: string[]; recipesServed?: string[]; stoveIdleMs?: number
 }
 export interface KitchenGameState {
+  controlMode: 'manual' | 'tap'
   levelId: number; status: 'ready' | 'running' | 'paused' | 'finished'; elapsedMs: number; remainingMs: number
   selectedOrderId: string | null; selectedIngredients: string[]; orders: KitchenOrder[]
   stations: Record<KitchenStationId, KitchenStation>; score: number; combo: number; bestCombo: number
@@ -40,6 +41,7 @@ export type KitchenAction =
   | { type: 'start' | 'pause' | 'resume' | 'clear-ingredients' | 'prepare' | 'prepare-batch' | 'prepare-stock' }
   | { type: 'set-menu'; recipeIds: string[] }
   | { type: 'select-order'; orderId: string }
+  | { type: 'take-order'; orderId: string }
   | { type: 'toggle-ingredient'; ingredientId: string }
   | { type: 'move'; from: 'prep' | 'cook'; orderId?: string }
   | { type: 'heat'; value: number }
@@ -70,26 +72,26 @@ export const KITCHEN_RECIPES: KitchenRecipe[] = [
 ]
 
 export const KITCHEN_LEVELS: KitchenLevel[] = [
-  { id: 1, name: '迎客早餐', description: '煎蛋饭与暖汤；先开长工序，再照顾下一单。', recipeIds: ['egg-rice', 'greens-soup'], durationMs: 90000, targetServed: 4, targetScore: 480, orderIntervalMs: 14000, patienceMs: 36000, maxOrders: 3, mechanic: 'tutorial', collectibleId: 'breakfast-page', collectibleName: '早餐菜谱页', story: '隔壁的邻居第一次来到餐车，想带一份热早餐回家。', coolingWindowMs: 12000 },
-  { id: 2, name: '雨天热汤', description: '热菜出锅后只有短暂保温；别让成品等汤。', recipeIds: ['egg-rice', 'greens-soup', 'tofu-soup', 'egg-tofu'], durationMs: 90000, targetServed: 5, targetScore: 620, orderIntervalMs: 12000, patienceMs: 33000, maxOrders: 3, mechanic: 'warmth', collectibleId: 'rain-coaster', collectibleName: '雨滴杯垫', story: '雨棚下的客人搓着手，热汤最好最后出锅、马上端出。', coolingWindowMs: 2500 },
-  { id: 3, name: '双份野餐', description: '成对订单共享备餐，一次备两份但只能存两份。', recipeIds: ['veggie-rice', 'fish-rice', 'greens-soup'], durationMs: 90000, targetServed: 6, targetScore: 850, orderIntervalMs: 10000, patienceMs: 36000, maxOrders: 3, mechanic: 'shared', collectibleId: 'picnic-pattern', collectibleName: '野餐布纹样', story: '两位朋友约好去草地野餐，希望吃到同一道餐食。', coolingWindowMs: 8000 },
-  { id: 4, name: '午后烘焙', description: '烤菜占灶更久；趁等待把短订单备好。', recipeIds: ['chicken-bake', 'garden-bake', 'mushroom-egg', 'egg-tofu'], durationMs: 90000, targetServed: 6, targetScore: 950, orderIntervalMs: 9500, patienceMs: 42000, maxOrders: 3, mechanic: 'oven', collectibleId: 'little-oven', collectibleName: '小烤箱摆件', story: '第一份烤菜的香气引来客人，灶台别闲着。', coolingWindowMs: 8000 },
-  { id: 5, name: '灯下晚餐', description: '组合餐穿插简单单；按耐心决定稳连击或冲高分。', recipeIds: ['fish-soup', 'egg-tofu', 'tofu-rice', 'mushroom-egg'], durationMs: 90000, targetServed: 7, targetScore: 1150, orderIntervalMs: 9000, patienceMs: 34000, maxOrders: 3, mechanic: 'combination', collectibleId: 'table-lamp-material', collectibleName: '桌灯材料', story: '晚餐灯亮了：有客人慢慢等，也有客人赶着回家。', coolingWindowMs: 8000 },
+  { id: 1, name: '迎客早餐', description: '点订单开做，亮区起锅；先学会送好第一餐。', recipeIds: ['egg-rice', 'greens-soup'], durationMs: 90000, targetServed: 4, targetScore: 480, orderIntervalMs: 14000, patienceMs: 36000, maxOrders: 3, mechanic: 'tutorial', collectibleId: 'breakfast-page', collectibleName: '早餐菜谱页', story: '隔壁的邻居第一次来到餐车，想带一份热早餐回家。', coolingWindowMs: 12000 },
+  { id: 2, name: '雨天热汤', description: '雨棚来客更多，优先照顾耐心少的顾客。', recipeIds: ['egg-rice', 'greens-soup', 'tofu-soup', 'egg-tofu'], durationMs: 90000, targetServed: 5, targetScore: 620, orderIntervalMs: 12000, patienceMs: 33000, maxOrders: 3, mechanic: 'warmth', collectibleId: 'rain-coaster', collectibleName: '雨滴杯垫', story: '雨棚下的客人搓着手，热汤最好最后出锅、马上端出。', coolingWindowMs: 2500 },
+  { id: 3, name: '双份野餐', description: '同菜配对自动备两份，接好两锅保持连击。', recipeIds: ['veggie-rice', 'fish-rice', 'greens-soup'], durationMs: 90000, targetServed: 6, targetScore: 850, orderIntervalMs: 10000, patienceMs: 36000, maxOrders: 3, mechanic: 'shared', collectibleId: 'picnic-pattern', collectibleName: '野餐布纹样', story: '两位朋友约好去草地野餐，希望吃到同一道餐食。', coolingWindowMs: 8000 },
+  { id: 4, name: '午后烘焙', description: '烤菜占锅更久；等待时提前安排下一单。', recipeIds: ['chicken-bake', 'garden-bake', 'mushroom-egg', 'egg-tofu'], durationMs: 90000, targetServed: 6, targetScore: 950, orderIntervalMs: 9500, patienceMs: 42000, maxOrders: 3, mechanic: 'oven', collectibleId: 'little-oven', collectibleName: '小烤箱摆件', story: '第一份烤菜的香气引来客人，灶台别闲着。', coolingWindowMs: 8000 },
+  { id: 5, name: '灯下晚餐', description: '快慢订单交错；按耐心决定先照顾谁。', recipeIds: ['fish-soup', 'egg-tofu', 'tofu-rice', 'mushroom-egg'], durationMs: 90000, targetServed: 7, targetScore: 1150, orderIntervalMs: 9000, patienceMs: 34000, maxOrders: 3, mechanic: 'combination', collectibleId: 'table-lamp-material', collectibleName: '桌灯材料', story: '晚餐灯亮了：有客人慢慢等，也有客人赶着回家。', coolingWindowMs: 8000 },
   { id: 6, name: '小屋宴会', description: '自选三道游戏菜谱；分波次来客，安排好每一锅。', recipeIds: KITCHEN_RECIPES.map(recipe => recipe.id), durationMs: 90000, targetServed: 8, targetScore: 1400, orderIntervalMs: 8000, patienceMs: 34000, maxOrders: 3, mechanic: 'banquet', collectibleId: 'kitchen-sign', collectibleName: '餐车招牌', story: '朋友带着故事来到小屋，菜单由你决定。', coolingWindowMs: 8000 },
 ]
 
 const recipeFor = (id: string): KitchenRecipe => KITCHEN_RECIPES.find(recipe => recipe.id === id)!
 const levelFor = (id: number): KitchenLevel => KITCHEN_LEVELS.find(level => level.id === id) || KITCHEN_LEVELS[0]
 
-export function createKitchenGame(levelId = 1): KitchenGameState {
+export function createKitchenGame(levelId = 1, controlMode: KitchenGameState['controlMode'] = 'manual'): KitchenGameState {
   const level = levelFor(levelId)
   return {
-    levelId: level.id, status: 'ready', elapsedMs: 0, remainingMs: level.durationMs,
+    controlMode, levelId: level.id, status: 'ready', elapsedMs: 0, remainingMs: level.durationMs,
     selectedOrderId: null, selectedIngredients: [], orders: [],
     stations: { prep: { job: null }, cook: { job: null }, plate: { job: null } },
     score: 0, combo: 0, bestCombo: 0, served: 0, missed: 0, mistakes: 0, wasted: 0,
     nextOrderAtMs: level.orderIntervalMs, nextOrderNumber: 1,
-    feedback: { kind: 'info', message: '先选订单，按配方备餐；灶台忙时可以准备下一单。', sequence: 0 }, result: null,
+    feedback: { kind: 'info', message: controlMode === 'tap' ? '点订单开做，在火候亮区起锅；伙伴负责配菜和送餐。' : '先选订单，按配方备餐；灶台忙时可以准备下一单。', sequence: 0 }, result: null,
     bufferedPrep: [], menuIds: level.mechanic === 'banquet' ? ['egg-rice', 'veggie-rice', 'mushroom-egg'] : [...level.recipeIds],
     cleaningMs: 0, stoveIdleMs: 0, recipesServed: [],
   }
@@ -137,16 +139,49 @@ function finishRound(state: KitchenGameState): void {
   let stars: KitchenResult['stars'] = passed ? 1 : 0
   if (passed && state.score >= level.targetScore * 1.25 && state.missed <= 3) stars = 2
   if (passed && state.score >= level.targetScore * 1.6 && state.missed <= 1 && state.wasted === 0) stars = 3
-  const advice = state.wasted > 0 ? '熟度到达亮区就移到装盘台，别让灶台上的食材等太久。'
+  const advice = state.wasted > 0 ? '熟度到达亮区就起锅，别让灶台上的食材等太久。'
     : state.missed > 0 ? '优先处理耐心较短的订单，灶台忙时备好下一单。'
       : state.mistakes > 0 ? '先选顾客再核对配方；成品要送给对应的顾客。'
         : state.stoveIdleMs >= 12000 ? `灶台空了${Math.floor(state.stoveIdleMs / 1000)}秒，下局可以先把暖汤煮上，再备下一份。`
-          : passed ? '配合得很好！试试同时备餐与烹饪，争取更长连击。' : '下一局先完成简单订单，用连击提高分数。'
+          : passed ? '配合得很好！灶台忙时提前点下一单，争取更长连击。' : '下一局先完成简单订单，用连击提高分数。'
   state.status = 'finished'; state.remainingMs = 0
   state.result = { levelId: state.levelId, stars, passed, score: state.score, served: state.served, missed: state.missed,
     wasted: state.wasted, bestCombo: state.bestCombo, targetServed: level.targetServed, targetScore: level.targetScore, advice,
     collectibleIds: passed ? [level.collectibleId] : [], recipesServed: [...state.recipesServed], stoveIdleMs: state.stoveIdleMs }
   feedback(state, passed ? 'success' : 'info', passed ? '餐车挑战完成，来看看本局的好表现。' : '本局结束，复盘后可以再来一局。')
+}
+
+/** Run assistance at each simulation event, never on a separate UI timer. */
+function resolveTapFlow(original: KitchenGameState): KitchenGameState {
+  if (original.controlMode !== 'tap') return original
+  let state = original
+  // A departed customer's dish must not block a worktop or earn a delivery.
+  const waiting = new Set(state.orders.filter(order => order.status === 'waiting').map(order => order.id))
+  for (const station of ['prep', 'cook', 'plate'] as KitchenStationId[]) {
+    const job = state.stations[station].job
+    if (job && !waiting.has(job.orderId)) {
+      if (job.stage !== 'burnt') state.wasted += 1
+      state.stations[station].job = null
+      if (station === 'cook') state.cleaningMs = 2000
+    }
+  }
+  state.wasted += state.bufferedPrep.filter(job => !waiting.has(job.orderId)).length
+  state.bufferedPrep = state.bufferedPrep.filter(job => waiting.has(job.orderId))
+  if (state.stations.plate.job?.stage === 'ready') {
+    state = applyKitchenAction(state, { type: 'serve', orderId: state.stations.plate.job.orderId })
+  }
+  const deliveryFeedback = state.feedback
+  if (!state.stations.cook.job && state.cleaningMs === 0) {
+    const prepared = [state.stations.prep.job, ...state.bufferedPrep].filter((job): job is KitchenJob => Boolean(job && job.stage === 'ready'))
+    // Preparation elapsed time includes waiting on the shelf: oldest accepted job first.
+    prepared.sort((a, b) => b.elapsedMs - a.elapsedMs)
+    if (prepared[0]) {
+      state = applyKitchenAction(state, { type: 'move', from: 'prep', orderId: prepared[0].orderId })
+      // Keep the delivery and combo visible when the next pot starts at the same instant.
+      if (deliveryFeedback.kind === 'success') state.feedback = deliveryFeedback
+    }
+  }
+  return state
 }
 
 function refreshJob(job: KitchenJob, station: KitchenStationId, coolingWindowMs = 8000): void {
@@ -167,7 +202,7 @@ function refreshJob(job: KitchenJob, station: KitchenStationId, coolingWindowMs 
 /** Pure elapsed-time simulation. Paused time is intentionally never consumed. */
 export function advanceKitchenGame(original: KitchenGameState, elapsedMs: number): KitchenGameState {
   if (original.status !== 'running' || !Number.isFinite(elapsedMs) || elapsedMs < 1) return original
-  const state = cloneState(original)
+  let state = resolveTapFlow(cloneState(original))
   const level = levelFor(state.levelId)
   const target = Math.min(level.durationMs, state.elapsedMs + Math.floor(elapsedMs))
   while (state.elapsedMs < target) {
@@ -206,7 +241,9 @@ export function advanceKitchenGame(original: KitchenGameState, elapsedMs: number
         feedback(state, 'warning', '灶台上的食材烧焦了，收拾灶台后重新制作。')
       } else if (job.stage === 'working' && job.progress >= 1) {
         job.stage = 'ready'
-        feedback(state, 'success', station === 'prep' ? '备餐完成，空出灶台后移去烹饪。' : station === 'cook' ? '火候正好！尽快移去装盘，继续加热会烧焦。' : '装盘完成，送给对应的顾客。')
+        feedback(state, 'success', state.controlMode === 'tap'
+          ? station === 'prep' ? '配菜好了，空锅时会自动开始烹饪。' : station === 'cook' ? '火候正好！现在起锅，接着做下一单。' : '伙伴正在送餐。'
+          : station === 'prep' ? '备餐完成，空出灶台后移去烹饪。' : station === 'cook' ? '火候正好！尽快移去装盘，继续加热会烧焦。' : '装盘完成，送给对应的顾客。')
       }
     }
     for (const order of state.orders) {
@@ -215,6 +252,7 @@ export function advanceKitchenGame(original: KitchenGameState, elapsedMs: number
       if (state.selectedOrderId === order.id) { state.selectedOrderId = null; state.selectedIngredients = [] }
       feedback(state, 'warning', `${recipeFor(order.recipeId).name}的顾客等不及了，调整一下下一单的顺序。`)
     }
+    state = resolveTapFlow(state)
     if (state.elapsedMs >= level.durationMs) { finishRound(state); break }
     if (state.elapsedMs >= state.nextOrderAtMs) {
       spawnOrder(state)
@@ -241,13 +279,28 @@ export function applyKitchenAction(original: KitchenGameState, action: KitchenAc
   if (action.type === 'start') {
     if (original.status !== 'ready') return original
     const state = cloneState(original); state.status = 'running'; spawnOrder(state); spawnOrder(state)
-    return feedback(state, 'info', '开张啦！先选一份订单，找到配方食材。')
+    return feedback(state, 'info', state.controlMode === 'tap' ? '开张啦！点一张订单，伙伴会自动配菜入锅。' : '开张啦！先选一份订单，找到配方食材。')
   }
   if (action.type === 'pause') return original.status === 'running' ? { ...original, status: 'paused' } : original
   if (action.type === 'resume') return original.status === 'paused' ? { ...original, status: 'running' } : original
   if (original.status !== 'running') return original
   const state = cloneState(original)
   switch (action.type) {
+    case 'take-order': {
+      if (state.controlMode !== 'tap') return original
+      const order = state.orders.find(item => item.id === action.orderId && item.status === 'waiting')
+      if (!order) return original
+      const jobs = [...Object.values(state.stations).flatMap(station => station.job ? [station.job] : []), ...state.bufferedPrep]
+      if (jobs.some(job => job.orderId === order.id)) return original
+      const recipe = recipeFor(order.recipeId)
+      state.selectedOrderId = order.id
+      state.selectedIngredients = [...recipe.ingredients]
+      const pair = levelFor(state.levelId).mechanic === 'shared' && !state.stations.prep.job && !state.bufferedPrep.length
+        && state.orders.some(item => item.id !== order.id && item.recipeId === recipe.id && item.status === 'waiting' && !jobs.some(job => job.orderId === item.id))
+      const prepared = applyKitchenAction(state, { type: pair ? 'prepare-batch' : 'prepare' })
+      return prepared.stations.prep.job?.orderId === order.id
+        ? feedback(prepared, 'info', pair ? '两份野餐一起配菜，盯好每一锅的火候。' : `${recipe.name}开始配菜，入锅后留意火候。`) : prepared
+    }
     case 'select-order': {
       const order = state.orders.find(item => item.id === action.orderId && item.status === 'waiting')
       if (!order) return feedback(state, 'warning', '这位顾客已经离开，请选择其他订单。')

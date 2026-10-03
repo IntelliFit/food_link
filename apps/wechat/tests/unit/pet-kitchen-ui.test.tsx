@@ -17,19 +17,18 @@ function click(container: HTMLElement, id: string) {
 }
 function wait(milliseconds: number) { act(() => { jest.advanceTimersByTime(milliseconds) }) }
 
-test('a player can prepare, cook, plate and serve a full order through the real controls', () => {
+test('two taps prepare and deliver a real order, leaving the timing decision to the player', () => {
   const { container } = render(<PetKitchenGame active accountId='account-one' onExit={jest.fn()} />)
   click(container, 'kitchen-start')
   click(container, 'kitchen-order-order-1')
-  click(container, 'kitchen-ingredient-rice')
-  click(container, 'kitchen-ingredient-egg')
-  click(container, 'kitchen-prepare')
-  wait(2000)
-  click(container, 'kitchen-prepare')
-  wait(4000)
+  expect(container.querySelector('#kitchen-order-order-1')).toBeDisabled()
+  expect(container.querySelector('#kitchen-prepare')).toBeNull()
+  expect(container.querySelector('#kitchen-heat-high')).toBeNull()
+  expect(container.querySelector('#kitchen-ingredient-rice')).toBeNull()
+  wait(6000)
   click(container, 'kitchen-move-cook')
   wait(1500)
-  click(container, 'kitchen-serve')
+  expect(container.querySelector('#kitchen-serve')).toBeNull()
   expect(screen.getByText(/递餐成功 \+120分/)).toBeInTheDocument()
   expect(Taro.setStorageSync).not.toHaveBeenCalled()
 })
@@ -75,16 +74,19 @@ test('switching accounts clears the current round instead of carrying progress i
   expect(Taro.setStorageSync).not.toHaveBeenCalled()
 })
 
-test('picnic pair control prepares two real orders and the shelf can send either to the single stove', () => {
+test('one picnic order tap prepares the matching pair without a separate batch or shelf control', () => {
   const { container } = render(<PetKitchenGame active accountId='account-one' onExit={jest.fn()} />)
   click(container, 'kitchen-level-3'); click(container, 'kitchen-start')
-  for (const id of ['rice', 'greens', 'carrot']) click(container, `kitchen-ingredient-${id}`)
-  click(container, 'kitchen-prepare-batch'); wait(2500)
-  expect(screen.getByText('半成品 2/2')).toBeInTheDocument()
-  click(container, 'kitchen-buffer-order-2')
-  expect(screen.getByText(/开始烹饪：亮区/)).toBeInTheDocument()
+  click(container, 'kitchen-order-order-1')
+  expect(container.querySelector('#kitchen-order-order-2')).toBeDisabled()
+  wait(2500)
+  expect(screen.getByText('1份等入锅')).toBeInTheDocument()
+  expect(container.querySelector('#kitchen-prepare-batch')).toBeNull()
   expect(container.querySelector('#kitchen-move-cook')).toBeDisabled()
-  expect(screen.getByText('半成品 1/2')).toBeInTheDocument()
+  wait(4500)
+  click(container, 'kitchen-move-cook')
+  wait(1800)
+  expect(screen.getByText(/递餐成功 \+180分/)).toBeInTheDocument()
 })
 
 test('terminal callback captures original scope and callback once without losing standalone best scores', async () => {

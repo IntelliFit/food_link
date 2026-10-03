@@ -230,7 +230,7 @@ test('a real round settles against the latest purchase even when its captured pa
 })
 
 test.each([
-  ['kitchen', 'kitchen-prepare', '离开餐车'],
+  ['kitchen', 'kitchen-station-cook', '离开餐车'],
   ['merge', 'merge-board', 'merge-exit'],
   ['adventure', 'adventure-world', 'adventure-exit'],
   ['explore', 'explore-world', 'explore-paused-exit'],
@@ -242,7 +242,13 @@ test.each([
     expect(screen.getAllByTestId('hub-pet')[0]).toHaveAttribute('data-pet-id', pet.id)
     click(container, `${game}-start`)
     expect(container.querySelector(`#${world}`)).toBeInTheDocument()
-    if (game !== 'kitchen') expect(container.querySelector(`#${world}`)).toHaveAttribute('data-state', 'running')
+    if (game === 'kitchen') {
+      click(container, 'kitchen-order-order-1')
+      expect(container.querySelector('#kitchen-order-order-1')).toBeDisabled()
+      act(() => { jest.advanceTimersByTime(2000) })
+      expect(container.querySelector('#kitchen-move-cook')).toHaveTextContent('烹饪中，留意火候')
+      expect(saved().stars).toBe(0); expect(saved().rounds).toEqual([])
+    } else expect(container.querySelector(`#${world}`)).toHaveAttribute('data-state', 'running')
     click(container, `${game}-back`)
     if (game === 'kitchen') fireEvent.click(screen.getByRole('button', { name: exit }))
     else click(container, exit)

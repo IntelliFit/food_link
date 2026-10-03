@@ -9,6 +9,7 @@
 .pet-motion-atlas--jump .pet-motion-atlas__sheet { animation: pet-motion-jump 1000ms step-end infinite; }
 .pet-motion-atlas--celebrate .pet-motion-atlas__sheet { animation: pet-motion-celebrate 1000ms step-end infinite; }
 .pet-motion-atlas--ride .pet-motion-atlas__sheet { animation: pet-motion-ride 800ms step-end infinite; }
+.pet-motion-atlas--ride.is-coasting .pet-motion-atlas__sheet { animation: none; transform: translate(0, -75%); }
 .pet-motion-atlas.is-paused .pet-motion-atlas__sheet { animation-play-state: paused; }
 @keyframes pet-motion-blink { 0%, 20%, 100% { transform: translate(0, 0); } 10% { transform: translate(-25%, 0); } }
 @keyframes pet-motion-walk { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-75%, 0); } }

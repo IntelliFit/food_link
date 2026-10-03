@@ -19,16 +19,10 @@ interface PetKitchenGameProps {
   settlementText?: string
   onRetrySettlement?: () => void | Promise<void>
 }
-type StationId = 'prep' | 'cook' | 'plate'
 type LocalBest = Record<string, { score: number; stars: number; served: number }>
-type TouchLike = { touches?: { clientX: number; clientY: number }[]; changedTouches?: { clientX: number; clientY: number }[]; stopPropagation?: () => void; preventDefault?: () => void }
-type Drag = { kind: 'ingredient'; ingredientId: string; x: number; y: number; startX: number; startY: number; moved: boolean }
-  | { kind: 'dish'; station: StationId; x: number; y: number; startX: number; startY: number; moved: boolean }
-type DropRect = { id: string; left: number; right: number; top: number; bottom: number }
 const BEST_PREFIX = 'pet_kitchen_best_v1:'
 const recipeById = (id: string) => KITCHEN_RECIPES.find(recipe => recipe.id === id)
 const ingredientById = (id: string) => KITCHEN_INGREDIENTS.find(ingredient => ingredient.id === id)
-const stationLabels: Record<StationId, string> = { prep: '备餐台', cook: '灶台', plate: '装盘台' }
 const KitchenActor = memo(PetActor)
 
 function readBest(accountId?: string, strict = false): LocalBest {
@@ -60,7 +54,7 @@ function kitchenActorSize() {
   try { return Math.round((Taro.getWindowInfo().windowWidth || 375) * 180 / 750) } catch { return 90 }
 }
 export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, settlementText, onRetrySettlement }: PetKitchenGameProps) {
-  const [state, setState] = useState<KitchenGameState>(() => createKitchenGame(1))
+  const [state, setState] = useState<KitchenGameState>(() => createKitchenGame(1, 'tap'))
   const [levelId, setLevelId] = useState(1)
   const [bests, setBests] = useState<LocalBest>(() => readBest(accountId))
   const [accountHistory, setAccountHistory] = useState<LocalBest>(() => readAccountHistory(accountId))
@@ -68,7 +62,6 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
   const [tutorialStep, setTutorialStep] = useState<number | null>(null)
   const [recipeBook, setRecipeBook] = useState(false)
   const [showGuide, setShowGuide] = useState(true)
-  const [dragging, setDragging] = useState<Drag | null>(null)
   const [menuSelection, setMenuSelection] = useState<string[]>(['egg-rice', 'veggie-rice', 'mushroom-egg'])
   const [settling, setSettling] = useState(false)
   const [settlementError, setSettlementError] = useState(false)
@@ -77,8 +70,6 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
   const activeRef = useRef(active)
   const roundRef = useRef(0)
   const lastTick = useRef(0)
-  const dragRef = useRef<Drag | null>(null)
-  const suppressClickUntil = useRef(0)
   const recordedResult = useRef<KitchenGameState['result']>(null)
   const finishedNotified = useRef<KitchenResult | null>(null)
   const mountedRef = useRef(true)
@@ -90,12 +81,9 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
   accountRef.current = accountId
   callbackRef.current = onFinished
   const level = KITCHEN_LEVELS.find(item => item.id === levelId) || KITCHEN_LEVELS[0]
-  const selectedOrder = state.orders.find(order => order.id === state.selectedOrderId && order.status === 'waiting')
-  const selectedRecipe = selectedOrder ? recipeById(selectedOrder.recipeId) : undefined
   const liveOrders = state.orders.filter(order => order.status === 'waiting')
   const playing = state.status === 'running'
   const levelRecipes = KITCHEN_RECIPES.filter(recipe => state.menuIds.includes(recipe.id))
-  const availableIngredients = KITCHEN_INGREDIENTS.filter(ingredient => levelRecipes.some(recipe => recipe.ingredients.includes(ingredient.id)))
   const dispatch = useCallback((action: KitchenAction) => {
     if (!activeRef.current && action.type !== 'pause') return
     setState(previous => applyKitchenAction(previous, action))
@@ -107,7 +95,7 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
     setBests(readBest(accountId))
     setAccountHistory(readAccountHistory(accountId))
     setLevelId(1)
-    setState(createKitchenGame(1))
+    setState(createKitchenGame(1, 'tap'))
     setTutorial(false)
     setTutorialStep(null)
     setRecipeBook(false)
@@ -115,14 +103,10 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
     finishedNotified.current = null
     setSettling(false)
     setSettlementError(false)
-    dragRef.current = null
-    setDragging(null)
   }, [accountId])
   useEffect(() => {
     if (!active) {
       dispatch({ type: 'pause' })
-      dragRef.current = null
-      setDragging(null)
     }
   }, [active, dispatch])
   useEffect(() => {
@@ -132,7 +116,9 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
   useEffect(() => {
     if (!active || state.status !== 'running') return undefined
     lastTick.current = Date.now()
+    const round = roundRef.current
     const timer = setInterval(() => {
+      if (!activeRef.current || roundRef.current !== round) return
       const now = Date.now()
       const delta = Math.max(0, now - lastTick.current)
       lastTick.current = now
@@ -186,17 +172,17 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
     setSettling(false)
     setSettlementError(false)
     sessionRef.current = accountId ? { id: `kitchen:${Date.now()}:${roundRef.current}:${Math.random().toString(36).slice(2, 8)}`, scope: accountId, callback: callbackRef.current } : null
-    let next = createKitchenGame(id)
+    let next = createKitchenGame(id, 'tap')
     if (id === 6) next = applyKitchenAction(next, { type: 'set-menu', recipeIds: menuSelection })
     setState(applyKitchenAction(next, { type: 'start' }))
   }
   const chooseLevel = (id: number) => {
     roundRef.current += 1; setLevelId(id); setTutorial(false)
-    let next = createKitchenGame(id)
+    let next = createKitchenGame(id, 'tap')
     if (id === 6 && menuSelection.length === 3) next = applyKitchenAction(next, { type: 'set-menu', recipeIds: menuSelection })
     setState(next)
   }
-  const backToMenu = () => { roundRef.current += 1; setState(createKitchenGame(levelId)); setTutorial(false); setTutorialStep(null); setRecipeBook(false) }
+  const backToMenu = () => { roundRef.current += 1; setState(createKitchenGame(levelId, 'tap')); setTutorial(false); setTutorialStep(null); setRecipeBook(false) }
   const selectMenu = (recipeId: string) => {
     const next = menuSelection.includes(recipeId) ? menuSelection.filter(id => id !== recipeId) : [...menuSelection, recipeId]
     if (next.length > 3 || new Set(next.flatMap(id => recipeById(id)?.ingredients || [])).size > 6) return
@@ -214,62 +200,14 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
       if (mountedRef.current && sessionRef.current === session) { setSettling(false); setSettlementError(true) }
     })
   }
-  const safeClick = (action: KitchenAction) => { if (Date.now() >= suppressClickUntil.current) dispatch(action) }
-  const beginDrag = (payload: { ingredientId: string } | { station: StationId }, event: unknown) => {
-    const touch = (event as TouchLike).touches?.[0]
-    if (!touch || !playing || !active) return
-    dragRef.current = 'ingredientId' in payload ? { kind: 'ingredient', ...payload, x: touch.clientX, y: touch.clientY, startX: touch.clientX, startY: touch.clientY, moved: false }
-      : { kind: 'dish', ...payload, x: touch.clientX, y: touch.clientY, startX: touch.clientX, startY: touch.clientY, moved: false }
-  }
-  const moveDrag = (event: unknown) => {
-    const touchEvent = event as TouchLike
-    const touch = touchEvent.touches?.[0]
-    const previous = dragRef.current
-    if (!touch || !previous) return
-    const moved = previous.moved || Math.abs(touch.clientX - previous.startX) + Math.abs(touch.clientY - previous.startY) > 12
-    const next = { ...previous, x: touch.clientX, y: touch.clientY, moved }
-    dragRef.current = next
-    if (moved) {
-      touchEvent.stopPropagation?.()
-      touchEvent.preventDefault?.()
-      setDragging(next)
-    }
-  }
-  const endDrag = (event: unknown) => {
-    const drag = dragRef.current
-    const touch = (event as TouchLike).changedTouches?.[0]
-    dragRef.current = null
-    setDragging(null)
-    if (!drag?.moved || !touch || !active || stateRef.current.status !== 'running') return
-    suppressClickUntil.current = Date.now() + 350
-    const releasedX = touch.clientX
-    const releasedY = touch.clientY
-    const round = roundRef.current
-    try {
-      // Sticky worktops and scrolling orders can move during the gesture, so
-      // resolve the target against its current viewport rectangle at release.
-      Taro.createSelectorQuery().selectAll('.pet-kitchen-drop').boundingClientRect(rectangles => {
-        if (!activeRef.current || stateRef.current.status !== 'running' || round !== roundRef.current) return
-        const currentRects = Array.isArray(rectangles) ? rectangles as unknown as DropRect[] : []
-        const target = currentRects.find(rect => releasedX >= rect.left && releasedX <= rect.right && releasedY >= rect.top && releasedY <= rect.bottom)
-        if (!target) return
-        if (drag.kind === 'ingredient' && target.id === 'kitchen-station-prep') {
-          if (!stateRef.current.selectedIngredients.includes(drag.ingredientId)) dispatch({ type: 'toggle-ingredient', ingredientId: drag.ingredientId })
-        } else if (drag.kind === 'dish') {
-          if (drag.station === 'prep' && target.id === 'kitchen-station-cook') dispatch({ type: 'move', from: 'prep' })
-          else if (drag.station === 'cook' && target.id === 'kitchen-station-plate') dispatch({ type: 'move', from: 'cook' })
-          else if (drag.station === 'plate' && target.id.startsWith('kitchen-order-')) dispatch({ type: 'serve', orderId: target.id.replace('kitchen-order-', '') })
-        }
-      }).exec()
-    } catch { /* Tap controls remain available when a selector query is unavailable. */ }
-  }
-  const cancelDrag = () => { dragRef.current = null; setDragging(null) }
-  const guideText = !selectedOrder ? '先点一张订单，看清需要的食材。'
-    : !state.stations.prep.job && !state.stations.cook.job && !state.stations.plate.job ? '点选所需食材，再点“开始备餐”。多选的食材可再点一次取消。'
-      : state.stations.prep.job?.stage === 'ready' ? '备餐完成！送往灶台，然后可以接着做另一份订单。'
-        : state.stations.cook.job ? '观察火候，进度进入绿色区再出锅。火太大或等太久会影响品质。'
-          : state.stations.plate.job?.stage === 'ready' ? '装盘完成！点“递给顾客”，或拖到对应订单。'
-            : '三个工位可以同时工作，优先照顾耐心快耗尽的顾客。'
+  const cook = state.stations.cook.job
+  const cookingRecipe = cook ? recipeById(cook.recipeId) : undefined
+  const prepBusy = state.stations.prep.job?.stage === 'working'
+  const prepCount = state.bufferedPrep.length + (state.stations.prep.job ? 1 : 0)
+  const canLift = playing && cook && cook.stage !== 'burnt' && cook.progress >= .65 && !state.stations.plate.job
+  const guideText = cook?.stage === 'burnt' ? '点“清锅重做”，两秒后就能重新开做。'
+    : cook ? '亮区起锅最稳；同时可以点下一张订单，让伙伴提前配菜。'
+      : prepCount ? '伙伴配菜后会自动入锅，留意这里的火候条。' : '点一张订单开做，其他工序由伙伴帮忙。'
 
   const inRound = state.status === 'running' || state.status === 'paused'
   return <View className={`pet-kitchen ${playing ? 'is-playing' : ''} ${inRound ? 'is-round' : ''}`}>
@@ -280,7 +218,7 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
     </View>
 
     {state.status === 'ready' ? <>
-      <View className='pet-kitchen__scene is-welcome'><Image className='pet-kitchen__scene-art' src='/packagePetStudio/assets/kitchen-scene-v1.jpg' mode='aspectFill' /><View className='pet-kitchen__scene-actor'>{pet ? <KitchenActor pet={pet} size={actorSize} action='wave' active={active} /> : null}</View><View className='pet-kitchen__scene-caption'><Text>把一餐做好，把快乐递过去</Text><Text>90秒 · 一口灶台 · 两份半成品空间</Text></View></View>
+      <View className='pet-kitchen__scene is-welcome'><Image className='pet-kitchen__scene-art' src='/packagePetStudio/assets/kitchen-scene-v1.jpg' mode='aspectFill' /><View className='pet-kitchen__scene-actor'>{pet ? <KitchenActor pet={pet} size={actorSize} action='wave' active={active} /> : null}</View><View className='pet-kitchen__scene-caption'><Text>把一餐做好，把快乐递过去</Text><Text>90秒 · 点单开做 · 看准火候起锅</Text></View></View>
       <View className='pet-kitchen__section-heading'><Text>今日餐车地图</Text><Button className='pet-kitchen__button' id='kitchen-tutorial' onClick={() => setTutorialStep(0)}>新手教学 ›</Button></View>
       <View className='pet-kitchen__levels'>{KITCHEN_LEVELS.map(item => <Button id={`kitchen-level-${item.id}`} key={item.id} className={`pet-kitchen__button pet-kitchen__level ${item.id === levelId ? 'is-selected' : ''}`} onClick={() => chooseLevel(item.id)}><View className='pet-kitchen__level-top'><Text className='pet-kitchen__level-number'>0{item.id}</Text><Text className='pet-kitchen__stars'>{bests[String(item.id)] ? '★'.repeat(bests[String(item.id)].stars) + '☆'.repeat(3 - bests[String(item.id)].stars) : '☆☆☆'}</Text></View><Text className='pet-kitchen__level-name'>{item.name}</Text><Text className='pet-kitchen__level-description'>{item.description}</Text><Text className='pet-kitchen__level-record'>{bests[String(item.id)] ? `最佳 ${bests[String(item.id)].score}分` : `${item.targetServed}份餐食 · ${item.targetScore}分目标`}</Text></Button>)}</View>
       {accountHistory[String(levelId)] && <View id='kitchen-account-history' className='pet-kitchen__story'><Text>账号历史最好（参考） · {Math.max(accountHistory[String(levelId)].score, bests[String(levelId)]?.score || 0)}分</Text><Text>旧成绩属于账号，不计作当前伙伴的新纪录、成长或奖励。</Text></View>}
@@ -309,32 +247,30 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
         const recipe = recipeById(order.recipeId)
         const patience = Math.max(0, Math.min(100, (order.expiresAtMs - state.elapsedMs) / order.patienceMs * 100))
         const inStation = Object.values(state.stations).some(station => station.job?.orderId === order.id) || state.bufferedPrep.some(job => job.orderId === order.id)
-        return <Button key={order.id} id={`kitchen-order-${order.id}`} className={`pet-kitchen__button pet-kitchen-drop pet-kitchen__order ${state.selectedOrderId === order.id ? 'is-selected' : ''} ${patience < 25 ? 'is-urgent' : ''}`} onClick={() => safeClick({ type: 'select-order', orderId: order.id })}><View className='pet-kitchen__order-top'><Text>{order.customer}</Text><Text>{Math.ceil(Math.max(0, order.expiresAtMs - state.elapsedMs) / 1000)}秒</Text></View><Text className='pet-kitchen__order-name'>{recipe?.name}</Text><Text className='pet-kitchen__order-state'>{inStation ? '正在制作' : state.selectedOrderId === order.id ? '已选中 · 开始备餐' : '点击接单'}</Text><View className='pet-kitchen__patience'><View style={{ width: `${patience}%` }} /></View></Button>
+        return <Button key={order.id} id={`kitchen-order-${order.id}`} className={`pet-kitchen__button pet-kitchen-drop pet-kitchen__order ${state.selectedOrderId === order.id ? 'is-selected' : ''} ${patience < 25 ? 'is-urgent' : ''}`} disabled={!playing || inStation || prepBusy || prepCount >= 2} onClick={() => dispatch({ type: 'take-order', orderId: order.id })}><View className='pet-kitchen__order-top'><Text>{order.customer}</Text><Text>{Math.ceil(Math.max(0, order.expiresAtMs - state.elapsedMs) / 1000)}秒</Text></View><Text className='pet-kitchen__order-name'>{recipe?.name}</Text><Text className='pet-kitchen__order-state'>{inStation ? '伙伴正在制作' : prepBusy ? '配菜后可接单' : prepCount >= 2 ? '等候空位' : '点一下 · 开做'}</Text><View className='pet-kitchen__patience'><View style={{ width: `${patience}%` }} /></View></Button>
       }) : <View className='pet-kitchen__order-empty'><Text>这一波都送到了</Text><Text>下一位顾客马上来</Text></View>}</View></ScrollView>
       <View className='pet-kitchen__scene is-round-scene'><Image className='pet-kitchen__scene-art' src='/packagePetStudio/assets/kitchen-scene-v1.jpg' mode='aspectFill' /><View className='pet-kitchen__scene-actor'>{pet ? <KitchenActor pet={pet} size={actorSize} active={active && playing} action={!playing ? 'idle' : state.feedback.kind === 'success' && !state.stations.cook.job ? 'celebrate' : state.stations.prep.job || state.stations.cook.job ? 'cook' : 'observe'} /> : null}</View><Text className='pet-kitchen__scene-level'>{level.name}</Text></View>
       <View key={state.feedback.sequence} className={`pet-kitchen__feedback is-${state.feedback.kind}`}><Text>{state.feedback.kind === 'success' ? '✓' : state.feedback.kind === 'warning' ? '!' : '·'}</Text><Text>{state.feedback.message}</Text></View>
       {tutorial && showGuide ? <View className='pet-kitchen__guide'><View><Text>边玩边学</Text><Button className='pet-kitchen__button' onClick={() => setShowGuide(false)}>收起</Button></View><Text>{guideText}</Text></View> : null}
-      <View className={`pet-kitchen__stations ${level.mechanic === 'tutorial' ? 'is-two-zone' : ''}`}>{(['prep', 'cook', 'plate'] as StationId[]).map((stationId, index) => {
-        const job = state.stations[stationId].job
-        const recipe = job ? recipeById(job.recipeId) : undefined
-        const ready = job?.stage === 'ready'
-        const burnt = job?.stage === 'burnt'
-        const progress = job ? Math.min(100, Math.max(0, job.progress * 100)) : 0
-        return <View id={`kitchen-station-${stationId}`} key={stationId} className={`pet-kitchen-drop pet-kitchen__station is-${stationId} ${ready ? 'is-ready' : ''} ${burnt ? 'is-burnt' : ''}`}><View className='pet-kitchen__station-heading'><Text>{index + 1}</Text><Text>{stationLabels[stationId]}</Text></View><View className='pet-kitchen__dish' onTouchStart={event => beginDrag({ station: stationId }, event)} onTouchMove={moveDrag} onTouchEnd={endDrag} onTouchCancel={cancelDrag}><Text className='pet-kitchen__dish-icon'>{job ? burnt ? '需清锅' : recipe?.name : stationId === 'prep' ? '切配' : stationId === 'cook' ? state.cleaningMs > 0 ? '清锅中' : level.mechanic === 'oven' ? '烤炉' : '汤锅' : '递餐'}</Text><Text className='pet-kitchen__dish-name'>{recipe?.name || '空闲工位'}</Text></View><Text className='pet-kitchen__station-state'>{!job ? stationId === 'prep' ? '待备餐' : '待送入' : burnt ? '烧焦了' : ready ? stationId === 'plate' ? '可递餐' : '可移交' : stationId === 'prep' ? `${recipe?.prepLabel || '备餐'}中` : stationId === 'cook' ? `${recipe?.cookLabel || '烹饪'}中` : '摆盘中'}</Text><View className='pet-kitchen__progress'><View style={{ width: `${progress}%` }} /></View><Text className='pet-kitchen__quality'>{job ? `品质 ${Math.round(job.quality)}%` : '—'}</Text>
-          {stationId === 'prep' ? <Button id='kitchen-prepare' disabled={!playing || Boolean(job && !ready)} className='pet-kitchen__button pet-kitchen__station-action' onClick={() => safeClick(job ? { type: 'move', from: 'prep' } : { type: 'prepare' })}>{job ? '送往灶台 ›' : '开始备餐'}</Button> : stationId === 'cook' ? <Button id='kitchen-move-cook' disabled={!playing || !job || burnt || job.progress < .65} className='pet-kitchen__button pet-kitchen__station-action' onClick={() => safeClick({ type: 'move', from: 'cook' })}>起锅装盘 ›</Button> : <Button id='kitchen-serve' disabled={!playing || !ready} className='pet-kitchen__button pet-kitchen__station-action' onClick={() => safeClick({ type: 'serve', orderId: job?.orderId })}>交付这一单 ✓</Button>}
-          {job ? <Button id={`kitchen-discard-${stationId}`} className='pet-kitchen__button pet-kitchen__discard' disabled={!playing} onClick={() => safeClick({ type: 'discard', station: stationId })}>{burnt ? '清理并重做' : '丢弃这份'}</Button> : <Text className='pet-kitchen__station-tip'>可拖拽 · 也可点按钮</Text>}
-        </View>
-      })}</View>
-      <View className='pet-kitchen__prep-shelf'><Text>半成品 {state.bufferedPrep.length + (state.stations.prep.job ? 1 : 0)}/2</Text>{state.bufferedPrep.map(job => <View key={job.orderId} className='pet-kitchen__buffer-slot'><Button id={`kitchen-buffer-${job.orderId}`} className='pet-kitchen__button pet-kitchen__buffer' disabled={!playing || job.stage !== 'ready' || Boolean(state.stations.cook.job) || state.cleaningMs > 0} onClick={() => safeClick({ type: 'move', from: 'prep', orderId: job.orderId })}>{recipeById(job.recipeId)?.name} · {job.stage === 'ready' ? '送灶台 ›' : '切配中'}</Button><Button id={`kitchen-buffer-discard-${job.orderId}`} className='pet-kitchen__button pet-kitchen__buffer-discard' disabled={!playing} aria-label={`清理${recipeById(job.recipeId)?.name}半成品`} onClick={() => safeClick({ type: 'discard-prepared', orderId: job.orderId })}>×</Button></View>)}{state.cleaningMs > 0 ? <Text className='pet-kitchen__cleaning'>清锅 {Math.ceil(state.cleaningMs / 1000)}秒</Text> : null}</View>
-      <View className='pet-kitchen__prep-options'><Button id='kitchen-prep-extra' className='pet-kitchen__button pet-kitchen__prep-extra' disabled={!playing || state.stations.prep.job?.stage === 'working' || state.bufferedPrep.length + (state.stations.prep.job ? 1 : 0) >= 2} onClick={() => safeClick({ type: 'prepare' })}>留一份，再备下一单</Button>{level.mechanic === 'shared' ? <Button id='kitchen-prepare-batch' className='pet-kitchen__button pet-kitchen__prep-extra' disabled={!playing || Boolean(state.stations.prep.job) || state.bufferedPrep.length > 0} onClick={() => safeClick({ type: 'prepare-batch' })}>共用配菜 · 一次备两份</Button> : <Button id='kitchen-prepare-stock' className='pet-kitchen__button pet-kitchen__prep-extra' disabled={!playing || state.stations.prep.job?.stage === 'working' || state.bufferedPrep.length + (state.stations.prep.job ? 1 : 0) >= 2} onClick={() => safeClick({ type: 'prepare-stock' })}>为同菜预备一份</Button>}</View>
-      <View className='pet-kitchen__heat'><View className='pet-kitchen__section-heading'><Text>掌握火候</Text><Text className='pet-kitchen__muted'>{state.stations.cook.job ? `当前 ${state.stations.cook.job.heat} · 建议 ${recipeById(state.stations.cook.job.recipeId)?.idealHeat}` : '食材送上灶台后可调节'}</Text></View><View className='pet-kitchen__heat-buttons'>{[{ value: 35, label: '小火', desc: '慢慢做' }, { value: state.stations.cook.job ? recipeById(state.stations.cook.job.recipeId)?.idealHeat || 55 : 55, label: '合适火候', desc: '品质更稳' }, { value: 85, label: '大火', desc: '快，但要盯紧' }].map(item => <Button id={`kitchen-heat-${item.label === '小火' ? 'low' : item.label === '大火' ? 'high' : 'ideal'}`} key={item.label} disabled={!playing || !state.stations.cook.job || state.stations.cook.job.stage === 'burnt'} className={`pet-kitchen__button pet-kitchen__heat-button ${state.stations.cook.job?.heat === item.value ? 'is-selected' : ''}`} onClick={() => dispatch({ type: 'heat', value: item.value })}><Text>{item.label}</Text><Text>{item.desc}</Text></Button>)}</View>{state.stations.cook.job ? <View className='pet-kitchen__cook-meter'><View className='pet-kitchen__cook-track'><View className='pet-kitchen__cook-perfect' /><View className='pet-kitchen__cook-marker' style={{ left: `${Math.min(98, state.stations.cook.job.progress / 1.55 * 100)}%` }} /></View><View className='pet-kitchen__cook-labels'><Text>未熟</Text><Text>【火候正好】起锅</Text><Text>烧焦</Text></View></View> : null}</View>
-      <View className='pet-kitchen__ingredients'><View className='pet-kitchen__section-heading'><Text>选取食材</Text><Button className='pet-kitchen__button' id='kitchen-clear-ingredients' disabled={!playing} onClick={() => dispatch({ type: 'clear-ingredients' })}>清空选择</Button></View><Text className='pet-kitchen__recipe-hint'>{selectedRecipe ? `${selectedRecipe.name}：${selectedRecipe.ingredients.map(id => ingredientById(id)?.name).join(' ＋ ')}` : '先选一张订单，再准备对应食材'}</Text><View className='pet-kitchen__ingredient-grid'>{availableIngredients.map(ingredient => <Button id={`kitchen-ingredient-${ingredient.id}`} key={ingredient.id} disabled={!playing} className={`pet-kitchen__button pet-kitchen__ingredient-button ${state.selectedIngredients.includes(ingredient.id) ? 'is-selected' : ''}`} onClick={() => safeClick({ type: 'toggle-ingredient', ingredientId: ingredient.id })} onTouchStart={event => beginDrag({ ingredientId: ingredient.id }, event)} onTouchMove={moveDrag} onTouchEnd={endDrag} onTouchCancel={cancelDrag}><Text>{ingredient.name}</Text><Text className='pet-kitchen__ingredient-check'>{state.selectedIngredients.includes(ingredient.id) ? '✓' : '+'}</Text></Button>)}</View></View>
+      <View className='pet-kitchen__service-strip'>
+        <View><Text>配菜</Text><Text>{prepCount ? `${prepCount}份${prepBusy ? '准备中' : '等入锅'}` : '点订单开做'}</Text></View>
+        <Text className='pet-kitchen__service-arrow'>›</Text>
+        <View className='is-current'><Text>看火候</Text><Text>{cook ? cookingRecipe?.cookLabel : state.cleaningMs ? '清锅中' : '等菜入锅'}</Text></View>
+        <Text className='pet-kitchen__service-arrow'>›</Text>
+        <View><Text>送餐</Text><Text>{state.stations.plate.job ? '伙伴装盘中' : '起锅后自动送达'}</Text></View>
+      </View>
+      <View id='kitchen-station-cook' className={`pet-kitchen__stove ${cook?.stage === 'burnt' ? 'is-burnt' : ''} ${cook && cook.progress >= 1 && cook.progress <= 1.2 ? 'is-perfect' : ''}`}>
+        <View className='pet-kitchen__stove-heading'><View><Text className='pet-kitchen__stove-kicker'>这一锅，交给你</Text><Text className='pet-kitchen__stove-name'>{cookingRecipe?.name || (state.cleaningMs ? '收拾灶台' : '等一份好餐食')}</Text></View><Text className='pet-kitchen__pot' aria-hidden>{cook?.stage === 'burnt' ? '♨' : '🍲'}</Text></View>
+        <View className='pet-kitchen__cook-meter'><View className='pet-kitchen__cook-track'><View className='pet-kitchen__cook-perfect' /><View className='pet-kitchen__cook-marker' style={{ left: `${cook ? Math.min(98, cook.progress / 1.55 * 100) : 0}%` }} /></View><View className='pet-kitchen__cook-labels'><Text>未熟</Text><Text>亮区 · 最佳起锅</Text><Text>烧焦</Text></View></View>
+        {cook?.stage === 'burnt' ? <Button id='kitchen-discard-cook' className='pet-kitchen__button pet-kitchen__primary' disabled={!playing} onClick={() => dispatch({ type: 'discard', station: 'cook' })}>清锅重做</Button>
+          : <Button id='kitchen-move-cook' className='pet-kitchen__button pet-kitchen__primary' disabled={!canLift} onClick={() => dispatch({ type: 'move', from: 'cook' })}>{!cook ? state.cleaningMs ? `清锅还剩${Math.ceil(state.cleaningMs / 1000)}秒` : '点上方订单，开始做菜' : state.stations.plate.job ? '伙伴送餐中，稍等片刻' : cook.progress < .65 ? '烹饪中，留意火候' : cook.progress < 1 ? '提前起锅 · 品质降低' : cook.progress <= 1.2 ? '起锅！火候正好' : '马上起锅 · 别烧焦'}</Button>}
+        <Text className='pet-kitchen__stove-tip'>伙伴负责配菜和送餐，你来决定顺序与起锅时机。</Text>
+      </View>
       <Button className='pet-kitchen__button pet-kitchen__text-button pet-kitchen__playing-help' onClick={() => { dispatch({ type: 'pause' }); setRecipeBook(true) }}>配方与操作说明</Button>
     </>}
 
-    {dragging ? <View className='pet-kitchen__drag-ghost' style={{ left: `${dragging.x}px`, top: `${dragging.y}px` }}><Text>{dragging.kind === 'ingredient' ? ingredientById(dragging.ingredientId)?.emoji : '🍽'}</Text></View> : null}
     {state.status === 'paused' && !recipeBook ? <View className='pet-kitchen__modal-mask'><View className='pet-kitchen__dialog'><Text className='pet-kitchen__dialog-title'>餐车歇一会儿</Text><Text className='pet-kitchen__muted'>时间、工序和顾客耐心都已暂停。</Text><Button id='kitchen-resume' disabled={!active} className='pet-kitchen__button pet-kitchen__primary' onClick={() => dispatch({ type: 'resume' })}>继续营业</Button><Button id='kitchen-restart' className='pet-kitchen__button pet-kitchen__secondary' onClick={() => start(levelId, tutorial)}>重新开始本关</Button><Button className='pet-kitchen__button pet-kitchen__text-button' onClick={backToMenu}>返回关卡地图</Button><Button className='pet-kitchen__button pet-kitchen__text-button' onClick={onExit}>离开餐车</Button></View></View> : null}
-    {tutorialStep !== null ? <View className='pet-kitchen__modal-mask'><View className='pet-kitchen__dialog'><Text className='pet-kitchen__dialog-kicker'>新手教学 · {tutorialStep + 1}/3</Text><Text className='pet-kitchen__tutorial-icon'>0{tutorialStep + 1}</Text><Text className='pet-kitchen__dialog-title'>{['接单与备餐', '看火候，安排工位', '装盘与连击'][tutorialStep]}</Text><Text className='pet-kitchen__tutorial-copy'>{['点一张订单查看配方，点选对应食材，再点“开始备餐”。食材也可以拖到备餐台，选错可取消或清空。', '备餐完成后送往灶台。绿色进度区出锅品质更好；大火更快，但容易烧焦。灶台忙碌时，你可以准备下一份餐食。', '熟食送去装盘，完成后递给对应顾客。正确出餐积累连击；顾客耐心耗尽会离开，优先处理着急的订单。'][tutorialStep]}</Text><Button id='kitchen-tutorial-next' className='pet-kitchen__button pet-kitchen__primary' onClick={() => tutorialStep < 2 ? setTutorialStep(tutorialStep + 1) : start(1, true)}>{tutorialStep < 2 ? '下一步' : '开始第一关 · 边玩边学'}</Button><Button className='pet-kitchen__button pet-kitchen__text-button' onClick={() => setTutorialStep(null)}>暂时跳过</Button></View></View> : null}
-    {recipeBook ? <View className='pet-kitchen__modal-mask'><View className='pet-kitchen__recipe-dialog'><View className='pet-kitchen__section-heading'><Text>餐车配方本 · 12份</Text><Button className='pet-kitchen__button' id='kitchen-close-recipes' onClick={() => setRecipeBook(false)}>关闭 ×</Button></View><ScrollView className='pet-kitchen__recipe-scroll' scrollY><View className='pet-kitchen__recipe-book'>{KITCHEN_RECIPES.map(recipe => <View key={recipe.id}><Text className='pet-kitchen__recipe-emoji'>{recipe.ingredients.map(id => ingredientById(id)?.emoji).join('')}</Text><View><Text>{recipe.name}</Text><Text>{recipe.ingredients.map(id => ingredientById(id)?.name).join(' ＋ ')}</Text><Text>{recipe.prepLabel} → {recipe.cookLabel} → 装盘</Text></View></View>)}</View><Text className='pet-kitchen__recipe-instructions'>操作：点选或拖入食材 → 备餐 → 送往灶台 → 控火出锅 → 装盘 → 递餐。烹饪绿色区为合适出锅时机，熟食摆放过久会降品质。</Text></ScrollView></View></View> : null}
+    {tutorialStep !== null ? <View className='pet-kitchen__modal-mask'><View className='pet-kitchen__dialog'><Text className='pet-kitchen__dialog-kicker'>新手教学 · {tutorialStep + 1}/3</Text><Text className='pet-kitchen__tutorial-icon'>0{tutorialStep + 1}</Text><Text className='pet-kitchen__dialog-title'>{['点单开做', '看准火候', '连续出餐'][tutorialStep]}</Text><Text className='pet-kitchen__tutorial-copy'>{['点一下顾客的订单，伙伴自动配菜并送入空锅。你可以决定先照顾哪位顾客。', '火候条进入亮区时点“起锅”。太早会影响品质，太晚会烧焦；做菜时可以点下一单提前配菜。', '起锅后伙伴会自动装盘送餐，正确出餐获得分数与连击。顾客耐心越少，越需要优先照顾。'][tutorialStep]}</Text><Button id='kitchen-tutorial-next' className='pet-kitchen__button pet-kitchen__primary' onClick={() => tutorialStep < 2 ? setTutorialStep(tutorialStep + 1) : start(1, true)}>{tutorialStep < 2 ? '下一步' : '开始第一关 · 边玩边学'}</Button><Button className='pet-kitchen__button pet-kitchen__text-button' onClick={() => setTutorialStep(null)}>暂时跳过</Button></View></View> : null}
+    {recipeBook ? <View className='pet-kitchen__modal-mask'><View className='pet-kitchen__recipe-dialog'><View className='pet-kitchen__section-heading'><Text>餐车配方本 · 12份</Text><Button className='pet-kitchen__button' id='kitchen-close-recipes' onClick={() => setRecipeBook(false)}>关闭 ×</Button></View><ScrollView className='pet-kitchen__recipe-scroll' scrollY><View className='pet-kitchen__recipe-book'>{KITCHEN_RECIPES.map(recipe => <View key={recipe.id}><Text className='pet-kitchen__recipe-emoji'>{recipe.ingredients.map(id => ingredientById(id)?.emoji).join('')}</Text><View><Text>{recipe.name}</Text><Text>{recipe.ingredients.map(id => ingredientById(id)?.name).join(' ＋ ')}</Text><Text>{recipe.prepLabel} → {recipe.cookLabel} → 装盘</Text></View></View>)}</View><Text className='pet-kitchen__recipe-instructions'>点订单开做 → 亮区起锅。伙伴自动配菜、入锅和送餐。优先照顾耐心少的顾客，灶台忙时提前准备下一单，连续送达可获得连击。</Text></ScrollView></View></View> : null}
   </View>
 }

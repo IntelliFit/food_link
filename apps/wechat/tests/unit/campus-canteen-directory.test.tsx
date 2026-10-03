@@ -99,7 +99,7 @@ describe('campus canteen directory', () => {
     )
 
     expect(screen.getByText('已收录食堂')).toBeInTheDocument()
-    expect(screen.getByText('学生食堂')).toBeInTheDocument()
+    expect(await screen.findByText('学生食堂')).toBeInTheDocument()
     expect(screen.getByText('张江校区 · 蔡伦路1200号')).toBeInTheDocument()
     expect(screen.getByText('该食堂目录已上线，暂无已分析菜品')).toBeInTheDocument()
     expect(screen.queryByText('暂无校园食堂数据')).not.toBeInTheDocument()
