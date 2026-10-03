@@ -112,6 +112,7 @@ type SubmitTaskInput struct {
 	IsMultiView             bool                           `json:"is_multi_view"`
 	PreviousResult          map[string]any                 `json:"previousResult"`
 	CorrectionItems         []map[string]any               `json:"correctionItems"`
+	CorrectionTargetIndex   *int                           `json:"correction_target_index"`
 	CorrectionSourceTaskID  string                         `json:"correction_source_task_id"`
 	CorrectionRootTaskID    string                         `json:"correction_root_task_id"`
 	ReferenceObjects        []map[string]any               `json:"reference_objects"`
@@ -166,6 +167,9 @@ type TaskListPage struct {
 
 // SubmitAnalyzeTask 是面向用户 API 的入口，必须走积分检查。
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	if input.CorrectionTargetIndex != nil {
+		return "", &errors.AppError{Code: 10002, Message: "单项重算请使用文本任务", HTTPStatus: 400}
+	}
 	if err := validateSubmittedImageReferences(input); err != nil {
 		return "", err
 	}
@@ -277,6 +281,18 @@ func (s *TaskService) SubmitInternalAnalyzeTask(ctx context.Context, userID stri
 
 // SubmitTextTask 是面向用户 API 的入口，必须走积分检查。
 func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	if input.CorrectionTargetIndex != nil {
+		if input.PrecisionSessionID != nil {
+			return "", &errors.AppError{Code: 10002, Message: "单项重算不能附加精准会话", HTTPStatus: 400}
+		}
+		if _, _, _, err := ParseSingleItemCorrection(input.PreviousResult, input.CorrectionItems, *input.CorrectionTargetIndex); err != nil {
+			logger.Warn(ctx, "单项重算参数校验失败", slog.String("user_id", userID))
+			return "", err
+		}
+		mode := "standard"
+		input.ExecutionMode = &mode
+		input.AnalysisEngine = "db_first"
+	}
 	if input.TextInput == "" {
 		input.TextInput = input.Text
 	}
@@ -653,6 +669,10 @@ func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInp
 	}
 	if len(input.CorrectionItems) > 0 {
 		payload["correctionItems"] = input.CorrectionItems
+	}
+	if input.CorrectionTargetIndex != nil {
+		payload["correction_target_index"] = *input.CorrectionTargetIndex
+		payload["is_correction"] = true
 	}
 	if strings.TrimSpace(input.CorrectionSourceTaskID) != "" {
 		payload["correction_source_task_id"] = strings.TrimSpace(input.CorrectionSourceTaskID)

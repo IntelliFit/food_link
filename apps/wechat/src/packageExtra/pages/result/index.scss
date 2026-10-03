@@ -3160,3 +3160,21 @@ transitiontransition
   color: #9ca3af;
   font-weight: 400;
 }
+.food-edit-recalculation-hint {
+  display: block;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--fl-text-secondary, #64748b);
+  margin-bottom: 20rpx;
+}
+
+.food-edit-recalculation-spinner {
+  width: 30rpx;
+  height: 30rpx;
+  border: 3rpx solid rgba(255, 255, 255, .35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: food-recalculation-spin .8s linear infinite;
+}
+
+@keyframes food-recalculation-spin { to { transform: rotate(360deg); } }

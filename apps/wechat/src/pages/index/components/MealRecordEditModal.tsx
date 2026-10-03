@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Taro from '@tarojs/taro'
 import {
   updateFoodRecord, showUnifiedApiError, submitAnalysisFeedback,
-  type FoodRecord, type Nutrients
+  type FoodRecord, type Nutrients, type FoodItem
 } from '../../../utils/api'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
@@ -15,6 +15,7 @@ import {
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { formatMacroNutrient, formatMicroNutrient, roundTo } from '../../../utils/number-format'
 import { applyEnergyEdit } from '../../../utils/nutrition-edit'
+import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
 
 import './MealRecordEditModal.scss'
 
@@ -221,8 +222,14 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
   const [devFeedbackIndicator, setDevFeedbackIndicator] = useState(false)
   const [editMealType, setEditMealType] = useState<SelectableMealType>('afternoon_snack')
   const [editSaving, setEditSaving] = useState(false)
+  const [recalculatingIndex, setRecalculatingIndex] = useState<number | null>(null)
+  const recalculationBusyRef = useRef(false)
+  const editSessionRef = useRef(0)
 
   useEffect(() => {
+    editSessionRef.current += 1
+    recalculationBusyRef.current = false
+    setRecalculatingIndex(null)
     if (visible && record) {
       const mt = normalizeSelectableMealType(record.meal_type)
       setEditMealType(mt)
@@ -262,6 +269,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
     return () => {
+      editSessionRef.current += 1
       // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
   }, [visible, record])
@@ -290,35 +298,72 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     })
   }, [])
 
-  const updateEditItemName = useCallback((index: number, nextName: string) => {
-    setEditItems(prev => {
-      const next = [...prev]
-      if (!next[index]) return prev
-      next[index] = { ...next[index], name: nextName }
-      return next
-    })
-  }, [])
-
-  const handleEditItemName = useCallback((index: number) => {
+  const handleEditItemName = async (index: number) => {
+    if (recalculationBusyRef.current || editSaving) return
     const currentName = editItems[index]?.name || ''
-    // @ts-ignore
-    Taro.showModal({
-      title: '修改食物名称',
-      content: currentName,
-      // @ts-ignore
-      editable: true,
-      placeholderText: '请输入新的食物名称',
-      success: (res) => {
-        if (!res.confirm) return
-        const nextName = String((res as any).content ?? '').trim()
-        if (!nextName) {
-          Taro.showToast({ title: '名称不能为空', icon: 'none' })
-          return
-        }
-        updateEditItemName(index, nextName)
+    const session = editSessionRef.current
+    const isCurrent = () => session === editSessionRef.current
+    recalculationBusyRef.current = true
+    try {
+      const res = await Taro.showModal({
+        title: '改名并重算此项',
+        content: currentName,
+        editable: true,
+        placeholderText: '请输入新的食物名称',
+      } as Taro.showModal.Option & { editable: boolean; placeholderText: string })
+      if (!res.confirm || !isCurrent()) return
+      const nextName = String((res as typeof res & { content?: string }).content ?? '').trim()
+      if (!nextName) {
+        Taro.showToast({ title: '名称不能为空', icon: 'none' })
+        return
       }
-    })
-  }, [editItems, updateEditItemName])
+      if (nextName === currentName.trim()) return
+      if (!await confirmSingleItemRecalculation(nextName) || !isCurrent()) return
+      setRecalculatingIndex(index)
+      const original = editItems[index]
+      const snapshot: FoodItem[] = editItems.map((item, itemIndex) => ({
+        itemId: itemIndex + 1,
+        name: item.name,
+        estimatedWeightGrams: item.weight,
+        originalWeightGrams: item.weight,
+        waterMl: item.waterMl,
+        nutrients: item.nutrients,
+      }))
+      const resolved = await recalculateSingleFoodItem({
+        previous: { description: record?.description || '', insight: record?.insight || '', items: snapshot },
+        index,
+        name: nextName,
+        weight: original.weight,
+        isCurrent,
+      })
+      if (!isCurrent()) return
+      const waterMl = Math.max(0, Math.min(original.weight, Number(resolved.waterMl ?? resolved.nutrients.waterMl ?? resolved.nutrients.water_ml ?? 0)))
+      setEditItems(prev => prev.map((item, itemIndex) => itemIndex === index ? {
+        ...item,
+        name: nextName,
+        waterMl,
+        nutrients: { ...resolved.nutrients, waterMl, water_ml: waterMl },
+        matchedFoodId: resolved.matched_food_id ?? resolved.matchedFoodId,
+        nutritionSource: resolved.nutrition_source ?? resolved.nutritionSource,
+        nutritionSourceCategory: resolved.nutrition_source_category ?? resolved.nutritionSourceCategory,
+        packagedFoodId: resolved.packaged_food_id ?? resolved.packagedFoodId,
+        packageMatchStatus: resolved.package_match_status ?? resolved.packageMatchStatus,
+        packageMatchConfidence: resolved.package_match_confidence ?? resolved.packageMatchConfidence,
+        packagedCandidates: resolved.packaged_candidates ?? resolved.packagedCandidates,
+        packageWeightSource: 'user_context',
+        packageWeightApplied: true,
+        packageWeightReason: '按当前重量单项重算',
+      } : item))
+      Taro.showToast({ title: '已重算这一项', icon: 'success' })
+    } catch (error) {
+      if (isCurrent()) showUnifiedApiError(error, '重算失败，原数据保留')
+    } finally {
+      if (isCurrent()) {
+        recalculationBusyRef.current = false
+        setRecalculatingIndex(null)
+      }
+    }
+  }
 
   const toggleNutrientDetails = useCallback((index: number) => {
     setEditItems(prev => {
@@ -535,6 +580,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
   }
 
   const handleSaveEdit = async () => {
+    if (recalculationBusyRef.current || editSaving) return
     if (editItems.length === 0) {
       Taro.showToast({ title: '至少保留一项食物', icon: 'none' })
       return
@@ -613,7 +659,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           </View>
           <View className='edit-modal-close' onClick={onClose} />
         </View>
-        <View className='edit-modal-body'>
+        <View className={`edit-modal-body ${recalculatingIndex !== null ? 'edit-modal-body--recalculating' : ''}`}>
           <MealTypeField value={editMealType} onChange={setEditMealType} />
           {editItems.map((item, idx) => {
             const detailRows = getNutrientDetailRows(item)
@@ -625,6 +671,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
                   <View className='ingredient-header ingredient-header--title-row'>
                     <Text className='ingredient-name'>{item.name}</Text>
                     <View className='ingredient-header-actions'>
+                      {recalculatingIndex === idx && <View className='btn-spinner ingredient-recalculation-spinner' />}
                       <View className='edit-icon-wrapper' onClick={() => handleEditItemName(idx)}>
                         <Text className='iconfont icon-shouxieqianming' />
                       </View>
@@ -748,7 +795,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
         </View>
         <View className='edit-modal-footer'>
           <Button className='edit-cancel-btn' onClick={onClose}>取消</Button>
-          <Button className='edit-save-btn' onClick={handleSaveEdit} disabled={editSaving}>
+          <Button className='edit-save-btn' onClick={handleSaveEdit} disabled={editSaving || recalculatingIndex !== null}>
             {editSaving ? <View className='btn-spinner' /> : '保存修改'}
           </Button>
         </View>

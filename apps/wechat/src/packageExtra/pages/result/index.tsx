@@ -46,6 +46,7 @@ import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { applyEnergyEdit } from '../../../utils/nutrition-edit'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
+import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
@@ -634,6 +635,13 @@ function ResultPage() {
   )
 
   // 二次纠错抽屉状态
+  const [foodRecalculating, setFoodRecalculating] = useState(false)
+  const foodRecalculationBusyRef = useRef(false)
+  const foodEditorMountedRef = useRef(true)
+  useEffect(() => {
+    foodEditorMountedRef.current = true
+    return () => { foodEditorMountedRef.current = false }
+  }, [])
   const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
   const [quickRatioSheetVisible, setQuickRatioSheetVisible] = useState(false)
   const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
@@ -1623,6 +1631,7 @@ function ResultPage() {
         } as NutritionItem
       })
       calculateNutritionStats(updatedItems)
+      itemId: item.id,
       return updatedItems
     })
   }
@@ -1672,6 +1681,7 @@ function ResultPage() {
     Taro.setStorageSync('analyzeResult', JSON.stringify(nextResult))
     const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId')
     if (!sourceTaskId) return
+    if (foodRecalculationBusyRef.current) return
     try {
       await updateAnalysisTaskResult(sourceTaskId, nextResult)
     } catch (error) {
@@ -1685,6 +1695,7 @@ function ResultPage() {
       name: item.name,
       weight: String(roundToSingleDecimal(item.weight || 0)),
       calories: String(Math.round(item.calorie || 0)),
+    if (foodRecalculationBusyRef.current) return
       protein: formatMacroDisplay(item.protein || 0),
       carbs: formatMacroDisplay(item.carbs || 0),
       fat: formatMacroDisplay(item.fat || 0),
@@ -1723,9 +1734,8 @@ function ResultPage() {
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
   }
 
-  const handleSaveFoodEditDraft = () => {
-    if (!foodEditDraft) return
-    nutritionAdjustedRef.current = true
+  const handleSaveFoodEditDraft = async () => {
+    if (!foodEditDraft || foodRecalculationBusyRef.current) return
     const name = foodEditDraft.name.trim()
     const weight = parseFoodEditNumber(foodEditDraft.weight)
     const calories = parseFoodEditNumber(foodEditDraft.calories)
@@ -1734,11 +1744,55 @@ function ResultPage() {
     const fat = parseFoodEditNumber(foodEditDraft.fat)
     const waterMl = parseFoodEditNumber(foodEditDraft.waterMl)
 
+    const targetIndex = nutritionItems.findIndex(item => item.id === foodEditDraft.itemId)
+    const original = nutritionItems[targetIndex]
+    if (!original) return
+    if (name !== original.name.trim()) {
+      foodRecalculationBusyRef.current = true
+      try {
+        if (!await confirmSingleItemRecalculation(name) || !foodEditorMountedRef.current) return
+        setFoodRecalculating(true)
+        const resolved = await recalculateSingleFoodItem({
+          previous: buildAnalyzeResultFromItems(nutritionItems),
+          index: targetIndex,
+          name,
+          weight,
+          sourceTaskId: Taro.getStorageSync('analyzeSourceTaskId') || undefined,
+          isCurrent: () => foodEditorMountedRef.current,
+        })
+        if (!foodEditorMountedRef.current) return
+        const converted = convertApiFoodItemsToNutritionItems([resolved])[0]
+        const nextItems = nutritionItems.map(item => item.id === original.id ? {
+          ...converted,
+          id: original.id,
+          sourceItemId: original.sourceItemId,
+          sourceName: name,
+          ratio: original.ratio,
+          intake: Math.round(weight * original.ratio / 100),
+          suggestedRatio: original.suggestedRatio,
+          suggestedRatioReason: original.suggestedRatioReason,
+          suggestedRatioSource: original.suggestedRatioSource,
+        } : item)
+        nutritionAdjustedRef.current = true
+        calculateNutritionStats(nextItems)
+        setNutritionItems(nextItems)
+        setFoodEditDraft(null)
+        void syncEditedAnalyzeResult(nextItems)
+        Taro.showToast({ title: '已重算这一项', icon: 'success' })
+      } catch (error) {
+        if (foodEditorMountedRef.current) showUnifiedApiError(error, '重算失败，原数据保留')
+      } finally {
+        foodRecalculationBusyRef.current = false
+        if (foodEditorMountedRef.current) setFoodRecalculating(false)
+      }
+      return
+    }
     if (!name) {
       Taro.showToast({ title: '名称不能为空', icon: 'none' })
       return
     }
     if (weight == null || weight <= 0) {
+    nutritionAdjustedRef.current = true
       Taro.showToast({ title: '请输入大于0的重量', icon: 'none' })
       return
     }
@@ -3169,6 +3223,7 @@ function ResultPage() {
               {saving ? (
                 <View className='btn-spinner' />
               ) : (
+                <Text className='food-edit-recalculation-hint'>修改名称后，保存时按当前重量重算这一项；其他食物和摄入比例保留。</Text>
                 <Text className='btn-text'>
                   {isAnalyzeSessionCommitted() || committedRecordId
                     ? '查看结果'
@@ -3200,7 +3255,7 @@ function ResultPage() {
 
       <View
         className={`food-edit-drawer-overlay ${foodEditDraft ? 'visible' : ''}`}
-        onClick={() => setFoodEditDraft(null)}
+        onClick={() => { if (!foodRecalculationBusyRef.current) setFoodEditDraft(null) }}
       >
         <View
           className={`food-edit-drawer-content ${foodEditDraft ? 'slide-up' : ''}`}
@@ -3208,7 +3263,7 @@ function ResultPage() {
         >
           <View className='drawer-header'>
             <Text className='drawer-title'>修改食物</Text>
-            <View className='drawer-close' onClick={() => setFoodEditDraft(null)}>
+            <View className='drawer-close' onClick={() => { if (!foodRecalculationBusyRef.current) setFoodEditDraft(null) }}>
               <Text className='close-icon'>×</Text>
             </View>
           </View>
@@ -3270,11 +3325,11 @@ function ResultPage() {
             </ScrollView>
           )}
           <View className='food-edit-footer'>
-            <View className='food-edit-cancel' onClick={() => setFoodEditDraft(null)}>
+            <View className='food-edit-cancel' onClick={() => { if (!foodRecalculationBusyRef.current) setFoodEditDraft(null) }}>
               <Text className='food-edit-cancel-text'>取消</Text>
             </View>
             <View className='food-edit-save' onClick={handleSaveFoodEditDraft}>
-              <Text className='food-edit-save-text'>保存修改</Text>
+              {foodRecalculating ? <View className='food-edit-recalculation-spinner' /> : <Text className='food-edit-save-text'>保存修改</Text>}
             </View>
           </View>
         </View>

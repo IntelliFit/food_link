@@ -3616,6 +3616,7 @@ export async function submitAnalyzeBatch(body: AnalyzeBatchSubmitParams): Promis
 
 /** 文字分析提交参数 */
 export interface AnalyzeTextTaskSubmitParams {
+	correction_target_index?: number
   text: string
   meal_type?: MealType
   date?: string

@@ -1430,6 +1430,9 @@ func (r *Runner) processFoodText(ctx context.Context, task *domain.AnalysisTask)
 }
 
 func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.AnalysisTask, sessionID string, roundIndex int, latestInputs map[string]any) (bool, error) {
+	if _, single := task.Payload["correction_target_index"]; single {
+		return true, r.completeSingleItemCorrection(ctx, task)
+	}
 	correctionItems := extractItems(firstNonNil(task.Payload["correctionItems"], latestInputs["correctionItems"]))
 	if len(correctionItems) == 0 {
 		return false, nil
