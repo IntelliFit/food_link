@@ -671,7 +671,7 @@ func (s *Service) CreateDeveloperApp(ctx context.Context, ownerUserID, name stri
 }
 
 func (s *Service) CreateDeveloperKey(ctx context.Context, ownerUserID, appID, name string, scopes []string) (*KeyMaterial, error) {
-	app, err := s.requireOwnedApp(ctx, ownerUserID, appID)
+	app, err := s.requireActiveOwnedApp(ctx, ownerUserID, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -731,6 +731,32 @@ func (s *Service) ListDeveloperLedger(ctx context.Context, ownerUserID, appID st
 	return s.repo.ListLedger(ctx, app.ID, limit)
 }
 
+func (s *Service) RecycleDeveloperApp(ctx context.Context, ownerUserID, appID string) error {
+	return s.setDeveloperAppStatus(ctx, ownerUserID, appID, domain.AppStatusDisabled)
+}
+
+func (s *Service) RestoreDeveloperApp(ctx context.Context, ownerUserID, appID string) error {
+	return s.setDeveloperAppStatus(ctx, ownerUserID, appID, domain.AppStatusActive)
+}
+
+func (s *Service) setDeveloperAppStatus(ctx context.Context, ownerUserID, appID, status string) error {
+	ownerUserID, appID = strings.TrimSpace(ownerUserID), strings.TrimSpace(appID)
+	if ownerUserID == "" {
+		return commonerrors.ErrUnauthorized
+	}
+	found, err := s.repo.SetOwnedAppStatus(ctx, ownerUserID, appID, status)
+	if err != nil {
+		logger.Error(ctx, "更新开放平台应用状态失败", err, slog.String("user_id", ownerUserID), slog.String("open_api.app_id", appID))
+		return err
+	}
+	if !found {
+		logger.Warn(ctx, "开放平台应用不存在或无权管理", slog.String("user_id", ownerUserID), slog.String("open_api.app_id", appID))
+		return commonerrors.ErrNotFound
+	}
+	logger.Info(ctx, "开发者更新开放平台应用状态", slog.String("user_id", ownerUserID), slog.String("open_api.app_id", appID), slog.String("open_api.status", status))
+	return nil
+}
+
 func (s *Service) ListCreditPackages(ctx context.Context) ([]domain.CreditPackage, error) {
 	return s.repo.ListActivePackages(ctx)
 }
@@ -741,7 +767,7 @@ type PaymentOrderResult struct {
 }
 
 func (s *Service) CreatePaymentOrder(ctx context.Context, ownerUserID, appID, packageCode string) (*PaymentOrderResult, error) {
-	app, err := s.requireOwnedApp(ctx, ownerUserID, appID)
+	app, err := s.requireActiveOwnedApp(ctx, ownerUserID, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -886,6 +912,18 @@ func (s *Service) requireOwnedApp(ctx context.Context, ownerUserID, appID string
 	}
 	if app == nil {
 		return nil, commonerrors.ErrNotFound
+	}
+	return app, nil
+}
+
+func (s *Service) requireActiveOwnedApp(ctx context.Context, ownerUserID, appID string) (*domain.App, error) {
+	app, err := s.requireOwnedApp(ctx, ownerUserID, appID)
+	if err != nil {
+		return nil, err
+	}
+	if app.Status != domain.AppStatusActive {
+		logger.Warn(ctx, "开放平台应用已停用", slog.String("user_id", ownerUserID), slog.String("open_api.app_id", appID))
+		return nil, &commonerrors.AppError{Code: 50008, Message: "请先恢复回收站中的应用", HTTPStatus: http.StatusConflict}
 	}
 	return app, nil
 }

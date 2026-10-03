@@ -56,6 +56,8 @@ func (h *Handler) RegisterDeveloperRoutes(engine *gin.Engine, requireJWT gin.Han
 	group.Use(requireJWT)
 	group.GET("/apps", h.ListDeveloperApps)
 	group.POST("/apps", h.CreateDeveloperApp)
+	group.DELETE("/apps/:app_id", h.RecycleDeveloperApp)
+	group.POST("/apps/:app_id/restore", h.RestoreDeveloperApp)
 	group.POST("/apps/:app_id/keys", h.CreateDeveloperKey)
 	group.DELETE("/apps/:app_id/keys/:key_id", h.RevokeDeveloperKey)
 	group.GET("/apps/:app_id/ledger", h.ListDeveloperLedger)
@@ -71,7 +73,29 @@ func (h *Handler) ListDeveloperApps(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"apps": apps})
+	response.Success(c, gin.H{"apps": apps, "capabilities": []string{"app_recycle"}})
+}
+
+func (h *Handler) RecycleDeveloperApp(c *gin.Context) {
+	userID, appID := c.GetString(authmw.ContextUserIDKey), c.Param("app_id")
+	logger.Info(c.Request.Context(), "收到开放平台应用回收请求", slog.String("user_id", userID), slog.String("open_api.app_id", appID))
+	if err := h.service.RecycleDeveloperApp(c.Request.Context(), userID, appID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "开放平台应用已移入回收站", slog.String("user_id", userID), slog.String("open_api.app_id", appID))
+	response.Success(c, gin.H{"recycled": true})
+}
+
+func (h *Handler) RestoreDeveloperApp(c *gin.Context) {
+	userID, appID := c.GetString(authmw.ContextUserIDKey), c.Param("app_id")
+	logger.Info(c.Request.Context(), "收到开放平台应用恢复请求", slog.String("user_id", userID), slog.String("open_api.app_id", appID))
+	if err := h.service.RestoreDeveloperApp(c.Request.Context(), userID, appID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "开放平台应用已恢复", slog.String("user_id", userID), slog.String("open_api.app_id", appID))
+	response.Success(c, gin.H{"restored": true})
 }
 
 func (h *Handler) CreateDeveloperApp(c *gin.Context) {
