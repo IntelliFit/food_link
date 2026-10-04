@@ -15,6 +15,7 @@ export const PET_MILESTONES: PetMilestone[] = [
   { id: 'explore-landmarks', game: 'explore', name: '风景收集者', condition: '发现 6 处不同地标', target: 6, mark: '⌖' },
   { id: 'explore-route', game: 'explore', name: '水岸向导', condition: '完成 3 个不同寻宝关卡', target: 3, mark: '⌖' },
 ]
+export const ACTIVE_PET_MILESTONES = PET_MILESTONES.filter(item => item.game === 'merge' || item.game === 'adventure')
 export function milestoneProgress(pet: PetJourney, item: PetMilestone): number {
   const value = item.id.endsWith('-first') || item.id.endsWith('-route') ? pet.cleared[item.game].length : item.id === 'explore-landmarks' ? pet.landmarks : pet.milestoneProgress?.[item.id] || 0
   return Math.min(item.target, Math.max(0, value))

@@ -1,6 +1,7 @@
-import { PET_MILESTONES, milestoneProgress } from './pet-milestones'
+import { ACTIVE_PET_MILESTONES, PET_MILESTONES, milestoneProgress } from './pet-milestones'
 
 export type GrowthGame = 'kitchen' | 'merge' | 'adventure' | 'explore'
+export type PlayableGrowthGame = 'merge' | 'adventure'
 export type RoomSlot = 'window' | 'table' | 'floor'
 export interface GrowthRound { game: GrowthGame; levelId: number; score: number; completed: boolean; stars: number; collectibles: string[]; landmarks?: string[]; detail?: Record<string, number> }
 export interface PetJourney {
@@ -13,11 +14,9 @@ export interface GrowthSave {
   version: 2; revision: number; stars: number; inventory: string[]; pets: Record<string, PetJourney>; migratedPets: string[]
   rounds: string[]; daily: { day: string; games: GrowthGame[]; earned: number }
 }
-export const GROWTH_GAMES: { id: GrowthGame; name: string; description: string; icon: string }[] = [
-  { id: 'kitchen', name: '湖畔餐车', description: '点订单开锅，找准火候收锅', icon: '♨' },
+export const GROWTH_GAMES: { id: PlayableGrowthGame; name: string; description: string; icon: string }[] = [
   { id: 'merge', name: '食材合成局', description: '滑动合成，选材完成配方', icon: '▦' },
   { id: 'adventure', name: '追风快跑', description: '自动奔跑，点一下起跳赢纪念', icon: '↗' },
-  { id: 'explore', name: '水岸寻宝', description: '选择路线，解开水岸谜题', icon: '⌖' },
 ]
 export const GROWTH_SHOP = [
   { id: 'plant', name: '窗边小绿植', cost: 20, kind: 'furniture' },
@@ -26,11 +25,13 @@ export const GROWTH_SHOP = [
   { id: 'explorer-scarf', name: '探险小围巾', cost: 30, kind: 'clothing' },
 ] as const
 export const GROWTH_CHAPTERS = [
-  { id: 1, title: '灯亮之前', subtitle: '发现三处水岸地标 · 做好一份餐食 · 摆放旅途卡', story: '窗台还空着，屋里也少了一点热气。伙伴把今天找到的地标画在小卡上，你们做了一顿简单的晚餐。灯亮起来的时候，远方也有了回家的方向。', choices: ['先布置窗边，留住今天的风景', '先摆好餐桌，等一顿热乎的晚餐'], reward: 'memory-first-light' },
-  { id: 2, title: '水岸失物', subtitle: '完成第二关寻宝 · 合成一份配方 · 阅读上一章', story: '石桥边有一只被雨打湿的小篮子。顺着水道走，也可以绕过岸边的石板。路口没有唯一答案，带回来的纪念却都记录着你们亲自走过的路。', choices: ['沿安全的岸边慢慢寻找', '解开水道机关，换一个方向'], reward: 'memory-riverside' },
-  { id: 3, title: '雨天的餐车', subtitle: '完成第二关餐车 · 完成第二关冒险 · 阅读上一章', story: '雨打在餐车的檐角，最后一位客人还没走远。你们把汤装好，收起围布。今天赚到了多少并不重要，重要的是有人带着温暖离开，而你们又添了一段故事。', choices: ['帮伙伴备好明天的食材', '先一起收摊，带着晚餐回家'], reward: 'memory-rain-cart' },
+  { id: 1, title: '灯亮之前', subtitle: '完成一关快跑 · 合成一份配方 · 摆放旅途卡', story: '伙伴带回了跑途中赢得的小纪念，你们又拼出一道新的餐盘。把旅途卡摆好，灯亮起来的时候，远方也有了回家的方向。', choices: ['先布置窗边，留住今天的风景', '先摆好餐桌，等一顿热乎的晚餐'], reward: 'memory-first-light' },
+  { id: 2, title: '水岸失物', subtitle: '完成快跑第二关 · 合成一份配方 · 阅读上一章', story: '石桥边有一只被雨打湿的小篮子。跑过这段路后，伙伴记住了每一个弯道。回家拼好餐盘，你们把亲手赢来的纪念放进篮子，为今天留一张小卡。', choices: ['沿安全的岸边慢慢寻找', '解开水道机关，换一个方向'], reward: 'memory-riverside' },
+  { id: 3, title: '雨后的归途', subtitle: '完成合成第二关 · 完成快跑第二关 · 阅读上一章', story: '雨停了，伙伴带着新配方和旅途纪念回到小屋。你们把桌子收拾好，准备一顿简单的晚餐。一次跳跃、一次合成，都变成了可以珍藏的故事。', choices: ['帮伙伴备好明天的食材', '先一起收摊，带着晚餐回家'], reward: 'memory-rain-cart' },
 ]
-const GAME_IDS = GROWTH_GAMES.map(item => item.id)
+// Historical IDs remain valid in saved records after a game is removed.
+const GAME_IDS: GrowthGame[] = ['kitchen', 'merge', 'adventure', 'explore']
+export function isPlayableGrowthGame(game: unknown): game is PlayableGrowthGame { return GROWTH_GAMES.some(item => item.id === game) }
 const int = (n: unknown, max = Number.MAX_SAFE_INTEGER) => typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.min(max, Math.floor(n))) : 0
 const ids = (value: unknown) => Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === 'string' && /^[a-zA-Z0-9:_./%-]{1,160}$/.test(id)))] : []
 const validDay = (day: string) => /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(Date.parse(`${day}T00:00:00Z`)) && new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) === day
@@ -63,9 +64,10 @@ export function normalizeGrowthSave(raw: unknown): GrowthSave {
 export function growthLevel(xp: number) { const thresholds = [0, 40, 100, 180, 300, 460]; let index = 0; thresholds.forEach((threshold, i) => { if (xp >= threshold) index = i }); return { level: index + 1, current: xp - thresholds[index], next: index === 5 ? 0 : thresholds[index + 1] - thresholds[index] } }
 export function chapterTasks(save: GrowthSave, petId: string, chapterId: number): { label: string; done: boolean }[] {
   const pet = save.pets[petId] || newPetJourney()
-  if (chapterId === 1) return [{ label: `水岸地标 ${Math.min(3, pet.landmarks)}/3`, done: pet.landmarks >= 3 }, { label: '完成一份餐车关卡', done: pet.cleared.kitchen.length > 0 }, { label: '把旅途卡摆进小屋', done: Object.values(pet.placements).includes('journey-card') }]
-  if (chapterId === 2) return [{ label: '完成水岸寻宝第二关', done: pet.cleared.explore.includes(2) }, { label: '完成一关食材合成', done: pet.cleared.merge.length > 0 }, { label: '读完灯亮之前', done: pet.chapters.includes(1) }]
-  return [{ label: '完成雨天热汤第二关', done: pet.cleared.kitchen.includes(2) }, { label: '完成活力冒险第二关', done: pet.cleared.adventure.includes(2) }, { label: '读完水岸失物', done: pet.chapters.includes(2) }]
+  // A previously fulfilled objective stays fulfilled for existing companions.
+  if (chapterId === 1) return [{ label: '完成一关追风快跑', done: pet.cleared.adventure.length > 0 || pet.landmarks >= 3 }, { label: '完成一关食材合成', done: pet.cleared.merge.length > 0 || pet.cleared.kitchen.length > 0 }, { label: '把旅途卡摆进小屋', done: Object.values(pet.placements).includes('journey-card') }]
+  if (chapterId === 2) return [{ label: '完成追风快跑第二关', done: pet.cleared.adventure.includes(2) || pet.cleared.explore.includes(2) }, { label: '完成一关食材合成', done: pet.cleared.merge.length > 0 }, { label: '读完灯亮之前', done: pet.chapters.includes(1) }]
+  return [{ label: '完成食材合成第二关', done: pet.cleared.merge.includes(2) || pet.cleared.kitchen.includes(2) }, { label: '完成追风快跑第二关', done: pet.cleared.adventure.includes(2) }, { label: '读完水岸失物', done: pet.chapters.includes(2) }]
 }
 export interface GrowthUpdate { save: GrowthSave; ok: boolean; message: string }
 const copy = (save: GrowthSave): GrowthSave => JSON.parse(JSON.stringify(save))
@@ -79,9 +81,10 @@ function enterDay(save: GrowthSave, petId: string, day: string): PetJourney | nu
 export function settleGrowthRound(source: GrowthSave, petId: string, round: GrowthRound, roundId: string, day: string): GrowthUpdate {
   if (!petId || !/^[a-zA-Z0-9:_./%-]{1,128}$/.test(roundId) || !GAME_IDS.includes(round.game) || !Number.isInteger(round.levelId) || round.levelId < 1 || round.levelId > 6 || !Number.isInteger(round.score) || round.score < 0 || round.score > 1000000 || !Number.isInteger(round.stars) || round.stars < 0 || round.stars > 3) return { save: source, ok: false, message: '本局结果无法确认，请保留后重试' }
   if (source.rounds.includes(roundId)) return { save: source, ok: true, message: '这局已保存，没有重复发放' }
+  if (!isPlayableGrowthGame(round.game)) return { save: source, ok: false, message: '这款游戏已移除，已保存的成长与收藏仍然保留' }
   const save = copy(source); const pet = enterDay(save, petId, day)
   if (!pet) return { save: source, ok: false, message: '设备日期变化，请校准日期后重试' }
-  const meaningful = round.game === 'kitchen' ? (round.detail?.served || 0) >= 1 : round.game === 'merge' ? (round.detail?.steps || 0) >= 1 : round.game === 'explore' ? (round.detail?.moves || 0) >= 2 && (round.detail?.nodes || 0) >= 1 : (round.detail?.distance || 0) >= 40 && (round.detail?.flowRun !== 1 || (round.detail?.successfulJumps || 0) >= 1)
+  const meaningful = round.game === 'merge' ? (round.detail?.steps || 0) >= 1 : (round.detail?.distance || 0) >= 40 && (round.detail?.flowRun !== 1 || (round.detail?.successfulJumps || 0) >= 1)
   let reward = 0; let xp = 0
   if (meaningful && !save.daily.games.includes(round.game)) {
     reward = Math.min(6, 24 - save.daily.earned); save.daily.games.push(round.game); save.daily.earned += reward; save.stars += reward
@@ -92,17 +95,12 @@ export function settleGrowthRound(source: GrowthSave, petId: string, round: Grow
     if (!pet.cleared[round.game].includes(round.levelId)) pet.cleared[round.game].push(round.levelId)
   }
   if (meaningful) save.inventory = [...new Set([...save.inventory, ...ids(round.collectibles)])]
-  if (round.game === 'explore' && meaningful) {
-    pet.seenLandmarks = [...new Set([...pet.seenLandmarks, ...ids(round.landmarks).map(id => `explore:${round.levelId}:${id}`)])]
-    pet.landmarks = pet.seenLandmarks.length
-  }
   const key = `${round.game}:${round.levelId}`; const best = pet.bests[key]
   if (!best || round.score > best.score || round.stars > best.stars) pet.bests[key] = { score: Math.max(round.score, best?.score || 0), stars: Math.max(round.stars, best?.stars || 0) }
   const unlocked: string[] = []
   if (meaningful) {
     pet.badges ||= []; pet.milestoneProgress ||= {}
     const progress = (id: string, value: number) => { const next = Math.max(pet.milestoneProgress[id] || 0, int(value, PET_MILESTONES.find(item => item.id === id)!.target)); if (next) pet.milestoneProgress[id] = next }
-    if (round.game === 'kitchen') progress('kitchen-combo', round.detail?.bestCombo || 0)
     if (round.game === 'merge') progress('merge-rank', round.detail?.highestRank || 0)
     if (round.game === 'adventure' && round.completed) progress('adventure-stars', round.stars)
     PET_MILESTONES.filter(item => item.game === round.game).forEach(item => {
@@ -124,7 +122,7 @@ export function placeGrowthItem(source: GrowthSave, petId: string, slot: RoomSlo
 }
 export function chooseGrowthStory(source: GrowthSave, petId: string, chapterId: number, choice: string): GrowthUpdate {
   const chapter = GROWTH_CHAPTERS.find(item => item.id === chapterId)
-  if (!chapter || !chapter.choices.includes(choice) || !chapterTasks(source, petId, chapterId).every(task => task.done)) return { save: source, ok: false, message: '先完成这一章的三个目标' }
+  if (!chapter || !chapter.choices.includes(choice) || (!source.pets[petId]?.chapters.includes(chapterId) && !chapterTasks(source, petId, chapterId).every(task => task.done))) return { save: source, ok: false, message: '先完成这一章的三个目标' }
   const save = copy(source); const pet = save.pets[petId] ||= newPetJourney()
   if (!pet.chapters.includes(chapterId)) { pet.chapters.push(chapterId); pet.xp += 30; save.inventory = [...new Set([...save.inventory, chapter.reward])] }
   pet.choices[String(chapterId)] = choice
@@ -147,7 +145,7 @@ export function touchGrowthPet(source: GrowthSave, petId: string, day: string): 
 }
 
 export function choosePetWish(source: GrowthSave, petId: string, id: string | null): GrowthUpdate {
-  if (!petId || (id !== null && !PET_MILESTONES.some(item => item.id === id))) return { save: source, ok: false, message: '这个心愿暂不可用' }
+  if (!petId || (id !== null && !ACTIVE_PET_MILESTONES.some(item => item.id === id))) return { save: source, ok: false, message: '这个心愿暂不可用' }
   const save = copy(source); const pet = save.pets[petId] ||= newPetJourney()
   pet.wish = id
   return { save, ok: true, message: id ? '心愿已记下，随时可以换；进度会一直保留' : '已取消追踪，收集进度仍然保留' }

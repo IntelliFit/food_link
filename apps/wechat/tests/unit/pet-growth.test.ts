@@ -36,8 +36,8 @@ function finish(save: GrowthSave, game: GrowthGame, id: string, pet = petA, leve
   return update.save
 }
 
-test('local v2 exposes four games and the existing fixed shop prices, with independent starter objects', () => {
-  expect(GROWTH_GAMES.map(item => item.id)).toEqual(['kitchen', 'merge', 'adventure', 'explore'])
+test('local v2 exposes only two playable games and the existing fixed shop prices, with independent starter objects', () => {
+  expect(GROWTH_GAMES.map(item => item.id)).toEqual(['merge', 'adventure'])
   expect(GROWTH_SHOP.map(item => [item.id, item.cost])).toEqual([
     ['plant', 20], ['lamp', 30], ['leafboard', 40], ['explorer-scarf', 30],
   ])
@@ -67,7 +67,7 @@ test('greetings add affinity only once per pet per day, never currency or experi
   expect(source.pets).toEqual({})
 })
 
-test.each<GrowthGame>(['kitchen', 'merge', 'adventure', 'explore'])('%s normal failure earns its first valid participation reward without unlocking a level', game => {
+test.each<GrowthGame>(['merge', 'adventure'])('%s normal failure earns its first valid participation reward without unlocking a level', game => {
   const source = newGrowthSave()
   const result = settleGrowthRound(source, petA, round(game, { completed: false, stars: 0 }), `failed-${game}`, today)
   expect(result.ok).toBe(true)
@@ -81,7 +81,7 @@ test.each<GrowthGame>(['kitchen', 'merge', 'adventure', 'explore'])('%s normal f
 
 test('an insufficient-participation terminal result cannot award currency, XP, affinity or collection', () => {
   let save = newGrowthSave()
-  for (const game of ['kitchen', 'merge', 'adventure', 'explore'] as GrowthGame[]) {
+  for (const game of ['merge', 'adventure'] as GrowthGame[]) {
     save = settleGrowthRound(save, petA, round(game, { completed: false, stars: 0, detail: {} }), `empty-${game}`, today).save
   }
   expect(save.stars).toBe(0)
@@ -121,51 +121,64 @@ test('the actual adventure timeout at the first automatic fork is not eligible p
   expect(afterActualPlay.save.stars).toBe(6)
 })
 
-test('revisiting the same real water node after exit, reload or a later day never adds another landmark', () => {
-  const observed = round('explore', { completed: false, stars: 0, score: 50, collectibles: [], landmarks: ['clue'], detail: { moves: 2, nodes: 1 } })
-  const first = settleGrowthRound(newGrowthSave(), petA, observed, 'water-first-trip', today).save
-  expect(first.pets[petA].seenLandmarks).toEqual(['explore:1:clue'])
-  const reopened = normalizeGrowthSave(copy(first))
-  const repeated = settleGrowthRound(reopened, petA, observed, 'water-reopened-trip', today).save
-  expect(repeated.pets[petA].landmarks).toBe(1)
-  expect(repeated.pets[petA].seenLandmarks).toEqual(['explore:1:clue'])
-  expect(repeated.stars).toBe(6)
-  const later = settleGrowthRound(normalizeGrowthSave(copy(repeated)), petA, observed, 'water-later-day', nextDay).save
-  expect(later.pets[petA].landmarks).toBe(1)
-  expect(later.stars).toBe(12)
-  const newSource = settleGrowthRound(later, petA, round('explore', { completed: false, landmarks: ['clue', 'canal'], detail: { moves: 2, nodes: 1 } }), 'water-new-canal', nextDay).save
-  expect(newSource.pets[petA].seenLandmarks).toEqual(['explore:1:clue', 'explore:1:canal'])
-  expect(newSource.pets[petA].landmarks).toBe(2)
+test.each<GrowthGame>(['kitchen', 'explore'])('retired %s rounds cannot mint currency or change progress', game => {
+  const source = newGrowthSave()
+  const update = settleGrowthRound(source, petA, round(game), `retired:${game}`, today)
+  expect(update.ok).toBe(false)
+  expect(update.save).toBe(source)
+  expect(source).toEqual(newGrowthSave())
 })
 
-test('numeric node counts alone cannot invent a chapter landmark or restore unverifiable counts', () => {
-  const numericOnly = settleGrowthRound(newGrowthSave(), petA, round('explore', { landmarks: undefined, detail: { moves: 2, nodes: 3 } }), 'no-landmark-sources', today).save
-  expect(numericOnly.pets[petA].landmarks).toBe(0)
-  expect(numericOnly.pets[petA].seenLandmarks).toEqual([])
-  expect(chapterTasks(numericOnly, petA, 1)[0].done).toBe(false)
-  const corrupted = copy(numericOnly)
-  corrupted.pets[petA].landmarks = 99
-  expect(normalizeGrowthSave(corrupted).pets[petA].landmarks).toBe(0)
+test('old kitchen and exploration records survive normalization and a new game write', () => {
+  const old = newGrowthSave(); old.stars = 79; old.rounds = ['old-kitchen', 'old-explore']; old.migratedPets = [petA]
+  old.daily = { day: today, games: ['kitchen', 'explore'], earned: 12 }
+  old.inventory.push('kitchen-first-soup', 'explore-blue-pebble', 'badge:kitchen-first')
+  const pet = old.pets[petA] = newPetJourney()
+  pet.cleared.kitchen = [1, 2]; pet.cleared.explore = [1, 2]
+  pet.bests = { 'kitchen:2': { score: 900, stars: 3 }, 'explore:2': { score: 750, stars: 2 } }
+  pet.seenLandmarks = ['explore:1:clue', 'explore:1:canal', 'explore:2:clue']; pet.landmarks = 3
+  pet.badges = ['kitchen-first']; pet.milestoneProgress = { 'kitchen-combo': 2 }; pet.wish = 'explore-route'
+  pet.placements.table = 'badge:kitchen-first'; pet.chapters = [1]; pet.choices['1'] = GROWTH_CHAPTERS[0].choices[0]
+  const restored = normalizeGrowthSave(copy(old))
+  expect(restored).toEqual(old)
+  for (const game of ['kitchen', 'explore'] as const) {
+    const replay = settleGrowthRound(restored, petA, round(game), `old-${game}`, nextDay)
+    expect(replay.ok).toBe(true); expect(replay.save).toBe(restored)
+  }
+  const updated = finish(restored, 'merge', 'new-merge')
+  expect(updated.stars).toBe(85)
+  expect(updated.daily).toEqual({ day: today, games: ['kitchen', 'explore', 'merge'], earned: 18 })
+  expect(updated.pets[petA]).toMatchObject({ cleared: { kitchen: [1, 2], explore: [1, 2] }, seenLandmarks: pet.seenLandmarks, landmarks: 3, wish: pet.wish, placements: pet.placements, chapters: pet.chapters, choices: pet.choices, milestoneProgress: pet.milestoneProgress })
+  expect(updated.pets[petA].badges).toEqual(expect.arrayContaining(pet.badges))
+  expect(updated.pets[petA].bests).toMatchObject(pet.bests)
+  expect(normalizeGrowthSave(copy(updated))).toEqual(updated)
+  store.set(growthStorageKey(account), copy(old))
+  expect(writeGrowth(account, updated)).toBe(true)
+  expect(readGrowth(account, petA)).toEqual(updated)
 })
 
-test('identical raw water node IDs stay separate across levels and pets, while duplicate cumulative entries are collapsed', () => {
-  const clue = { completed: false, landmarks: ['clue', 'clue'], detail: { moves: 2, nodes: 1 } }
-  let save = settleGrowthRound(newGrowthSave(), petA, round('explore', clue), 'level-one-clue', today).save
-  save = settleGrowthRound(save, petA, round('explore', { ...clue, levelId: 2 }), 'level-two-clue', today).save
-  save = settleGrowthRound(save, petB, round('explore', clue), 'other-pet-clue', today).save
-  expect(save.pets[petA].seenLandmarks).toEqual(['explore:1:clue', 'explore:2:clue'])
-  expect(save.pets[petA].landmarks).toBe(2)
-  expect(save.pets[petB].seenLandmarks).toEqual(['explore:1:clue'])
-  expect(save.pets[petB].landmarks).toBe(1)
+test('historical fulfilled chapter goals and completed stories stay available without rewarding twice', () => {
+  const source = newGrowthSave(); const pet = source.pets[petA] = newPetJourney()
+  pet.cleared.kitchen = [1, 2]; pet.cleared.explore = [2]; pet.landmarks = 3
+  pet.placements.table = 'journey-card'
+  expect(chapterTasks(source, petA, 1).every(task => task.done)).toBe(true)
+  pet.chapters = [1, 2, 3]; pet.xp = 90; pet.choices['3'] = GROWTH_CHAPTERS[2].choices[1]
+  source.inventory.push(GROWTH_CHAPTERS[2].reward)
+  expect(chapterTasks(source, petA, 3)[1].done).toBe(false)
+  const reread = chooseGrowthStory(source, petA, 3, GROWTH_CHAPTERS[2].choices[0])
+  expect(reread.ok).toBe(true)
+  expect(reread.save.pets[petA].xp).toBe(90)
+  expect(reread.save.stars).toBe(source.stars)
+  expect(reread.save.inventory).toEqual(source.inventory)
 })
 
 test('an already-settled round is idempotent even on another day or against another pet', () => {
-  const first = finish(newGrowthSave(), 'explore', 'permanent-round')
-  const repeated = settleGrowthRound(first, petB, round('explore', { score: 999 }), 'permanent-round', nextDay)
+  const first = finish(newGrowthSave(), 'adventure', 'permanent-round')
+  const repeated = settleGrowthRound(first, petB, round('adventure', { score: 999 }), 'permanent-round', nextDay)
   expect(repeated.ok).toBe(true)
   expect(repeated.save).toBe(first)
   expect(first.rounds).toEqual(['permanent-round'])
-  expect(first.pets[petA].landmarks).toBe(3)
+  expect(first.pets[petA].cleared.adventure).toEqual([1])
   expect(first.pets[petB]).toBeUndefined()
 })
 
@@ -181,35 +194,45 @@ test('every accepted round ID remains protected after normalization and a later-
   }
 })
 
-test('one account shares four first-game rewards across pets, with a daily total of 24 rather than report cloud limits', () => {
-  let save = newGrowthSave()
-  save = finish(save, 'kitchen', 'kitchen-a', petA)
-  save = finish(save, 'kitchen', 'kitchen-b', petB)
+test('one account shares two first-game rewards across pets, with twelve stars on a fresh day', () => {
+  let save = finish(newGrowthSave(), 'merge', 'merge-a', petA)
+  save = finish(save, 'merge', 'merge-b', petB)
   expect(save.stars).toBe(6)
-  for (const game of ['merge', 'adventure', 'explore'] as GrowthGame[]) save = finish(save, game, `${game}-b`, petB)
-  expect(save.stars).toBe(24)
-  expect(save.daily.earned).toBe(24)
-  expect(save.daily.games).toHaveLength(4)
-  save = finish(save, 'explore', 'explore-new-level', petA, 2)
-  expect(save.stars).toBe(24)
-  expect(save.pets[petA].cleared.explore).toEqual([2])
-  expect(save.inventory).toContain('explore-keepsake')
+  save = finish(save, 'adventure', 'adventure-b', petB)
+  expect(save.daily).toEqual({ day: today, games: ['merge', 'adventure'], earned: 12 })
+  save = finish(save, 'adventure', 'adventure-new-level', petA, 2)
+  expect(save.stars).toBe(12)
+  expect(save.pets[petA].cleared.adventure).toEqual([2])
+  expect(save.inventory).toContain('adventure-keepsake')
 })
 
-test('daily pet XP and affinity are capped independently of the 24 account currency cap', () => {
+test('historical daily claims up to twenty-four are retained and new days only expose two rewards', () => {
+  const source = newGrowthSave(); source.stars = 24
+  source.daily = { day: today, games: ['kitchen', 'explore', 'merge', 'adventure'], earned: 24 }
+  const restored = normalizeGrowthSave(copy(source))
+  expect(restored.daily).toEqual(source.daily)
+  const sameDay = finish(restored, 'merge', 'same-day')
+  expect(sameDay.stars).toBe(24)
+  let next = finish(sameDay, 'merge', 'next-merge', petA, 1, nextDay)
+  next = finish(next, 'adventure', 'next-run', petB, 1, nextDay)
+  expect(next.stars).toBe(36)
+  expect(next.daily.earned).toBe(12)
+})
+
+test('daily pet XP and affinity retain their existing caps', () => {
   let save = touchGrowthPet(newGrowthSave(), petA, today).save
-  for (const game of ['kitchen', 'merge', 'adventure', 'explore'] as GrowthGame[]) save = finish(save, game, `daily-${game}`)
-  expect(save.stars).toBe(24)
+  for (const game of ['merge', 'adventure'] as GrowthGame[]) save = finish(save, game, `daily-${game}`)
+  expect(save.stars).toBe(12)
   expect(save.pets[petA]).toMatchObject({ xp: 20, affinity: 10 })
   expect(save.pets[petA].daily).toEqual({ day: today, xp: 20, affinity: 10, touch: true })
   const next = finish(save, 'merge', 'next-day-merge', petA, 1, nextDay)
-  expect(next.stars).toBe(30)
+  expect(next.stars).toBe(18)
   expect(next.daily).toEqual({ day: nextDay, games: ['merge'], earned: 6 })
   expect(next.pets[petA]).toMatchObject({ xp: 30, affinity: 14 })
 })
 
 test('date rollback and impossible calendar dates never reset the claimed day or consume a new round ID', () => {
-  const source = finish(newGrowthSave(), 'kitchen', 'newer-day', petA, 1, nextDay)
+  const source = finish(newGrowthSave(), 'adventure', 'newer-day', petA, 1, nextDay)
   for (const day of [today, '2026-02-30', 'invalid']) {
     const rejected = settleGrowthRound(source, petB, round('merge'), `rollback-${day}`, day)
     expect(rejected.ok).toBe(false)
@@ -219,7 +242,7 @@ test('date rollback and impossible calendar dates never reset the claimed day or
     expect(greeting.save).toBe(source)
   }
   expect(source.rounds).toEqual(['newer-day'])
-  expect(source.daily).toEqual({ day: nextDay, games: ['kitchen'], earned: 6 })
+  expect(source.daily).toEqual({ day: nextDay, games: ['adventure'], earned: 6 })
 })
 
 test('invalid result scores, stars, level IDs and empty IDs cannot mutate the ledger', () => {
@@ -246,8 +269,8 @@ test('three chapters require their actual tasks and prior story, with one-time r
   let save = newGrowthSave()
   expect(chapterTasks(save, petA, 1).every(task => task.done)).toBe(false)
   expect(chooseGrowthStory(save, petA, 1, GROWTH_CHAPTERS[0].choices[0]).ok).toBe(false)
-  save = finish(save, 'explore', 'chapter-landmarks')
-  save = finish(save, 'kitchen', 'chapter-meal')
+  save = finish(save, 'adventure', 'chapter-run')
+  save = finish(save, 'merge', 'chapter-meal')
   expect(chapterTasks(save, petA, 1).map(task => task.done)).toEqual([true, true, false])
   save = placeGrowthItem(save, petA, 'table', 'journey-card').save
   expect(chapterTasks(save, petA, 1).every(task => task.done)).toBe(true)
@@ -256,16 +279,16 @@ test('three chapters require their actual tasks and prior story, with one-time r
   save = chooseGrowthStory(save, petA, 1, GROWTH_CHAPTERS[0].choices[0]).save
   expect(save.pets[petA].xp).toBe(beforeStory + 30)
   const currency = save.stars
-  save = finish(save, 'explore', 'chapter-two-explore', petA, 2)
+  save = finish(save, 'adventure', 'chapter-two-run', petA, 2)
   save = finish(save, 'merge', 'chapter-two-merge')
   expect(chapterTasks(save, petA, 2).every(task => task.done)).toBe(true)
   save = chooseGrowthStory(save, petA, 2, GROWTH_CHAPTERS[1].choices[1]).save
-  save = finish(save, 'kitchen', 'chapter-three-kitchen', petA, 2)
-  expect(chapterTasks(save, petA, 3).map(task => task.done)).toEqual([true, false, true])
+  save = finish(save, 'merge', 'chapter-three-merge', petA, 2)
+  expect(chapterTasks(save, petA, 3).map(task => task.done)).toEqual([true, true, true])
   save = finish(save, 'adventure', 'chapter-three-adventure', petA, 2)
   save = chooseGrowthStory(save, petA, 3, GROWTH_CHAPTERS[2].choices[0]).save
   expect(save.pets[petA].chapters).toEqual([1, 2, 3])
-  expect(save.stars).toBe(currency + 12)
+  expect(save.stars).toBe(currency)
   for (const chapter of GROWTH_CHAPTERS) expect(save.inventory.filter(id => id === chapter.reward)).toHaveLength(1)
   const beforeReplay = copy(save)
   save = chooseGrowthStory(save, petA, 1, GROWTH_CHAPTERS[0].choices[1]).save
@@ -419,7 +442,7 @@ test('a stale page cannot overwrite a purchase, settled round or shared daily re
   const pageB = readGrowth(account, petA)
   const purchased = buyGrowthItem(pageB, 'leafboard')
   expect(purchased.ok).toBe(true)
-  const committedB = finish(purchased.save, 'kitchen', 'page-b-kitchen')
+  const committedB = finish(purchased.save, 'adventure', 'page-b-adventure')
   expect(writeGrowth(account, committedB)).toBe(true)
   expect(committedB.revision).toBe(1)
   const staleA = finish(pageA, 'merge', 'page-a-merge')
@@ -430,10 +453,10 @@ test('a stale page cannot overwrite a purchase, settled round or shared daily re
   expect(Taro.setStorageSync).not.toHaveBeenCalled()
   expect(Taro.eventCenter.trigger).not.toHaveBeenCalled()
   expect(readGrowth(account, petA)).toEqual(committedB)
-  expect(readGrowth(account, petA)).toMatchObject({ stars: 6, inventory: expect.arrayContaining(['leafboard']), rounds: ['already-imported', 'page-b-kitchen'], daily: { games: ['kitchen'], earned: 6 } })
+  expect(readGrowth(account, petA)).toMatchObject({ stars: 6, inventory: expect.arrayContaining(['leafboard']), rounds: ['already-imported', 'page-b-adventure'], daily: { games: ['adventure'], earned: 6 } })
   const retriedA = finish(readGrowth(account, petA), 'merge', 'page-a-merge')
   expect(writeGrowth(account, retriedA)).toBe(true)
-  expect(retriedA).toMatchObject({ revision: 2, stars: 12, inventory: expect.arrayContaining(['leafboard']), rounds: ['already-imported', 'page-b-kitchen', 'page-a-merge'], daily: { games: ['kitchen', 'merge'], earned: 12 } })
+  expect(retriedA).toMatchObject({ revision: 2, stars: 12, inventory: expect.arrayContaining(['leafboard']), rounds: ['already-imported', 'page-b-adventure', 'page-a-merge'], daily: { games: ['adventure', 'merge'], earned: 12 } })
   const repeatedA = finish(readGrowth(account, petA), 'merge', 'page-a-merge')
   expect(repeatedA.stars).toBe(12)
   expect(repeatedA.rounds).toEqual(retriedA.rounds)

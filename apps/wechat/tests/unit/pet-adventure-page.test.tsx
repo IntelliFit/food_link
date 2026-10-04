@@ -26,15 +26,15 @@ beforeEach(() => {
 })
 
 test.each([
-  ['adventure', PetAdventurePage, '正在打开伙伴冒险'],
-  ['kitchen', PetKitchenPage, '正在打开湖畔餐车'],
-] as const)('the cached %s route redirects to the unified hub without reading or mutating either wallet', (game, Page, label) => {
+  ['adventure', PetAdventurePage, '正在打开伙伴冒险', '?game=adventure'],
+  ['kitchen', PetKitchenPage, '正在打开伙伴时光', ''],
+] as const)('the cached %s route redirects to the unified hub without reading or mutating either wallet', (game, Page, label, query) => {
   const before = [...storage.entries()].map(([key, value]) => [key, JSON.parse(JSON.stringify(value))])
   const { container } = render(<Page />)
   expect(container.querySelector(`[aria-label='${label}']`)).toBeInTheDocument()
   act(() => { show?.() })
   expect(Taro.redirectTo).toHaveBeenCalledTimes(1)
-  expect(Taro.redirectTo).toHaveBeenCalledWith({ url: `/packagePetStudio/pages/index/index?game=${game}` })
+  expect(Taro.redirectTo).toHaveBeenCalledWith({ url: `/packagePetStudio/pages/index/index${query}` })
   act(() => { show?.() })
   expect(Taro.redirectTo).toHaveBeenCalledTimes(2)
   expect(Taro.getStorageSync).not.toHaveBeenCalled()

@@ -36,11 +36,17 @@ it('does not award mastery for empty participation or failed completion', () => 
   const failed = settleGrowthRound(empty, 'a', round({ game: 'adventure', completed: false, detail: { distance: 50 } }), 'failed:1', day).save
   expect(failed.pets.a.badges).toEqual([])
 })
-it('retains best combo progress, not the sum of separate runs', () => {
-  let save = newGrowthSave()
-  for (let n = 0; n < 3; n++) save = settleGrowthRound(save, 'a', round({ game: 'kitchen', detail: { served: 2, bestCombo: 2 } }), `combo:${n}`, day).save
-  expect(save.pets.a.milestoneProgress['kitchen-combo']).toBe(2)
-  expect(save.pets.a.badges).not.toContain('kitchen-combo')
-  save = settleGrowthRound(save, 'a', round({ game: 'kitchen', detail: { served: 4, bestCombo: 4 } }), 'combo:4', day).save
-  expect(save.pets.a.badges).toContain('kitchen-combo')
+it('retains old mastery but prevents new retired wishes and badges', () => {
+  const source = newGrowthSave(); source.pets.a = newPetJourney()
+  source.pets.a.badges = ['kitchen-first']; source.pets.a.wish = 'kitchen-combo'
+  source.pets.a.milestoneProgress['kitchen-combo'] = 2
+  const restored = normalizeGrowthSave(source)
+  expect(restored.pets.a).toEqual(source.pets.a)
+  expect(choosePetWish(restored, 'a', 'kitchen-combo').ok).toBe(false)
+  expect(choosePetWish(restored, 'a', 'explore-route').ok).toBe(false)
+  const rejected = settleGrowthRound(restored, 'a', round({ game: 'kitchen', detail: { served: 4, bestCombo: 4 } }), 'retired:1', day)
+  expect(rejected.ok).toBe(false); expect(rejected.save).toBe(restored)
+  const replaced = choosePetWish(restored, 'a', 'adventure-first').save
+  expect(replaced.pets.a.wish).toBe('adventure-first')
+  expect(replaced.pets.a.badges).toEqual(['kitchen-first'])
 })

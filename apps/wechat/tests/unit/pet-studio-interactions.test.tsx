@@ -87,9 +87,8 @@ function deferred<T>() {
 function seedChapterPrerequisites() {
   let next = newGrowthSave()
   const rounds: [GrowthGame, number, Record<string, number>][] = [
-    ['kitchen', 1, { served: 2 }], ['explore', 1, { moves: 4, nodes: 3 }],
-    ['explore', 2, { moves: 5, nodes: 3 }], ['merge', 1, { steps: 4 }],
-    ['kitchen', 2, { served: 2 }], ['adventure', 2, { distance: 300 }],
+    ['adventure', 1, { distance: 300 }], ['merge', 1, { steps: 4 }],
+    ['merge', 2, { steps: 4 }], ['adventure', 2, { distance: 300 }],
   ]
   rounds.forEach(([game, levelId, detail], index) => {
     const landmarks = game === 'explore' ? levelId === 1 ? ['clue', 'canal', 'pebble'] : ['clue', 'slate', 'letter'] : undefined
@@ -117,13 +116,10 @@ function finishMergeFromFirstPlate(container: HTMLElement) {
 function finishMerge(container: HTMLElement) { serveFirstMergePlate(container); finishMergeFromFirstPlate(container) }
 function startMerge(container: HTMLElement) { click(container, 'journey-tab-map'); click(container, 'journey-start-merge'); click(container, 'merge-start') }
 
-test.each(['kitchen', 'merge', 'explore'] as const)('the %s first-screen card opens the next real game immediately without paying a reward', async game => {
+test.each(['merge'] as const)('the %s first-screen card opens the next real game immediately without paying a reward', async game => {
   const { container, unmount } = await mount()
   click(container, `journey-feature-${game}`); click(container, 'journey-play-now')
-  if (game === 'kitchen') {
-    expect(container.querySelector('#kitchen-pause')).toBeEnabled()
-    expect(container.querySelector('#kitchen-order-order-1')).toBeEnabled()
-  } else expect(container.querySelector(game === 'merge' ? '#merge-board' : '#explore-world')).toHaveAttribute('data-state', 'running')
+  expect(container.querySelector('#merge-board')).toHaveAttribute('data-state', 'running')
   expect(container.querySelector(`#${game}-start`)).toBeNull()
   expect(saved().stars).toBe(0); expect(saved().rounds).toEqual([])
   unmount(); await flush()
@@ -278,10 +274,8 @@ test('a real round settles against the latest purchase even when its captured pa
 })
 
 test.each([
-  ['kitchen', 'kitchen-station-cook', '离开餐车'],
   ['merge', 'merge-board', 'merge-exit'],
   ['adventure', 'adventure-world', 'adventure-exit'],
-  ['explore', 'explore-world', 'explore-paused-exit'],
 ] as const)('%s map pin and card both open a playable game; leaving an unfinished game gives no reward', async (game, world, exit) => {
   const { container, unmount } = await mount()
   for (const entry of ['journey-map-', 'journey-start-']) {
@@ -290,16 +284,8 @@ test.each([
     expect(screen.getAllByTestId('hub-pet')[0]).toHaveAttribute('data-pet-id', pet.id)
     click(container, `${game}-start`)
     expect(container.querySelector(`#${world}`)).toBeInTheDocument()
-    if (game === 'kitchen') {
-      click(container, 'kitchen-order-order-1')
-      expect(container.querySelector('#kitchen-order-order-1')).toBeDisabled()
-      act(() => { jest.advanceTimersByTime(2000) })
-      expect(container.querySelector('#kitchen-move-cook')).toHaveTextContent('烹饪中，留意火候')
-      expect(saved().stars).toBe(0); expect(saved().rounds).toEqual([])
-    } else expect(container.querySelector(`#${world}`)).toHaveAttribute('data-state', 'running')
-    click(container, `${game}-back`)
-    if (game === 'kitchen') fireEvent.click(screen.getByRole('button', { name: exit }))
-    else click(container, exit)
+    expect(container.querySelector(`#${world}`)).toHaveAttribute('data-state', 'running')
+    click(container, `${game}-back`); click(container, exit)
     await flush()
     expect(screen.getByText('小麦的小屋')).toBeInTheDocument()
     expect(saved().stars).toBe(0); expect(saved().rounds).toEqual([])
@@ -338,11 +324,11 @@ test('all three chapter goals gate story choices, and prior stories unlock chapt
   expect(saved().pets[pet.id].xp).toBe(initial.pets[pet.id].xp + 90)
 })
 
-test.each(['landmarks', 'kitchen', 'placement'] as const)('the first chapter cannot be selected when its %s condition is missing', async missing => {
+test.each(['adventure', 'merge', 'placement'] as const)('the first chapter cannot be selected when its %s condition is missing', async missing => {
   const next = seedChapterPrerequisites()
   next.pets[pet.id].placements.window = 'journey-card'
-  if (missing === 'landmarks') { next.pets[pet.id].seenLandmarks = ['explore:1:clue', 'explore:1:canal']; next.pets[pet.id].landmarks = 2 }
-  if (missing === 'kitchen') next.pets[pet.id].cleared.kitchen = []
+  if (missing === 'adventure') next.pets[pet.id].cleared.adventure = []
+  if (missing === 'merge') next.pets[pet.id].cleared.merge = []
   if (missing === 'placement') next.pets[pet.id].placements.window = null
   storage.set(growthStorageKey(user), clone(next))
   const { container } = await mount()
@@ -514,7 +500,7 @@ test('an unfinished game with no pending result can recover account identity in 
   expect(saved().rounds).toEqual([]); expect(saved().stars).toBe(0)
 })
 
-test.each(['adventure', 'kitchen'] as const)('a legacy %s query opens the real game once and migrates the old wallet only once', async game => {
+test.each(['adventure'] as const)('a legacy %s query opens the real game once and migrates the old wallet only once', async game => {
   const legacyKey = `pet_adventure_progress_v1:${user}:${pet.id}`
   const legacy = { ...createAdventureProgress(), starBalance: 45, xp: 85, inventory: ['plant'], clearedLevels: [1, 2], settledRoundIds: ['v1-already-saved'] }
   storage.set(legacyKey, clone(legacy))
@@ -524,7 +510,7 @@ test.each(['adventure', 'kitchen'] as const)('a legacy %s query opens the real g
   expect(saved().stars).toBe(45)
   expect(saved().rounds).toEqual(['v1-already-saved'])
   expect(saved().pets[pet.id]).toMatchObject({ xp: 85, cleared: { adventure: [1, 2] } })
-  click(container, game === 'adventure' ? 'adventure-exit' : 'kitchen-back')
+  click(container, 'adventure-exit')
   await act(async () => { show?.(); await Promise.resolve() })
   expect(screen.getByText('小麦的小屋')).toBeInTheDocument()
   expect(container.querySelector(`#${game}-start`)).not.toBeInTheDocument()
@@ -550,36 +536,46 @@ test('real merge input settles its measured score, collectibles and six-star-lig
   expect(container.querySelector('.journey-wallet')).toHaveTextContent('✦ 6')
 })
 
-test('real water node sources remain unique through continuation, exit and reopening the same route', async () => {
+test.each(['kitchen', 'explore'])('removed %s queries and all entry surfaces cannot start a retired game', async game => {
+  const legacyKey = `pet_adventure_progress_v1:${user}:${pet.id}`
+  const legacy = { ...createAdventureProgress(), starBalance: 45, xp: 85, inventory: ['plant'], settledRoundIds: ['old-round'] }
+  storage.set(legacyKey, clone(legacy))
+  ;(Taro.getCurrentPages as jest.Mock).mockReturnValue([{ options: { game } }])
   const { container, unmount } = await mount()
-  click(container, 'journey-tab-map'); click(container, 'journey-start-explore'); click(container, 'explore-start')
-  click(container, 'explore-node-clue'); click(container, 'explore-observe')
-  click(container, 'explore-node-camp'); click(container, 'explore-finish'); await flush()
-  expect(container.querySelector('#explore-result')).toHaveAttribute('data-score', '50')
-  expect(container.querySelector('#explore-result')).toHaveAttribute('data-completed', 'false')
-  expect(saved().stars).toBe(6); expect(saved().pets[pet.id].landmarks).toBe(1)
-  expect(saved().pets[pet.id].seenLandmarks).toEqual(['explore:1:clue'])
-  expect(saved().pets[pet.id].bests['explore:1']).toEqual({ score: 50, stars: 0 })
-  expect(saved().pets[pet.id].cleared.explore).toEqual([])
-  click(container, 'explore-continue')
-  click(container, 'explore-node-clue'); click(container, 'explore-observe')
-  expect(container.querySelector('#explore-world')).toHaveAttribute('data-score', '0')
-  click(container, 'explore-node-camp'); click(container, 'explore-finish'); await flush()
-  expect(saved().stars).toBe(6); expect(saved().pets[pet.id].landmarks).toBe(1)
-  expect(saved().rounds).toHaveLength(2)
-  click(container, 'explore-result-exit')
-  expect(screen.getByText('小麦的小屋')).toBeInTheDocument()
-  click(container, 'journey-tab-map'); click(container, 'journey-start-explore'); click(container, 'explore-start')
-  click(container, 'explore-node-clue'); click(container, 'explore-observe')
-  expect(container.querySelector('#explore-world')).toHaveAttribute('data-score', '50')
-  click(container, 'explore-node-camp'); click(container, 'explore-finish'); await flush()
-  expect(saved().rounds).toHaveLength(3)
-  expect(saved().stars).toBe(6)
-  expect(saved().pets[pet.id].landmarks).toBe(1)
-  expect(saved().pets[pet.id].seenLandmarks).toEqual(['explore:1:clue'])
+  expect(container.querySelector('#journey-play-now')).toBeEnabled()
+  expect(container.querySelector(`#${game}-start`)).toBeNull()
+  expect(container.querySelector(`#journey-feature-${game}`)).toBeNull()
+  expect(container.querySelectorAll('.pet-play-lobby__choice')).toHaveLength(2)
+  click(container, 'journey-tab-map')
+  expect(container.querySelector(`#journey-map-${game}`)).toBeNull()
+  expect(container.querySelector(`#journey-start-${game}`)).toBeNull()
+  expect(container.querySelectorAll('.journey-game-card')).toHaveLength(2)
+  click(container, 'journey-tab-collection')
+  expect(container.querySelector(`#journey-badges-${game}`)).toBeNull()
+  expect(container.querySelectorAll('.journey-milestone')).toHaveLength(3)
+  expect(saved().stars).toBe(45); expect(saved().rounds).toEqual(['old-round'])
+  expect(storage.get(legacyKey)).toEqual(legacy)
   unmount(); await mount()
-  expect(screen.getByText('水岸地标 1/3')).toBeInTheDocument()
-  expect(saved().pets[pet.id].seenLandmarks).toEqual(['explore:1:clue'])
+  expect(saved().stars).toBe(45)
+  expect(writes()).toHaveLength(1)
+})
+
+test('earned retired badges stay named and placeable, with six current badges and no retired wish prompt', async () => {
+  const old = newGrowthSave(); old.migratedPets = [pet.id]
+  const journey = old.pets[pet.id] = newPetJourney()
+  journey.badges = ['kitchen-first']; journey.wish = 'kitchen-combo'
+  old.inventory.push('badge:kitchen-first')
+  storage.set(growthStorageKey(user), clone(old))
+  const { container } = await mount()
+  expect(container.querySelector('#journey-current-wish')).toHaveTextContent('6 枚技巧徽章')
+  click(container, 'journey-tab-collection')
+  expect(screen.getByText('技巧徽章 · 0/6')).toBeInTheDocument()
+  const historical = container.querySelector('[id="journey-place-badge:kitchen-first"]')
+  expect(historical).toHaveTextContent('第一份热饭')
+  fireEvent.click(historical as Element)
+  expect(saved().pets[pet.id].placements.window).toBe('badge:kitchen-first')
+  expect(saved().pets[pet.id].wish).toBe('kitchen-combo')
+  expect(saved().pets[pet.id].badges).toEqual(['kitchen-first'])
 })
 
 test('a genuinely failed played round keeps its progress reward and can restart without marking a clear', async () => {
@@ -702,9 +698,9 @@ it('tracks a chosen badge, earns it through actual merge inputs and displays it 
 it('does not show an unsaved wish as selected', async () => {
   const { container } = await mount()
   click(container, 'journey-wishes-open'); failGrowthWrites = true
-  click(container, 'journey-wish-kitchen-combo')
+  click(container, 'journey-wish-adventure-stars')
   expect(saved().pets[pet.id].wish).toBeNull()
-  expect(container.querySelector('#journey-wish-kitchen-combo')?.textContent).toBe('设为心愿')
+  expect(container.querySelector('#journey-wish-adventure-stars')?.textContent).toBe('设为心愿')
 })
 
 it('offers a non-spending merge suggestion and clears it after a player decision', async () => {
