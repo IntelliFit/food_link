@@ -66,6 +66,12 @@ export const ADVENTURE_LEVELS: AdventureLevel[] = [
     scene('home-platform', '灯下踏板', 'platform', 'travel-frame', '旅途相框', '看清最后的踏板落点，把今天喜欢的纪念品带到家门口。'),
   ]),
 ]
+/** An inventory ID keeps one name even when another route offers the same keepsake. */
+export const ADVENTURE_COLLECTIBLES: Record<string, string> = ADVENTURE_LEVELS.reduce((items, selected) => {
+  selected.scenes.forEach(entry => { if (!items[entry.collectibleId]) items[entry.collectibleId] = entry.collectibleName })
+  items[`adventure-story-${selected.id}`] = `${selected.name}旅行页`
+  return items
+}, {} as Record<string, string>)
 export const adventureLevel = (id: number): AdventureLevel => ADVENTURE_LEVELS.find(item => item.id === id) || ADVENTURE_LEVELS[0]
 export const adventureScene = (state: AdventureGameState): AdventureScene => adventureLevel(state.levelId).scenes[state.sceneIndex]
 const JUMP_MS = 900

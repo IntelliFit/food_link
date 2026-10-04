@@ -14,9 +14,9 @@ export interface GrowthSave {
   rounds: string[]; daily: { day: string; games: GrowthGame[]; earned: number }
 }
 export const GROWTH_GAMES: { id: GrowthGame; name: string; description: string; icon: string }[] = [
-  { id: 'kitchen', name: '湖畔餐车', description: '安排备菜、控火与装盘', icon: '♨' },
+  { id: 'kitchen', name: '湖畔餐车', description: '点订单开锅，找准火候收锅', icon: '♨' },
   { id: 'merge', name: '食材合成局', description: '滑动合成，选材完成配方', icon: '▦' },
-  { id: 'adventure', name: '活力冒险', description: '跳跃、分岔与场景机关', icon: '↗' },
+  { id: 'adventure', name: '追风快跑', description: '自动奔跑，点一下起跳赢纪念', icon: '↗' },
   { id: 'explore', name: '水岸寻宝', description: '选择路线，解开水岸谜题', icon: '⌖' },
 ]
 export const GROWTH_SHOP = [
@@ -81,7 +81,7 @@ export function settleGrowthRound(source: GrowthSave, petId: string, round: Grow
   if (source.rounds.includes(roundId)) return { save: source, ok: true, message: '这局已保存，没有重复发放' }
   const save = copy(source); const pet = enterDay(save, petId, day)
   if (!pet) return { save: source, ok: false, message: '设备日期变化，请校准日期后重试' }
-  const meaningful = round.game === 'kitchen' ? (round.detail?.served || 0) >= 1 : round.game === 'merge' ? (round.detail?.steps || 0) >= 1 : round.game === 'explore' ? (round.detail?.moves || 0) >= 2 && (round.detail?.nodes || 0) >= 1 : (round.detail?.distance || 0) >= 40
+  const meaningful = round.game === 'kitchen' ? (round.detail?.served || 0) >= 1 : round.game === 'merge' ? (round.detail?.steps || 0) >= 1 : round.game === 'explore' ? (round.detail?.moves || 0) >= 2 && (round.detail?.nodes || 0) >= 1 : (round.detail?.distance || 0) >= 40 && (round.detail?.flowRun !== 1 || (round.detail?.successfulJumps || 0) >= 1)
   let reward = 0; let xp = 0
   if (meaningful && !save.daily.games.includes(round.game)) {
     reward = Math.min(6, 24 - save.daily.earned); save.daily.games.push(round.game); save.daily.earned += reward; save.stars += reward

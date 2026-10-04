@@ -90,6 +90,21 @@ test('an insufficient-participation terminal result cannot award currency, XP, a
   expect(save.inventory).toEqual(newGrowthSave().inventory)
 })
 
+test('automatic running distance alone is not participation, while a genuine jump retains normal capped rewards', () => {
+  const idle = round('adventure', { completed: false, stars: 0, detail: { distance: 100, flowRun: 1, successfulJumps: 0 } })
+  const first = settleGrowthRound(newGrowthSave(), petA, idle, 'dash:idle', today)
+  expect(first.save.stars).toBe(0)
+  expect(first.save.pets[petA]).toMatchObject({ xp: 0, affinity: 0 })
+  expect(first.save.inventory).not.toContain('adventure-keepsake')
+  const earned = round('adventure', { detail: { distance: 300, flowRun: 1, successfulJumps: 12 } })
+  const second = settleGrowthRound(first.save, petA, earned, 'dash:won', today)
+  expect(second.save.stars).toBe(6)
+  expect(second.save.inventory).toContain('adventure-keepsake')
+  const replay = settleGrowthRound(second.save, petA, earned, 'dash:replayed', today)
+  expect(replay.save.stars).toBe(6)
+  expect(replay.save.daily.earned).toBe(6)
+})
+
 test('the actual adventure timeout at the first automatic fork is not eligible participation', () => {
   const idle = advanceAdventureGame(applyAdventureAction(createAdventureGame(1, 102), { type: 'start' }), 90000)
   expect(idle.result).toMatchObject({ completed: false, distance: 25 })

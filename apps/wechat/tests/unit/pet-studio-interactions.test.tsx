@@ -117,6 +117,53 @@ function finishMergeFromFirstPlate(container: HTMLElement) {
 function finishMerge(container: HTMLElement) { serveFirstMergePlate(container); finishMergeFromFirstPlate(container) }
 function startMerge(container: HTMLElement) { click(container, 'journey-tab-map'); click(container, 'journey-start-merge'); click(container, 'merge-start') }
 
+test.each(['kitchen', 'merge', 'explore'] as const)('the %s first-screen card opens the next real game immediately without paying a reward', async game => {
+  const { container, unmount } = await mount()
+  click(container, `journey-feature-${game}`); click(container, 'journey-play-now')
+  if (game === 'kitchen') {
+    expect(container.querySelector('#kitchen-pause')).toBeEnabled()
+    expect(container.querySelector('#kitchen-order-order-1')).toBeEnabled()
+  } else expect(container.querySelector(game === 'merge' ? '#merge-board' : '#explore-world')).toHaveAttribute('data-state', 'running')
+  expect(container.querySelector(`#${game}-start`)).toBeNull()
+  expect(saved().stars).toBe(0); expect(saved().rounds).toEqual([])
+  unmount(); await flush()
+  expect(saved().stars).toBe(0); expect(saved().rounds).toEqual([])
+})
+
+test('the first-screen button immediately starts a real run; no-input failure saves no currency or collection', async () => {
+  const { container } = await mount()
+  click(container, 'journey-play-now')
+  expect(container.querySelector('#adventure-world')).toHaveAttribute('data-state', 'running')
+  expect(container.querySelector('#adventure-start')).toBeNull()
+  expect(saved().rounds).toEqual([]); expect(saved().stars).toBe(0)
+  act(() => { jest.advanceTimersByTime(7000) }); await flush()
+  expect(container.querySelector('#adventure-result')).toBeInTheDocument()
+  expect(saved().stars).toBe(0)
+  expect(saved().inventory).toEqual(['journey-card', 'cozy-scarf'])
+  click(container, 'adventure-home')
+  expect(container.querySelector('#journey-play-now')).toBeEnabled()
+})
+
+test('a timed first-screen run wins named keepsakes that can really be placed in the house', async () => {
+  const { container } = await mount()
+  click(container, 'journey-play-now')
+  for (const distance of [18, 42, 66, 90, 114, 138, 162, 186, 210, 234, 258, 282]) {
+    const remaining = Number(container.querySelector('#adventure-world')!.getAttribute('data-remaining'))
+    act(() => { jest.advanceTimersByTime(distance * 100 - (30000 - remaining) - 400) })
+    click(container, 'adventure-jump')
+    act(() => { jest.advanceTimersByTime(400) })
+  }
+  act(() => { jest.advanceTimersByTime(1800) }); await flush()
+  expect(saved().stars).toBe(6)
+  expect(saved().pets[pet.id].cleared.adventure).toContain(1)
+  expect(saved().inventory).toContain('trail-leaf')
+  click(container, 'adventure-home'); click(container, 'journey-tab-collection')
+  expect(container.querySelector('#journey-place-trail-leaf')).toHaveTextContent('旅途叶片')
+  click(container, 'journey-place-trail-leaf'); click(container, 'journey-tab-home')
+  expect(container.querySelector('.journey-room__prop')).toHaveTextContent('旅途叶片')
+  expect(container.querySelector('#journey-play-now')).toBeEnabled()
+})
+
 function seedWallet(stars = 40) {
   const initial = newGrowthSave()
   initial.stars = stars; initial.migratedPets = [pet.id]; initial.pets[pet.id] = newPetJourney()
@@ -134,7 +181,7 @@ test('cold-start identity storage failure shows a retry and recovery starts a re
   failIdentityReads = false
   fireEvent.click(screen.getByRole('button', { name: '重试读取' })); await flush()
   expect(screen.getByText('小麦的小屋')).toBeInTheDocument()
-  expect(screen.getByTestId('hub-pet')).toHaveAttribute('data-active', 'true')
+  expect(screen.getAllByTestId('hub-pet').every(actor => actor.getAttribute('data-active') === 'true')).toBe(true)
   expect(getPetSummary).toHaveBeenCalledTimes(1)
   click(container, 'journey-tab-map'); click(container, 'journey-start-merge')
   expect(container.querySelector('#merge-start')).toBeEnabled()
@@ -477,7 +524,7 @@ test.each(['adventure', 'kitchen'] as const)('a legacy %s query opens the real g
   expect(saved().stars).toBe(45)
   expect(saved().rounds).toEqual(['v1-already-saved'])
   expect(saved().pets[pet.id]).toMatchObject({ xp: 85, cleared: { adventure: [1, 2] } })
-  click(container, `${game}-back`)
+  click(container, game === 'adventure' ? 'adventure-exit' : 'kitchen-back')
   await act(async () => { show?.(); await Promise.resolve() })
   expect(screen.getByText('小麦的小屋')).toBeInTheDocument()
   expect(container.querySelector(`#${game}-start`)).not.toBeInTheDocument()

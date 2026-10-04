@@ -12,11 +12,13 @@ import { readPetLoadout, savePetLoadout, type PetLoadout } from '../../../utils/
 import { GROWTH_CHAPTERS, GROWTH_GAMES, GROWTH_SHOP, buyGrowthItem, choosePetWish, chapterTasks, chooseGrowthStory, growthLevel, newGrowthSave, newPetJourney, placeGrowthItem, settleGrowthRound, touchGrowthPet, type GrowthGame, type GrowthRound, type GrowthSave, type GrowthUpdate, type RoomSlot } from '../../../utils/pet-growth'
 import { GROWTH_CHANGED, growthAccount, growthAccountOrNull, growthDay, readGrowth, writeGrowth } from '../../../utils/pet-growth-storage'
 import { KITCHEN_LEVELS, type KitchenResult } from '../../../utils/pet-kitchen-game'
-import type { AdventureResult } from '../../../utils/pet-adventure-game'
+import { ADVENTURE_COLLECTIBLES, type AdventureResult } from '../../../utils/pet-adventure-game'
+import type { DashResult } from '../../../utils/pet-dash-game'
 import { MERGE_LEVELS } from '../../../utils/pet-merge-game'
 import { EXPLORE_COLLECTIBLES } from '../../../utils/pet-explore-game'
 import { PetKitchenGame } from '../../components/PetKitchenGame'
-import { PetAdventureGame } from '../../components/PetAdventureGame'
+import { PetDashGame } from '../../components/PetDashGame'
+import { PetPlayLobby } from '../../components/PetPlayLobby'
 import { PetMergeGame } from '../../components/PetMergeGame'
 import { PetExploreGame } from '../../components/PetExploreGame'
 import { PetTransportPicker } from '../../components/PetTransportPicker'
@@ -26,11 +28,13 @@ import './index.scss'
 type Tab = 'home' | 'map' | 'collection' | 'story'
 const ROOM = '/packagePetStudio/assets/growth-room-v1.jpg'
 const ATLAS = '/packagePetStudio/assets/adventure-props-v1.png'
-const cells: Record<string, [number, number]> = { plant: [0, 1], lamp: [1, 1], 'journey-card': [3, 1], leafboard: [0, 2] }
-const names: Record<string, string> = { ...Object.fromEntries(PET_MILESTONES.map(item => [`badge:${item.id}`, item.name])), ...EXPLORE_COLLECTIBLES, 'journey-card': '初次出发旅途卡', 'cozy-scarf': '暖暖围巾', 'memory-first-light': '灯亮之前故事页', 'memory-riverside': '水岸失物故事页', 'memory-rain-cart': '雨天餐车故事页', ...Object.fromEntries(GROWTH_SHOP.map(item => [item.id, item.name])), ...Object.fromEntries(KITCHEN_LEVELS.map(item => [item.collectibleId, item.collectibleName])), ...Object.fromEntries(MERGE_LEVELS.map(item => [item.collectible, item.collectibleName])) }
+const cells: Record<string, [number, number]> = { plant: [0, 1], lamp: [1, 1], 'journey-card': [3, 1], leafboard: [0, 2], 'trail-leaf': [0, 0] }
+const names: Record<string, string> = { ...ADVENTURE_COLLECTIBLES, ...Object.fromEntries(PET_MILESTONES.map(item => [`badge:${item.id}`, item.name])), ...EXPLORE_COLLECTIBLES, 'journey-card': '初次出发旅途卡', 'cozy-scarf': '暖暖围巾', 'memory-first-light': '灯亮之前故事页', 'memory-riverside': '水岸失物故事页', 'memory-rain-cart': '雨天餐车故事页', ...Object.fromEntries(GROWTH_SHOP.map(item => [item.id, item.name])), ...Object.fromEntries(KITCHEN_LEVELS.map(item => [item.collectibleId, item.collectibleName])), ...Object.fromEntries(MERGE_LEVELS.map(item => [item.collectible, item.collectibleName])) }
 const actionNames: Record<PetAction, string> = { idle: '休息', walk: '散步', jump: '跳跃', wave: '招手', blink: '眨眼', observe: '观察', celebrate: '庆祝', cook: '做饭', ride: '骑车' }
-function Ornament({ item }: { item: string }) { const badge = PET_MILESTONES.find(entry => item === `badge:${entry.id}`); if (badge) return <View className={`journey-badge is-${badge.game}`}><Text>{badge.mark}</Text><Text>{badge.id.endsWith('-route') ? 'III' : badge.id.endsWith('-first') ? 'I' : 'II'}</Text></View>; const [column, row] = cells[item] || [2, 2]; return <View className='journey-ornament' style={{ backgroundImage: `url(${ATLAS})`, backgroundPosition: `${column * 100 / 3}% ${row * 50}%` }} /> }
+function Ornament({ item }: { item: string }) { const badge = PET_MILESTONES.find(entry => item === `badge:${entry.id}`); if (badge) return <View className={`journey-badge is-${badge.game}`}><Text>{badge.mark}</Text><Text>{badge.id.endsWith('-route') ? 'III' : badge.id.endsWith('-first') ? 'I' : 'II'}</Text></View>; const [column, row] = cells[item] || (item.includes('page') || item.includes('story') || item.includes('letter') ? [3, 1] : [2, 2]); return <View className='journey-ornament' style={{ backgroundImage: `url(${ATLAS})`, backgroundPosition: `${column * 100 / 3}% ${row * 50}%` }} /> }
 function PetStudioPage() {
+  const [gameLevel, setGameLevel] = useState(1)
+  const [quickPlay, setQuickPlay] = useState(false)
   const [pet, setPet] = useState<PetProfile | null>(null)
   const [account, setAccount] = useState('')
   const [save, setSave] = useState<GrowthSave>(newGrowthSave)
@@ -123,20 +127,22 @@ function PetStudioPage() {
   }
   const retry = pending ? () => { if (growthAccountOrNull() === account) setActive(true); settle(pending.result, pending.id, pending.scope) } : undefined
   const leave = () => { if (pending) return; setGame(null); setSettlement(''); setTab('home'); if (profileDirty.current) void load() }
-  const start = (next: GrowthGame) => { if (!isCurrent(scope) || pending) return; setGame(next); setSettlement(''); setAction('idle') }
+  const start = (next: GrowthGame, level = 1, immediate = false) => { if (!isCurrent(scope) || pending) return; setGameLevel(level); setQuickPlay(immediate); setGame(next); setSettlement(''); setAction('idle') }
   const kitchenFinished = (result: KitchenResult, id: string, expected: string) => settle({ game: 'kitchen', levelId: result.levelId || 1, score: result.score, stars: result.stars, completed: result.passed, collectibles: result.collectibleIds || [], detail: { served: result.served, bestCombo: result.bestCombo } }, id, expected)
-  const adventureFinished = (result: AdventureResult, id: string, expected: string) => settle({ game: 'adventure', levelId: result.levelId, score: result.score, stars: result.stars, completed: result.completed, collectibles: result.collectibleIds || [], detail: { distance: result.distance } }, id, expected)
+  const adventureFinished = (result: AdventureResult | DashResult, id: string, expected: string) => settle({ game: 'adventure', levelId: result.levelId, score: result.score, stars: result.stars, completed: result.completed, collectibles: result.collectibleIds || [], detail: { distance: result.distance, ...('successfulJumps' in result ? { flowRun: 1, successfulJumps: result.successfulJumps } : {}) } }, id, expected)
   if (pet && game) {
-    const shared = { active, pet, accountId: scope, onExit: leave, settlementText: settlement, onRetrySettlement: retry }
-    return <View className='journey-game-page'>{identityUnavailable && <View className='journey-account-recovery'><Text>本局已暂停，先重新确认账号。</Text><Button id='journey-recover-account' className='journey-button journey-primary' onClick={() => { const identity = growthAccountOrNull(); if (identity === null) return; if (identity !== account) { void load(); return }; setIdentityUnavailable(false); setActive(true) }}>重新确认账号</Button></View>}{game === 'kitchen' ? <PetKitchenGame {...shared} onFinished={kitchenFinished} /> : game === 'adventure' ? <PetAdventureGame {...shared} board={save.inventory.includes('leafboard') ? 'leafboard' : null} onFinished={adventureFinished} /> : game === 'merge' ? <PetMergeGame {...shared} onFinished={settle} /> : <PetExploreGame {...shared} onFinished={settle} />}</View>
+    const shared = { active, pet, accountId: scope, startLevel: gameLevel, quickStart: quickPlay, onExit: leave, settlementText: settlement, onRetrySettlement: retry }
+    return <View className='journey-game-page'>{identityUnavailable && <View className='journey-account-recovery'><Text>本局已暂停，先重新确认账号。</Text><Button id='journey-recover-account' className='journey-button journey-primary' onClick={() => { const identity = growthAccountOrNull(); if (identity === null) return; if (identity !== account) { void load(); return }; setIdentityUnavailable(false); setActive(true) }}>重新确认账号</Button></View>}{game === 'kitchen' ? <PetKitchenGame {...shared} onFinished={kitchenFinished} /> : game === 'adventure' ? <PetDashGame {...shared} quickStart={quickPlay} board={save.inventory.includes('leafboard') ? 'leafboard' : null} bestScore={journey.bests[`adventure:${gameLevel}`]?.score || 0} onFinished={adventureFinished} /> : game === 'merge' ? <PetMergeGame {...shared} onFinished={settle} /> : <PetExploreGame {...shared} onFinished={settle} />}</View>
   }
   return <View className='pet-journey-page'>
-    <View className='journey-heading'><View><Text className='journey-eyebrow'>食探 · 伙伴时光</Text><Text className='journey-title'>{tab === 'home' ? '一起，把日子过暖' : tab === 'map' ? '带着好奇，出发吧' : tab === 'collection' ? '把喜欢带回家' : '我们的成长手册'}</Text></View><View className='journey-wallet'><Text>✦ {pet ? save.stars : '—'}</Text><Text>本机星光</Text></View></View>
+    <View className='journey-heading'><View><Text className='journey-eyebrow'>食探 · 伙伴时光</Text><Text className='journey-title'>{tab === 'home' ? '今天，玩点有意思的' : tab === 'map' ? '带着好奇，出发吧' : tab === 'collection' ? '把喜欢带回家' : '我们的成长手册'}</Text></View><View className='journey-wallet'><Text>✦ {pet ? save.stars : '—'}</Text><Text>本机星光</Text></View></View>
     {!pet ? <View className='journey-empty'>{error ? <><Text>{error}</Text><Button className='journey-button journey-primary' onClick={() => void load()}>重试读取</Button></> : <View className='journey-spinner' aria-label='正在读取宠物档案' />}</View> : <>
       {tab === 'home' && <>
+        <PetPlayLobby pet={pet} sprite={current?.sprite} active={active} journey={journey} save={save} day={growthDay()} onPlay={(next, level) => start(next, level, true)} />
+        <View className='journey-section-heading'><Text>玩过以后，回家看看</Text><Button className='journey-button journey-text' onClick={() => setTab('collection')}>布置与换装 ›</Button></View>
         <View className={`journey-room${journey.chapters.includes(1) ? ' is-warm' : ''}`}><Image src={ROOM} className='journey-room__image' mode='aspectFill' /><View className='journey-room__name'><Text>{pet.name}的小屋</Text><Text>Lv.{growth.level} · {journey.occupation === 'cook' ? '料理伙伴' : journey.occupation === 'explorer' ? '水岸探索者' : journey.occupation === 'active' ? '活力伙伴' : '新旅途，慢慢来'}</Text></View>
           {Object.entries(journey.placements).map(([position, item]) => item && <View key={position} className={`journey-room__prop is-${position}`}><Ornament item={item} /><Text>{names[item] || '旅途纪念'}</Text></View>)}
-          <View id='journey-pet-touch' className='journey-room__actor' role='button' aria-label={`问候${pet.name}`} onClick={() => { if (write(latestSave => touchGrowthPet(latestSave, pet.id, growthDay()))) setAction('walk') }}><PetActor pet={pet} size={138} action={action} active={active} /></View><Text className='journey-room__speech'>{journey.chapters.includes(1) ? '灯亮了，今天的故事也有了归处。' : '先带回一张风景，再做一顿热乎的饭。'}</Text>
+          <View id='journey-pet-touch' className='journey-room__actor' role='button' aria-label={`问候${pet.name}`} onClick={() => { if (write(latestSave => touchGrowthPet(latestSave, pet.id, growthDay()))) setAction('walk') }}><PetActor pet={pet} size={92} action={action} active={active} /></View><Text className='journey-room__speech'>{journey.chapters.includes(1) ? '灯亮了，今天的故事也有了归处。' : '把亲手赢来的纪念，摆到喜欢的位置。'}</Text>
         </View>
         <View className='journey-level'><View><Text>成长 Lv.{growth.level}</Text><Text>{journey.xp} 经验 · 亲密 {journey.affinity}</Text></View><View className='journey-progress'><View style={{ width: `${growth.next ? Math.min(100, growth.current / growth.next * 100) : 100}%` }} /></View><Text>{growth.next ? `再积累 ${growth.next - growth.current} 经验，打开下一段成长` : '已来到首期成长里程碑'}</Text></View>
         <View className='journey-wish' id='journey-current-wish'><Text className='journey-wish__title'>{wish ? `我的心愿 · ${wish.name}` : '挑一个想赢回来的纪念'}</Text><Text>{wish ? `${wish.condition} · ${milestoneProgress(journey, wish)}/${wish.target}` : '12 枚技巧徽章，靠亲手完成挑战获得，永久珍藏。'}</Text>{wish && <View className='journey-progress'><View style={{ width: `${milestoneProgress(journey, wish) / wish.target * 100}%` }} /></View>}<Button id='journey-wishes-open' className='journey-button journey-text' onClick={() => setTab('collection')}>{wish && journey.badges.includes(wish.id) ? '心愿达成，去摆放徽章 ›' : '查看心愿与徽章 ›'}</Button></View>

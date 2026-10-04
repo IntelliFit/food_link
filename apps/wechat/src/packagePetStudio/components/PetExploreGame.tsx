@@ -11,7 +11,7 @@ import {
 import './PetExploreGame.scss'
 
 export interface PetExploreGameProps {
-  pet: PetProfile; accountId: string; active: boolean; startLevel?: number; onExit: () => void
+  pet: PetProfile; accountId: string; active: boolean; startLevel?: number; quickStart?: boolean; onExit: () => void
   onFinished: (result: ExploreResult, roundId: string, sessionAccountId: string) => void | Promise<void>
   settlementText?: string; onRetrySettlement?: () => void | Promise<void>
 }
@@ -44,7 +44,7 @@ function canalOutlet(puzzle: ExploreCanal) {
   }
 }
 
-export function PetExploreGame({ pet, accountId, active, startLevel = 1, onFinished, onExit, settlementText, onRetrySettlement }: PetExploreGameProps) {
+export function PetExploreGame({ pet, accountId, active, startLevel = 1, quickStart = false, onFinished, onExit, settlementText, onRetrySettlement }: PetExploreGameProps) {
   const [state, setState] = useState(() => createExploreGame(startLevel))
   const [help, setHelp] = useState(false)
   const [settling, setSettling] = useState(false)
@@ -59,6 +59,7 @@ export function PetExploreGame({ pet, accountId, active, startLevel = 1, onFinis
   const alive = useRef(true)
   const histories = useRef<Record<number, ExploreHistory>>({})
   const counter = useRef(0)
+  const automatic = useRef('')
   const notified = useRef('')
   const session = useRef<{ id: string; scope: string; accountId: string; callback: PetExploreGameProps['onFinished'] } | null>(null)
   const blockedRef = useRef(false)
@@ -139,6 +140,10 @@ export function PetExploreGame({ pet, accountId, active, startLevel = 1, onFinis
     setHelp(false)
     setState(applyExploreAction(createExploreGame(state.levelId, histories.current[state.levelId]), { type: 'start' }))
   }
+  useEffect(() => {
+    const key = `${scope}:${startLevel}`
+    if (quickStart && active && accountId && pet.id && !blocked && unclaimed && state.status === 'ready' && state.levelId === startLevel && automatic.current !== key) { automatic.current = key; start() }
+  }, [quickStart, active, accountId, pet.id, scope, startLevel, blocked, unclaimed, state.status, state.levelId, start])
   const selectLevel = (levelId: number) => {
     if (!activeRef.current || blockedRef.current || state.status === 'running' || state.status === 'paused') return
     histories.current[state.levelId] = exploreHistory(state)

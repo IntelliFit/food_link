@@ -11,7 +11,7 @@ import {
 import './PetMergeGame.scss'
 
 export interface PetMergeGameProps {
-  pet: PetProfile; accountId: string; active: boolean; startLevel?: number
+  pet: PetProfile; accountId: string; active: boolean; startLevel?: number; quickStart?: boolean
   onFinished: (result: MergeResult, roundId: string, sessionAccountId: string) => void | Promise<void>
   onExit: () => void; settlementText?: string; onRetrySettlement?: () => void | Promise<void>
 }
@@ -29,7 +29,7 @@ function actorPixels() {
   try { return Math.round((Taro.getSystemInfoSync().windowWidth || 375) * 156 / 750) } catch { return 78 }
 }
 
-export function PetMergeGame({ pet, accountId, active, startLevel = 1, onFinished, onExit, settlementText, onRetrySettlement }: PetMergeGameProps) {
+export function PetMergeGame({ pet, accountId, active, startLevel = 1, quickStart = false, onFinished, onExit, settlementText, onRetrySettlement }: PetMergeGameProps) {
   const owner = `${accountId}:${pet.id}`
   const [state, setState] = useState<MergeGameState>(() => createMergeGame(startLevel))
   const [guide, setGuide] = useState(false)
@@ -47,6 +47,7 @@ export function PetMergeGame({ pet, accountId, active, startLevel = 1, onFinishe
   const counterRef = useRef(0)
   const touchRef = useRef<TouchPoint | null>(null)
   const suppressClickUntil = useRef(0)
+  const automatic = useRef('')
   ownerRef.current = owner; activeRef.current = active; stateRef.current = state; callbackRef.current = onFinished
   const level = mergeLevelFor(state.levelId)
   const playing = state.status === 'running'
@@ -95,6 +96,10 @@ export function PetMergeGame({ pet, accountId, active, startLevel = 1, onFinishe
     setSettlementError(false); setGuide(false); touchRef.current = null; suppressClickUntil.current = 0
     setState(applyMergeAction(createMergeGame(levelId), { type: 'start' }))
   }
+  useEffect(() => {
+    const key = `${owner}:${startLevel}`
+    if (quickStart && active && accountId && !blockedSettlement && state.status === 'ready' && state.levelId === startLevel && automatic.current !== key) { automatic.current = key; start(startLevel) }
+  }, [quickStart, active, accountId, owner, startLevel, blockedSettlement, state.status, state.levelId, start])
   const returnToMenu = () => {
     if (!activeRef.current || blockedSettlement) return
     sessionRef.current = null; notifiedRef.current = ''; touchRef.current = null; suppressClickUntil.current = 0

@@ -14,6 +14,8 @@ interface PetKitchenGameProps {
   active: boolean
   pet?: PetProfile | null
   accountId?: string
+  startLevel?: number
+  quickStart?: boolean
   onExit: () => void
   onFinished?: (result: KitchenResult, roundId: string, sessionAccountId: string) => void | Promise<void>
   settlementText?: string
@@ -53,9 +55,9 @@ function readAccountHistory(scope?: string): LocalBest {
 function kitchenActorSize() {
   try { return Math.round((Taro.getWindowInfo().windowWidth || 375) * 180 / 750) } catch { return 90 }
 }
-export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, settlementText, onRetrySettlement }: PetKitchenGameProps) {
-  const [state, setState] = useState<KitchenGameState>(() => createKitchenGame(1, 'tap'))
-  const [levelId, setLevelId] = useState(1)
+export function PetKitchenGame({ active, pet, accountId, startLevel = 1, quickStart = false, onExit, onFinished, settlementText, onRetrySettlement }: PetKitchenGameProps) {
+  const [state, setState] = useState<KitchenGameState>(() => createKitchenGame(startLevel, 'tap'))
+  const [levelId, setLevelId] = useState(startLevel)
   const [bests, setBests] = useState<LocalBest>(() => readBest(accountId))
   const [accountHistory, setAccountHistory] = useState<LocalBest>(() => readAccountHistory(accountId))
   const [tutorial, setTutorial] = useState(false)
@@ -76,6 +78,7 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
   const accountRef = useRef(accountId)
   const callbackRef = useRef(onFinished)
   const sessionRef = useRef<{ id: string; scope: string; callback: PetKitchenGameProps['onFinished'] } | null>(null)
+  const automatic = useRef('')
   stateRef.current = state
   activeRef.current = active
   accountRef.current = accountId
@@ -94,8 +97,8 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
     recordedResult.current = stateRef.current.result
     setBests(readBest(accountId))
     setAccountHistory(readAccountHistory(accountId))
-    setLevelId(1)
-    setState(createKitchenGame(1, 'tap'))
+    setLevelId(startLevel)
+    setState(createKitchenGame(startLevel, 'tap'))
     setTutorial(false)
     setTutorialStep(null)
     setRecipeBook(false)
@@ -103,7 +106,7 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
     finishedNotified.current = null
     setSettling(false)
     setSettlementError(false)
-  }, [accountId])
+  }, [accountId, startLevel])
   useEffect(() => {
     if (!active) {
       dispatch({ type: 'pause' })
@@ -159,7 +162,7 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
   }, [active, accountId, state.result])
 
   const start = (id: number, guided = false) => {
-    if (!active) return
+    if (!active || settling || settlementError || onRetrySettlement) return
     if (id === 6 && menuSelection.length !== 3) return
     roundRef.current += 1
     setLevelId(id)
@@ -176,6 +179,10 @@ export function PetKitchenGame({ active, pet, accountId, onExit, onFinished, set
     if (id === 6) next = applyKitchenAction(next, { type: 'set-menu', recipeIds: menuSelection })
     setState(applyKitchenAction(next, { type: 'start' }))
   }
+  useEffect(() => {
+    const key = `${accountId}:${startLevel}`
+    if (quickStart && active && accountId && pet?.id && !settling && !settlementError && !onRetrySettlement && state.status === 'ready' && state.levelId === startLevel && automatic.current !== key) { automatic.current = key; start(startLevel) }
+  }, [quickStart, active, accountId, pet?.id, startLevel, settling, settlementError, onRetrySettlement, state.status, state.levelId, start])
   const chooseLevel = (id: number) => {
     roundRef.current += 1; setLevelId(id); setTutorial(false)
     let next = createKitchenGame(id, 'tap')

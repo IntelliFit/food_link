@@ -117,9 +117,11 @@ test('failed shared settlement locks retry and exit until the same round is save
 
 test('parent-reported unsaved status retains the finished round even if callback succeeds locally', async () => {
   const retry = jest.fn()
-  const { container } = render(<PetKitchenGame active accountId='account:pet-one' onFinished={jest.fn()} onRetrySettlement={retry} settlementText='还未保存' onExit={jest.fn()} />)
+  const props = { active: true, accountId: 'account:pet-one', onFinished: jest.fn(), onExit: jest.fn() }
+  const { container, rerender } = render(<PetKitchenGame {...props} />)
   click(container, 'kitchen-start')
   await act(async () => { jest.advanceTimersByTime(90000); await Promise.resolve(); await Promise.resolve() })
+  rerender(<PetKitchenGame {...props} onRetrySettlement={retry} settlementText='还未保存' />)
   expect(container.querySelector('#kitchen-retry')).toBeDisabled()
   expect(container.querySelector('#kitchen-back')).toBeDisabled()
   expect(screen.getByText('还未保存')).toBeInTheDocument()
