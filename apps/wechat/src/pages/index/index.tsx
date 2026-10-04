@@ -2987,6 +2987,7 @@ function IndexPage() {
               size={67}
               mood={petMood}
               state={petState}
+              motion='companion'
               className='greeting-pet__avatar'
             />
           )}

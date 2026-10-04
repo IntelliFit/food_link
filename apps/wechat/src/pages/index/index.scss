@@ -6630,6 +6630,106 @@ button.poster-share-channel--btn {
   height: 124rpx !important;
 }
 
+.greeting-pet__aura {
+  position: absolute;
+  inset: 8rpx 4rpx 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgb(92 184 150 / 26%), transparent 70%);
+  animation: greeting-pet-aura 2s ease-in-out infinite;
+}
+
+.greeting-main--recognizing .greeting-pet__motion {
+  animation: greeting-pet-thinking 1.6s ease-in-out infinite;
+}
+
+.greeting-main--waiting .greeting-pet__motion {
+  animation: greeting-pet-ready 2.6s ease-in-out infinite;
+}
+
+.greeting-main--waiting .greeting-pet__aura {
+  background: radial-gradient(circle, rgb(245 185 68 / 32%), transparent 70%);
+}
+
+.greeting-main--waiting .greeting-pet-reminder {
+  animation: greeting-pet-reminder-pulse 2.6s ease-in-out infinite;
+}
+
+.greeting-pet__spark {
+  position: absolute;
+  z-index: 2;
+  top: 6rpx;
+  color: #d89522;
+  font-size: 22rpx;
+  pointer-events: none;
+  animation: greeting-pet-spark 2.6s ease-in-out infinite;
+}
+
+.greeting-pet__spark--left { left: -2rpx; }
+.greeting-pet__spark--right { right: -2rpx; top: 24rpx; animation-delay: .35s; }
+
+.greeting-pet-reminder__dots {
+  display: inline-flex;
+  gap: 5rpx;
+  margin-left: 9rpx;
+  vertical-align: middle;
+
+  view {
+    width: 6rpx;
+    height: 6rpx;
+    border-radius: 50%;
+    background: currentColor;
+    color: #5cb896;
+    animation: greeting-pet-dot 1.2s ease-in-out infinite;
+  }
+
+  view:nth-child(2) { animation-delay: .16s; }
+  view:nth-child(3) { animation-delay: .32s; }
+}
+
+@keyframes greeting-pet-thinking {
+  0%, 100% { transform: translateY(2rpx) rotate(-5deg); }
+  50% { transform: translateY(-3rpx) rotate(5deg); }
+}
+
+@keyframes greeting-pet-ready {
+  0%, 45%, 100% { transform: translateY(0) rotate(0); }
+  10% { transform: translateY(-8rpx) rotate(-7deg); }
+  20% { transform: translateY(-3rpx) rotate(7deg); }
+  30% { transform: translateY(-6rpx) rotate(-4deg); }
+}
+
+@keyframes greeting-pet-aura {
+  0%, 100% { transform: scale(.9); opacity: .45; }
+  50% { transform: scale(1.12); opacity: 1; }
+}
+
+@keyframes greeting-pet-reminder-pulse {
+  0%, 45%, 100% { transform: translateY(0); }
+  15%, 30% { transform: translateY(-3rpx); }
+}
+
+@keyframes greeting-pet-spark {
+  0%, 45%, 100% { transform: scale(.7) translateY(2rpx); opacity: .25; }
+  20% { transform: scale(1.15) translateY(-4rpx); opacity: 1; }
+}
+
+@keyframes greeting-pet-dot {
+  0%, 80%, 100% { transform: translateY(0); opacity: .35; }
+  40% { transform: translateY(-4rpx); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .greeting-pet__motion,
+  .greeting-main--recognizing .greeting-pet__motion,
+  .greeting-main--waiting .greeting-pet__motion,
+  .greeting-pet__ground,
+  .greeting-pet__aura,
+  .greeting-pet__spark,
+  .greeting-main--waiting .greeting-pet-reminder,
+  .greeting-pet-reminder__dots view { animation: none; }
+}
+
 .greeting-pet__ground {
   right: 8rpx;
   left: 6rpx;
