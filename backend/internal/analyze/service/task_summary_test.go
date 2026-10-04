@@ -3,18 +3,79 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/repo"
+	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestWaitingRecordSummaryFiltersBeforePaginationAndCountsAllRows(t *testing.T) {
+	db, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	require.NoError(t, db.Exec(`ALTER TABLE analysis_tasks ALTER COLUMN payload TYPE jsonb USING payload::jsonb, ALTER COLUMN result TYPE jsonb USING result::jsonb`).Error)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+	date := "2026-10-02"
+	now := time.Now()
+	makeTask := func(id, user, targetDate string) domain.AnalysisTask {
+		return domain.AnalysisTask{ID: id, UserID: user, TaskType: "food", Status: "done", Payload: map[string]any{"date": targetDate}, Result: map[string]any{"items": []any{map[string]any{"name": "米饭"}}}, CreatedAt: &now}
+	}
+	rows := make([]domain.AnalysisTask, 0, 215)
+	for i := 0; i < 205; i++ {
+		rows = append(rows, makeTask(fmt.Sprintf("waiting-%03d", i), "waiting-user", date))
+	}
+	rows = append(rows, makeTask("today", "waiting-user", "2026-10-03"), makeTask("other-user", "other-user", date), makeTask("saved", "waiting-user", date), makeTask("corrected-root", "waiting-user", date))
+	child := makeTask("saved-correction", "waiting-user", date)
+	child.Payload["correction_root_task_id"] = "corrected-root"
+	rows = append(rows, child)
+	failed := makeTask("failed", "waiting-user", date)
+	failed.Status = "failed"
+	violated := makeTask("violated", "waiting-user", date)
+	violated.IsViolated = true
+	empty := makeTask("empty", "waiting-user", date)
+	empty.Result = map[string]any{}
+	exercise := makeTask("exercise", "waiting-user", date)
+	exercise.Payload["exercise"] = true
+	precision := makeTask("precision", "waiting-user", date)
+	precision.Payload = map[string]any{"date": "", "recorded_on": date}
+	precision.TaskType = "precision_plan"
+	precision.Result = map[string]any{"userActionRequired": true}
+	rows = append(rows, failed, violated, empty, exercise, precision)
+	require.NoError(t, db.CreateInBatches(&rows, 100).Error)
+	for _, taskID := range []string{"saved", "saved-correction"} {
+		require.NoError(t, db.Create(&foodrecorddomain.FoodRecord{ID: "record-" + taskID, UserID: "waiting-user", SourceTaskID: &taskID}).Error)
+	}
+
+	page, err := svc.ListWaitingRecordTaskSummariesPage(ctx, "waiting-user", date, "", 2, 0)
+	require.NoError(t, err)
+	require.NotNil(t, page.Total)
+	assert.Equal(t, 206, *page.Total)
+	assert.True(t, page.FilterApplied)
+	assert.True(t, page.HasMore)
+	assert.Equal(t, 2, page.NextOffset)
+	require.Len(t, page.Tasks, 2)
+	for _, task := range page.Tasks {
+		assert.Equal(t, date, task.RecordedOn)
+		assert.False(t, task.IsRecorded)
+	}
+	last, err := svc.ListWaitingRecordTaskSummariesPage(ctx, "waiting-user", date, "", 10, 200)
+	require.NoError(t, err)
+	assert.Len(t, last.Tasks, 6)
+	assert.False(t, last.HasMore)
+	assert.Equal(t, 206, last.NextOffset)
+	otherDay, err := svc.ListWaitingRecordTaskSummariesPage(ctx, "waiting-user", "2026-10-03", "", 2, 0)
+	require.NoError(t, err)
+	require.Len(t, otherDay.Tasks, 1)
+	assert.Equal(t, "today", otherDay.Tasks[0].ID)
+}
 
 func TestSummarizeTaskListPage(t *testing.T) {
 	createdAt := time.Date(2026, 8, 12, 10, 30, 0, 0, time.UTC)

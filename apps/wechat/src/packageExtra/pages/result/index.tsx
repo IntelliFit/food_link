@@ -48,7 +48,9 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { applyEnergyEdit } from '../../../utils/nutrition-edit'
 import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
-import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import RecordDateField from '../../../components/RecordDateField'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -551,6 +553,11 @@ function toSafeNumber(value: unknown, fallback = 0): number {
 }
 
 function ResultPage() {
+  const [recordContext] = useState(() => ({
+    date: String(Taro.getCurrentInstance().router?.params?.date || ''),
+    taskId: String(Taro.getCurrentInstance().router?.params?.task_id || Taro.getStorageSync('analyzeSourceTaskId') || ''),
+  }))
+  const [recordDate, setRecordDate] = useRecordDate(recordContext.date, recordContext.taskId)
   const { scheme } = useAppColorScheme()
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
   const [textRecordInput, setTextRecordInput] = useState('')
@@ -581,6 +588,7 @@ function ResultPage() {
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const recordSaveLock = useRef(false)
 	const [savingRecipe, setSavingRecipe] = useState(false)
 	const [savedRecipeId, setSavedRecipeId] = useState<string | null>(null)
 	const recipeSaveInFlightRef = useRef(false)
@@ -742,11 +750,6 @@ function ResultPage() {
 
   useEffect(() => {
     setInsightCollapsed(getAiInsightCollapsed())
-  }, [])
-
-  useEffect(() => {
-    const params = Taro.getCurrentInstance().router?.params
-    persistRecordTargetDate(String(params?.date || ''))
   }, [])
 
   /** 上滑进度 0~1：驱动头图高度与内层圆角 */
@@ -1969,6 +1972,7 @@ function ResultPage() {
   }
 
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
+    if (!requireAllowedRecordDate(recordDate)) return
     // 避免用户快速连续点击导致重复保存
     if (saving) return
     if (nutritionItems.some(isPackagedChoicePending)) {
@@ -1989,10 +1993,12 @@ function ResultPage() {
     const activityTiming = savedActivityTiming || 'none'
 
     const doSave = async () => {
+      if (recordSaveLock.current || !requireAllowedRecordDate(recordDate)) return
       if (isAnalyzeSessionCommitted()) {
         Taro.showToast({ title: '该餐已记录', icon: 'none' })
         return
       }
+      recordSaveLock.current = true
       // 保存前根据用户编辑行为提交对应的反馈样本
       clearSuspectDistrustTimer()
       const hasWeightChangeOnly = weightAdjustedRef.current && !nutritionAdjustedRef.current && !ratioAdjustedRef.current
@@ -2009,9 +2015,9 @@ function ResultPage() {
         Taro.removeStorageSync('analyzeDietGoal')
         Taro.removeStorageSync('analyzeActivityTiming')
 
-        const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
+        const sourceTaskId = recordContext.taskId || undefined
         const payload: SaveFoodRecordRequest = {
-          date: getStoredRecordTargetDate(),
+          date: recordDate,
           meal_type: mealType as MealType,
           image_path: hasUploadableImage ? (imagePath || undefined) : undefined,
           image_paths: hasUploadableImage && imagePaths.length > 0 ? imagePaths : undefined,
@@ -2061,7 +2067,7 @@ function ResultPage() {
         }
 
         const saveResult = await saveFoodRecord(payload)
-        const targetDateKey = payload.date || getStoredRecordTargetDate() || formatDateKey(new Date())
+        const targetDateKey = recordDate
         if (!saveResult.already_saved) {
           applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
         }
@@ -2095,7 +2101,7 @@ function ResultPage() {
 
         if (saveOnly) {
           Taro.showToast({
-            title: saveResult.already_saved ? '该餐已记录，未重复发布' : '记录成功',
+            title: saveResult.already_saved ? '该餐已记录，未重复发布' : `已记录到${getRecordDateLabel(recordDate)}`,
             icon: saveResult.already_saved ? 'none' : 'success',
           })
           returnHomeAfterFoodRecord(800)
@@ -2103,13 +2109,14 @@ function ResultPage() {
         }
 
         Taro.showToast({
-          title: saveResult.already_saved ? '该餐已记录，未重复发布' : '记录成功',
+          title: saveResult.already_saved ? '该餐已记录，未重复发布' : `已记录到${getRecordDateLabel(recordDate)}`,
           icon: saveResult.already_saved ? 'none' : 'success',
         })
         returnHomeAfterFoodRecord()
       } catch (e: any) {
         await showUnifiedApiError(e, '保存失败')
       } finally {
+        recordSaveLock.current = false
         setSaving(false)
       }
     }
@@ -2121,7 +2128,7 @@ function ResultPage() {
       // 否则走旧的确认流程（防止直接调用时没有确认）
       Taro.showModal({
         title: '确认记录',
-        content: `餐次：${mealLabel}\n确定保存当前饮食记录吗？`,
+        content: `记录到${getRecordDateLabel(recordDate)} · ${mealLabel}\n确定保存当前饮食记录吗？`,
         success: async (res) => {
           if (!res.confirm) return
           await doSave()
@@ -2429,7 +2436,7 @@ function ResultPage() {
             const res = await submitAnalyzeTask({
               image_url: imagePaths[0] || imagePath,
               image_urls: imagePaths.length > 0 ? imagePaths : undefined,
-              date: getStoredRecordTargetDate(),
+              date: recordDate,
               additionalContext: finalCorrectionContext,
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
@@ -2456,7 +2463,7 @@ function ResultPage() {
             const textPayload = originalText || currentResultSummary
             const res = await submitTextAnalyzeTask({
               text: textPayload,
-              date: getStoredRecordTargetDate(),
+              date: recordDate,
               additionalContext: textContextParts.join('\n'),
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
@@ -3139,6 +3146,7 @@ function ResultPage() {
 
       {/* 底部固定栏：必须放在 scroll-view 外，避免 iOS 上 fixed 相对滚动容器失效 */}
       <View className='footer-actions'>
+        {!isAnalyzeSessionCommitted() && !committedRecordId && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
         {(taskType === 'food' || taskType === 'food_text') && !isAnalyzeSessionCommitted() && !committedRecordId && (
           <View className='eating-mood-bar'>
             <View className='eating-mood-heading'>

@@ -3,6 +3,26 @@ import Taro from '@tarojs/taro'
 export const RECORD_BACKFILL_WINDOW_DAYS = 3
 export const RECORD_TARGET_DATE_STORAGE_KEY = 'recordTargetDate'
 
+/** Keep the task's original date, including an expired date; never replace it with today. */
+export function getTaskRecordTargetDate(task: { payload?: Record<string, unknown> | null }): string {
+  for (const key of ['date', 'recorded_on', 'recordedOn']) {
+    const value = task.payload?.[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+export function getRecordDateLabel(date: string): string {
+  const parsed = parseDateKey(date)
+  return parsed ? `${parsed.getMonth() + 1}月${parsed.getDate()}日` : '请选择日期'
+}
+
+export function requireAllowedRecordDate(date: string): boolean {
+  if (isAllowedRecordDate(date)) return true
+  void Taro.showToast({ title: date ? '请重新选择日期，仅支持近3天记录' : '请先选择记录日期', icon: 'none' })
+  return false
+}
+
 function formatDateKey(date: Date): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')

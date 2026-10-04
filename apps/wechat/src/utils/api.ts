@@ -3810,11 +3810,15 @@ export interface AnalyzeTaskListResponse {
 
 export interface AnalyzeTaskSummaryListResponse {
   tasks: AnalyzeTaskSummary[]
+  total?: number
+  filter_applied?: boolean
   has_more?: boolean
   next_offset?: number
 }
 
 export interface AnalyzeTaskListParams {
+  date?: string
+  waiting_record?: boolean
   task_type?: string
   status?: string
   search?: string
@@ -3830,6 +3834,7 @@ function buildAnalyzeTaskListQuery(params?: AnalyzeTaskListParams, summary = fal
   if (params?.limit != null && Number.isFinite(params.limit)) q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
   if (params?.offset != null && Number.isFinite(params.offset)) q.set('offset', String(Math.max(0, Math.floor(params.offset))))
   if (summary) q.set('summary', '1')
+  if (params?.waiting_record) { q.set('waiting_record', '1'); if (params.date) q.set('date', params.date) }
   return q.toString()
 }
 
@@ -3945,9 +3950,13 @@ export async function listAnalyzeTaskSummaries(params?: AnalyzeTaskListParams): 
     tasks?: Array<AnalysisTask | AnalyzeTaskSummary>
     has_more?: boolean
     next_offset?: number
+    total?: number
+    filter_applied?: boolean
   }
   return {
     tasks: (data.tasks || []).map(normalizeAnalyzeTaskSummary),
+    total: data.total,
+    filter_applied: data.filter_applied,
     has_more: data.has_more,
     next_offset: data.next_offset,
   }
@@ -8936,10 +8945,10 @@ export async function deleteUserRecipe(recipeId: string): Promise<{ message: str
 }
 
 /** 使用食谱（一键记录，可指定餐次） */
-export async function applyUserRecipe(recipeId: string, mealType?: string, entryType?: FoodRecordEntryType): Promise<{ message: string; record_id: string }> {
+export async function applyUserRecipe(recipeId: string, mealType?: string, entryType?: FoodRecordEntryType, date?: string): Promise<{ message: string; record_id: string }> {
   const response = await authenticatedRequest(`/api/recipes/${recipeId}/use`, {
     method: 'POST',
-    data: { meal_type: mealType, entry_type: entryType },
+    data: { meal_type: mealType, entry_type: entryType, date },
     timeout: 15000
   })
   if (response.statusCode !== 200) {

@@ -2,10 +2,13 @@ package handler
 
 import (
 	"context"
+	"errors"
+	"io"
 	"log/slog"
 	"strconv"
 
 	authmw "food_link/backend/internal/auth"
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/recipe/domain"
 	"food_link/backend/internal/recipe/service"
@@ -23,7 +26,7 @@ type RecipeService interface {
 	GetForViewer(ctx context.Context, viewerUserID, recipeID string) (*domain.Recipe, error)
 	Update(ctx context.Context, userID, recipeID string, input service.UpdateInput) (*domain.Recipe, error)
 	Delete(ctx context.Context, userID, recipeID string) error
-	Use(ctx context.Context, userID, recipeID string, mealType *string, entryType *string) (string, error)
+	Use(ctx context.Context, userID, recipeID string, mealType *string, entryType *string, dates ...string) (string, error)
 }
 
 type RecipeHandler struct {
@@ -174,13 +177,20 @@ func (h *RecipeHandler) Use(c *gin.Context) {
 	var body struct {
 		MealType  *string `json:"meal_type"`
 		EntryType *string `json:"entry_type"`
+		Date      string  `json:"date"`
 	}
-	_ = c.ShouldBindJSON(&body)
-	recordID, err := h.svc.Use(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("recipe_id"), body.MealType, body.EntryType)
+	if err := c.ShouldBindJSON(&body); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(c, commonerrors.ErrBadRequest)
+		return
+	}
+	userID, recipeID := c.GetString(authmw.ContextUserIDKey), c.Param("recipe_id")
+	logger.Info(c.Request.Context(), "开始从收藏记录餐食", slog.String("user_id", userID), slog.String("recipe_id", recipeID))
+	recordID, err := h.svc.Use(c.Request.Context(), userID, recipeID, body.MealType, body.EntryType, body.Date)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "从收藏记录餐食完成", slog.String("user_id", userID), slog.String("recipe_id", recipeID), slog.String("record_id", recordID))
 	response.Success(c, gin.H{"message": "记录成功", "record_id": recordID})
 }
 

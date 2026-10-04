@@ -93,7 +93,7 @@ import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from '../../utils/food-display-image'
-import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
+import { isAllowedRecordDate, isTodayRecordDate, getRecordDateLabel } from '../../utils/record-date'
 import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 
@@ -162,7 +162,6 @@ import {
   normalizeNextMainMeal,
 } from './utils/next-meal-guidance'
 
-const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
   planned_count: 0,
   completed_count: 0,
@@ -753,17 +752,6 @@ function clearEditableWaterForDate(metrics: BodyMetricsStorage, date: string): B
   }
 }
 
-function getDismissedBackfillDates(): string[] {
-  const stored = Taro.getStorageSync(BACKFILL_HINT_DISMISSED_DATES_KEY)
-  return Array.isArray(stored)
-    ? stored.filter((date): date is string => typeof date === 'string' && date.length > 0)
-    : []
-}
-
-function saveDismissedBackfillDates(dates: string[]) {
-  Taro.setStorageSync(BACKFILL_HINT_DISMISSED_DATES_KEY, Array.from(new Set(dates)))
-}
-
 /** 真机弱网时身体指标接口偶发失败，短延迟重试一次；仍失败则返回 null，由本机缓存 + 日期键规范化兜底 */
 async function fetchBodyMetricsSummaryRetry(): Promise<
   Awaited<ReturnType<typeof getBodyMetricsSummary>> | null
@@ -902,7 +890,6 @@ function IndexPage() {
   const [showHomeOnboardingGuide, setShowHomeOnboardingGuide] = React.useState(false)
   const [homeGuideTransitionPending, setHomeGuideTransitionPending] = React.useState(false)
   const homeGuideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [dismissedBackfillDates, setDismissedBackfillDates] = React.useState<string[]>(() => getDismissedBackfillDates())
   const selectedDateRef = React.useRef(selectedDate)
   const calendarMonthLoadSeqRef = React.useRef(0)
   const commitSelectedDate = React.useCallback((date: string) => {
@@ -2902,13 +2889,6 @@ function IndexPage() {
     homeAchievement
   ])
 
-  const backfillDismissedDateSet = new Set(dismissedBackfillDates)
-  const showBackfillHint =
-    isAllowedRecordDate(selectedDate) &&
-    !isTodayRecordDate(selectedDate) &&
-    !dashboardBusy &&
-    !isGuest &&
-    !backfillDismissedDateSet.has(selectedDate)
   const membershipCredits = getMembershipCreditSummary(membershipStatus)
   const availableRewardCredits = getAvailableRewardCredits(rewardCenter)
   const rewardHintTasks = rewardCenter?.tasks || []
@@ -2981,24 +2961,6 @@ function IndexPage() {
       },
     })
   }, [])
-  const openBackfillRecordMenu = () => {
-    setShowRecordMenu(true)
-  }
-  const handleDismissBackfillHint = async () => {
-    const { confirm } = await Taro.showModal({
-      title: '取消补录提醒',
-      content: '取消后，这一天的补录提醒将不再显示。仍可随时通过首页记录入口补录历史餐食。',
-      confirmText: '确认取消',
-      cancelText: '继续保留',
-      confirmColor: '#5cb896'
-    })
-    if (!confirm) return
-    setDismissedBackfillDates((prev) => {
-      const next = Array.from(new Set([...prev, selectedDate]))
-      saveDismissedBackfillDates(next)
-      return next
-    })
-  }
 
   const moduleLocks = homeModuleLocks(expirySummary.items.some(item => ['overdue', 'today', 'soon'].includes(item.urgency_level)))
 
@@ -3081,16 +3043,12 @@ function IndexPage() {
           monthLoadError={calendarMonthLoadError}
         />
 
-        {showBackfillHint && (
+        {!isGuest && isAllowedRecordDate(selectedDate) && !isTodayRecordDate(selectedDate) && (
           <View className='home-backfill-hint'>
             <Text className='home-backfill-hint__dot' />
-            <View className='home-backfill-hint__copy'>
-              <Text className='home-backfill-hint__text'>可补录这一天的食物、体重、喝水和运动记录</Text>
-            </View>
-            <View className='home-backfill-hint__actions'>
-              <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
-              <Text className='home-backfill-hint__cancel' onClick={handleDismissBackfillHint}>取消</Text>
-            </View>
+            <Text className='home-backfill-hint__text'>
+              当前选择{getRecordDateLabel(selectedDate)}，直接在首页记录饮食、体重、喝水或运动，即可补录到这一天。
+            </Text>
           </View>
         )}
 
@@ -3378,7 +3336,7 @@ function IndexPage() {
           <View className='section-header'>
             <View className='meals-title-wrap'>
               <Text className='iconfont icon-canciguanli meals-title-icon' />
-              <Text className='meals-title'>今日餐食</Text>
+              <Text className='meals-title'>{selectedDate === formatDateKey(new Date()) ? '今日餐食' : `${getRecordDateLabel(selectedDate)}餐食`}</Text>
               {!loading && meals.length > 0 ? <Text className='home-meal-count'>{meals.length} 餐</Text> : null}
             </View>
             <View className='view-all-btn' onClick={handleViewAllMeals}>

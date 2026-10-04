@@ -9,6 +9,7 @@ import (
 	"food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/service"
 	authmw "food_link/backend/internal/auth"
+	"food_link/backend/internal/common/dateutil"
 	errors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/pkg/logger"
@@ -53,6 +54,10 @@ type paginatedTaskService interface {
 
 type summaryPaginatedTaskService interface {
 	ListTaskSummariesPage(ctx context.Context, userID, status, search string, limit, offset int) (service.TaskSummaryListPage, error)
+}
+
+type waitingRecordSummaryTaskService interface {
+	ListWaitingRecordTaskSummariesPage(ctx context.Context, userID, date, search string, limit, offset int) (service.TaskSummaryListPage, error)
 }
 
 type AnalyzeHandler struct {
@@ -338,6 +343,19 @@ func (h *AnalyzeHandler) ListTasks(c *gin.Context) {
 	status := c.Query("status")
 	search := c.Query("search")
 	summaryMode := strings.TrimSpace(c.Query("summary")) == "1"
+	waitingDate := ""
+	if c.Query("waiting_record") == "1" {
+		if !summaryMode || taskType != "" || strings.TrimSpace(c.Query("date")) == "" {
+			response.Error(c, &errors.AppError{Code: 10002, Message: "待确认查询需要日期和摘要模式", HTTPStatus: 400})
+			return
+		}
+		var dateErr error
+		waitingDate, dateErr = dateutil.NormalizeChinaDate(c.Query("date"), "date")
+		if dateErr != nil {
+			response.Error(c, dateErr)
+			return
+		}
+	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	if limit <= 0 {
 		limit = 50
@@ -371,7 +389,18 @@ func (h *AnalyzeHandler) ListTasks(c *gin.Context) {
 	var err error
 	if summaryMode && strings.TrimSpace(taskType) == "" {
 		if summaryPaginated, ok := h.taskSvc.(summaryPaginatedTaskService); ok {
-			summaryPage, summaryErr := summaryPaginated.ListTaskSummariesPage(c.Request.Context(), userID, status, search, limit, offset)
+			var summaryPage service.TaskSummaryListPage
+			var summaryErr error
+			if waitingDate != "" {
+				waitingRecord, supported := h.taskSvc.(waitingRecordSummaryTaskService)
+				if !supported {
+					response.Error(c, &errors.AppError{Code: 10002, Message: "当前服务暂不支持待确认日期查询", HTTPStatus: 400})
+					return
+				}
+				summaryPage, summaryErr = waitingRecord.ListWaitingRecordTaskSummariesPage(c.Request.Context(), userID, waitingDate, search, limit, offset)
+			} else {
+				summaryPage, summaryErr = summaryPaginated.ListTaskSummariesPage(c.Request.Context(), userID, status, search, limit, offset)
+			}
 			if summaryErr != nil {
 				logger.Error(c.Request.Context(), "查询识别记录摘要失败", summaryErr,
 					slog.String("user_id", userID),
@@ -384,12 +413,17 @@ func (h *AnalyzeHandler) ListTasks(c *gin.Context) {
 			logger.Info(c.Request.Context(), "查询识别记录摘要完成",
 				slog.String("user_id", userID),
 				slog.Int("returned_count", len(summaryPage.Tasks)),
+				slog.String("date", waitingDate),
 				slog.Int("next_offset", summaryPage.NextOffset),
 				slog.Bool("has_more", summaryPage.HasMore),
 			)
 			response.Success(c, summaryPage)
 			return
 		}
+	}
+	if waitingDate != "" {
+		response.Error(c, &errors.AppError{Code: 10002, Message: "当前服务暂不支持按日期查询待确认结果", HTTPStatus: 400})
+		return
 	}
 	if paginated, ok := h.taskSvc.(paginatedTaskService); ok {
 		page, err = paginated.ListTasksPage(c.Request.Context(), userID, taskType, status, search, limit, offset)
