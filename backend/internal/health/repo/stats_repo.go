@@ -537,32 +537,28 @@ func (r *StatsRepo) ResolveDietRecommendationSchool(ctx context.Context, questio
 	if normalized == "" {
 		return nil, nil
 	}
-	aliases := map[string]string{"北大": "北京大学", "清华": "清华大学"}
-	for alias, canonical := range aliases {
-		if strings.Contains(normalized, alias) {
-			var row domain.DietRecommendationSchool
-			err := r.db.WithContext(ctx).Table("schools").Select("id, name").Where("name = ? AND status = ?", canonical, "active").First(&row).Error
-			if err == nil {
-				return &row, nil
-			}
-			if err != gorm.ErrRecordNotFound {
-				return nil, err
-			}
-		}
-	}
+	aliases := map[string]string{"北京大学": "北大", "清华大学": "清华"}
 	var rows []domain.DietRecommendationSchool
 	if err := r.db.WithContext(ctx).Table("schools").Select("id, name").Where("status = ?", "active").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	var best *domain.DietRecommendationSchool
+	bestIndex, bestLength := -1, 0
 	for i := range rows {
 		name := strings.ReplaceAll(strings.TrimSpace(rows[i].Name), " ", "")
-		if name == "" || !strings.Contains(normalized, name) {
+		if name == "" {
 			continue
 		}
-		if best == nil || len([]rune(name)) > len([]rune(best.Name)) {
+		index := strings.LastIndex(normalized, name)
+		if alias := aliases[name]; alias != "" {
+			index = max(index, strings.LastIndex(normalized, alias))
+		}
+		// Multiple campuses can occur in a move request. Latest explicit mention
+		// wins, with the longer directory name breaking a nested-name tie.
+		if index >= 0 && (index > bestIndex || index == bestIndex && len([]rune(name)) > bestLength) {
 			candidate := rows[i]
 			best = &candidate
+			bestIndex, bestLength = index, len([]rune(name))
 		}
 	}
 	return best, nil

@@ -21,18 +21,26 @@ func mealHasStructure(c DietRecommendationCandidate) bool {
 }
 
 func mealHasNamedStructure(c DietRecommendationCandidate) bool {
-	text := c.Title
+	text := c.Title + " " + c.Description
 	for _, item := range c.Items {
 		text += " " + item.Name
 	}
-	staple := regexp.MustCompile(`米饭|拌饭|盖饭|盖浇饭|鸡饭|牛肉饭|滑蛋饭|炒饭|煲仔饭|石锅饭|鳗鱼饭|面条|面包|意面|荞麦面|牛肉面|拉面|拌面|炒面|生煎|烧麦|烧卖|汉堡|鸡肉卷|肉夹馍|煎饼|米粉|米线|土豆粉|馒头|包子|饺|馄饨|杂粮|红薯|玉米|燕麦|粥|饭`).MatchString(text)
+	staple := regexp.MustCompile(`米饭|拌饭|盖饭|盖浇饭|鸡饭|牛肉饭|滑蛋饭|炒饭|煲仔饭|石锅饭|鳗鱼饭|面条|面包|意面|荞麦面|牛肉面|臊子面|打卤面|阳春面|清汤面|拉面|拌面|炒面|生煎|烧麦|烧卖|汉堡|鸡肉卷|肉夹馍|煎饼|馅饼|米粉|米线|土豆粉|馒头|包子|饺|馄饨|杂粮|红薯|玉米|燕麦|粥|饭`).MatchString(text)
 	protein := regexp.MustCompile(`肉|鸡|牛|猪|鱼|虾|蛋|豆腐|豆皮|豆干|奶|排骨|鸭|羊`).MatchString(text)
-	return staple && protein
+	// A cooked noodle bowl is a main dish even when its name does not contain
+	// 肉/蛋/豆. Known nutrition and explicit user minimums are checked separately;
+	// bare rice, dough, a pot base or hotpot dumplings do not get this exemption.
+	return staple && (protein || mealPreparedMainPattern.MatchString(c.Title))
 }
 
 func mealSamePlace(a, b DietRecommendationCandidate) bool {
 	if a.IsCampusFood != b.IsCampusFood {
 		return false
+	}
+	if a.IsCampusFood {
+		if a.WindowID != "" && b.WindowID != "" && a.WindowID != b.WindowID || a.WindowName != "" && b.WindowName != "" && a.WindowName != b.WindowName || a.Floor != "" && b.Floor != "" && a.Floor != b.Floor {
+			return false
+		}
 	}
 	if a.CanteenID != "" && b.CanteenID != "" {
 		return a.CanteenID == b.CanteenID
@@ -56,6 +64,9 @@ func registerMealPlan(state *campusDietAgentRunState, components []DietRecommend
 	componentState.Constraints.RequiredStaple = "" // staple requirement applies to the composed meal, not each side
 	fullMeals := 0
 	for _, c := range components {
+		if risk := mealOrderingRisk(c); risk != "" {
+			return DietRecommendationCandidate{}, fmt.Errorf("%s：%s。请检索能直接点单的主餐或有完整必选费用证据的套餐，不要只加配菜标价", c.Title, risk)
+		}
 		if mealHasStructure(c) {
 			fullMeals++
 			if fullMeals > 1 {
@@ -66,7 +77,7 @@ func registerMealPlan(state *campusDietAgentRunState, components []DietRecommend
 			return DietRecommendationCandidate{}, fmt.Errorf("组合只接受份价已知的原始条目，不能将按两单价当作整份")
 		}
 		if !mealSamePlace(components[0], c) {
-			return DietRecommendationCandidate{}, fmt.Errorf("组合须在同一食堂或同一具明确地址的商家购买")
+			return DietRecommendationCandidate{}, fmt.Errorf("组合须在同一食堂窗口或同一具明确地址的商家购买，不跨窗口或楼层拼总价")
 		}
 		if len(mealHarnessRank(&componentState, []DietRecommendationCandidate{c})) == 0 {
 			return DietRecommendationCandidate{}, fmt.Errorf("组合中的菜品不符合本餐条件")

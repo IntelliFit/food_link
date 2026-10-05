@@ -287,6 +287,7 @@ type statsComputation struct {
 	DataFingerprint    string
 	BodyMetrics        *BodyMetricsSummary
 	PetCompanion       petChatCompanion
+	DietRecords        *dietRecordToolState
 }
 
 type petChatCompanion struct {
@@ -768,14 +769,15 @@ func (s *StatsService) preparePetChat(ctx context.Context, userID string, input 
 	if err != nil {
 		return nil, nil, err
 	}
-	if !hasEnoughStatsInsightData(comp) {
+	if !hasEnoughStatsInsightData(comp) && !dietRecordQuestion(question) {
 		return nil, nil, &commonerrors.AppError{Code: 10002, Message: "当前统计周期还没有饮食记录，先记录一餐后再问小食探", HTTPStatus: 400}
 	}
 	comp.PetCompanion = s.resolvePetChatCompanion(ctx, userID)
+	comp.DietRecords = newDietRecordToolState(userID)
 	prompt := buildPetChatPrompt(comp, question, nil, len(normalizedInput.ImageURLs))
 	usage := estimatePetChatTokenUsage(prompt, comp.StatsRange, len(normalizedInput.ImageURLs))
 	pricing := billing.PriceTokenUsage(billing.PricingInput{Model: s.preferredPetChatLLM(len(normalizedInput.ImageURLs) > 0).Model, Usage: usage}, s.aiUsagePricingConfig())
-	if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
+	if s.creditGuard != nil && strings.TrimSpace(userID) != "" && !petChatHomeIncluded(normalizedInput) {
 		if _, err := s.creditGuard.ValidateUsageCredits(ctx, userID, pricing.CreditsCharged, "小食探对话"); err != nil {
 			return nil, nil, err
 		}
@@ -926,7 +928,7 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 		return nil, &commonerrors.AppError{Code: 10000, Message: "小食探分析失败，请稍后重试", HTTPStatus: 503}
 	}
 	actualPricing := generation.Pricing
-	if actualPricing != nil && s.creditGuard != nil && strings.TrimSpace(userID) != "" {
+	if actualPricing != nil && s.creditGuard != nil && strings.TrimSpace(userID) != "" && !petChatHomeIncluded(input) {
 		creditsInfo, err = s.creditGuard.ValidateUsageCredits(ctx, userID, actualPricing.CreditsCharged, "小食探对话")
 		if err != nil {
 			return nil, err
@@ -954,6 +956,9 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 		if s.creditGuard == nil || strings.TrimSpace(userID) == "" {
 			billingStatus = "actual_usage_unmetered"
 		}
+	}
+	if petChatHomeIncluded(input) {
+		creditsCharged, billingStatus = 0, "included_home_meal"
 	}
 	userMessageID, assistantMessageID := s.persistPetChatExchange(ctx, userID, session.ID, estimate.Range, estimate.Question, generation.Content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus, input.ImageURLs)
 	return &PetChatResult{
@@ -1026,6 +1031,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			fullAnswer.WriteString(fallback)
 			chunkChan <- PetChatStreamChunk{Type: "chunk", Text: fallback}
 		} else {
+			s.preparePetDietEvidence(ctx, comp, estimate.Question, historyMessages, len(input.ImageURLs) > 0)
 			prompt := buildPetChatPrompt(comp, estimate.Question, historyMessages, len(input.ImageURLs))
 			modelStarted := time.Now()
 			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt, petChatMaxTokens, input.EnableThinking, input.ImageURLs...)
@@ -1081,11 +1087,13 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		creditsCharged := 0
 		if apiKey != "" {
 			billingStatus = "actual_usage_unmetered"
-			if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
+			if petChatHomeIncluded(input) {
+				billingStatus = "included_home_meal"
+			} else if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
 				billingStatus = "actual_usage_charged"
 			}
 		}
-		if apiKey != "" && s.creditGuard != nil && strings.TrimSpace(userID) != "" {
+		if apiKey != "" && s.creditGuard != nil && strings.TrimSpace(userID) != "" && !petChatHomeIncluded(input) {
 			sourceKey := fmt.Sprintf("pet_chat:%s:%s:%d", estimate.Range, session.ID, time.Now().UnixNano())
 			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: s.petChatModel(), Usage: billing.TokenUsage{OutputTokens: estimateChineseTokens(content)}}, s.aiUsagePricingConfig())
 			actualPricing = &pricing
@@ -1409,6 +1417,7 @@ func (s *StatsService) SaveInsight(ctx context.Context, userID string, content s
 }
 
 func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage, enableThinking bool, imageURLs []string) (statsInsightGeneration, error) {
+	s.preparePetDietEvidence(ctx, comp, question, historyMessages, len(imageURLs) > 0)
 	llm := s.preferredPetChatLLM(len(imageURLs) > 0)
 	apiKey := llm.APIKey
 	baseURL := llm.BaseURL
@@ -2307,7 +2316,7 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 	if imageCount > 0 {
 		imageInstruction = fmt.Sprintf("本轮用户附带了 %d 张图片。你必须先认真查看图片中的食物、包装文字、营养成分、份量线索或其他可见内容，再结合用户问题和健康记录回答；看不清的细节要说明不确定，不能编造。", imageCount)
 	}
-	return fmt.Sprintf(`你是「食探」小程序中的宠物伙伴。
+	prompt := fmt.Sprintf(`你是「食探」小程序中的宠物伙伴。
 
 你的名字：
 %s
@@ -2341,6 +2350,9 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 - 餐次热量：早餐 %.0f、早加餐 %.0f、午餐 %.0f、午加餐 %.0f、晚餐 %.0f、晚加餐 %.0f kcal
 - 每日热量趋势：%s
 
+具体日期/餐次/食品记录（按需实时查已保存记录，优先于上述周/月统计）：
+%s
+
 身体指标：
 %s
 
@@ -2371,6 +2383,7 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 12. 只有用户在询问怎么做、要求制定计划，或数据显示存在明确且可执行的改进点时，才给出 1-2 条行动建议。事实问答、简短追问、情绪表达或数据不足时不强行加建议；时间范围跟随用户问题，不固定设为第二天。
 13. 对缺失记录要说“当前记录里没有”，不要推断用户实际没吃、没训练或没有某个习惯。必要时用一句自然的追问补齐关键信息。
 14. 使用适合聊天气泡的纯文本；不要 Markdown、JSON、代码块或表格，不要输出 #、*、**、_、反引号等格式符号。
+15. 可以读取系统提供的具体日期、餐次、食品份量和营养明细。问某一天或某餐时优先引用对应记录，不用周/月均值替代；同一餐可能有多条记录。查询失败、未查询、查无记录、字段缺失须区分，不能声称“系统只能看7天汇总”或“新记录未同步”。未确认识别任务不属于已保存摄入。只提供部分食品营养时只能称已知部分合计，不能当作完整该餐的营养。不要输出record_id、内部JSON、工具名或权限标志。
 `,
 		companion.Name,
 		companion.Personality,
@@ -2400,12 +2413,17 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 		comp.ByMeal["dinner"],
 		comp.ByMeal["evening_snack"],
 		dailyTrend,
+		dietRecordEvidenceBlock(comp.DietRecords),
 		weightBlock,
 		micronutrientBlock,
 		exerciseBlock,
 		formatStatsHealthProfile(comp.User, latestWeightFromBodyMetrics(comp.BodyMetrics)),
 		customFocusBlock,
 	)
+	if dietRecordQuestion(question) {
+		prompt += "\n本轮是饮食记录事实核对：仅回答所问日期、餐次、食品份量或营养值，优先用简短逐项文本和一句合计，不附带减脂/训练/吃法建议或周均趋势。最多展示一位小数；不要加系统查询过程、补录邀请或身份介绍。不猜测食品个数，也不把本轮查询到的数据说成用户之前已问过。缺记录只用一句话说明指定餐次没有已保存记录，不推断是否实际录入或进食。缺营养只说明对应字段缺失。营养数字是已保存记录的值，即使字段齐全也不代表实测或精确真实摄入，禁止说不是估算值、确切真实摄入或实测值。"
+	}
+	return prompt
 }
 
 func buildPetChatExercisePromptBlock(comp *statsComputation) string {

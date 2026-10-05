@@ -83,7 +83,7 @@ func normalizeMealEvidence(c DietRecommendationCandidate) DietRecommendationCand
 }
 
 func mealHasEvidenceStructure(c DietRecommendationCandidate) bool {
-	return mealHasStructure(c) || c.Source != "food_record" && c.NutritionBasis == "unavailable" && mealHasNamedStructure(c)
+	return mealOrderingRisk(c) == "" && (mealHasStructure(c) || c.Source != "food_record" && c.NutritionBasis == "unavailable" && mealHasNamedStructure(c))
 }
 
 func decorateMealSource(state *campusDietAgentRunState, c DietRecommendationCandidate, option *DietRecommendationOption) {

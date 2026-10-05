@@ -12,13 +12,15 @@ import (
 	"food_link/backend/internal/health/domain"
 )
 
-const mealHarnessVersion = "foodlink-meal-harness-v5"
+const mealHarnessVersion = "foodlink-meal-harness-v6"
 
 type mealHistoryEvidence struct {
-	Date   string                  `json:"date"`
-	Meal   string                  `json:"meal"`
-	Foods  []string                `json:"foods"`
-	Macros DietRecommendationMacro `json:"macros"`
+	RecordID   string                  `json:"record_id"`
+	RecordedAt string                  `json:"recorded_at"`
+	Date       string                  `json:"date"`
+	Meal       string                  `json:"meal"`
+	Foods      []string                `json:"foods"`
+	Macros     DietRecommendationMacro `json:"macros"`
 }
 
 type mealFoodFrequency struct {
@@ -158,7 +160,7 @@ func summarizeMealHistory(records []domain.FoodRecord, now time.Time) mealPerson
 			freq[name] = f
 		}
 		if len(out.RecentMeals) < 18 {
-			out.RecentMeals = append(out.RecentMeals, mealHistoryEvidence{Date: date, Meal: record.MealType, Foods: names, Macros: DietRecommendationMacro{Calories: record.TotalCalories, Protein: record.TotalProtein, Carbs: record.TotalCarbs, Fat: record.TotalFat}})
+			out.RecentMeals = append(out.RecentMeals, mealHistoryEvidence{RecordID: record.ID, RecordedAt: record.RecordTime.In(chinaTZ).Format(time.RFC3339), Date: date, Meal: record.MealType, Foods: names, Macros: DietRecommendationMacro{Calories: record.TotalCalories, Protein: record.TotalProtein, Carbs: record.TotalCarbs, Fat: record.TotalFat}})
 		}
 	}
 	out.RecordedDays = len(days)
@@ -249,13 +251,13 @@ func mealHarnessEmptyResult(state *campusDietAgentRunState, reason string) *Camp
 	if reason == "needs_location" {
 		answer = "可以，按你这轮的地点找餐食，不再沿用之前的学校。请先使用当前位置，我再查询附近已收录的商家。"
 	}
-	if state.Constraints.PendingSchool != nil && !state.Constraints.CampusAccessDenied && state.Constraints.Scene != "takeout" {
-		answer = fmt.Sprintf("已收录的附近选择里有%s食堂，但位置不代表能在校内就餐。你这次可以在%s食堂吃饭吗？也可以只看校外商家。", state.Constraints.PendingSchool.Name, state.Constraints.PendingSchool.Name)
-		reason = "campus_access_required"
-	} else if state.SearchAttempted && state.Constraints.CompleteMeal && len(state.LastSearch) > 0 {
+	if state.SearchAttempted && state.Constraints.CompleteMeal && len(state.LastSearch) > 0 {
 		answer = "现有记录里有单道菜，但还没找到能核算份量、总价并满足这次条件的完整一餐。我不会把单道配菜当作吃饱的方案。你愿意调整预算，还是换一个就餐地点？"
 	} else if state.SearchAttempted && state.Constraints.Scene == "takeout" {
 		answer = "在本次范围和条件下，现有餐食库没有检索到位置与餐食资料足够的校外商家选项；这不代表当地没有商家。你愿意提供一个具体店名或换个地点吗？"
+	}
+	if gap := mealOrderingGap(state); gap != "" && state.SearchAttempted {
+		answer = gap
 	}
 	if state.RetrievalFailed {
 		answer = "餐食数据暂时查询失败，请稍后再试；这次没有生成方案，不扣积分。"
@@ -289,9 +291,6 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 	for _, candidate := range candidates {
 		candidate = normalizeMealEvidence(candidate)
 		isHistory := candidate.Source == "food_record"
-		if !mealCampusAvailable(state, candidate) {
-			continue
-		}
 		campusScope := state.Constraints.Scene == "campus" && candidate.IsCampusFood && state.School.ID != "" && candidate.SchoolID == state.School.ID
 		if state.Location != nil && !isHistory && !campusScope {
 			radius := state.Constraints.RadiusKM
