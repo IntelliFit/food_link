@@ -1,7 +1,8 @@
 import { View, Text } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import React from 'react'
-import { IconCollapse } from '../../../components/iconfont'
+import { IconCollapse, IconExpand } from '../../../components/iconfont'
+import { getTodayRecordDateKey } from '../../../utils/record-date'
 import { type WeekHeatmapCell } from '../types'
 import {
   buildCalendarRecordMap,
@@ -18,6 +19,7 @@ interface DateSelectorProps {
   cells: WeekHeatmapCell[]
   historyCells?: WeekHeatmapCell[]
   selectedDate: string
+  todayKey?: string
   onSelect: (date: string) => void
   onVisibleMonthChange?: (month: string) => void
   monthLoading?: boolean
@@ -41,13 +43,7 @@ function getCircleClass(cell?: WeekHeatmapCell): string {
   return Number(cell?.calories || 0) > Number(cell?.target || 0) ? 'is-over' : 'is-recorded'
 }
 
-export function DateSelector({ cells, historyCells = [], selectedDate, onSelect, onVisibleMonthChange, monthLoading = false, monthLoadError = false }: DateSelectorProps) {
-  const todayKey = React.useMemo(() => {
-    const today = new Date()
-    const month = String(today.getMonth() + 1).padStart(2, '0')
-    const day = String(today.getDate()).padStart(2, '0')
-    return `${today.getFullYear()}-${month}-${day}`
-  }, [])
+export function DateSelector({ cells, historyCells = [], selectedDate, todayKey = getTodayRecordDateKey(), onSelect, onVisibleMonthChange, monthLoading = false, monthLoadError = false }: DateSelectorProps) {
   const [expanded, setExpanded] = React.useState(false)
   const [visibleMonth, setVisibleMonth] = React.useState(() => getCalendarMonthKey(selectedDate))
 
@@ -67,7 +63,7 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect,
   const isCurrentMonth = visibleMonth >= currentMonth
 
   const handleSelect = (date: string) => {
-    if (!date || date > todayKey) return
+    if (!date || date > getTodayRecordDateKey()) return
     try {
       Taro.setStorageSync(HOME_SELECTED_DATE_KEY, date)
     } catch (_) {}
@@ -96,13 +92,14 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect,
     const [year, month, day] = selectedDate.split('-').map(Number)
     const next = new Date(year, month - 1, day + offset * 7)
     const nextKey = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`
-    handleSelect(offset > 0 && nextKey > todayKey ? todayKey : nextKey)
+    const currentToday = getTodayRecordDateKey()
+    handleSelect(offset > 0 && nextKey > currentToday ? currentToday : nextKey)
   }
 
   return (
     <View className={`date-selector-section ${expanded ? 'is-calendar-expanded' : ''}`}>
       <View className='date-calendar-toolbar'>
-        <View className='date-calendar-title' onClick={toggleExpanded}>
+        <View className='date-calendar-title' role='button' aria-label={expanded ? '收起月历' : '展开月历'} onClick={toggleExpanded}>
           {expanded ? (
             <Text className='date-calendar-title__text'>{formatCalendarMonthLabel(titleMonth)}</Text>
           ) : (
@@ -113,7 +110,9 @@ export function DateSelector({ cells, historyCells = [], selectedDate, onSelect,
           )}
           {expanded ? (
             <IconCollapse size={18} color='currentColor' className='date-calendar-title__indicator' />
-          ) : null}
+          ) : (
+            <IconExpand size={18} color='currentColor' className='date-calendar-title__indicator' />
+          )}
         </View>
         {expanded && (
           <View className='date-calendar-nav-group'>
