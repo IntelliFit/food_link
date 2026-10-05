@@ -4,7 +4,7 @@ import PetStudioPage from '../../src/packagePetStudio/pages/index/index'
 import { getBodyMetricsSummary, getExerciseLogs, getPetSummary, type PetProfile } from '../../src/utils/api'
 import { GROWTH_CHAPTERS, buyGrowthItem, newGrowthSave, newPetJourney, settleGrowthRound, type GrowthGame, type GrowthSave } from '../../src/utils/pet-growth'
 import { GROWTH_CHANGED, growthStorageKey, readGrowth, writeGrowth } from '../../src/utils/pet-growth-storage'
-import { HOME_COMPANION_PREFERENCE_KEY, ORIGINAL_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
+import { HOME_COMPANION_CHANGED_EVENT, HOME_COMPANION_PREFERENCE_KEY, ORIGINAL_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../src/utils/pet-events'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../src/utils/home-events'
 import { PET_LOADOUT_CHANGED, readPetLoadout } from '../../src/utils/pet-loadout'
@@ -29,6 +29,7 @@ let show: (() => void) | undefined
 let hide: (() => void) | undefined
 let failGrowthWrites: boolean
 let failIdentityReads: boolean
+let failGrowthReads: boolean
 let listeners: Map<string, Set<(...args: any[]) => void>>
 const clone = <T,>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value))
 const preferenceKey = (account: string) => `${HOME_COMPANION_PREFERENCE_KEY}:${account}`
@@ -42,13 +43,14 @@ beforeEach(() => {
     ['user_id', user],
     [preferenceKey(user), { selected: 'original', enabledOriginal: true }],
   ])
-  failGrowthWrites = false; failIdentityReads = false; listeners = new Map(); show = undefined; hide = undefined
+  failGrowthWrites = false; failIdentityReads = false; failGrowthReads = false; listeners = new Map(); show = undefined; hide = undefined
   let pageHideIsNext = false
   ;(Taro.useDidShow as jest.Mock).mockImplementation(callback => { show = callback; pageHideIsNext = true })
   // Page show/hide are registered together; games register hide alone.
   ;(Taro.useDidHide as jest.Mock).mockImplementation(callback => { if (pageHideIsNext) { hide = callback; pageHideIsNext = false } })
   ;(Taro.getStorageSync as jest.Mock).mockImplementation(key => {
     if (key === 'user_id' && failIdentityReads) throw new Error('storage temporarily unavailable')
+    if (key.startsWith('pet_growth_v2:') && failGrowthReads) throw new Error('wallet read temporarily unavailable')
     return clone(storage.has(key) ? storage.get(key) : '')
   })
   ;(Taro.setStorageSync as jest.Mock).mockImplementation((key, value) => {
@@ -212,6 +214,28 @@ test('a free growth souvenir can be claimed and placed without spending coins', 
   expect(saved().inventory).toContain('care-sprout'); expect(saved().stars).toBe(0)
   click(container, 'care-milestone-2'); click(container, 'journey-place-care-sprout'); click(container, 'journey-tab-home')
   expect(container.querySelector('.journey-room__prop')).toHaveTextContent('绿意小盆栽')
+})
+
+test('same pet changing appearance can explicitly end the old timer and start a new one without rewards', async () => {
+  const { container } = await mount(); click(container, 'journey-tab-map'); await flush()
+  click(container, 'care-action-work'); click(container, 'care-timer-start'); act(() => jest.advanceTimersByTime(2000))
+  act(() => { storage.set(preferenceKey(user), { selected: 'follow', enabledOriginal: true }); Taro.eventCenter.trigger(HOME_COMPANION_CHANGED_EVENT) }); await flush()
+  expect(container.querySelector('#care-previous-timer-cancel')).toBeEnabled()
+  expect(saved().care?.sessions[pet.id].appearance).toBe(ORIGINAL_COMPANION_SRC)
+  click(container, 'care-previous-timer-cancel'); click(container, 'care-action-rest'); click(container, 'care-timer-start')
+  expect(saved().care?.sessions[pet.id]).toMatchObject({ kind: 'rest', targetMs: 60000 })
+  expect(saved().care?.sessions[pet.id].appearance).not.toBe(ORIGINAL_COMPANION_SRC)
+  expect(saved().stars).toBe(0)
+})
+
+test('wallet read failure retains completed timer in memory across tabs until safe retry', async () => {
+  const { container } = await mount(); click(container, 'journey-tab-map'); await flush()
+  click(container, 'care-action-rest'); click(container, 'care-timer-start'); failGrowthReads = true
+  act(() => jest.advanceTimersByTime(60000)); expect(container.querySelector('#care-timer-claim')).toBeEnabled()
+  click(container, 'journey-tab-home'); click(container, 'journey-tab-map'); await flush()
+  expect(container.querySelector('#care-timer-claim')).toBeEnabled()
+  failGrowthReads = false; click(container, 'care-timer-claim'); await flush()
+  expect(saved().stars).toBe(2); expect(saved().rounds.filter(id => id === `care:${day}:rest`)).toHaveLength(1)
 })
 
 test.each(['merge'] as const)('the %s first-screen card opens the next real game immediately without paying a reward', async game => {

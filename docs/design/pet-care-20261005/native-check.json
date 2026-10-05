@@ -1,0 +1,42 @@
+[
+  {
+    "action": "water",
+    "present": true
+  },
+  {
+    "action": "exercise",
+    "present": true
+  },
+  {
+    "action": "work",
+    "present": true
+  },
+  {
+    "action": "rest",
+    "present": true
+  },
+  {
+    "mapRemoved": true,
+    "retiredKitchenAbsent": true,
+    "retiredExploreAbsent": true
+  },
+  {
+    "screenshot": "growth-native.png",
+    "bytes": 93015
+  },
+  {
+    "foregroundTimerStartPauseReopenResume": true
+  },
+  {
+    "screenshot": "timer-native.png",
+    "bytes": 48968
+  },
+  {
+    "unfinishedTimerCancelledNoReward": true,
+    "balanceAndReceiptsUnchanged": true
+  },
+  {
+    "screenshot": "exchange-native.png",
+    "bytes": 46418
+  }
+]

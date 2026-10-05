@@ -121,11 +121,13 @@ function PetStudioPage() {
   const checkpointCare = (session: PetCareSession) => {
     // Hiding or replacing the view must preserve the old session, never a new identity's timer.
     if (!pet || session.petId !== pet.id || session.appearance !== appearance || growthAccountOrNull() !== account) return false
+    const known = saveRef.current.care?.sessions[pet.id]
+    if (!known || known.id !== session.id || known.appearance !== session.appearance) return false
+    pendingCare.current = { account, session: { ...session, status: 'paused' } }
     try {
       const latestSave = readGrowth(account, pet.id)
       const existing = latestSave.care?.sessions[pet.id]
       if (!existing || existing.id !== session.id || existing.appearance !== session.appearance) return false
-      pendingCare.current = { account, session: { ...session, status: 'paused' } }
       const update = savePetCareSession(latestSave, { ...session, status: 'paused' })
       if (!update.ok || !writeGrowth(account, update.save)) return false
       pendingCare.current = null

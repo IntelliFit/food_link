@@ -26,6 +26,8 @@ export function PetGrowthGarden({ pet, sprite, appearance, account, active, save
   const claimed = save.care?.day === day ? save.care.claimed : {}
   const done = PET_CARE_ACTIONS.filter(item => claimed[item.id]).length
   const interactions = save.care?.interactionDay === day ? save.care.interactions : 0
+  const previousTimer = save.care?.sessions[pet.id]
+  const foreignTimer = previousTimer && previousTimer.appearance !== appearance ? previousTimer : null
   const [water, setWater] = useState<EvidenceState>(blankEvidence)
   const [exercise, setExercise] = useState<EvidenceState>(blankEvidence)
   const [selectedTimer, setSelectedTimer] = useState<PetCareTimerKind>('work')
@@ -145,6 +147,7 @@ export function PetGrowthGarden({ pet, sprite, appearance, account, active, save
   return <View className='pet-growth-garden' id='pet-growth-garden'>
     <View className='pet-growth-garden__hero'><Image src='/packagePetStudio/assets/growth-room-v1.jpg' mode='aspectFill' /><View className='pet-growth-garden__identity'><Text>{pet.name}的成长日记</Text><Text>Lv.{level.level} · 一起把生活过好</Text></View><View className='pet-growth-garden__actor'><PetActor pet={pet} spriteOverride={sprite} followAppearance={false} action={pose} size={100} active={active} followLoadout /></View><Text className='pet-growth-garden__speech'>{response}</Text></View>
     <View className='pet-growth-garden__level'><View><Text>成长 Lv.{level.level}</Text><Text>亲密 {journey?.affinity || 0} · {(save.care?.activeDays || []).length} 天有陪伴</Text></View><View className='journey-progress'><View style={{ width: `${level.next ? Math.min(100, level.current / level.next * 100) : 100}%` }} /></View><Text>{level.next ? `再成长 ${level.next - level.current} 点，打开下一份纪念` : '首期成长纪念全部可解锁，陪伴继续记录'}</Text></View>
+    {foreignTimer && <View className='pet-growth-garden__previous-timer'><Text>伙伴形象已经更新。结束原形象计时后，再开始新的陪伴；这一步不会扣币或发奖。</Text><Button id='care-previous-timer-cancel' className='journey-button' disabled={!active} onClick={() => { if (callbacks.current.onMutate(latest => cancelPetCareSession(latest, pet.id, foreignTimer.id))) setResponse('原形象的计时已经结束，和现在的伙伴重新开始吧。') }}>结束原形象计时</Button></View>}
     <View className='pet-growth-garden__section'><Text>今天，和伙伴一起</Text><Text>{done}/4 项已完成</Text></View>
     <View className='pet-growth-garden__actions'>{PET_CARE_ACTIONS.map(item => {
       const state = item.id === 'water' ? water : item.id === 'exercise' ? exercise : null
