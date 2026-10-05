@@ -61,6 +61,8 @@ type Service struct {
 	mu                    sync.Mutex
 	token                 string
 	expires               time.Time
+	profileMu             sync.Mutex
+	profilePending        map[string]string
 }
 
 func New(cfg *config.Config, users UserFinder) (*Service, error) {
@@ -77,6 +79,7 @@ func New(cfg *config.Config, users UserFinder) (*Service, error) {
 			opt.Password = cfg.Redis.Password
 		}
 		opt.DB = cfg.Redis.DB
+		opt.ContextTimeoutEnabled = true
 		s.store = redis.NewClient(opt)
 	}
 	return s, nil
@@ -125,7 +128,7 @@ func (s *Service) CheckText(ctx context.Context, openID string, scene int, text 
 		if err != nil {
 			return err
 		}
-		if err := decision(res); err != nil {
+		if err := decisionForContext(ctx, res); err != nil {
 			return err
 		}
 		logger.Info(ctx, "文本内容审核通过", slog.String("wechat_trace_id", res.TraceID), slog.Int("scene", scene))
@@ -152,6 +155,13 @@ func decision(res APIResponse) error {
 	default:
 		return ErrUnavailable
 	}
+}
+
+func decisionForContext(ctx context.Context, res APIResponse) error {
+	if ctx.Value(profileReviewContextKey{}) == true && res.ErrCode != nil && *res.ErrCode == 0 && res.Result.Suggest == "review" {
+		return errProfileReviewPending
+	}
+	return decision(res)
 }
 
 func (s *Service) CheckImages(ctx context.Context, openID string, scene int, urls []string) error {
@@ -213,7 +223,7 @@ func (s *Service) CheckImages(ctx context.Context, openID string, scene int, url
 		if json.Unmarshal(raw, &res) != nil {
 			return ErrUnavailable
 		}
-		if err := decision(res); err != nil {
+		if err := decisionForContext(ctx, res); err != nil {
 			if err == ErrUnavailable {
 				_ = s.store.Del(ctx, key).Err()
 			}

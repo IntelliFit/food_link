@@ -43,6 +43,7 @@ type UserService struct {
 	modeSwitchLog *userrepo.ModeSwitchLogRepo
 	storage       *storage.Client
 	blockChecker  BlockChecker
+	profileReview ProfileReviewChecker
 }
 
 type BlockChecker interface {
@@ -86,17 +87,25 @@ type UpdateProfileInput struct {
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, input UpdateProfileInput) (map[string]any, error) {
 	updates := map[string]any{}
 	if input.Nickname != nil {
-		validatedNickname, err := nickname.Validate(*input.Nickname)
+		validatedNickname, err := nickname.ValidateFormat(*input.Nickname)
 		if err != nil {
 			return nil, err
 		}
 		updates["nickname"] = validatedNickname
 	}
 	if input.Avatar != nil {
-		updates["avatar"] = s.resolveAvatarURL(*input.Avatar)
+		value, err := s.profileImageForSave("avatar", *input.Avatar)
+		if err != nil {
+			return nil, err
+		}
+		updates["avatar"] = value
 	}
 	if input.CoverImage != nil {
-		updates["cover_image"] = s.resolveCoverImageURL(*input.CoverImage)
+		value, err := s.profileImageForSave("cover_image", *input.CoverImage)
+		if err != nil {
+			return nil, err
+		}
+		updates["cover_image"] = value
 	}
 	if input.Telephone != nil {
 		updates["telephone"] = *input.Telephone
@@ -118,7 +127,18 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	}
 	user, err := s.users.UpdateFields(ctx, userID, updates)
 	if err != nil {
+		logger.Error(ctx, "保存用户资料失败", err, slog.String("user_id", userID))
 		return nil, err
+	}
+	if s.profileReview != nil && hasProfileContentUpdate(updates) {
+		queueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 250*time.Millisecond)
+		err := s.profileReview.QueueProfileReview(queueCtx, userID)
+		cancel()
+		if err != nil {
+			logger.Warn(ctx, "用户资料已保存，后台审核入队延后重试", slog.String("user_id", userID))
+		} else {
+			logger.Info(ctx, "用户资料已保存并安排后台审核", slog.String("user_id", userID))
+		}
 	}
 	return s.buildProfileResponse(user), nil
 }

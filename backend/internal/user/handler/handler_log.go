@@ -18,6 +18,8 @@ func logUserAPI(c *gin.Context, action string, attrs ...slog.Attr) {
 
 func userAPILogMessage(action string) string {
 	switch action {
+	case "profile_update_start":
+		return "开始保存用户资料"
 	case "profile_update_ok":
 		return "用户资料更新成功"
 	case "bind_phone_ok":
