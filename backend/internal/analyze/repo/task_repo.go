@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"food_link/backend/internal/analyze/domain"
+	commonerrors "food_link/backend/internal/common/errors"
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -572,14 +573,26 @@ func applyAnalyzeHistoryTaskFilter(q *gorm.DB) *gorm.DB {
 }
 
 func (r *TaskRepo) UpdateTaskResult(ctx context.Context, taskID string, result map[string]any) error {
-	var task domain.AnalysisTask
-	if err := r.db.WithContext(ctx).Where("id = ?", taskID).First(&task).Error; err != nil {
-		return err
-	}
-	task.Result = result
-	now := time.Now()
-	task.UpdatedAt = &now
-	return r.db.WithContext(ctx).Save(&task).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var task domain.AnalysisTask
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", taskID).First(&task).Error; err != nil {
+			return err
+		}
+		// Preserve protected server receipts atomically, including when a worker
+		// completed between the service read and this update. Never overwrite status.
+		if waiting, _ := task.Result["_content_security_waiting"].(bool); waiting {
+			return &commonerrors.AppError{Code: 10002, Message: "识别尚未完成", HTTPStatus: 409}
+		}
+		if result == nil {
+			result = map[string]any{}
+		}
+		delete(result, "_content_security_approval")
+		delete(result, "_content_security_waiting")
+		if approval, ok := task.Result["_content_security_approval"]; ok {
+			result["_content_security_approval"] = approval
+		}
+		return tx.Model(&domain.AnalysisTask{}).Where("id = ?", taskID).Updates(map[string]any{"result": datatypes.JSONMap(result), "updated_at": time.Now()}).Error
+	})
 }
 
 func (r *TaskRepo) UpdateTaskPayload(ctx context.Context, taskID string, payload map[string]any) error {
@@ -620,6 +633,25 @@ func (r *TaskRepo) CompleteTaskAttempt(ctx context.Context, taskID, attemptID st
 		Where("id = ? AND attempt_id = ? AND status = ?", taskID, attemptID, "processing").
 		Updates(updates)
 	return res.RowsAffected > 0, res.Error
+}
+
+// DeferContentSecurity keeps the computed result durable while releasing the
+// worker lease. Callback/recovery resumes only the check, without charging or AI.
+func (r *TaskRepo) DeferContentSecurity(ctx context.Context, taskID, attemptID string, result map[string]any) (bool, error) {
+	q := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).Where("id = ? AND status = ?", taskID, "processing")
+	if attemptID != "" {
+		q = q.Where("attempt_id = ?", attemptID)
+	}
+	res := q.Updates(map[string]any{"status": "pending", "result": datatypes.JSONMap(result), "lease_until": nil, "worker_id": nil, "attempt_id": nil, "error_message": nil, "updated_at": time.Now()})
+	return res.RowsAffected > 0, res.Error
+}
+
+func (r *TaskRepo) MarkContentViolation(ctx context.Context, taskID, attemptID, message string) error {
+	q := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).Where("id = ? AND status = ?", taskID, "failed")
+	if attemptID != "" {
+		q = q.Where("attempt_id = ?", attemptID)
+	}
+	return q.Updates(map[string]any{"is_violated": true, "violation_reason": message, "result": datatypes.JSONMap{}}).Error
 }
 
 func (r *TaskRepo) FailTask(ctx context.Context, taskID string, errorMsg string) (bool, error) {
@@ -687,8 +719,16 @@ func (r *TaskRepo) MarkTimedOutTasks(ctx context.Context, timeoutMinutes int) (i
 	cutoff := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
 	res := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
 		Where("(status = ? AND created_at < ?) OR (status = ? AND (lease_until IS NULL OR lease_until < ?))", "pending", cutoff, "processing", cutoff).
+		Where(contentSecurityTimeoutPredicate(r.db), time.Now().Add(-time.Hour)).
 		Updates(map[string]any{"status": "timed_out", "updated_at": time.Now()})
 	return res.RowsAffected, res.Error
+}
+
+func contentSecurityTimeoutPredicate(db *gorm.DB) string {
+	if db.Dialector.Name() == "postgres" {
+		return "(COALESCE(result::jsonb->>'_content_security_waiting', '') <> 'true' OR created_at < ?)"
+	}
+	return "(COALESCE(json_extract(result, '$._content_security_waiting'), 0) <> 1 OR created_at < ?)"
 }
 
 func (r *TaskRepo) ListRecoverableTasks(ctx context.Context, taskTypes []string, limit int, now, recoverBefore time.Time) ([]domain.AnalysisTask, error) {

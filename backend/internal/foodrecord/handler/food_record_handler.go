@@ -48,6 +48,15 @@ type UploadService interface {
 	UploadAnalyzeVideo(ctx context.Context, userID, videoPath string, sizeBytes int64) (*service.AnalyzeVideoUploadResult, error)
 }
 
+func (h *FoodRecordHandler) startImageAudit(c *gin.Context, imageURLs []string) error {
+	if checker, ok := h.uploadSvc.(interface {
+		StartImageAudit(context.Context, string, []string) error
+	}); ok {
+		return checker.StartImageAudit(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), imageURLs)
+	}
+	return nil
+}
+
 type FoodNutritionService interface {
 	Search(ctx context.Context, query string, limit int) ([]map[string]any, error)
 	GetUnresolvedTop(ctx context.Context, limit int) ([]domain.FoodUnresolvedLog, error)
@@ -323,6 +332,11 @@ func (h *FoodRecordHandler) UploadAnalyzeImage(c *gin.Context) {
 	logFoodRecordAPI(c, "upload_analyze_image_ok",
 		slog.Int("image.base64.length", len(body.Base64Image)),
 	)
+	if err := h.startImageAudit(c, []string{imageURL}); err != nil {
+		logFoodRecordAPIError(c, "upload_image_audit", err)
+		response.Error(c, err)
+		return
+	}
 	response.Success(c, gin.H{"imageUrl": imageURL})
 }
 
@@ -364,6 +378,11 @@ func (h *FoodRecordHandler) UploadAnalyzeImageFile(c *gin.Context) {
 		slog.Int("file.size", len(fileBytes)),
 		slog.String("file.content_type", file.Header.Get("Content-Type")),
 	)
+	if err := h.startImageAudit(c, []string{imageURL}); err != nil {
+		logFoodRecordAPIError(c, "upload_image_audit", err)
+		response.Error(c, err)
+		return
+	}
 	response.Success(c, gin.H{"imageUrl": imageURL})
 }
 
@@ -439,6 +458,15 @@ func (h *FoodRecordHandler) UploadAnalyzeVideoFile(c *gin.Context) {
 		slog.Int("keyframe_count", len(result.Keyframes)),
 		slog.Int64("video.duration_ms", result.DurationMS),
 	)
+	images := make([]string, 0, len(result.Keyframes))
+	for _, frame := range result.Keyframes {
+		images = append(images, frame.ImageURL)
+	}
+	if err := h.startImageAudit(c, images); err != nil {
+		logFoodRecordAPIError(c, "upload_video_image_audit", err)
+		response.Error(c, err)
+		return
+	}
 	response.Success(c, result)
 }
 

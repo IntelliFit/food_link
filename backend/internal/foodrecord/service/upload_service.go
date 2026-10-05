@@ -1,17 +1,31 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	"food_link/backend/pkg/storage"
 	"github.com/google/uuid"
 )
 
 type UploadService struct {
-	storage        *storage.Client
-	videoStorage   analyzeVideoStorage
-	videoExtractor analyzeVideoFrameExtractor
+	contentSecurity *contentsecurity.Service
+	storage         *storage.Client
+	videoStorage    analyzeVideoStorage
+	videoExtractor  analyzeVideoFrameExtractor
+}
+
+func (s *UploadService) ConfigureContentSecurity(checker *contentsecurity.Service) {
+	s.contentSecurity = checker
+}
+
+func (s *UploadService) StartImageAudit(ctx context.Context, userID string, imageURLs []string) error {
+	if s.contentSecurity == nil {
+		return nil
+	}
+	return s.contentSecurity.StartDocument(ctx, userID, 4, map[string]any{"image_urls": imageURLs}, s.storage)
 }
 
 func NewUploadService(storage *storage.Client) *UploadService {
