@@ -20,14 +20,17 @@ import { PetDashGame } from '../../components/PetDashGame'
 import { PetPlayLobby } from '../../components/PetPlayLobby'
 import { PetMergeGame } from '../../components/PetMergeGame'
 import { PetTransportPicker } from '../../components/PetTransportPicker'
+import { PetGrowthGarden } from '../../components/PetGrowthGarden'
+import { PET_CARE_MILESTONES, savePetCareSession } from '../../../utils/pet-care'
+import type { PetCareSession } from '../../../utils/pet-care-schema'
 import { ACTIVE_PET_MILESTONES, PET_MILESTONES, milestoneProgress } from '../../../utils/pet-milestones'
 import './index.scss'
 
 type Tab = 'home' | 'map' | 'collection' | 'story'
 const ROOM = '/packagePetStudio/assets/growth-room-v1.jpg'
 const ATLAS = '/packagePetStudio/assets/adventure-props-v1.png'
-const cells: Record<string, [number, number]> = { plant: [0, 1], lamp: [1, 1], 'journey-card': [3, 1], leafboard: [0, 2], 'trail-leaf': [0, 0] }
-const names: Record<string, string> = { ...ADVENTURE_COLLECTIBLES, ...Object.fromEntries(PET_MILESTONES.map(item => [`badge:${item.id}`, item.name])), ...EXPLORE_COLLECTIBLES, 'journey-card': '初次出发旅途卡', 'cozy-scarf': '暖暖围巾', 'memory-first-light': '灯亮之前故事页', 'memory-riverside': '水岸失物故事页', 'memory-rain-cart': '雨后的归途故事页', ...Object.fromEntries(GROWTH_SHOP.map(item => [item.id, item.name])), ...Object.fromEntries(KITCHEN_LEVELS.map(item => [item.collectibleId, item.collectibleName])), ...Object.fromEntries(MERGE_LEVELS.map(item => [item.collectible, item.collectibleName])) }
+const cells: Record<string, [number, number]> = { plant: [0, 1], lamp: [1, 1], 'journey-card': [3, 1], leafboard: [0, 2], 'trail-leaf': [0, 0], 'care-sprout': [0, 1], 'care-focus': [2, 1], 'care-nightlight': [1, 1], 'care-active-flag': [1, 0], 'care-album': [3, 1] }
+const names: Record<string, string> = { ...ADVENTURE_COLLECTIBLES, ...Object.fromEntries(PET_CARE_MILESTONES.map(item => [item.id, item.name])), ...Object.fromEntries(PET_MILESTONES.map(item => [`badge:${item.id}`, item.name])), ...EXPLORE_COLLECTIBLES, 'journey-card': '初次出发旅途卡', 'cozy-scarf': '暖暖围巾', 'memory-first-light': '灯亮之前故事页', 'memory-riverside': '水岸失物故事页', 'memory-rain-cart': '雨后的归途故事页', ...Object.fromEntries(GROWTH_SHOP.map(item => [item.id, item.name])), ...Object.fromEntries(KITCHEN_LEVELS.map(item => [item.collectibleId, item.collectibleName])), ...Object.fromEntries(MERGE_LEVELS.map(item => [item.collectible, item.collectibleName])) }
 const actionNames: Record<PetAction, string> = { idle: '休息', walk: '散步', jump: '跳跃', wave: '招手', blink: '眨眼', observe: '观察', celebrate: '庆祝', cook: '做饭', ride: '骑车' }
 function Ornament({ item }: { item: string }) { const badge = PET_MILESTONES.find(entry => item === `badge:${entry.id}`); if (badge) return <View className={`journey-badge is-${badge.game}`}><Text>{badge.mark}</Text><Text>{badge.id.endsWith('-route') ? 'III' : badge.id.endsWith('-first') ? 'I' : 'II'}</Text></View>; const [column, row] = cells[item] || (item.includes('page') || item.includes('story') || item.includes('letter') ? [3, 1] : [2, 2]); return <View className='journey-ornament' style={{ backgroundImage: `url(${ATLAS})`, backgroundPosition: `${column * 100 / 3}% ${row * 50}%` }} /> }
 function PetStudioPage() {
@@ -54,6 +57,7 @@ function PetStudioPage() {
   const scope = pet && account ? `${account}:${pet.id}` : ''
   const scopeRef = useRef(scope); scopeRef.current = scope
   const saveRef = useRef(save); saveRef.current = save
+  const pendingCare = useRef<{ account: string; session: PetCareSession } | null>(null)
   const current = pet ? buildStudioCharacters(pet, getHomeCompanionPreference())[0] : undefined
   const appearance = current?.sprite || pet?.builtin_avatar_id || pet?.pixel_avatar_url || ''
   const compatible = appearance === ORIGINAL_COMPANION_SRC
@@ -112,6 +116,23 @@ function PetStudioPage() {
       saveRef.current = update.save; setSave(update.save); setNotice(update.message); return true
     } catch { setNotice('成长存档暂时无法读取，原来的进度已保留'); return false }
   }
+  const canCare = () => isCurrent(scope) && !profileDirty.current && !identityUnavailable
+  const writeCare = (mutate: (latestSave: GrowthSave) => GrowthUpdate) => canCare() && write(mutate)
+  const checkpointCare = (session: PetCareSession) => {
+    // Hiding or replacing the view must preserve the old session, never a new identity's timer.
+    if (!pet || session.petId !== pet.id || session.appearance !== appearance || growthAccountOrNull() !== account) return false
+    try {
+      const latestSave = readGrowth(account, pet.id)
+      const existing = latestSave.care?.sessions[pet.id]
+      if (!existing || existing.id !== session.id || existing.appearance !== session.appearance) return false
+      pendingCare.current = { account, session: { ...session, status: 'paused' } }
+      const update = savePetCareSession(latestSave, { ...session, status: 'paused' })
+      if (!update.ok || !writeGrowth(account, update.save)) return false
+      pendingCare.current = null
+      if (mounted.current && scopeRef.current === scope) { saveRef.current = update.save; setSave(update.save) }
+      return true
+    } catch { return false }
+  }
   const settle = (result: GrowthRound, id: string, expected: string) => {
     if (!mounted.current || !pet || !expected || expected !== scopeRef.current) return
     const identity = growthAccountOrNull()
@@ -132,7 +153,7 @@ function PetStudioPage() {
     return <View className='journey-game-page'>{identityUnavailable && <View className='journey-account-recovery'><Text>本局已暂停，先重新确认账号。</Text><Button id='journey-recover-account' className='journey-button journey-primary' onClick={() => { const identity = growthAccountOrNull(); if (identity === null) return; if (identity !== account) { void load(); return }; setIdentityUnavailable(false); setActive(true) }}>重新确认账号</Button></View>}{game === 'adventure' ? <PetDashGame {...shared} quickStart={quickPlay} board={save.inventory.includes('leafboard') ? 'leafboard' : null} bestScore={journey.bests[`adventure:${gameLevel}`]?.score || 0} onFinished={adventureFinished} /> : <PetMergeGame {...shared} onFinished={settle} />}</View>
   }
   return <View className='pet-journey-page'>
-    <View className='journey-heading'><View><Text className='journey-eyebrow'>食探 · 伙伴时光</Text><Text className='journey-title'>{tab === 'home' ? '今天，玩点有意思的' : tab === 'map' ? '带着好奇，出发吧' : tab === 'collection' ? '把喜欢带回家' : '我们的成长手册'}</Text></View><View className='journey-wallet'><Text>✦ {pet ? save.stars : '—'}</Text><Text>本机星光</Text></View></View>
+    <View className='journey-heading'><View><Text className='journey-eyebrow'>食探 · 伙伴时光</Text><Text className='journey-title'>{tab === 'home' ? '今天，玩点有意思的' : tab === 'map' ? '照顾自己，伙伴也成长' : tab === 'collection' ? '把喜欢带回家' : '我们的成长手册'}</Text></View><View className='journey-wallet'><Text>✦ {pet ? save.stars : '—'}</Text><Text>星光币</Text></View></View>
     {!pet ? <View className='journey-empty'>{error ? <><Text>{error}</Text><Button className='journey-button journey-primary' onClick={() => void load()}>重试读取</Button></> : <View className='journey-spinner' aria-label='正在读取宠物档案' />}</View> : <>
       {tab === 'home' && <>
         <PetPlayLobby pet={pet} sprite={current?.sprite} active={active} journey={journey} save={save} day={growthDay()} onPlay={(next, level) => start(next, level, true)} />
@@ -143,16 +164,12 @@ function PetStudioPage() {
         </View>
         <View className='journey-level'><View><Text>成长 Lv.{growth.level}</Text><Text>{journey.xp} 经验 · 亲密 {journey.affinity}</Text></View><View className='journey-progress'><View style={{ width: `${growth.next ? Math.min(100, growth.current / growth.next * 100) : 100}%` }} /></View><Text>{growth.next ? `再积累 ${growth.next - growth.current} 经验，打开下一段成长` : '已来到首期成长里程碑'}</Text></View>
         <View className='journey-wish' id='journey-current-wish'><Text className='journey-wish__title'>{wish ? `我的心愿 · ${wish.name}` : '挑一个想赢回来的纪念'}</Text><Text>{wish ? `${wish.condition} · ${milestoneProgress(journey, wish)}/${wish.target}` : '6 枚技巧徽章，靠亲手完成挑战获得，永久珍藏。'}</Text>{wish && <View className='journey-progress'><View style={{ width: `${milestoneProgress(journey, wish) / wish.target * 100}%` }} /></View>}<Button id='journey-wishes-open' className='journey-button journey-text' onClick={() => setTab('collection')}>{wish && journey.badges.includes(wish.id) ? '心愿达成，去摆放徽章 ›' : '查看心愿与徽章 ›'}</Button></View>
-        <View className='journey-two-actions'><Button id='journey-map-open' className='journey-button journey-primary' onClick={() => setTab('map')}>去小镇玩一局 ↗</Button><Button id='journey-collection-open' className='journey-button journey-secondary' onClick={() => setTab('collection')}>布置与换装</Button></View>
+        <View className='journey-two-actions'><Button id='journey-map-open' className='journey-button journey-primary' onClick={() => setTab('map')}>成长与陪伴 ↗</Button><Button id='journey-collection-open' className='journey-button journey-secondary' onClick={() => setTab('collection')}>布置与换装</Button></View>
         <Button id='journey-transport-open' className='journey-button journey-text' onClick={() => setTab('collection')}>给 {pet.name} 选一辆出行工具 ›</Button>
         <View className='journey-chapter-card'><View className='journey-section-heading'><Text>第 {latest.id} 章 · {latest.title}</Text><Button className='journey-button journey-text' onClick={() => { setChapter(latest.id); setTab('story') }}>查看 ›</Button></View>{chapterTasks(save, pet.id, latest.id).map(task => <View className={`journey-task${task.done ? ' is-done' : ''}`} key={task.label}><Text>{task.done ? '✓' : '○'}</Text><Text>{task.label}</Text></View>)}</View>
         <View className='journey-life-card'><Text>生活里的进步，也值得记下来</Text><Text>一顿饭、一次运动，或认真休息的一天。</Text><Button id='journey-record-open' className='journey-button journey-text' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/record-text/index') })}>去记录今天 ›</Button></View>
       </>}
-      {tab === 'map' && <>
-        <View className='journey-map'><Image src='/packagePetStudio/assets/chapter-map-v1.jpg' mode='aspectFill' className='journey-map__image' /><View className='journey-map__legend'><Text>湖畔小镇</Text><Text>两种玩法，带回不同的纪念</Text></View>{GROWTH_GAMES.map((entry, index) => <Button id={`journey-map-${entry.id}`} key={entry.id} className={`journey-button journey-map__pin is-pin-${index}`} onClick={() => start(entry.id)}><Text>{entry.icon}</Text><Text>{entry.name}</Text></Button>)}</View>
-        <View className='journey-section-heading'><Text>今天想去哪儿？</Text><Text className='journey-muted'>每款 6 关</Text></View><View className='journey-game-grid'>{GROWTH_GAMES.map(entry => <Button id={`journey-start-${entry.id}`} className={`journey-button journey-game-card is-${entry.id}`} key={entry.id} onClick={() => start(entry.id)}><View className='journey-game-card__top'><Text>{entry.icon}</Text><Text>{journey.cleared[entry.id].length}/6</Text></View><Text className='journey-game-card__name'>{entry.name}</Text><Text>{entry.description}</Text><Text className='journey-game-card__go'>出发 ›</Text></Button>)}</View>
-        <View className='journey-fair-note'><Text>每款游戏当天首次有效游玩可得 6 星光。</Text><Text>之后可自由挑战与收集，装扮不增加战力。</Text></View><View className='journey-match-card'><Text>匹配 PK</Text><Text>真人匹配与服务器成绩核验尚未开放。</Text></View>
-      </>}
+      {tab === 'map' && <PetGrowthGarden key={`${scope}:${appearance}`} pet={pet} sprite={current?.sprite} appearance={appearance} account={account} active={active} save={save} resumeSession={pendingCare.current?.account === account && pendingCare.current.session.petId === pet.id && pendingCare.current.session.appearance === appearance && save.care?.sessions[pet.id]?.id === pendingCare.current.session.id ? pendingCare.current.session : undefined} canMutate={canCare} onMutate={writeCare} onCheckpoint={checkpointCare} onPlay={next => start(next)} onCollection={() => setTab('collection')} />}
       {tab === 'collection' && <>
         <PetTransportPicker key={`${scope}:${appearance}`} pet={pet} sprite={current?.sprite} account={account} active={active} canSave={() => isCurrent(scope) && !profileDirty.current} />
         <View className='journey-section-heading'><Text>技巧徽章 · {ACTIVE_PET_MILESTONES.filter(item => journey.badges.includes(item.id)).length}/{ACTIVE_PET_MILESTONES.length}</Text><Text className='journey-muted'>属于 {pet.name} 的成长</Text></View>
@@ -172,9 +189,9 @@ function PetStudioPage() {
         <View className='journey-chapter-tabs'>{GROWTH_CHAPTERS.map(item => <Button id={`journey-chapter-${item.id}`} className={`journey-button${chapter === item.id ? ' is-selected' : ''}`} key={item.id} onClick={() => setChapter(item.id)}><Text>第 {item.id} 章</Text><Text>{item.title}</Text></Button>)}</View><View className='journey-story'><Text className='journey-story__eyebrow'>成长手册 / CHAPTER 0{chapter}</Text><Text className='journey-story__title'>{selectedChapter.title}</Text><Text className='journey-story__text'>{selectedChapter.story}</Text><View className='journey-story__tasks'>{tasks.map(task => <View className={`journey-task${task.done ? ' is-done' : ''}`} key={task.label}><Text>{task.done ? '✓' : '○'}</Text><Text>{task.label}</Text></View>)}</View><Text className='journey-story__question'>把这一页，写成你们自己的选择</Text>{selectedChapter.choices.map((choice, index) => <Button id={`journey-story-choice-${index}`} className={`journey-button journey-story-choice${journey.choices[String(chapter)] === choice ? ' is-selected' : ''}`} disabled={!journey.chapters.includes(chapter) && !tasks.every(task => task.done)} key={choice} onClick={() => write(latestSave => chooseGrowthStory(latestSave, pet.id, chapter, choice))}><Text>{index === 0 ? 'A' : 'B'}</Text><Text>{choice}</Text></Button>)}<Text className='journey-muted'>{journey.chapters.includes(chapter) ? '这一页已珍藏 · 可以重新阅读和选择' : '完成三个目标后珍藏故事页，首次获得 30 成长经验'}</Text></View>
         {growth.level >= 3 && <View className='journey-occupation'><Text>伙伴的兴趣方向 · 随时可以换</Text>{([['cook', '料理伙伴'], ['explorer', '水岸探索者'], ['active', '活力伙伴']] as const).map(([id, label]) => <Button className={`journey-button${journey.occupation === id ? ' is-selected' : ''}`} key={id} onClick={() => { write(latestSave => { const next = JSON.parse(JSON.stringify(latestSave)) as GrowthSave; next.pets[pet.id].occupation = id; return { save: next, ok: true, message: `今天，做一个${label}` } }) }}>{label}</Button>)}</View>}
       </>}
-      {notice && <View id='journey-notice' className='journey-notice' role='status'><Text>{notice}</Text><Button className='journey-button' onClick={() => setNotice('')}>×</Button></View>}<Text className='journey-footer'>本机成长与星光独立于 AI 积分 · 不以健康数据评分决定游戏输赢</Text>
+      {notice && <View id='journey-notice' className='journey-notice' role='status'><Text>{notice}</Text><Button className='journey-button' onClick={() => setNotice('')}>×</Button></View>}<Text className='journey-footer'>本机成长与星光币独立于 AI 积分 · 不以健康数据评分决定游戏输赢</Text>
     </>}
-    <View className='journey-nav'>{([['home', '⌂', '小屋'], ['map', '⌖', '小镇'], ['collection', '◇', '收藏'], ['story', '▤', '故事']] as [Tab, string, string][]).map(([id, mark, label]) => <Button id={`journey-tab-${id}`} className={`journey-button${tab === id ? ' is-selected' : ''}`} key={id} onClick={() => { setTab(id); setAction('idle'); setNotice('') }}><Text>{mark}</Text><Text>{label}</Text></Button>)}</View>
+    <View className='journey-nav'>{([['home', '⌂', '小屋'], ['map', '⌖', '成长'], ['collection', '◇', '收藏'], ['story', '▤', '故事']] as [Tab, string, string][]).map(([id, mark, label]) => <Button id={`journey-tab-${id}`} className={`journey-button${tab === id ? ' is-selected' : ''}`} key={id} onClick={() => { setTab(id); setAction('idle'); setNotice('') }}><Text>{mark}</Text><Text>{label}</Text></Button>)}</View>
   </View>
 }
 export default withAuth(PetStudioPage)

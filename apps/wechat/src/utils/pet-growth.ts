@@ -1,16 +1,19 @@
 import { ACTIVE_PET_MILESTONES, PET_MILESTONES, milestoneProgress } from './pet-milestones'
+import { normalizePetCareLedger, normalizePetCareProgress, type PetCareLedger, type PetCareProgress } from './pet-care-schema'
 
 export type GrowthGame = 'kitchen' | 'merge' | 'adventure' | 'explore'
 export type PlayableGrowthGame = 'merge' | 'adventure'
 export type RoomSlot = 'window' | 'table' | 'floor'
 export interface GrowthRound { game: GrowthGame; levelId: number; score: number; completed: boolean; stars: number; collectibles: string[]; landmarks?: string[]; detail?: Record<string, number> }
 export interface PetJourney {
+  care?: PetCareProgress
   badges: string[]; wish: string | null; milestoneProgress: Record<string, number>
   xp: number; affinity: number; cleared: Record<GrowthGame, number[]>; bests: Record<string, { score: number; stars: number }>
   landmarks: number; seenLandmarks: string[]; chapters: number[]; choices: Record<string, string>; occupation: 'cook' | 'explorer' | 'active' | null
   placements: Record<RoomSlot, string | null>; daily: { day: string; xp: number; affinity: number; touch: boolean }
 }
 export interface GrowthSave {
+  care?: PetCareLedger
   version: 2; revision: number; stars: number; inventory: string[]; pets: Record<string, PetJourney>; migratedPets: string[]
   rounds: string[]; daily: { day: string; games: GrowthGame[]; earned: number }
 }
@@ -42,10 +45,12 @@ export function normalizeGrowthSave(raw: unknown): GrowthSave {
   const source = raw as Partial<GrowthSave>; const save = newGrowthSave()
   save.revision = int(source.revision); save.stars = int(source.stars); save.inventory = [...new Set([...save.inventory, ...ids(source.inventory)])]
   save.rounds = ids(source.rounds); save.migratedPets = ids(source.migratedPets)
+  if (source.care && typeof source.care === 'object') save.care = normalizePetCareLedger(source.care)
   if (source.daily && validDay(source.daily.day)) save.daily = { day: source.daily.day, games: [...new Set(source.daily.games.filter(game => GAME_IDS.includes(game)))], earned: int(source.daily.earned, 24) }
   Object.entries(source.pets || {}).forEach(([id, value]) => {
     if (!value || typeof value !== 'object') return
     const journey = newPetJourney(); journey.xp = int(value.xp); journey.affinity = int(value.affinity); journey.seenLandmarks = ids(value.seenLandmarks); journey.landmarks = journey.seenLandmarks.length
+    if (value.care && typeof value.care === 'object') journey.care = normalizePetCareProgress(value.care)
     GAME_IDS.forEach(game => { journey.cleared[game] = [...new Set((Array.isArray(value.cleared?.[game]) ? value.cleared[game] : []).filter(level => Number.isInteger(level) && level >= 1 && level <= 6))] })
     Object.entries(value.bests || {}).forEach(([key, best]) => { if (/^(kitchen|merge|adventure|explore):[1-6]$/.test(key) && best) journey.bests[key] = { score: int(best.score, 1000000), stars: int(best.stars, 3) } })
     journey.chapters = (Array.isArray(value.chapters) ? value.chapters : []).filter(chapter => [1, 2, 3].includes(chapter))

@@ -1,18 +1,19 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 import PetStudioPage from '../../src/packagePetStudio/pages/index/index'
-import { getPetSummary, type PetProfile } from '../../src/utils/api'
+import { getBodyMetricsSummary, getExerciseLogs, getPetSummary, type PetProfile } from '../../src/utils/api'
 import { GROWTH_CHAPTERS, buyGrowthItem, newGrowthSave, newPetJourney, settleGrowthRound, type GrowthGame, type GrowthSave } from '../../src/utils/pet-growth'
 import { GROWTH_CHANGED, growthStorageKey, readGrowth, writeGrowth } from '../../src/utils/pet-growth-storage'
 import { HOME_COMPANION_PREFERENCE_KEY, ORIGINAL_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../src/utils/pet-events'
+import { HOME_DASHBOARD_REFRESH_EVENT } from '../../src/utils/home-events'
 import { PET_LOADOUT_CHANGED, readPetLoadout } from '../../src/utils/pet-loadout'
 import { PET_TRANSPORT_CHANGED, petTransportStorageKey } from '../../src/utils/pet-transport-storage'
 import { extraPkgUrl } from '../../src/utils/subpackage-extra'
 import { createAdventureProgress } from '../../src/utils/pet-adventure-progress'
 
 jest.mock('../../src/utils/withAuth', () => ({ withAuth: (Component: any) => Component }))
-jest.mock('../../src/utils/api', () => ({ getPetSummary: jest.fn() }))
+jest.mock('../../src/utils/api', () => ({ getPetSummary: jest.fn(), getBodyMetricsSummary: jest.fn(), getExerciseLogs: jest.fn() }))
 // Game engines, inputs and storage/settlement code stay real. Only sprite
 // rendering is replaced so lifecycle assertions measure game timers alone.
 jest.mock('../../src/components/PetActor', () => ({
@@ -61,6 +62,8 @@ beforeEach(() => {
   ;(Taro.eventCenter.off as jest.Mock).mockImplementation((event, callback) => { listeners.get(event)?.delete(callback) })
   ;(Taro.eventCenter.trigger as jest.Mock).mockImplementation((event, ...args) => { [...(listeners.get(event) || [])].forEach(callback => callback(...args)) })
   ;(getPetSummary as jest.Mock).mockResolvedValue({ pet })
+  ;(getBodyMetricsSummary as jest.Mock).mockResolvedValue({ water_daily: [] })
+  ;(getExerciseLogs as jest.Mock).mockResolvedValue({ logs: [] })
   ;(Taro.getCurrentPages as jest.Mock).mockReturnValue([])
 })
 
@@ -115,6 +118,101 @@ function finishMergeFromFirstPlate(container: HTMLElement) {
 }
 function finishMerge(container: HTMLElement) { serveFirstMergePlate(container); finishMergeFromFirstPlate(container) }
 function startMerge(container: HTMLElement) { click(container, 'journey-tab-map'); click(container, 'journey-start-merge'); click(container, 'merge-start') }
+
+test('growth replaces the map with four activities; saved water and exercise reward the shared wallet once', async () => {
+  ;(getBodyMetricsSummary as jest.Mock).mockResolvedValue({ water_daily: [{ date: day, total: 250, logs: [250] }] })
+  ;(getExerciseLogs as jest.Mock).mockResolvedValue({ logs: [{ id: 'e1', recorded_on: day }] })
+  const { container } = await mount(); click(container, 'journey-tab-map'); await flush()
+  expect(container.querySelector('.journey-map')).toBeNull()
+  for (const kind of ['water', 'exercise', 'work', 'rest']) expect(container.querySelector(`#care-action-${kind}`)).toBeEnabled()
+  click(container, 'care-action-water'); await flush(); click(container, 'care-action-exercise'); await flush()
+  expect(saved().stars).toBe(4); expect(saved().pets[pet.id]).toMatchObject({ xp: 10, care: { water: 1, exercise: 1 } })
+  expect(container.querySelector('#care-action-water')).toBeDisabled()
+  act(() => Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)); await flush()
+  expect(saved().stars).toBe(4)
+  expect(container.querySelector('.journey-wallet')).toHaveTextContent('星光币')
+})
+
+test('record creation only navigates; a deleted saved record cannot be claimed from stale eligibility', async () => {
+  const { container } = await mount(); click(container, 'journey-tab-map'); await flush()
+  click(container, 'care-action-water')
+  expect(Taro.navigateTo).toHaveBeenCalledWith({ url: `${extraPkgUrl('/pages/water-record/index')}?date=${day}` })
+  expect(saved().stars).toBe(0)
+  ;(getBodyMetricsSummary as jest.Mock).mockResolvedValueOnce({ water_daily: [{ date: day, total: 250, logs: [250] }] })
+  act(() => Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)); await flush()
+  ;(getBodyMetricsSummary as jest.Mock).mockResolvedValue({ water_daily: [] })
+  click(container, 'care-action-water'); await flush()
+  expect(saved().stars).toBe(0); expect(container.querySelector('#care-action-water')).toHaveTextContent('去记录')
+})
+
+test('a late eligibility response from the previous account cannot award or enable the new account', async () => {
+  const late = deferred<any>(); (getBodyMetricsSummary as jest.Mock).mockReturnValueOnce(late.promise)
+  const { container } = await mount(); click(container, 'journey-tab-map'); await flush()
+  act(() => { storage.set('user_id', 'other-account'); show?.() }); await flush()
+  await act(async () => { late.resolve({ water_daily: [{ date: day, total: 250, logs: [250] }] }); await Promise.resolve() }); await flush()
+  expect(saved('other-account').stars).toBe(0)
+  expect(container.querySelector('#care-action-water')).toHaveTextContent('去记录')
+})
+
+test('work pauses in the background and across tabs; resuming needs an explicit action and never counts hidden time', async () => {
+  const { container, unmount } = await mount(); click(container, 'journey-tab-map'); await flush()
+  click(container, 'care-action-work'); click(container, 'care-timer-start')
+  act(() => jest.advanceTimersByTime(5000))
+  expect(container.querySelector('#care-timer')).toHaveAttribute('data-elapsed', '5000')
+  act(() => hide?.()); act(() => jest.advanceTimersByTime(600000))
+  expect(saved().care?.sessions[pet.id]).toMatchObject({ elapsedMs: 5000, status: 'paused' }); expect(saved().stars).toBe(0)
+  act(() => show?.()); await flush(); expect(container.querySelector('#care-timer-resume')).toBeEnabled()
+  click(container, 'care-timer-resume'); act(() => jest.advanceTimersByTime(2000))
+  click(container, 'journey-tab-home'); click(container, 'journey-tab-map'); await flush()
+  expect(container.querySelector('#care-timer')).toHaveAttribute('data-elapsed', '7000')
+  expect(container.querySelector('#care-timer-resume')).toBeEnabled(); expect(saved().stars).toBe(0)
+  unmount(); expect(jest.getTimerCount()).toBe(0)
+})
+
+test('switching from work to rest explicitly requires finishing the existing timer and never replaces its progress', async () => {
+  const { container } = await mount(); click(container, 'journey-tab-map'); await flush()
+  click(container, 'care-action-work'); click(container, 'care-timer-start'); act(() => jest.advanceTimersByTime(2000))
+  click(container, 'care-action-rest')
+  expect(container.querySelector('.pet-growth-garden__speech')).toHaveTextContent('先结束已有计时')
+  expect(saved().care?.sessions[pet.id]).toMatchObject({ kind: 'work', elapsedMs: 2000 })
+  click(container, 'care-timer-cancel'); click(container, 'care-timer-start')
+  expect(saved().care?.sessions[pet.id]).toMatchObject({ kind: 'rest', targetMs: 60000, elapsedMs: 0 })
+})
+
+test('completed timer reward survives write failure, tab changes and midnight, and retries once', async () => {
+  const { container } = await mount(); click(container, 'journey-tab-map'); await flush()
+  click(container, 'care-action-rest'); click(container, 'care-timer-start')
+  failGrowthWrites = true; act(() => jest.advanceTimersByTime(60000))
+  expect(saved().stars).toBe(0); expect(container.querySelector('#care-timer-claim')).toBeEnabled()
+  click(container, 'journey-tab-home'); click(container, 'journey-tab-map'); await flush()
+  expect(container.querySelector('#care-timer-claim')).toBeEnabled()
+  failGrowthWrites = false; jest.setSystemTime(new Date('2026-10-03T12:00:00Z'))
+  click(container, 'care-timer-claim'); await flush()
+  expect(saved().stars).toBe(2); expect(saved().rounds).toContain(`care:${day}:rest`)
+  expect(saved().care?.sessions[pet.id]).toBeUndefined()
+  click(container, 'journey-tab-home'); click(container, 'journey-tab-map'); await flush()
+  expect(container.querySelector('#care-timer-claim')).toBeNull(); expect(saved().stars).toBe(2)
+})
+
+test('an idle screen crossing midnight starts the new day, and failed interaction spends nothing', async () => {
+  seedWallet(6)
+  const { container } = await mount(); click(container, 'journey-tab-map'); await flush()
+  click(container, 'care-action-work'); jest.setSystemTime(new Date('2026-10-03T12:00:00Z')); click(container, 'care-timer-start')
+  expect(saved().care?.sessions[pet.id].day).toBe('2026-10-03')
+  failGrowthWrites = true; click(container, 'care-use-ball')
+  expect(saved().stars).toBe(6); expect(saved().pets[pet.id].care?.interactions).toBeUndefined()
+  failGrowthWrites = false; click(container, 'care-use-ball')
+  expect(saved().stars).toBe(0); expect(saved().pets[pet.id]).toMatchObject({ xp: 2, affinity: 2, care: { interactions: 1 } })
+})
+
+test('a free growth souvenir can be claimed and placed without spending coins', async () => {
+  const seeded = seedWallet(0); seeded.pets[pet.id].xp = 40; storage.set(growthStorageKey(user), clone(seeded))
+  const { container } = await mount(); click(container, 'journey-tab-map'); await flush()
+  click(container, 'care-milestone-2')
+  expect(saved().inventory).toContain('care-sprout'); expect(saved().stars).toBe(0)
+  click(container, 'care-milestone-2'); click(container, 'journey-place-care-sprout'); click(container, 'journey-tab-home')
+  expect(container.querySelector('.journey-room__prop')).toHaveTextContent('绿意小盆栽')
+})
 
 test.each(['merge'] as const)('the %s first-screen card opens the next real game immediately without paying a reward', async game => {
   const { container, unmount } = await mount()
@@ -276,9 +374,9 @@ test('a real round settles against the latest purchase even when its captured pa
 test.each([
   ['merge', 'merge-board', 'merge-exit'],
   ['adventure', 'adventure-world', 'adventure-exit'],
-] as const)('%s map pin and card both open a playable game; leaving an unfinished game gives no reward', async (game, world, exit) => {
+] as const)('%s card in the growth page opens a playable game; leaving an unfinished game gives no reward', async (game, world, exit) => {
   const { container, unmount } = await mount()
-  for (const entry of ['journey-map-', 'journey-start-']) {
+  for (const entry of ['journey-start-']) {
     click(container, 'journey-tab-map'); click(container, `${entry}${game}`)
     expect(container.querySelector(`#${game}-start`)).toBeEnabled()
     expect(screen.getAllByTestId('hub-pet')[0]).toHaveAttribute('data-pet-id', pet.id)
