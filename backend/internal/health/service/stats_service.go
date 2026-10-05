@@ -917,7 +917,8 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 		)
 		historyMessages = nil
 	}
-	generation, err := s.generatePetChatAnswer(ctx, comp, estimate.Question, historyMessages, input.EnableThinking, input.ImageURLs)
+	images := s.resolvePetChatImageContext(ctx, userID, session.ID, historyMessages, input.ImageURLs)
+	generation, err := s.generatePetChatAnswer(ctx, comp, estimate.Question, historyMessages, input.EnableThinking, images)
 	if err != nil {
 		logger.Warn(ctx, "宠物对话大模型生成失败",
 			logger.UserID(userID),
@@ -983,7 +984,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 	if err != nil {
 		return nil, err
 	}
-	if s.shouldUseCampusDietAgent(ctx, userID, input) {
+	if s.shouldUseCampusDietAgent(ctx, userID, input) && !s.petChatHasHistoricalImageQuestion(ctx, userID, input) {
 		return s.GenerateCampusDietAgentStream(ctx, userID, input)
 	}
 	requestStarted := time.Now()
@@ -1004,16 +1005,19 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		)
 		historyMessages = nil
 	}
+	images := s.resolvePetChatImageContext(ctx, userID, session.ID, historyMessages, input.ImageURLs)
 	logger.Info(ctx, "宠物对话流式准备完成",
 		logger.UserID(userID),
 		slog.String("session_id", session.ID),
 		slog.String("range", estimate.Range),
 		slog.Int("recorded_days", estimate.RecordedDays),
-		slog.Int("image_count", len(input.ImageURLs)),
+		slog.Int("image_count", len(images.URLs)),
+		slog.Int("current_image_count", images.CurrentCount),
+		slog.Int("history_image_count", images.HistoryCount),
 		slog.Int64("prepare_duration_ms", time.Since(requestStarted).Milliseconds()),
 	)
-	llm := s.preferredPetChatLLM(len(input.ImageURLs) > 0)
-	if len(input.ImageURLs) > 0 && strings.TrimSpace(llm.APIKey) == "" {
+	llm := s.preferredPetChatLLM(len(images.URLs) > 0)
+	if len(images.URLs) > 0 && strings.TrimSpace(llm.APIKey) == "" {
 		return nil, &commonerrors.AppError{Code: 10000, Message: "图片对话服务暂不可用，请稍后重试", HTTPStatus: http.StatusServiceUnavailable}
 	}
 
@@ -1023,18 +1027,18 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		chunkChan <- PetChatStreamChunk{Type: "start"}
 		fullAnswer := &strings.Builder{}
 		var streamErr error
+		var labelUsage billing.TokenUsage
+		var labelOnly bool
 		apiKey := llm.APIKey
-		baseURL := llm.BaseURL
 		model := llm.Model
 		if apiKey == "" {
 			fallback := fallbackPetChatAnswer(comp, estimate.Question)
 			fullAnswer.WriteString(fallback)
 			chunkChan <- PetChatStreamChunk{Type: "chunk", Text: fallback}
 		} else {
-			s.preparePetDietEvidence(ctx, comp, estimate.Question, historyMessages, len(input.ImageURLs) > 0)
-			prompt := buildPetChatPrompt(comp, estimate.Question, historyMessages, len(input.ImageURLs))
 			modelStarted := time.Now()
-			textChan, err := s.streamNutritionInsight(ctx, baseURL, apiKey, model, prompt, petChatMaxTokens, input.EnableThinking, input.ImageURLs...)
+			textChan, usage, onlyLabel, err := s.streamPetChatAnswer(ctx, llm, comp, estimate.Question, historyMessages, input.EnableThinking, images)
+			labelUsage, labelOnly = usage, onlyLabel
 			if err != nil {
 				streamErr = err
 			} else {
@@ -1042,6 +1046,7 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 					logger.UserID(userID),
 					slog.String("session_id", session.ID),
 					slog.String("model", model),
+					slog.Bool("label_fact_answer", labelOnly),
 					slog.Int64("model_headers_duration_ms", time.Since(modelStarted).Milliseconds()),
 				)
 				firstChunkLogged := false
@@ -1095,7 +1100,12 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		}
 		if apiKey != "" && s.creditGuard != nil && strings.TrimSpace(userID) != "" && !petChatHomeIncluded(input) {
 			sourceKey := fmt.Sprintf("pet_chat:%s:%s:%d", estimate.Range, session.ID, time.Now().UnixNano())
-			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: s.petChatModel(), Usage: billing.TokenUsage{OutputTokens: estimateChineseTokens(content)}}, s.aiUsagePricingConfig())
+			usage := labelUsage
+			if !labelOnly {
+				outputTokens := estimateChineseTokens(content)
+				usage = addPetChatTokenUsage(usage, billing.TokenUsage{OutputTokens: outputTokens, TotalTokens: outputTokens})
+			}
+			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: model, Usage: usage}, s.aiUsagePricingConfig())
 			actualPricing = &pricing
 			creditsCharged = pricing.CreditsCharged
 			creditsInfo, creditErr := s.creditGuard.ValidateUsageCredits(ctx, userID, pricing.CreditsCharged, "小食探对话")
@@ -1416,25 +1426,41 @@ func (s *StatsService) SaveInsight(ctx context.Context, userID string, content s
 	return s.repo.UpsertInsightCache(ctx, userID, comp.StatsRange, today, comp.DataFingerprint, sanitizeStatsInsightText(content))
 }
 
-func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage, enableThinking bool, imageURLs []string) (statsInsightGeneration, error) {
-	s.preparePetDietEvidence(ctx, comp, question, historyMessages, len(imageURLs) > 0)
-	llm := s.preferredPetChatLLM(len(imageURLs) > 0)
+func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsComputation, question string, historyMessages []domain.PetChatMessage, enableThinking bool, images petChatImageContext) (statsInsightGeneration, error) {
+	llm := s.preferredPetChatLLM(len(images.URLs) > 0)
 	apiKey := llm.APIKey
 	baseURL := llm.BaseURL
 	model := llm.Model
 	if apiKey == "" {
-		if len(imageURLs) > 0 {
+		if len(images.URLs) > 0 {
 			return statsInsightGeneration{}, &commonerrors.AppError{Code: 10000, Message: "图片对话服务暂不可用，请稍后重试", HTTPStatus: http.StatusServiceUnavailable}
 		}
 		return statsInsightGeneration{Content: fallbackPetChatAnswer(comp, question), Model: model}, nil
 	}
-	prompt := buildPetChatPrompt(comp, question, historyMessages, len(imageURLs))
+	label, err := s.readPetChatLabel(ctx, llm, question, images)
+	if err != nil {
+		return statsInsightGeneration{}, err
+	}
+	var labelUsage billing.TokenUsage
+	if label != nil {
+		labelUsage = label.Usage
+	}
+	if answer, ok := label.factAnswer(question); ok {
+		generation := statsInsightGeneration{Content: answer, Model: model, Usage: labelUsage}
+		if billing.HasTokenUsage(labelUsage) {
+			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: model, Usage: labelUsage}, s.aiUsagePricingConfig())
+			generation.Pricing = &pricing
+		}
+		return generation, nil
+	}
+	s.preparePetDietEvidence(ctx, comp, question, historyMessages, len(images.URLs) > 0)
+	prompt := buildPetChatImagePrompt(comp, question, historyMessages, images) + label.promptBlock()
 	var lastErr error
 	var retryFeedback string
 	for attempt := 0; attempt < statsInsightMaxAttempts; attempt++ {
 		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens, map[string]any{
 			"enable_thinking":                enableThinking,
-			petChatImageURLsRequestOptionKey: imageURLs,
+			petChatImageURLsRequestOptionKey: images.URLs,
 		})
 		if err != nil {
 			lastErr = err
@@ -1451,6 +1477,7 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 			continue
 		}
 		generation.Content = sanitizePetChatAnswerText(generation.Content)
+		generation.Usage = addPetChatTokenUsage(generation.Usage, labelUsage)
 		if billing.HasTokenUsage(generation.Usage) {
 			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: model, Usage: generation.Usage}, s.aiUsagePricingConfig())
 			generation.Pricing = &pricing
@@ -2312,9 +2339,9 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 	exerciseBlock := buildPetChatExercisePromptBlock(comp)
 	historyBlock := buildPetChatHistoryPromptBlock(historyMessages)
 	customFocusBlock := buildPetChatCustomFocusPromptBlock(comp.User)
-	imageInstruction := "本轮没有附带图片。不要声称看到了图片。"
+	imageInstruction := "当前请求没有可查看的图片。不要声称看到了图片；历史助手对图片的描述不是核验依据，无法重看时不能确认标签数值。"
 	if imageCount > 0 {
-		imageInstruction = fmt.Sprintf("本轮用户附带了 %d 张图片。你必须先认真查看图片中的食物、包装文字、营养成分、份量线索或其他可见内容，再结合用户问题和健康记录回答；看不清的细节要说明不确定，不能编造。", imageCount)
+		imageInstruction = fmt.Sprintf("当前请求包含 %d 张可查看的图片，可能包含本轮新图和同一会话的历史原图，具体来源以图片顺序说明为准。你必须先认真查看图片中的食物、包装文字、营养成分、份量线索或其他可见内容，再结合用户问题和健康记录回答；看不清的细节要说明不确定，不能编造。", imageCount)
 	}
 	prompt := fmt.Sprintf(`你是「食探」小程序中的宠物伙伴。
 
