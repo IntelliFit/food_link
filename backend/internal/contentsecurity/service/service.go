@@ -56,6 +56,8 @@ type Service struct {
 	baseURL               string
 	store                 *redis.Client
 	mediaEnabled          bool
+	approvalReader        func(context.Context, string, string) (map[string]any, error)
+	mediaResultHandler    func(context.Context, string) error
 	mu                    sync.Mutex
 	token                 string
 	expires               time.Time
@@ -241,6 +243,18 @@ func (s *Service) RecordMediaResult(ctx context.Context, res APIResponse) error 
 	}
 	logger.Info(ctx, "图片内容审核回调已保存", slog.String("wechat_trace_id", res.TraceID),
 		slog.Int("wechat_errcode", *res.ErrCode), slog.String("suggest", res.Result.Suggest))
+	if s.mediaResultHandler != nil {
+		tasks, err := s.store.SMembers(ctx, s.prefix+"watchers:"+res.TraceID).Result()
+		if err != nil {
+			return ErrUnavailable
+		}
+		for _, taskID := range tasks {
+			if err := s.mediaResultHandler(ctx, taskID); err != nil {
+				logger.Error(ctx, "图片审核回调唤醒识别任务失败", err, slog.String("task_id", taskID))
+				return ErrUnavailable
+			}
+		}
+	}
 	return nil
 }
 

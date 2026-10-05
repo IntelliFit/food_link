@@ -21,6 +21,7 @@ import (
 	authrepo "food_link/backend/internal/auth/repo"
 	campuscatalogdomain "food_link/backend/internal/campuscatalog/domain"
 	campuscatalogrepo "food_link/backend/internal/campuscatalog/repo"
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	expiryservice "food_link/backend/internal/expiry/service"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordservice "food_link/backend/internal/foodrecord/service"
@@ -89,24 +90,25 @@ func SupportedTaskTypes() []string {
 }
 
 type Runner struct {
-	tasks         *analyzerepo.TaskRepo
-	precision     *analyzerepo.PrecisionRepo
-	publicFood    *publicfoodrepo.PublicFoodRepo
-	campusCatalog *campuscatalogrepo.CatalogRepo
-	analyze       analyzeRunner
-	ocr           *userservice.OCRService
-	healthDocs    *userrepo.HealthDocumentRepo
-	users         *authrepo.UserRepo
-	expiry        *expiryservice.Recognizer
-	notifier      expiryNotificationProcessor
-	exercise      *healthservice.ExerciseService
-	customFocus   customFocusProcessor
-	nutrition     *foodrecordservice.FoodNutritionService
-	autoRecorder  analysisAutoRecorder
-	queue         taskqueue.Queue
-	storage       *storage.Client
-	credit        CreditGuard
-	expiryPoll    expiryNotificationPollOptions
+	tasks           *analyzerepo.TaskRepo
+	precision       *analyzerepo.PrecisionRepo
+	publicFood      *publicfoodrepo.PublicFoodRepo
+	campusCatalog   *campuscatalogrepo.CatalogRepo
+	analyze         analyzeRunner
+	ocr             *userservice.OCRService
+	healthDocs      *userrepo.HealthDocumentRepo
+	users           *authrepo.UserRepo
+	expiry          *expiryservice.Recognizer
+	notifier        expiryNotificationProcessor
+	exercise        *healthservice.ExerciseService
+	customFocus     customFocusProcessor
+	nutrition       *foodrecordservice.FoodNutritionService
+	autoRecorder    analysisAutoRecorder
+	contentSecurity *contentsecurity.Service
+	queue           taskqueue.Queue
+	storage         *storage.Client
+	credit          CreditGuard
+	expiryPoll      expiryNotificationPollOptions
 }
 
 type analyzeRunner interface {
@@ -942,33 +944,47 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 	shadowEligible := (task.TaskType == "food" || task.TaskType == "precision_plan") &&
 		!boolFromAny(task.Payload["internal_benchmark"]) && !boolFromAny(task.Payload["open_api"])
 	taskCtx = analyzeservice.WithVisionRequest(taskCtx, visionMode, task.ID, shadowEligible)
-	switch task.TaskType {
-	case "food":
-		err = r.processFood(taskCtx, task)
-	case "food_text":
-		err = r.processFoodText(taskCtx, task)
-	case "precision_plan":
-		err = r.processPrecisionPlan(taskCtx, task)
-	case "precision_item_estimate":
-		err = r.processPrecisionItemEstimate(taskCtx, task)
-	case "precision_aggregate":
-		err = r.processPrecisionAggregate(taskCtx, task)
-	case "public_food_library_text":
-		err = r.processPublicFoodModeration(taskCtx, task)
-	case "exercise":
-		err = r.processExercise(taskCtx, task)
-	case "custom_focus":
-		err = r.processCustomFocus(taskCtx, task)
-	case "health_report":
-		err = r.processHealthReport(taskCtx, task)
-	case "packaged_nutrition_label":
-		err = r.processPackagedNutritionLabel(taskCtx, task)
-	case "packaged_product_extract":
-		err = r.processPackagedProductExtract(taskCtx, task)
-	case "expiry_recognize":
-		err = r.processExpiryRecognize(taskCtx, task)
-	default:
-		err = fmt.Errorf("unsupported worker task_type: %s", task.TaskType)
+	taskCtx, stopContentSecurity := r.monitorContentSecurity(taskCtx, task)
+	defer stopContentSecurity()
+	if boolFromAny(task.Result[contentsecurity.WaitingKey]) {
+		err = r.completeTask(taskCtx, task, task.Result)
+	} else {
+		switch task.TaskType {
+		case "food":
+			err = r.processFood(taskCtx, task)
+		case "food_text":
+			err = r.processFoodText(taskCtx, task)
+		case "precision_plan":
+			err = r.processPrecisionPlan(taskCtx, task)
+		case "precision_item_estimate":
+			err = r.processPrecisionItemEstimate(taskCtx, task)
+		case "precision_aggregate":
+			err = r.processPrecisionAggregate(taskCtx, task)
+		case "public_food_library_text":
+			err = r.processPublicFoodModeration(taskCtx, task)
+		case "exercise":
+			err = r.processExercise(taskCtx, task)
+		case "custom_focus":
+			err = r.processCustomFocus(taskCtx, task)
+		case "health_report":
+			err = r.processHealthReport(taskCtx, task)
+		case "packaged_nutrition_label":
+			err = r.processPackagedNutritionLabel(taskCtx, task)
+		case "packaged_product_extract":
+			err = r.processPackagedProductExtract(taskCtx, task)
+		case "expiry_recognize":
+			err = r.processExpiryRecognize(taskCtx, task)
+		default:
+			err = fmt.Errorf("unsupported worker task_type: %s", task.TaskType)
+		}
+	}
+	if errors.Is(err, errAwaitingContentSecurity) {
+		taskStatus = "awaiting_content_security"
+		r.info(ctx, "识别结果已保留，等待图片审核回调", slog.String("task_id", task.ID))
+		return nil
+	}
+	if cause := context.Cause(taskCtx); errors.Is(cause, contentsecurity.ErrRejected) || errors.Is(cause, contentsecurity.ErrUnavailable) {
+		err = cause
 	}
 	if err != nil {
 		if errors.Is(err, errTaskAttemptLost) {
@@ -1085,6 +1101,9 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		return err
 	}
 	err = r.completeTask(ctx, task, result)
+	if errors.Is(err, errAwaitingContentSecurity) {
+		return err
+	}
 	if err != nil {
 		r.errorLog(ctx, "食物任务完成状态更新失败", nil, slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID))
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
@@ -5338,6 +5357,12 @@ func (r *Runner) completeTask(ctx context.Context, task *domain.AnalysisTask, re
 			return err
 		}
 	}
+	if result == nil {
+		result = map[string]any{}
+	}
+	if err := r.completeContentSecurity(ctx, task, result); err != nil {
+		return err
+	}
 	attemptID := stringPtrValue(task.AttemptID)
 	var (
 		ok  bool
@@ -5421,6 +5446,13 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	}
 	task.Status = "failed"
 	task.ErrorMessage = &msg
+	if errors.Is(taskErr, contentsecurity.ErrRejected) {
+		if err := r.tasks.MarkContentViolation(ctx, task.ID, attemptID, contentsecurity.ErrRejected.Message); err != nil {
+			return err
+		}
+		task.IsViolated = true
+		task.ViolationReason = &msg
+	}
 	if r.campusCatalog != nil {
 		if itemID := stringFromMap(task.Payload, "campus_catalog_item_id"); itemID != "" {
 			var campusErr error

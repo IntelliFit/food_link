@@ -10,13 +10,24 @@ import (
 	"food_link/backend/pkg/storage"
 )
 
-// CheckDocument checks every human-readable string in a publish payload, including
+// ExtractContent extracts every human-readable string in a publish payload, including
 // nested food items. Resource IDs and fixed protocol fields are not user content.
-func (s *Service) CheckDocument(ctx context.Context, userID string, scene int, doc map[string]any, store *storage.Client) error {
+func ExtractContent(doc map[string]any, store *storage.Client) ([]string, []string, error) {
+	// Normalize pointers and typed slices exactly as CheckValue does.
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		return nil, nil, commonerrors.ErrBadRequest
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, nil, commonerrors.ErrBadRequest
+	}
 	var texts, images []string
 	var walk func(string, any)
 	walk = func(key string, value any) {
 		key = strings.ToLower(key)
+		if key == ApprovalKey || key == WaitingKey {
+			return
+		}
 		switch v := value.(type) {
 		case map[string]any:
 			keys := make([]string, 0, len(v))
@@ -71,7 +82,29 @@ func (s *Service) CheckDocument(ctx context.Context, userID string, scene int, d
 	walk("", doc)
 	for _, u := range images {
 		if !strings.HasPrefix(u, "https://") {
-			return commonerrors.ErrBadRequest
+			return nil, nil, commonerrors.ErrBadRequest
+		}
+	}
+	return unique(texts), unique(images), nil
+}
+
+func (s *Service) CheckDocument(ctx context.Context, userID string, scene int, doc map[string]any, store *storage.Client) error {
+	texts, images, err := ExtractContent(doc, store)
+	if err != nil {
+		return err
+	}
+	// Receipts come exclusively from an owned, completed server-side task. Clients
+	// cannot supply an approval. Changed text/images still receive a fresh check.
+	if s.approvalReader != nil {
+		if taskID, _ := doc["source_task_id"].(string); taskID != "" {
+			approval, err := s.approvalReader(ctx, userID, taskID)
+			if err != nil {
+				return ErrUnavailable
+			}
+			if s.trustedApproval(userID, taskID, approval) {
+				texts = subtractApproved(texts, approval["texts"])
+				images = subtractApproved(images, approval["images"])
+			}
 		}
 	}
 	if len(texts) == 0 && len(images) == 0 {

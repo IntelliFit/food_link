@@ -311,6 +311,7 @@ func New(cfg *config.Config) (*App, error) {
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
 	analyzeTaskSvc.ConfigureTaskPublisher(taskQueue)
 	analyzeTaskSvc.ConfigureRecordRepo(frRepo)
+	analyzeTaskSvc.ConfigureContentSecurity(contentSecurity)
 
 	adminKey := os.Getenv("ADMIN_API_KEY")
 	analyzeHandler := analyzehandler.NewAnalyzeHandler(analyzeSvc, analyzeTaskSvc, adminKey)
@@ -323,6 +324,18 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureContentSecurity(contentSecurity)
 	analyzeTaskSvc.ConfigureAutoRecorder(frSvc)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
+	frUploadSvc.ConfigureContentSecurity(contentSecurity)
+	contentSecurity.ConfigureAnalysis(func(ctx context.Context, userID, taskID string) (map[string]any, error) {
+		task, err := frTaskRepo.GetByID(ctx, taskID)
+		if err != nil || task == nil {
+			return nil, err
+		}
+		if task.UserID != userID || task.Status != "done" {
+			return nil, nil
+		}
+		approval, _ := task.Result[contentsecurityservice.ApprovalKey].(map[string]any)
+		return approval, nil
+	}, analyzeTaskSvc.ResumeContentSecurity)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
 	if gemini35Client != nil {
 		frNutritionSvc.ConfigureNutritionLabelVisionClient(gemini35Client)
@@ -1144,6 +1157,7 @@ func (a *App) startEmbeddedWorker(
 	runner.ConfigureCreditGuard(membershipSvc)
 	runner.ConfigureCampusCatalog(campusCatalogRepo)
 	runner.ConfigureAutoRecorder(foodRecordSvc)
+	runner.ConfigureContentSecurity(a.contentSecurity)
 	runner.ConfigureCustomFocusProcessor(statsSvc)
 
 	workerCtx, cancel := context.WithCancel(context.Background())

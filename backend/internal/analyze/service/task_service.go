@@ -12,6 +12,7 @@ import (
 	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/common/dateutil"
 	"food_link/backend/internal/common/errors"
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/logger"
@@ -24,14 +25,15 @@ import (
 )
 
 type TaskService struct {
-	tasks        *repo.TaskRepo
-	precision    *repo.PrecisionRepo
-	users        *authrepo.UserRepo
-	storage      *storage.Client
-	creditGuard  CreditGuard
-	taskQueue    taskqueue.Publisher
-	recordRepo   *foodrecordrepo.FoodRecordRepo
-	autoRecorder AutoRecordExecutor
+	tasks           *repo.TaskRepo
+	precision       *repo.PrecisionRepo
+	users           *authrepo.UserRepo
+	storage         *storage.Client
+	creditGuard     CreditGuard
+	taskQueue       taskqueue.Publisher
+	recordRepo      *foodrecordrepo.FoodRecordRepo
+	autoRecorder    AutoRecordExecutor
+	contentSecurity *contentsecurity.Service
 }
 
 const (
@@ -418,6 +420,9 @@ func (s *TaskService) resolveCreditMode(mode string, input SubmitTaskInput, payl
 }
 
 func (s *TaskService) createAndEnqueueAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any, mode string, creditsInfo map[string]any, creditCost int, creditGroupID string) (string, error) {
+	if err := s.startContentSecurity(ctx, userID, input, payload); err != nil {
+		return "", err
+	}
 	if shouldUsePrecisionSession(mode, input) {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
@@ -456,6 +461,9 @@ func (s *TaskService) createAndEnqueueAnalyzeTask(ctx context.Context, userID st
 }
 
 func (s *TaskService) createAndEnqueueTextTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any, mode string, creditsInfo map[string]any, creditCost int, creditGroupID string) (string, error) {
+	if err := s.startContentSecurity(ctx, userID, input, payload); err != nil {
+		return "", err
+	}
 	if shouldUsePrecisionSession(mode, input) {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
@@ -1487,6 +1495,10 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 	}
 	s.normalizeTaskImages(task)
 	normalizeIngredientLabelEnergyInResult(task.Result)
+	if boolFromAny(task.Result[contentsecurity.WaitingKey]) && task.Status != "done" {
+		// Keep the durable intermediate result server-side until the callback.
+		task.Result = nil
+	}
 	if task.Status == "done" {
 		recordedMap, err := s.tasks.RecordedTaskMap(ctx, userID, []string{task.ID})
 		if err != nil {
@@ -1535,6 +1547,17 @@ func (s *TaskService) UpdateTaskResult(ctx context.Context, taskID, userID strin
 	}
 	if task.UserID != userID {
 		return errors.ErrForbidden
+	}
+	if boolFromAny(task.Result[contentsecurity.WaitingKey]) {
+		return &errors.AppError{Code: 10002, Message: "识别尚未完成", HTTPStatus: 409}
+	}
+	if result == nil {
+		result = map[string]any{}
+	}
+	delete(result, contentsecurity.ApprovalKey)
+	delete(result, contentsecurity.WaitingKey)
+	if approval, ok := task.Result[contentsecurity.ApprovalKey]; ok {
+		result[contentsecurity.ApprovalKey] = approval
 	}
 	return s.tasks.UpdateTaskResult(ctx, taskID, result)
 }
