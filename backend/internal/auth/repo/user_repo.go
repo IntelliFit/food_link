@@ -439,6 +439,19 @@ func (r *UserRepo) UpdateFields(ctx context.Context, userID string, updates map[
 	return r.FindByID(ctx, userID)
 }
 
+// ResetProfileFieldIfCurrent prevents a delayed moderation result from replacing
+// a newer user edit. The field whitelist is also the SQL identifier boundary.
+func (r *UserRepo) ResetProfileFieldIfCurrent(ctx context.Context, userID, field, expected, replacement string) (bool, error) {
+	switch field {
+	case "nickname", "avatar", "cover_image", "motto":
+	default:
+		return false, fmt.Errorf("不支持的用户资料审核字段")
+	}
+	result := r.db.WithContext(ctx).Model(&User{}).
+		Where("id = ? AND COALESCE("+field+", '') = ?", userID, expected).Update(field, replacement)
+	return result.RowsAffected > 0, result.Error
+}
+
 func normalizeUserJSONUpdates(updates map[string]any) map[string]any {
 	if len(updates) == 0 {
 		return updates

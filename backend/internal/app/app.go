@@ -140,6 +140,8 @@ type App struct {
 	taskQueue             taskqueue.Queue
 	campusCatalogService  *campuscatalogservice.CatalogService
 	contentSecurity       *contentsecurityservice.Service
+	profileReviewCancel   context.CancelFunc
+	profileReviewDone     chan struct{}
 }
 
 type campusCatalogNutritionBackfiller interface {
@@ -220,6 +222,7 @@ func New(cfg *config.Config) (*App, error) {
 	analysisTaskRepo := userrepo.NewAnalysisTaskRepo(db)
 
 	userSvc := userservice.NewUserService(userRepo, healthDocRepo, modeSwitchLogRepo, storageClient)
+	userSvc.ConfigureProfileReview(contentSecurity)
 	bindPhoneSvc := userservice.NewBindPhoneService(cfg, userRepo)
 	uploadSvc := userservice.NewUploadService(storageClient)
 	ocrSvc := userservice.NewOCRService(cfg, storageClient)
@@ -577,7 +580,7 @@ func New(cfg *config.Config) (*App, error) {
 	// User routes
 	pushHandler.RegisterRoutes(engine.Group("/api/push", authmw.RequireJWT(jwtSvc)))
 	engine.GET("/api/user/profile", authmw.RequireJWT(jwtSvc), userHandler.GetProfile)
-	engine.PUT("/api/user/profile", authmw.RequireJWT(jwtSvc), contentGuard(1), userHandler.UpdateProfile)
+	engine.PUT("/api/user/profile", authmw.RequireJWT(jwtSvc), userHandler.UpdateProfile)
 	engine.POST("/api/user/bind-phone", authmw.RequireJWT(jwtSvc), userHandler.BindPhone)
 	engine.POST("/api/user/upload-avatar", authmw.RequireJWT(jwtSvc), userHandler.UploadAvatar)
 	engine.POST("/api/user/upload-cover", authmw.RequireJWT(jwtSvc), userHandler.UploadCoverImage)
@@ -1069,6 +1072,13 @@ func New(cfg *config.Config) (*App, error) {
 		logger.Warn(context.Background(), "路由映射文件缺失，已跳过存根路由注册", slog.String("path", routeMapPath))
 	}
 
+	profileCtx, profileCancel := context.WithCancel(context.Background())
+	app.profileReviewCancel = profileCancel
+	app.profileReviewDone = make(chan struct{})
+	go func() {
+		defer close(app.profileReviewDone)
+		contentSecurity.RunProfileReviews(profileCtx, userSvc.ReviewCurrentProfile)
+	}()
 	return app, nil
 }
 
@@ -1427,6 +1437,16 @@ func embeddedWorkerID(cfg *config.Config) string {
 func (a *App) Close(ctx context.Context) error {
 	if a.contentSecurity != nil {
 		defer func() { _ = a.contentSecurity.Close() }()
+	}
+	if a.profileReviewCancel != nil {
+		a.profileReviewCancel()
+	}
+	if a.profileReviewDone != nil {
+		select {
+		case <-a.profileReviewDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "用户资料后台审核关闭超时", logger.Err(ctx.Err()))
+		}
 	}
 	if a.pushCancel != nil {
 		a.pushCancel()

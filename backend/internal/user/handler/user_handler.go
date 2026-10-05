@@ -101,6 +101,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logUserAPI(c, "profile_update_start", slog.Int("field_count", updateProfileFieldCount(input)))
 	data, err := h.userSvc.UpdateProfile(c.Request.Context(), userID, input)
 	if err != nil {
 		response.Error(c, err)

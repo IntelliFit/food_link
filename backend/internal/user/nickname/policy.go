@@ -23,15 +23,24 @@ func Key(value string) string {
 }
 
 func Validate(value string) (string, error) {
+	value, err := ValidateFormat(value)
+	if err != nil {
+		return "", err
+	}
+	if containsProhibitedTerm(value) {
+		return "", &commonerrors.AppError{Code: 10002, Message: "昵称包含违规内容，请修改后重试", HTTPStatus: 400}
+	}
+	return value, nil
+}
+
+// ValidateFormat checks request shape without making content review a save gate.
+func ValidateFormat(value string) (string, error) {
 	value = Normalize(value)
 	if value == "" {
 		return "", &commonerrors.AppError{Code: 10002, Message: "昵称不能为空", HTTPStatus: 400}
 	}
 	if len([]rune(value)) > maxLength {
 		return "", &commonerrors.AppError{Code: 10002, Message: "昵称不能超过30个字符", HTTPStatus: 400}
-	}
-	if containsProhibitedTerm(value) {
-		return "", &commonerrors.AppError{Code: 10002, Message: "昵称包含违规内容，请修改后重试", HTTPStatus: 400}
 	}
 	return value, nil
 }
