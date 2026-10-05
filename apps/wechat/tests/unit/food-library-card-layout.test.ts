@@ -12,10 +12,10 @@ describe('public food library card layout', () => {
   )
 
   it('shows campus canteen information once and keeps calories in the compact summary', () => {
-    expect(pageSource).toContain('item.merchant_name && !campusFood')
-    expect(pageSource).toContain('item.description && item.food_name && !campusFood')
-    expect(pageSource).toContain("className='campus-food-summary'")
-    expect(pageSource).toContain("className='campus-food-calories'")
+    expect(pageSource).toContain("item.merchant_name || item.detail_address || item.merchant_address || '地点待补充'")
+    expect(pageSource.match(/className='campus-food-location'/g)).toHaveLength(1)
+    expect(pageSource).toContain("className='atlas-food-price'")
+    expect(pageSource).toContain("nutritionAvailable ? `${item.total_calories.toFixed(0)} kcal · 蛋白 ${item.total_protein.toFixed(0)}g` : '营养待补充'")
     expect(pageSource).not.toContain("className='campus-food-price'")
   })
 
@@ -28,8 +28,9 @@ describe('public food library card layout', () => {
   it('uses the three page text sizes and a compact card image', () => {
     expect(pageScss).toContain('$food-library-font-large: 30rpx;')
     expect(pageScss).toContain('$food-library-font-body: 26rpx;')
-    expect(pageScss).toContain('$food-library-font-meta: 22rpx;')
+    expect(pageScss).toContain('$food-library-font-meta: 24rpx;')
     expect(pageScss).toMatch(/\.food-image-wrap\s*{[^}]*width:\s*176rpx;[^}]*height:\s*176rpx;/)
     expect(pageScss).toMatch(/\.fat-loss-badge\s*{[^}]*top:\s*42rpx;/)
+    expect(pageScss).toMatch(/\.food-image-wrap\s*{[^}]*width:\s*152rpx;[^}]*height:\s*152rpx;/)
   })
 })

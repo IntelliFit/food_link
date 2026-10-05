@@ -1,7 +1,9 @@
-// 公共食物库列表页样式
+@import '../../../styles/meal-orbit-tokens.scss';
+
+// 美食图谱列表页样式
 $food-library-font-large: 30rpx;
 $food-library-font-body: 26rpx;
-$food-library-font-meta: 22rpx;
+$food-library-font-meta: 24rpx;
 
 .food-library-page {
   height: 100vh;
@@ -1255,4 +1257,189 @@ $food-library-font-meta: 22rpx;
     background: linear-gradient(90deg, #202926 25%, #2a3531 50%, #202926 75%);
     background-size: 200% 100%;
   }
+}
+
+.food-library-page {
+  .tab-section { padding: 8rpx 20rpx 0; flex-shrink: 0; }
+  .tab-item { padding: 22rpx 6rpx; font-size: 26rpx; white-space: nowrap; }
+  .discovery-header { padding: 16rpx 28rpx; flex-shrink: 0; }
+  .discovery-title { font-size: 30rpx; line-height: 42rpx; }
+  .view-mode-option { padding: 14rpx 20rpx; min-width: 72rpx; font-size: 26rpx; }
+  .search-row { margin-top: 0; }
+  .food-title { -webkit-line-clamp: 2; }
+  .food-merchant { min-width: 0; max-width: 100%; padding-right: 170rpx; }
+  .merchant-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .food-nutrition-unavailable { font-size: 24rpx; font-weight: 400; }
+}
+
+.fl-page-theme-root:not(.fl-d) .food-library-page {
+  background: $orbit-page;
+
+  .tab-section,
+  .filter-section { background: $orbit-surface; border-color: $orbit-border; }
+  .discovery-header { background: $orbit-page; border-color: $orbit-border; }
+  .discovery-title,
+  .food-title { color: $orbit-ink; }
+  .tab-item.active { color: $orbit-forest; border-color: $orbit-forest; }
+  .view-mode-option.active,
+  .search-btn,
+  .empty-btn { background: $orbit-forest; color: #fffef9; box-shadow: none; }
+  .view-mode-option,
+  .description-text,
+  .campus-food-location { color: $orbit-muted; }
+  .food-card { background: $orbit-surface; border: 1rpx solid $orbit-border; box-shadow: $orbit-shadow; }
+  .merchant-name { color: $orbit-forest; background: $orbit-soft; }
+  .food-calories { color: $orbit-forest; }
+  .food-nutrition-unavailable { color: $orbit-muted; }
+}
+
+// 原生地图底图保持 SDK 提供的颜色，应用页头/浮层与深色主题一致。
+.fl-d .food-library-page {
+  .discovery-header,
+  .food-map-experience { background: #18251f; border-color: #355442; }
+  .view-mode-switch,
+  .map-locate-button,
+  .map-food-sheet,
+  .map-discovery-sheet { background: #25372f; border-color: #48634f; box-shadow: none; }
+  .discovery-title,
+  .map-summary-title,
+  .map-food-sheet-title,
+  .map-discovery-title { color: #e8ece9; }
+  .view-mode-option,
+  .map-summary-meta,
+  .map-food-sheet-place,
+  .map-food-sheet-meta,
+  .map-discovery-subtitle,
+  .food-nutrition-unavailable { color: #b7c4bd; }
+  .view-mode-option.active,
+  .map-discovery-button { background: #b3d9c1; color: #142a1e; box-shadow: none; }
+  .map-locate-button { color: #b3d9c1; }
+  .food-map-wrap { border-color: #355442; }
+  .map-food-action--secondary,
+  .map-food-distance { background: #25372f; color: #b3d9c1; }
+  .map-food-action--primary { background: #286749; }
+}
+
+// 方案二：地图为主。只在本页覆盖，不改变首页或共享主题。
+.fl-page-theme-root .food-library-page--place-first {
+  background: $orbit-surface;
+
+  button::after { border: 0; }
+
+  .tab-section { padding: 0 24rpx; background: $orbit-surface; border-color: $orbit-border; }
+  .tab-item { padding: 24rpx 4rpx 20rpx; color: $orbit-muted; font-size: 28rpx; }
+  .tab-item.active { color: $orbit-forest; border-color: $orbit-forest; font-weight: 600; }
+
+  .atlas-toolbar {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 16rpx;
+    padding: 18rpx 24rpx;
+    background: $orbit-surface;
+  }
+
+  .search-input-wrap { min-width: 0; height: 76rpx; padding: 0 20rpx; border-radius: 40rpx; background: #f1f3ec; }
+  .search-input-icon { color: $orbit-muted; font-size: 32rpx; }
+  .search-input { color: $orbit-ink; font-size: 28rpx; }
+  .atlas-search-clear { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 56rpx; height: 72rpx; padding: 0; margin: 0 -12rpx 0 0; color: $orbit-muted; background: transparent; font-size: 28rpx; }
+  .view-mode-switch { padding: 4rpx; border: 1rpx solid $orbit-border; box-shadow: none; background: $orbit-surface; }
+  .view-mode-option { display: flex; align-items: center; justify-content: center; min-width: 84rpx; height: 66rpx; padding: 0 14rpx; color: $orbit-muted; font-size: 28rpx; }
+  .view-mode-option.active { color: $orbit-surface; background: $orbit-forest; box-shadow: none; }
+  .sort-section { flex-shrink: 0; padding: 8rpx 28rpx 14rpx; border-color: $orbit-border; background: $orbit-surface; }
+  .sort-item { padding: 20rpx 16rpx; color: $orbit-muted; }
+  .sort-item.active { color: $orbit-forest; font-weight: 600; }
+  .sort-filter-btn { background: #f1f3ec; min-height: 68rpx; box-sizing: border-box; }
+  .filter-dropdown-panel { flex-shrink: 0; background: $orbit-surface; }
+
+  .food-map-experience { padding: 0; background: $orbit-surface; }
+  .food-map-wrap { margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+  .atlas-map-tools { position: absolute; right: 24rpx; top: 24rpx; display: flex; flex-direction: column; gap: 16rpx; }
+  .atlas-map-tool { display: flex; align-items: center; justify-content: center; width: 84rpx; height: 84rpx; padding: 0; margin: 0; border: 1rpx solid $orbit-border; border-radius: 24rpx; color: $orbit-forest; background: $orbit-surface; font-size: 38rpx; box-shadow: 0 4rpx 16rpx rgb(36 61 49 / 8%); }
+  .map-locate-button .iconfont { font-size: 36rpx; }
+
+  .map-food-sheet,
+  .map-discovery-sheet { left: 16rpx; right: 16rpx; bottom: calc(16rpx + env(safe-area-inset-bottom)); border: 1rpx solid $orbit-border; border-radius: 28rpx; background: $orbit-surface; box-shadow: 0 8rpx 24rpx rgb(36 61 49 / 10%); backdrop-filter: none; }
+  .map-food-sheet { padding: 24rpx; }
+  .map-food-sheet-main { gap: 20rpx; align-items: flex-start; }
+  .map-food-sheet-image-wrap { width: 156rpx; height: 156rpx; border-radius: 18rpx; background: $orbit-soft; }
+  .map-food-sheet-heading { display: flex; align-items: center; min-width: 0; }
+  .map-food-sheet-title { flex: 1; min-width: 0; font-size: 32rpx; line-height: 44rpx; font-weight: 650; color: $orbit-ink; }
+  .map-food-more { display: flex; align-items: center; justify-content: center; width: 76rpx; height: 68rpx; flex-shrink: 0; padding: 0; margin: -10rpx -12rpx -10rpx 0; font-size: 36rpx; background: transparent; color: $orbit-ink; }
+  .map-food-sheet-place { margin-top: 8rpx; line-height: 34rpx; color: $orbit-muted; font-size: 26rpx; }
+  .map-food-sheet-dish { display: -webkit-box; margin-top: 12rpx; color: $orbit-ink; font-size: 28rpx; line-height: 38rpx; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .map-food-count { font-size: 22rpx; font-weight: 500; background: rgb(36 61 49 / 85%); }
+  .map-food-sheet-actions { margin-top: 20rpx; gap: 16rpx; }
+  .map-food-action { min-height: 84rpx; border-radius: 18rpx; font-size: 28rpx; font-weight: 600; box-shadow: none; }
+  .map-food-action--secondary { color: $orbit-forest; background: $orbit-soft; }
+  .map-food-action--primary { color: $orbit-surface; background: $orbit-forest; box-shadow: none; }
+  .map-discovery-sheet { padding: 16rpx 20rpx; gap: 12rpx; }
+  .map-discovery-title { color: $orbit-ink; font-weight: 500; font-size: 28rpx; }
+  .map-discovery-button { display: flex; align-items: center; justify-content: center; margin: 0; padding: 0 22rpx; min-height: 76rpx; color: $orbit-forest; background: $orbit-soft; font-size: 26rpx; border-radius: 18rpx; font-weight: 500; }
+
+  .list-content { padding: 0 24rpx calc(132rpx + env(safe-area-inset-bottom)); }
+  .food-card { margin: 0; border: 0; border-bottom: 1rpx solid $orbit-border; border-radius: 0; background: $orbit-surface; box-shadow: none; }
+  .food-card-main { padding: 22rpx 0 12rpx; gap: 20rpx; }
+  .food-image-wrap { width: 152rpx; height: 152rpx; border-radius: 18rpx; background: $orbit-soft; }
+  .food-image { border-radius: 18rpx; }
+  .food-image-placeholder { flex-direction: column; gap: 8rpx; color: $orbit-muted; font-size: 22rpx; }
+  .food-image-placeholder .iconfont { font-size: 36rpx; }
+  .food-title { margin: 0 0 8rpx; line-height: 40rpx; font-size: 30rpx; font-weight: 600; color: $orbit-ink; }
+  .food-merchant { margin: 0 0 6rpx; padding: 0; }
+  .merchant-icon { display: none; }
+  .merchant-name { padding: 0; background: transparent; color: $orbit-muted; font-size: 26rpx; }
+  .campus-food-location { margin-bottom: 6rpx; font-size: 26rpx; line-height: 34rpx; color: $orbit-muted; }
+  .atlas-food-price { display: block; color: $orbit-forest; font-size: 28rpx; line-height: 36rpx; font-weight: 600; }
+  .atlas-food-nutrition { display: block; margin-top: 4rpx; color: $orbit-muted; font-size: 24rpx; line-height: 32rpx; }
+  .fat-loss-badge { top: 8rpx; font-size: 20rpx; background: $orbit-forest; }
+  .campus-food-badge { font-size: 20rpx; border-radius: 8rpx; background: rgb(36 61 49 / 85%); }
+  .food-footer { padding: 0 0 8rpx; border: 0; background: transparent; }
+  .author-name { color: $orbit-muted; }
+  .stat-item { min-width: 68rpx; min-height: 76rpx; justify-content: center; }
+  .stat-icon { font-size: 28rpx; }
+  .fab-button { display: flex; align-items: center; justify-content: center; width: 92rpx; height: 92rpx; padding: 0; border-radius: 50%; font-size: 40rpx; background: $orbit-forest; box-shadow: 0 4rpx 18rpx rgb(36 61 49 / 14%); }
+  .pick-mode-tip { background: $orbit-soft; padding: 18rpx 24rpx; }
+  .empty-btn { color: $orbit-surface; background: $orbit-forest; }
+}
+
+.fl-d .food-library-page--place-first {
+  background: #18251f;
+
+  .tab-section,
+  .atlas-toolbar,
+  .sort-section,
+  .filter-dropdown-panel,
+  .food-card { background: #18251f; border-color: #355442; }
+  .search-input-wrap,
+  .sort-filter-btn,
+  .food-image-wrap,
+  .map-food-sheet-image-wrap { background: #25372f; }
+  .tab-item,
+  .view-mode-option,
+  .sort-item,
+  .search-input-icon,
+  .atlas-search-clear,
+  .merchant-name,
+  .campus-food-location,
+  .atlas-food-nutrition,
+  .map-food-sheet-place,
+  .food-image-placeholder { color: #b7c4bd; }
+  .tab-item.active,
+  .sort-item.active,
+  .atlas-food-price { color: #b3d9c1; border-color: #b3d9c1; }
+  .search-input,
+  .food-title,
+  .map-food-sheet-title,
+  .map-food-sheet-dish,
+  .map-food-more,
+  .map-discovery-title { color: #e8ece9; }
+  .view-mode-switch,
+  .atlas-map-tool,
+  .map-food-sheet,
+  .map-discovery-sheet { color: #b3d9c1; background: #25372f; border-color: #48634f; }
+  .view-mode-option.active,
+  .map-discovery-button { background: #b3d9c1; color: #142a1e; }
+  .map-food-action--secondary { background: #344c3c; color: #d7e9de; }
+  .map-food-action--primary { background: #286749; color: #fffef9; }
+  .pick-mode-tip { background: #25372f; }
 }

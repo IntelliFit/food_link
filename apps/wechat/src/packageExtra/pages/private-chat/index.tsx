@@ -18,6 +18,7 @@ import {
   type FriendBlockStatus,
 } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -461,11 +462,10 @@ export default function PrivateChatPage() {
               onLongPress={() => showMessageActions(msg)}
             >
               {msg.content_type === 'image' && msg.image_url ? (
-                <Image
-                  className='chat-bubble-image'
-                  src={msg.image_url}
-                  mode='widthFix'
-                  onClick={() => handlePreviewImage(msg.image_url!)}
+                <AdaptiveImageGrid
+                  urls={[msg.image_url]}
+                  compact
+                  onImageClick={(url) => handlePreviewImage(url)}
                 />
               ) : (
                 <Text className='chat-bubble-text'>{msg.content}</Text>

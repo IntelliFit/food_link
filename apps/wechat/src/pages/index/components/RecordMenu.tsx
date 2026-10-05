@@ -24,7 +24,7 @@ import {
   openDebugResultPageFromMenu
 } from '../../../utils/dev-debug-tools'
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
-import { persistRecordTargetDate } from '../../../utils/record-date'
+import { persistRecordTargetDate, getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import {
   chooseImageWithPrivacy,
@@ -207,6 +207,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   if ((!visible || imagePickInProgress) && !onboardingPreviewOpen) return null
 
   const handleGridClick = (modeId: string) => {
+    if (!requireAllowedRecordDate(selectedDate)) return
     const recordDate = persistRecordTargetDate(selectedDate)
 
     switch (modeId) {
@@ -325,13 +326,14 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   }
 
   const handleQuickAccessClick = (modeId: string) => {
+    if (modeId === 'favorites' && !requireAllowedRecordDate(selectedDate)) return
     persistRecordTargetDate(selectedDate)
     onClose()
     logRecordMenuStage('quick-access-click', { mode: modeId })
     let target = ''
     switch (modeId) {
       case 'favorites':
-        target = extraPkgUrl('/pages/recipes/index')
+        target = `${extraPkgUrl('/pages/recipes/index')}?date=${encodeURIComponent(selectedDate)}`
         break
       case 'history':
         target = extraPkgUrl('/pages/analyze-history/index')
@@ -370,6 +372,10 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
       <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}`}>
         {/* 顶部圆角指示条 */}
         <View className='record-menu-handle-bar' />
+
+        <View className='record-menu-header'>
+          <Text className='record-menu-title'>记录到 {getRecordDateLabel(selectedDate)}</Text>
+        </View>
 
         {/* 2x2 功能网格 */}
         <View className='record-menu-grid-v2'>

@@ -109,8 +109,10 @@ func (r *RecipeRepo) InsertFoodRecord(ctx context.Context, record *domain.FoodRe
 	if record.ID == "" {
 		record.ID = uuid.New().String()
 	}
-	now := time.Now()
-	record.RecordTime = &now
+	if record.RecordTime == nil {
+		now := time.Now()
+		record.RecordTime = &now
+	}
 	return r.db.WithContext(ctx).Create(record).Error
 }
 

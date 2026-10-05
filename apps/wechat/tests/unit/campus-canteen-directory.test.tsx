@@ -7,6 +7,16 @@ import {
   getSchoolCanteens,
 } from '../../src/utils/api'
 
+jest.mock('@taroify/icons', () => ({
+  ArrowDown: () => null,
+  ArrowRight: () => null,
+  Ellipsis: () => null,
+  FilterOutlined: () => null,
+  Plus: () => null,
+  Search: () => null,
+}))
+jest.mock('@taroify/icons/style', () => ({}))
+
 jest.mock('../../src/utils/withAuth', () => ({
   withAuth: (Component: any) => Component,
 }))
@@ -55,6 +65,7 @@ jest.mock('../../src/utils/api', () => ({
   getPublicFoodLibraryList: jest.fn(),
   getSchoolCampuses: jest.fn(),
   getSchoolCanteens: jest.fn(),
+  getUserProfile: jest.fn(() => Promise.resolve({})),
   showUnifiedApiError: jest.fn(),
   submitStructuredFeedback: jest.fn(),
 }))
@@ -90,7 +101,6 @@ describe('campus canteen directory', () => {
   it('shows imported canteens even when no analyzed dishes are published yet', async () => {
     render(<CampusCanteenPage />)
 
-    await waitFor(() => expect(getPublicFoodLibraryList).toHaveBeenCalled())
     fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
 
@@ -98,17 +108,14 @@ describe('campus canteen directory', () => {
       expect(getSchoolCanteens).toHaveBeenCalledWith('school-shanghai-tcm'),
     )
 
-    expect(screen.getByText('已收录食堂')).toBeInTheDocument()
-    expect(screen.getByText('学生食堂')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('学生食堂')).toBeInTheDocument())
     expect(screen.getByText('张江校区 · 蔡伦路1200号')).toBeInTheDocument()
-    expect(screen.getByText('该食堂目录已上线，暂无已分析菜品')).toBeInTheDocument()
     expect(screen.queryByText('暂无校园食堂数据')).not.toBeInTheDocument()
   })
 
   it('uses the selected canteen id without conflicting parent filters', async () => {
     render(<CampusCanteenPage />)
 
-    await waitFor(() => expect(getPublicFoodLibraryList).toHaveBeenCalled())
     fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
     await waitFor(() => expect(screen.getByText('学生食堂')).toBeInTheDocument())
@@ -138,10 +145,12 @@ describe('campus canteen directory', () => {
 
     render(<CampusCanteenPage />)
 
+    fireEvent.click(screen.getByText('选择学校'))
+    fireEvent.click(screen.getByText('选择上海中医药大学'))
     await waitFor(() => expect(screen.getAllByText('已分析鸡肉饭').length).toBeGreaterThan(0))
     expect(screen.getAllByText('失败菜品').length).toBeGreaterThan(0)
     expect(screen.queryByText('分析中菜品')).not.toBeInTheDocument()
-    expect(screen.getByText('分析失败，稍后重试')).toBeInTheDocument()
+    expect(screen.getAllByText('营养待重试').length).toBeGreaterThan(0)
   })
 
   it('falls back to ready campus dishes when the initial hot page is empty', async () => {
@@ -164,6 +173,8 @@ describe('campus canteen directory', () => {
 
     render(<CampusCanteenPage />)
 
+    fireEvent.click(screen.getByText('选择学校'))
+    fireEvent.click(screen.getByText('选择上海中医药大学'))
     await waitFor(() =>
       expect(screen.getAllByText('高蛋白鸡肉饭').length).toBeGreaterThan(0),
     )
@@ -198,6 +209,8 @@ describe('campus canteen directory', () => {
 
     render(<CampusCanteenPage />)
 
+    fireEvent.click(screen.getByText('选择学校'))
+    fireEvent.click(screen.getByText('选择上海中医药大学'))
     await waitFor(() =>
       expect(screen.getAllByText('超时后可见鸡肉饭').length).toBeGreaterThan(0),
     )

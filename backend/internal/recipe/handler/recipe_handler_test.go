@@ -21,6 +21,8 @@ type mockRecipeService struct {
 	createInput  *service.CreateInput
 	updateInput  *service.UpdateInput
 	updateRecipe *domain.Recipe
+	useDate      string
+	useCalls     int
 }
 
 func (m *mockRecipeService) Create(ctx context.Context, userID string, input service.CreateInput) (string, error) {
@@ -60,7 +62,11 @@ func (m *mockRecipeService) Delete(ctx context.Context, userID, recipeID string)
 	return nil
 }
 
-func (m *mockRecipeService) Use(ctx context.Context, userID, recipeID string, mealType *string, entryType *string) (string, error) {
+func (m *mockRecipeService) Use(ctx context.Context, userID, recipeID string, mealType *string, entryType *string, dates ...string) (string, error) {
+	m.useCalls++
+	if len(dates) > 0 {
+		m.useDate = dates[0]
+	}
 	return "record-1", nil
 }
 
@@ -73,7 +79,36 @@ func setupRecipeRouter(h *RecipeHandler) *gin.Engine {
 	})
 	r.POST("/api/recipes", h.Create)
 	r.PUT("/api/recipes/:recipe_id", h.Update)
+	r.POST("/api/recipes/:recipe_id/use", h.Use)
 	return r
+}
+
+func TestUseRecipeAcceptsOptionalDateAndRejectsMalformedJSON(t *testing.T) {
+	for _, tc := range []struct {
+		body, date string
+		status     int
+	}{
+		{"", "", http.StatusOK},
+		{"{}", "", http.StatusOK},
+		{`{"date":"2026-10-02","meal_type":"lunch"}`, "2026-10-02", http.StatusOK},
+		{`{"date":`, "", http.StatusBadRequest},
+	} {
+		t.Run(tc.body, func(t *testing.T) {
+			svc := &mockRecipeService{}
+			router := setupRecipeRouter(NewRecipeHandler(svc))
+			request := httptest.NewRequest(http.MethodPost, "/api/recipes/test-recipe/use", bytes.NewBufferString(tc.body))
+			request.Header.Set("Content-Type", "application/json")
+			writer := httptest.NewRecorder()
+			router.ServeHTTP(writer, request)
+			assert.Equal(t, tc.status, writer.Code)
+			if tc.status == http.StatusOK {
+				assert.Equal(t, 1, svc.useCalls)
+				assert.Equal(t, tc.date, svc.useDate)
+			} else {
+				assert.Zero(t, svc.useCalls)
+			}
+		})
+	}
 }
 
 func packagedRecipeRequestBody() map[string]any {

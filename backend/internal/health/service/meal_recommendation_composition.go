@@ -52,7 +52,8 @@ func registerMealPlan(state *campusDietAgentRunState, components []DietRecommend
 	combined.Calories, combined.Protein, combined.Carbs, combined.Fat, combined.Price = 0, 0, 0, 0, 0
 	combined.Items = nil
 	componentState := *state
-	componentState.Constraints.MinProtein = nil // the user's minimum applies to the whole meal, not each side
+	componentState.Constraints.MinProtein = nil    // the user's minimum applies to the whole meal, not each side
+	componentState.Constraints.RequiredStaple = "" // staple requirement applies to the composed meal, not each side
 	fullMeals := 0
 	for _, c := range components {
 		if mealHasStructure(c) {
@@ -127,7 +128,7 @@ func composeMealTool(state *campusDietAgentRunState, raw string) (map[string]any
 		return nil, err
 	}
 	components := []DietRecommendationCandidate{}
-	for _, id := range args.SourceIDs {
+	for _, id := range mealResolveChoiceIDs(state, args.SourceIDs) {
 		c, ok := state.Candidates[id]
 		if !ok {
 			return nil, fmt.Errorf("组合条目尚未检索，请先查询")
@@ -138,7 +139,7 @@ func composeMealTool(state *campusDietAgentRunState, raw string) (map[string]any
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"meal_id": plan.SourceID, "returned": 1, "meal": campusDietAgentToolCandidates([]DietRecommendationCandidate{plan}, true), "components": campusDietAgentToolCandidates(components, true)}, nil
+	return map[string]any{"meal_id": plan.SourceID, "returned": 1, "meal": campusDietAgentToolCandidates([]DietRecommendationCandidate{plan}, true, state), "components": campusDietAgentToolCandidates(components, true, state)}, nil
 }
 
 func mealStoredComponents(state *campusDietAgentRunState, id string) []DietRecommendationCandidate {

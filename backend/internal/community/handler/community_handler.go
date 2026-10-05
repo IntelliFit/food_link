@@ -270,11 +270,13 @@ func (h *CommunityHandler) PostComment(c *gin.Context) {
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
 	recordID := c.Param("record_id")
+	logger.Info(c.Request.Context(), "开始发布圈子评论", slog.String("user_id", userID), slog.String("record_id", recordID))
 	comment, err := h.svc.PostComment(c.Request.Context(), userID, recordID, body.Content, body.ParentCommentID, body.ReplyToUserID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "圈子评论发布完成", slog.String("user_id", userID), slog.String("comment_id", comment.ID))
 	response.Success(c, gin.H{"comment": comment})
 }
 
@@ -289,11 +291,13 @@ func (h *CommunityHandler) PostTargetComment(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "开始发布圈子互动评论", slog.String("user_id", userID), slog.String("target_id", c.Param("target_id")))
 	comment, err := h.svc.PostTargetComment(c.Request.Context(), userID, c.Param("target_type"), c.Param("target_id"), body.Content, body.ParentCommentID, body.ReplyToUserID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "圈子互动评论发布完成", slog.String("user_id", userID), slog.String("comment_id", comment.ID))
 	response.Success(c, gin.H{"comment": comment})
 }
 
@@ -431,11 +435,13 @@ func (h *CommunityHandler) CreateCirclePost(c *gin.Context) {
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
 	nutrition := circlePostNutritionFromBody(body.Nutrition)
+	logger.Info(c.Request.Context(), "开始发布圈子动态", slog.String("user_id", userID), slog.Int("image_count", len(body.ImageURLs)))
 	postID, err := h.svc.CreateCirclePost(c.Request.Context(), userID, body.Title, body.Body, body.ImageURLs, nutrition)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "圈子动态发布完成", slog.String("user_id", userID), slog.String("post_id", postID))
 	response.Success(c, gin.H{"id": postID})
 }
 
@@ -462,10 +468,12 @@ func (h *CommunityHandler) UpdateCirclePost(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	postID := c.Param("post_id")
 	nutrition := circlePostNutritionFromBody(body.Nutrition)
+	logger.Info(c.Request.Context(), "开始更新圈子动态", slog.String("user_id", userID), slog.String("post_id", postID), slog.Int("image_count", len(body.ImageURLs)))
 	if err := h.svc.UpdateCirclePost(c.Request.Context(), userID, postID, body.Title, body.Body, body.ImageURLs, nutrition); err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "圈子动态更新完成", slog.String("user_id", userID), slog.String("post_id", postID))
 	response.Success(c, gin.H{"id": postID})
 }
 

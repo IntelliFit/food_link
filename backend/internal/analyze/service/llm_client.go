@@ -8,13 +8,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"food_link/backend/pkg/logger"
 )
 
 // LLMClient defines the interface for LLM-based analysis.
@@ -169,7 +173,7 @@ func (c *OfoxAIClient) NewAnalyzeWithImagesAndTemperatureModelCall(prompt string
 	if model == "" {
 		model = c.Model
 	}
-	if !isWanjieGeminiNativeModel(model, c.BaseURL) {
+	if !isGeminiNativeModel(model, c.BaseURL) {
 		return func(ctx context.Context) (map[string]any, error) {
 			return c.AnalyzeWithImagesAndTemperatureModel(ctx, prompt, imageURLs, temperature, modelName)
 		}
@@ -257,7 +261,7 @@ func (c *OfoxAIClient) analyzeWithImagesAndTemperatureMeta(ctx context.Context, 
 	if model == "" {
 		model = c.Model
 	}
-	if isWanjieGeminiNativeModel(model, c.BaseURL) {
+	if isGeminiNativeModel(model, c.BaseURL) {
 		return c.doGeminiNativeRequest(ctx, model, prompt, imageURLs, temperature)
 	}
 	content := []map[string]any{
@@ -277,9 +281,13 @@ func (c *OfoxAIClient) analyzeWithImagesAndTemperatureMeta(ctx context.Context, 
 	}
 	body := map[string]any{
 		"model":           model,
+		"stream":          false,
 		"messages":        []map[string]any{{"role": "user", "content": content}},
 		"response_format": map[string]string{"type": "json_object"},
 		"temperature":     temperature,
+	}
+	if strings.HasPrefix(strings.ToLower(model), "gemini-") {
+		body["max_tokens"] = 8192
 	}
 	useQwenDefaultReasoningEffort := false
 	for key, value := range extras {
@@ -321,6 +329,19 @@ func isWanjieGeminiNativeModel(model, baseURL string) bool {
 		strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gemini-")
 }
 
+func isGeminiNativeModel(model, baseURL string) bool {
+	endpoint, err := url.Parse(baseURL)
+	if err != nil || !strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gemini-") {
+		return false
+	}
+	switch strings.ToLower(endpoint.Hostname()) {
+	case "maas-openapi.wanjiedata.com", "api.openlux.ai", "api.a6api.com":
+		return true
+	default:
+		return false
+	}
+}
+
 func (c *OfoxAIClient) doGeminiNativeRequest(ctx context.Context, model, prompt string, imageURLs []string, temperature float64) (map[string]any, map[string]any, error) {
 	body, err := c.prepareGeminiNativeRequest(ctx, prompt, imageURLs, temperature)
 	if err != nil {
@@ -330,6 +351,10 @@ func (c *OfoxAIClient) doGeminiNativeRequest(ctx context.Context, model, prompt 
 }
 
 func (c *OfoxAIClient) prepareGeminiNativeRequest(ctx context.Context, prompt string, imageURLs []string, temperature float64) ([]byte, error) {
+	started := time.Now()
+	defer func() {
+		logger.Info(ctx, "餐照原生请求图片准备结束", slog.Int("image_count", len(imageURLs)), slog.Int64("duration_ms", time.Since(started).Milliseconds()))
+	}()
 	parts := []map[string]any{{"text": prompt}}
 	inlineImages, err := c.downloadGeminiInlineImages(ctx, imageURLs)
 	if err != nil {
@@ -394,7 +419,35 @@ func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model 
 		return nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	if req.URL.Hostname() == "api.a6api.com" {
+		req.Header.Del("Authorization")
+		req.Header.Set("x-goog-api-key", c.APIKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
+	started := time.Now()
+	var phaseMu sync.Mutex
+	sentMs, firstByteMs := int64(-1), int64(-1)
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			if info.Err == nil {
+				phaseMu.Lock()
+				sentMs = time.Since(started).Milliseconds()
+				phaseMu.Unlock()
+			}
+		},
+		GotFirstResponseByte: func() {
+			phaseMu.Lock()
+			firstByteMs = time.Since(started).Milliseconds()
+			phaseMu.Unlock()
+		},
+	}))
+	defer func() {
+		phaseMu.Lock()
+		sent, firstByte := sentMs, firstByteMs
+		phaseMu.Unlock()
+		logger.Info(ctx, "餐照原生请求网络阶段结束", slog.String("upstream_host", req.URL.Hostname()), slog.String("model", model),
+			slog.Int("request_bytes", len(body)), slog.Int64("sent_ms", sent), slog.Int64("first_byte_ms", firstByte), slog.Int64("total_ms", time.Since(started).Milliseconds()))
+	}()
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, nil, err
@@ -416,19 +469,28 @@ func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model 
 		return nil, nil, fmt.Errorf("empty response from Gemini")
 	}
 	firstCandidate := mapFromAny(candidates[0])
+	captureVisionUsage(ctx, raw)
+	if strings.EqualFold(stringFromAny(firstCandidate["finishReason"]), "MAX_TOKENS") {
+		return nil, nil, &LLMJSONParseError{Err: fmt.Errorf("Gemini 响应因 token 上限截断")}
+	}
 	content := mapFromAny(firstCandidate["content"])
+	var answer strings.Builder
 	for _, part := range anyListFromAny(content["parts"]) {
-		text := stringFromAny(mapFromAny(part)["text"])
+		partMap := mapFromAny(part)
+		if thought, _ := partMap["thought"].(bool); thought {
+			continue
+		}
+		text := stringFromAny(partMap["text"])
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
-		parsed, err := parseLLMJSON(text)
-		if err != nil {
-			return nil, nil, err
-		}
-		return parsed, raw, nil
+		answer.WriteString(text)
 	}
-	return nil, nil, fmt.Errorf("empty response from Gemini")
+	if strings.TrimSpace(answer.String()) == "" {
+		return nil, nil, fmt.Errorf("empty response from Gemini")
+	}
+	parsed, err := parseLLMJSON(answer.String())
+	return parsed, raw, err
 }
 
 func geminiNativeEndpoint(baseURL, model string) string {
@@ -438,6 +500,12 @@ func geminiNativeEndpoint(baseURL, model string) string {
 	}
 	endpoint.Path = "/api/v1beta/models/" + url.PathEscape(model) + ":generateContent"
 	endpoint.RawQuery = ""
+	if endpoint.Hostname() == "api.openlux.ai" || endpoint.Hostname() == "api.a6api.com" {
+		endpoint.Path = "/v1beta/models/" + url.PathEscape(model) + ":generateContent"
+	}
+	if endpoint.Hostname() == "api.openlux.ai" {
+		endpoint.RawQuery = "sort=success_rate"
+	}
 	return endpoint.String()
 }
 
@@ -523,6 +591,10 @@ func (c *OfoxAIClient) doRequest(ctx context.Context, url string, body map[strin
 		return nil, nil, fmt.Errorf("empty response from ofoxai")
 	}
 	message := mapFromAny(firstChoice["message"])
+	captureVisionUsage(ctx, raw)
+	if strings.EqualFold(stringFromAny(firstChoice["finish_reason"]), "length") {
+		return nil, nil, &LLMJSONParseError{Err: fmt.Errorf("模型响应因 token 上限截断")}
+	}
 	content := stringFromAny(message["content"])
 	if strings.TrimSpace(content) == "" {
 		return nil, nil, fmt.Errorf("empty response from ofoxai")

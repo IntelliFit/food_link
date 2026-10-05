@@ -87,6 +87,10 @@ type DietRecommendationResult struct {
 }
 
 type CampusDietRecommendationConstraints struct {
+	Version            int                              `json:"version,omitempty"`
+	OptionCount        int                              `json:"option_count,omitempty"`
+	RequiredStaple     string                           `json:"required_staple,omitempty"`
+	CanteenName        string                           `json:"canteen_name,omitempty"`
 	AllowedSchoolIDs   []string                         `json:"allowed_school_ids,omitempty"`
 	PendingSchool      *domain.DietRecommendationSchool `json:"pending_school,omitempty"`
 	CampusAccessDenied bool                             `json:"campus_access_denied,omitempty"`
@@ -105,47 +109,48 @@ type CampusDietRecommendationConstraints struct {
 }
 
 type DietRecommendationOption struct {
-	HistoryDate             string                        `json:"history_date,omitempty"`
-	SourceLabel             string                        `json:"source_label,omitempty"`
-	MealComponents          []DietRecommendationCandidate `json:"meal_components,omitempty"`
-	DistanceKM              *float64                      `json:"distance_km,omitempty"`
-	LocationLevel           string                        `json:"location_level,omitempty"`
-	MerchantName            string                        `json:"merchant_name,omitempty"`
-	Address                 string                        `json:"address,omitempty"`
-	Title                   string                        `json:"title"`
-	Reason                  string                        `json:"reason"`
-	Source                  string                        `json:"source,omitempty"`
-	SourceID                string                        `json:"source_id,omitempty"`
-	Calories                float64                       `json:"calories"`
-	Protein                 float64                       `json:"protein"`
-	Carbs                   float64                       `json:"carbs"`
-	Fat                     float64                       `json:"fat"`
-	Items                   []DietRecommendationFoodItem  `json:"items"`
-	Tips                    []string                      `json:"tips"`
-	Alternatives            []string                      `json:"alternatives"`
-	IsCampusFood            bool                          `json:"is_campus_food,omitempty"`
-	SchoolID                string                        `json:"school_id,omitempty"`
-	SchoolName              string                        `json:"school_name,omitempty"`
-	CampusID                string                        `json:"campus_id,omitempty"`
-	CampusName              string                        `json:"campus_name,omitempty"`
-	CanteenID               string                        `json:"canteen_id,omitempty"`
-	CanteenName             string                        `json:"canteen_name,omitempty"`
-	WindowID                string                        `json:"window_id,omitempty"`
-	WindowName              string                        `json:"window_name,omitempty"`
-	Floor                   string                        `json:"floor,omitempty"`
-	Price                   float64                       `json:"price,omitempty"`
-	PriceUnit               string                        `json:"price_unit,omitempty"`
-	ImagePath               string                        `json:"image_path,omitempty"`
-	NutritionBasis          string                        `json:"nutrition_basis,omitempty"`
-	NutritionSourceCategory string                        `json:"nutrition_source_category,omitempty"`
-	WeightMethod            string                        `json:"weight_method,omitempty"`
-	WeightConfidence        float64                       `json:"weight_confidence,omitempty"`
-	UncertaintyLevel        string                        `json:"uncertainty_level,omitempty"`
-	DecisionRole            string                        `json:"decision_role,omitempty"`
-	DecisionLabel           string                        `json:"decision_label,omitempty"`
-	DecisionScore           float64                       `json:"decision_score,omitempty"`
-	DecisionScores          *DietDecisionScorecard        `json:"decision_scores,omitempty"`
-	DecisionMissingEvidence []string                      `json:"decision_missing_evidence,omitempty"`
+	RequiresCampusAccessConfirmation bool                          `json:"requires_campus_access_confirmation,omitempty"`
+	HistoryDate                      string                        `json:"history_date,omitempty"`
+	SourceLabel                      string                        `json:"source_label,omitempty"`
+	MealComponents                   []DietRecommendationCandidate `json:"meal_components,omitempty"`
+	DistanceKM                       *float64                      `json:"distance_km,omitempty"`
+	LocationLevel                    string                        `json:"location_level,omitempty"`
+	MerchantName                     string                        `json:"merchant_name,omitempty"`
+	Address                          string                        `json:"address,omitempty"`
+	Title                            string                        `json:"title"`
+	Reason                           string                        `json:"reason"`
+	Source                           string                        `json:"source,omitempty"`
+	SourceID                         string                        `json:"source_id,omitempty"`
+	Calories                         float64                       `json:"calories"`
+	Protein                          float64                       `json:"protein"`
+	Carbs                            float64                       `json:"carbs"`
+	Fat                              float64                       `json:"fat"`
+	Items                            []DietRecommendationFoodItem  `json:"items"`
+	Tips                             []string                      `json:"tips"`
+	Alternatives                     []string                      `json:"alternatives"`
+	IsCampusFood                     bool                          `json:"is_campus_food,omitempty"`
+	SchoolID                         string                        `json:"school_id,omitempty"`
+	SchoolName                       string                        `json:"school_name,omitempty"`
+	CampusID                         string                        `json:"campus_id,omitempty"`
+	CampusName                       string                        `json:"campus_name,omitempty"`
+	CanteenID                        string                        `json:"canteen_id,omitempty"`
+	CanteenName                      string                        `json:"canteen_name,omitempty"`
+	WindowID                         string                        `json:"window_id,omitempty"`
+	WindowName                       string                        `json:"window_name,omitempty"`
+	Floor                            string                        `json:"floor,omitempty"`
+	Price                            float64                       `json:"price,omitempty"`
+	PriceUnit                        string                        `json:"price_unit,omitempty"`
+	ImagePath                        string                        `json:"image_path,omitempty"`
+	NutritionBasis                   string                        `json:"nutrition_basis,omitempty"`
+	NutritionSourceCategory          string                        `json:"nutrition_source_category,omitempty"`
+	WeightMethod                     string                        `json:"weight_method,omitempty"`
+	WeightConfidence                 float64                       `json:"weight_confidence,omitempty"`
+	UncertaintyLevel                 string                        `json:"uncertainty_level,omitempty"`
+	DecisionRole                     string                        `json:"decision_role,omitempty"`
+	DecisionLabel                    string                        `json:"decision_label,omitempty"`
+	DecisionScore                    float64                       `json:"decision_score,omitempty"`
+	DecisionScores                   *DietDecisionScorecard        `json:"decision_scores,omitempty"`
+	DecisionMissingEvidence          []string                      `json:"decision_missing_evidence,omitempty"`
 }
 
 type DietRecommendationFoodItem = domain.DietRecommendationFoodItem
@@ -412,7 +417,7 @@ func (s *StatsService) generateDietRecommendationCore(ctx context.Context, userI
 		fallbackInput.CampusName = ""
 		result := fallbackDietRecommendation(fallbackInput, "campus_general_fallback", s.fetchDietRecommendationCandidates(ctx, userID, fallbackInput))
 		result.Title = resolvedSchool.Name + "暂时没有匹配的校园菜品"
-		result.Summary = "本校公共食物库暂时没有满足条件的已发布菜品，以下是通用备选，不代表该校食堂；我没有用模型编造食堂或菜名。"
+		result.Summary = "本校校园食堂暂时没有满足条件的已发布菜品，以下是通用备选，不代表该校食堂；我没有用模型编造食堂或菜名。"
 		result.ResolvedSchool = resolvedSchool
 		return result, nil
 	}
@@ -1136,6 +1141,21 @@ func (s *StatsService) resolveDietRecommendationSchool(ctx context.Context, user
 	if err != nil || profile == nil {
 		return nil, "", ""
 	}
+	school, campusID, campusName := studentDiningPreference(profile)
+	if school == nil {
+		return nil, "", ""
+	}
+	return school, campusID, campusName
+}
+
+func studentDiningPreference(profile *domain.StatsUserProfile) (*domain.DietRecommendationSchool, string, string) {
+	if profile == nil || profile.HealthCondition == nil {
+		return nil, "", ""
+	}
+	isStudent, ok := profile.HealthCondition["is_student"].(bool)
+	if !ok || !isStudent {
+		return nil, "", ""
+	}
 	pref := mapFromAny(profile.HealthCondition["campus_dining_preference"])
 	if len(pref) == 0 {
 		return nil, "", ""
@@ -1308,7 +1328,7 @@ func normalizeDietRecommendationText(value string) string {
 func dietRecommendationSourceLabel(source string) string {
 	switch source {
 	case "public_food_library":
-		return "公共食物库"
+		return "美食图谱"
 	case "user_food_records":
 		return "你的历史记录"
 	case "food_nutrition_library":

@@ -1,490 +1,155 @@
-# 首页活动 Banner 与三记录卡设计 QA
-
-- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-3c6dce1c-ce26-438d-bd0e-f2bf395bf33f.png`
-- 实现截图：`/private/tmp/foodlink-home-banner-three-cards-final.png`
-- 聚焦实现截图：`/private/tmp/foodlink-home-banner-three-cards-focus.png`
-- 并排对比图：`/private/tmp/foodlink-home-banner-three-cards-comparison.png`
-- 验证环境：微信开发者工具模拟器，页面内容视口约 390 × 753 CSS px；完整截图 656 × 1418 px
-- 源图像尺寸：688 × 486 px；实现聚焦图尺寸：656 × 463 px
-- 密度归一：源图缩放为 656 × 463 px；实现截图裁取同一 Banner 与记录卡区域为 656 × 463 px，再横向合并比较
-- 页面状态：同一登录用户、浅色主题、活动 Banner 与今日记录默认态
-
-## Findings
-
-- 无 P0/P1/P2 问题。
-- 信息结构：活动 Banner 保留标题和说明两行，第三行“去识别 / 去赚 / 去看看 / 去反馈”及箭头已删除；整张 Banner 仍是点击入口。
-- 尺寸：Banner 主卡由 176rpx 调整为 140rpx，缩短 20.45%；Swiper 轨道同步由 184rpx 调整为 148rpx，未产生裁切或多余空白。
-- 记录卡：体重、喝水、运动已恢复为三个等宽独立白色卡片，不再使用“今日记录 + 编辑”的共享大卡和竖线分隔结构。
-- 字体：继续使用首页既有字号；Banner 标题 28rpx、说明 22rpx，记录值 40rpx、单位与辅助信息 20rpx，没有新增一次性字号。
-- 间距：缩窄后的 Banner 两行文案垂直居中；三张记录卡使用 16rpx 间距、20rpx 内边距和 24rpx 圆角，首屏仍能看到“今日餐食”作为下滑提示。
-- 颜色：保留原 Banner 图片与深色遮罩；三张记录卡使用白色表面和轻阴影，体重、喝水、运动图标继续使用灰、蓝、橙色语义色。
-- 图标与图片：Banner 继续使用原业务图片，记录卡继续使用项目 iconfont；没有新增或替换图片资产，也没有使用 Emoji、自绘 SVG 或占位资源。
-- 文案：标题和业务说明保持不变，仅按用户要求删除第三行操作文案；记录卡保留原有真实数值、单位和辅助信息。
-
-## Full-view comparison evidence
-
-- 并排图左侧为修改前源图，右侧为实现。右侧 Banner 高度明显降低约五分之一，标题和说明未被裁切，轮播圆点仍在卡片内。
-- 右侧不再出现任何第三行白色操作文字；下面直接进入三张独立记录卡，卡片边界和间距清晰。
-- 三卡下方已露出“今日餐食”标题，没有出现恢复三卡后首屏内容完全被挤出的情况。
-
-## Focused-region comparison evidence
-
-- 聚焦图覆盖 Banner、三张记录卡和下一模块标题，文字、圆角、卡间距及轮播圆点均可清晰判读，无需额外局部放大。
-- CSS 尺寸提供精确比例证据：`140 / 176 = 79.55%`，即高度缩短 `20.45%`，符合“缩窄 20%”要求。
-
-## Interaction and runtime checks
-
-- `.home-handbook-card__action` 确认不存在。
-- `.body-status-card` 确认渲染 3 个。
-- 点击缩窄后的整张 Banner 成功进入 `packageExtra/pages/goose-duck-chicken/index`，返回首页正常，说明删除操作文字没有删除业务入口。
-- 微信开发者工具运行时错误日志：0 条。
-- TypeScript、目标 ESLint 与 `git diff --check` 通过。
-
-## Comparison history
-
-1. 修改前 Banner 为 176rpx 高并包含第三行操作文字；记录区为单张共享大卡。
-2. 修复：Banner 改为 140rpx，删除 action 字段和渲染节点；记录区恢复 PR #54 前的三卡 JSX、样式和深色模式规则。
-3. 修复后证据：`/private/tmp/foodlink-home-banner-three-cards-final.png` 与并排对比图显示布局稳定；整卡跳转正常，运行时错误 0。
-
-## Follow-up Polish
-
-- 无阻塞项。P3：极窄设备上较长的喝水目标文案继续沿用原版单行展示策略，当前常用机型未发生溢出。
-
-final result: passed
-
----
-
-# 公共食物库紧凑校园卡片设计 QA
-
-- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-778bc45e-76f0-4d05-92e2-e89876bb3fa5.png`、`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-db17a72a-f552-4cf4-b8e0-0d792bb894ab.png`
-- 验证环境：微信开发者工具模拟器，登录用户，公共食物库浅色主题
-
-## Findings
-
-- 校园卡片正文只保留菜品名、学校/食堂/楼层位置、蛋白和热量；重复的食堂商户标签、第二行详细名称与价格已删除。
-- 校园位置文本会去除完全相同的重复片段，并继续用单行省略保护较长学校、食堂与窗口信息。
-- 页面正文统一为 30rpx、26rpx、22rpx 三档文字字号；iconfont 的图形尺寸独立于文字字号体系。
-- 卡片图片从 220rpx 缩至 176rpx，卡片内边距从 24rpx 缩至 18rpx，卡间距从 24rpx 缩至 16rpx，作者栏同步压缩。
-- “食探官方”只显示文字，不渲染头像或空头像占位；普通用户仍保留头像与昵称。
-- 运行态读取到 50 张校园卡片、50 行位置、50 行营养摘要、50 个官方文字署名、0 个作者头像；首卡约 367 × 138 CSS px，图片约 91 × 91 CSS px。
-- 运行态切换“校园食堂”标签成功，错误事件为 0；TypeScript、全量 ESLint、31 套/108 条 Jest、Sass 与 `git diff --check` 均通过。
-
-## Blocking issue
-
-- 微信开发者工具的 `App.captureScreenshot` 在当前会话持续返回 `fail to capture screenshot`。因此无法生成实现截图，也无法按 Product Design 要求把源图与实现图合成同视口并排视觉对比；本轮视觉截图 QA 标记为 blocked，节点、尺寸与交互验证已完成。
+# 美食图谱方案二 · 首轮视觉验收（2026-10-02）
 
 final result: blocked
 
----
+此章节只评估图谱方案二；下方分析页和首页独立历史报告保留，不覆盖其结论。
 
-# 分析页双模式主卡区分设计 QA
+- Source visual truth：`.local-state/current-task/non-home-review-20261002/02-atlas-campus-concept.png`，已打开，1330×1182双页概念稿，仅左侧图谱为本轮目标。
+- Implementation：目前没有打开并核实的改后图谱截图。05基线截图terminated；06持续无响应后仅中断本次CLI，最终terminated且无文件，未关IDE/服务。旧01不是新代码证据；源稿示例坐标/照片/价格不能代替真实数据。
+- Viewport/density/state：预期原生手机图谱、全部/地图、选中地点、浅色。实际runtime在原生开图谱成功后返回pet-chat/pageId21；本轮真实图谱viewport/DPR未核实，不能做1:1假归一化或像素通过声明。
+- Full-view/focused共同输入：缺改后正确页，尚无法创建并打开。因此本轮没有视觉比较iteration，静态检查/产物刷新不当视觉修复回合。
 
-- 均衡模式：`/private/tmp/foodlink-balanced-stats-light-card.png`
-- 养生模式：`/private/tmp/foodlink-wellness-stats-dark-card.png`
-- 验证环境：微信开发者工具模拟器，同一分析数据，仅切换首页模式
+## 阻塞与必检项
 
-## Findings
+- [P1 / verification] 正确页运行图与交互证据缺失。原生开页成功≠页面保持；MRC where已连接却超时。需要图谱稳定当前页/用户截图，再采集地图、选中卡和列表，同状态共同比较。
+- 字体/排版：局部约14–16px主体层级、长菜名两行代码已落；字体fallback、真实换行、价格是否截断尚未视觉核验。
+- 间距/布局：紧凑toolbar、无框大地图、单选中底卡、平面列表已落；实际高度、安全区、底部控制是否遮挡/小屏溢出待验。
+- 颜色/tokens：仅本页沿用暖白/森林绿，局部深色已写；对比度和原生底图/浮层实态待验。
+- 图片/图标：继续真实Map和数据餐照，无生成食堂外景；现有font与Taroify Plus/Ellipsis，watch vendors含对应图标；实际清晰度/裁切与图标绘制待验。
+- 文案/内容：重复宣传收起，地点/代表餐/价格前置，未知营养/价格诚实，导航按学校/校区/食堂/餐食精度；搜索由真实keyword列表返回，完整地图菜单检索未实现。真实超长内容和未知/错态待验。
+- 交互/可达：代码保留四来源、排序筛选、社交与贡献、外卖词复制、详情导航和记录选择；这一轮没有有效图谱实际tap/切换/记录选择证据，不称原功能已运行验收。
 
-- 均衡模式主卡使用 `#edf8f2 → #c8e5d7` 浅薄荷/鼠尾草绿渐变，标题与主数值使用 `#1f493a` 深绿；视觉语言与圈子页浅色卡片一致。
-- 养生模式主卡继续使用 `#133a32 → #245c4f` 深森林绿渐变和白色标题，不受均衡模式规则影响。
-- 两种模式的卡片结构、数值、徽标和四项指标完全一致，只通过色面和文字明度区分，不改变分析功能。
-- 微信运行时确认分别命中 `fl-page-theme-root--balanced` 与 `fl-page-theme-root--wellness`；错误日志为 0。
-- TypeScript、目标 ESLint与 `git diff --check` 通过。
+## Implementation checklist
 
-final result: passed
+- [x] 精确选定第2显示结果，本轮局部图谱代码；其它任务改动保留。
+- [x] TS/目标ESLint/Sass/diff检查；现有watch新产物核对。
+- [ ] 正确页当前截图及地图/列表/选中/详情/搜索交互。
+- [ ] 全图及局部共同输入比较，核对五类fidelity surfaces并修P0/P1/P2。
+- [ ] 浅深、小屏、空错、from=record及四来源验证；图谱通过后再校园。
 
----
-
-# 首页模式扩展为全局主题设计 QA
-
-- 养生分析页：`/private/tmp/foodlink-wellness-global-stats-final.png`
-- 养生圈子页：`/private/tmp/foodlink-wellness-global-community.png`
-- 养生我的页：`/private/tmp/foodlink-wellness-global-profile.png`
-- 均衡我的页对照：`/private/tmp/foodlink-balanced-global-profile.png`
-- 验证环境：微信开发者工具模拟器，同一代码与用户状态，仅切换 `home_display_mode_v1`
-
-## Findings
-
-- 养生模式在三个主 Tab 使用一致的暖白背景、暖米白表面、森林绿主卡和暖金导航选中态；没有把页面主体整体染成深绿。
-- 分析页“关注综合分”主卡保持深绿底与白字，运行时背景为 `#133a32 → #245c4f`，标题为纯白；不存在通用暖白卡片覆盖造成的低对比问题。
-- 圈子页的快捷入口、排行榜、筛选区和动态列表处于同一暖色背景体系；排行榜继续承担主视觉，内容照片和业务语义色未被主题滤镜污染。
-- 我的页的会员主卡保持深绿，列表卡使用暖米白表面；头像、功能图标和红色提醒等原语义色保持不变。
-- 三页页面壳均实测为 `fl-page-theme-root--wellness`；切回均衡模式后实测为 `fl-page-theme-root--balanced`，页面恢复原薄荷渐变与白色导航。
-- 原生顶部背景和自定义底栏均随模式统一；运行时错误日志为 0。
-- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
-
-final result: passed
+完整交接：`.local-state/current-task/non-home-review-20261002/OPTION2-IMPLEMENTATION.md`。当前不交付为已完成设计或精准还原。
 
 ---
 
-# 首页双模式宠物尺寸一致性设计 QA
-
-- 养生模式截图：`/private/tmp/foodlink-wellness-pet-size.png`
-- 均衡模式截图：`/private/tmp/foodlink-balanced-pet-size.png`
-- 验证环境：微信开发者工具模拟器，同一登录用户、同一宠物展开状态
-
-## Findings
-
-- 养生模式不再强制把宠物收起，也不再额外应用 `scale(0.62)`；模式切换只改变首页内容主题，不改变宠物视觉状态。
-- 微信运行时测量：养生/均衡模式的宠物外框均为 `187 × 98px`，头像均为 `86 × 86px`，状态类均为 `is-expanded`。
-- 两张完整页面截图中宠物的位置、头像直径、对话气泡和收起按钮尺寸一致；未出现裁切、重叠或缩放跳变。
-- 真实执行养生 → 均衡 → 养生切换，用户选择状态可保持；运行时错误日志为 0。
-- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
-
-final result: passed
-
----
-
-# 常用形象新增华佗与太极小子设计 QA
-
-- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-02918ffa-9e4b-4b14-89ee-884138499f5c.png`、`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-79144f06-2bb9-43ef-a22b-808aee82e619.png`
-- 目标区域参考：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-912a0d14-8f81-4bab-bb29-daedea1c04ed.png`
-- 处理后素材：`apps/wechat/src/assets/pets/huatuo-01.png`、`apps/wechat/src/assets/pets/taiji-xiaozi-01.png`
-- 素材规格：384 × 384 透明 PNG；华佗约 29KB，太极小子约 22KB
-
-## Findings
-
-- 已去除源卡片的绿色编号、名称、标签与说明文字，只保留人物和随身元素；华佗保留药杖、药枝与药篮，太极小子保留太极图。
-- 两个人物使用同一透明画布尺寸与视觉重心，接入既有 `PetAvatar` 的 `aspectFit` 槽位，不使用截图整卡、占位图、Emoji 或自绘 SVG。
-- “常用形象”由两列调整为三列，健文伙伴、华佗、太极小子可以在同一行展示；卡片选中态和“选择/当前”交互沿用现有实现。
-- 新增后端内置 ID 和候选元数据，复用现有选择接口与持久化字段；匹配版本提升后，已有用户也能获取新增候选。
-- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）、宠物 Go 服务测试与 `git diff --check` 通过。
-- 微信开发者工具 CLI 已成功打开项目并刷新编译产物，但当前 DevTools 版本只启动 IDE HTTP 服务，未开放 `miniprogram-automator` 所需 WebSocket；`mrc` 无法连接 3001，因此未能取得同状态运行时截图和实际点击证据。
-
-## Blocking issue
-
-- 需要在微信开发者工具中重新开启“工具 → 自动化”或恢复兼容的自动化端口后，补做三张卡可见、点击华佗/太极小子、返回首页同步、错误日志为 0 的验证。
+# 分析页 UI 改版视觉验收（2026-10-02）
 
 final result: blocked
 
----
+此结论仅针对本对话分析页的新方案；下方首页历史验收原文保留，不重新评价或覆盖其业务结论。
 
-# 养生模式微量营养展开设计 QA
+## 2026-10-02 05:43–05:49：用户授权修正实际偏差
 
-- 实现截图：`/private/tmp/foodlink-home-wellness-micros-expanded-final.png`
-- 验证环境：微信开发者工具模拟器，首页养生模式，浅色主题
+- 本轮在dev仅增量修改stats/index.tsx、index.scss，不动首页/共享样式/底栏。此前P2对应修正：综合分64→80rpx；关注标题28rpx/600、行高112rpx/上下14rpx、简述24/34rpx；本页明确系统无衬线回退；管理/更新/关注图标去旧阴影（含active）。
+- 营养三行改名称/横条/真实累计g/能量占比同行，明确本周/月累计；六餐次改单行名称/横条/占比，“看热量”只切换末列真实kcal，再点可看占比，不删实际绝对数值、不改统计。体重喝水默认折叠仍可展开。热量显示数值开关移到标题，图表缩放/参考线/0值规则不变；月长标题留可缩宽度。
+- 目标TS+ESLint通过；末次SCSS内存Sass/diff通过。已有watch已生成05:44新TSX/WXSS，末次SCSS对应WXSS05:48:59。无生产build、前后端启停、收费、账户写入、测试编辑或发布。
+- weapp原生开页成功；实际先home/page12，switchTab成功后currentPage确认stats/page15。本輪健康截图16/趋势17没有有效新图；自动化viewport超时，原生截图长时间不返回，后续页签/query又无当前页。停止经read-only确认的本轮skill-index截图CLI请求PID64420（非GUI/前后端），不创建重复窗口或清缓存。
+- 五面均仍待最新渲染复核：字体数字和字重、112rpx行距与紧凑宏量/餐次的长值适配、去阴影与深色、原iconfont渲染、完整原文与新数值切换。旧05/06/08及11–14对照是改前本轮证据，不作为上述修正后的验证图。
+- 当前final result仍blocked：不是代码未修改，而是修正后的微信捕图与新交互验证未完成。源真值仍analysis-ui-proposal.png/1536×1024；本轮无实现像素、CSS视口和新共同输入可供判定，不能补成passed。
 
-## Findings
+- Source visual truth：D:/files/food_link/.local-state/current-task/stats-redesign-20261002/analysis-ui-proposal.png，1536×1024，一套三面板设计示例。PLAN.md记录已约定的数据/图标/底栏等偏差。
+- Implementation evidence：verification/01-health-pass1.png、02-focus-pass1.png，289×625；实际stats页面，第一轮currentPage与关注打开成功。但是这两张仍为旧WXSS，不接受为最新实现视觉证据。
+- Viewport：第一轮截图289×625，未拿到对应windowInfo密度记录；最新视口捕获失败，未做密度归一、全图/局部共同对照。不能假称1:1还原。
+- State：小马哥真实数据、健康关注/关注弹层；未发送、生成、增删关注、改主题或记录。数据与设计示例不同，不强行把示例灌入账号。
+- 原因：watch产物先旧后已更新，新WXSS包含方案选择器。随后微信自动化超时/无当前页；重开项目窗口及独立原生auto+mrc连接仍失败。来源与最新实现无法放入同一有效比较输入，因此阻塞设计QA，而不是凭静态成功passed。
 
-- 养生热量卡复用均衡模式既有的 `MicrosSection`，没有复制微量营养配置、计算或数据状态。
-- 折叠态在三大营养下方显示“营养概览 / 展开更多”；展开后显示 21 项微量营养及当前值、目标值和进度。
-- 展开区域延续养生模式的暖米白卡面、低饱和金色分隔和森林绿操作色，未引入新的深绿色大背景。
-- 点击收起后展开内容消失，再次点击恢复 21 项；微信开发者工具运行时错误为 0。
-- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
+## 五个必查面（当前未视觉通过）
 
-final result: passed
+### 用户关闭全部微信窗口后重新打开：新证据（2026-10-02 05:19–05:25）
 
----
+- 用户授权重新打开工具，原生CLI `auto`仅对apps/wechat项目启用9420；不启动/重启前后端。原生打开页面后实际初始仍在首页，随后真实switchTab成功，currentPage=pages/stats/index/pageId6。IDE微信登录小马哥；这不单独当作应用账号证明。
+- 最新实现截图05-health-reopened-runtime.png、06-nutrition-reopened.png、08-trends-lower-reopened.png已实际打开，都是470×1014。健康新样式、解读即显/展开入口、趋势六餐次及0值横条已可观察；真实点击三个页签以及趋势ScrollView滚动成功。不是前轮01/02旧WXSS。
+- 最新共同输入已生成并打开：verification/11-health-comparison.png、12-health-focus-comparison.png、13-nutrition-comparison.png、14-trends-meals-comparison.png。来源分别裁取1536×1024方案对应425/426px手机和局部，双侧等比缩至390px宽；手机完整参考分别390×844/842，实现390×841。getWindowInfo调用超时，CSS视口/捕获密度尚未实测，不声称像素1:1；仅按等比例图像共同对照分析密度和层级。趋势局部是下滚状态，不当作趋势首屏对照。
+- 五面检查：系统字体大字层级/白底森林绿/真实iconfont图标/真实完整copy已核对；接口原句比示例长、真实动作只有1条、实际报告为旧缓存长文，均保留，不伪造示例。原底栏不属于本任务；圈子/我的等其他任务不更改。
+- [P2 / spacing、tokens] 管理入口和更新按钮仍继承旧投影，关注图标亦带旧阴影，参考平面控件未完全还原。下一轮在stats局部取消box-shadow及active遗留，不影响点击范围。
+- [P2 / density] 六餐次多了每行kcal二行，归一后6行占比明显高于参考，营养行也是上文下条而非稿中紧凑同行布局。需保留真实数值，通过展开详情/紧凑同行布局处理，不能只删数据凑图。当前用户仅授权重开，本轮未新增应用修改。
+- 解读展开在本轮没有完成点击/长页检查；关注/详情点击工具报告success但对应截图失败/选择器超时，不能作为弹层验收。热量首屏、周期/深色/空态仍缺完整证据。当前图像捕获部分恢复、仍偶发automator响应超时，与前轮“没有任何最新图”不同。
+- final result仍为blocked：有效新图已解除完全捕图阻塞，但以上可见P2及未验交互尚未消除。不把本次窗口重开说成设计完全验收。
 
-# 首页养生建议与主题 Banner 设计 QA
+1. Fonts/typography：代码使用系统中文字体、正文32rpx/次要26rpx，尚需新截图检查长真实建议、指标标题与字重；不可从旧截图判定完成。
+2. Spacing/layout：紧凑综合分、固定页签、单列关注、六餐次横条、弹层独立滚动已编码；首轮旧样式层级不合稿，watch更新后须重捕，检查小屏/底部安全区。
+3. Colors/tokens：局部近白/森林绿及深色变量，不改全局；需要实际确认覆盖旧模式规则与深色对比。
+4. Assets/icons：沿用项目iconfont/原生Checkbox，未用生成图切片或伪图替换数据。不重新绘制底栏；图标渲染/大小尚需最新微信截图确认。
+5. Copy/content：真实分数/原文/证据/收费保留；门槛与月图窗口、无数据语义已修正；尚需运行验证完整报告展开、缺字段及计费不触发。
 
-- 页面参考图：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-870cb843-50a3-41d1-a30a-2ad32db7fdc8.png`
-- 养生建议整卡背景参考：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-ab5f5726-01fb-4cb3-80e8-8224b5fe348f.png`
-- 微信开发者工具实现截图：`/private/tmp/foodlink-home-wellness-advice-background-final.png`
-- 全屏并排证据：`/private/tmp/foodlink-wellness-full-comparison.png`
-- 养生建议聚焦实现：`/private/tmp/foodlink-wellness-advice-focus.png`
-- 养生建议聚焦对比：`/private/tmp/foodlink-wellness-advice-comparison.png`
-- 验证环境：微信开发者工具模拟器，浅色主题，养生模式，同一登录用户
-- 视口与密度：页面内容约 390 × 753 CSS px；实现截图 656 × 1418 px；页面参考 528 × 992 px；卡片参考 600 × 178 px；聚焦实现裁取为 600 × 128 px。对比以相同 600 px 宽度归一，不把截图高度和设备框差异记为视觉缺陷。
+## 迭代与验收缺口
 
-## Findings
+- Pass1：新JS+旧WXSS，综合分大卡/双列/标题位置明显不合，拒绝视觉验收。不是根据这张图“修得像旧版”，而是先按依赖核对编译。
+- Pass2准备：watch最新CSS已生成；原生/自动化/MRC截图均超时，无法产生有效03-health-pass2.png。最终fullMode恢复尝试结果需在后续REPORT记录，不放宽标准。
+- 可证明：类型、目标ESLint、Sass、现有关注选择单测；一次真实关注弹层打开。不可证明：最新版外观、详情关闭与滚动、三面板切换、报告展开、周期/空态/深色、全产品回归。
 
-- 无 P0/P1/P2 问题。
-- 信息架构：养生模式顺序明确为热量概览、今日养生建议、养生主题 AI 食物识别 Banner、体重/喝水/运动；均衡模式原 Banner 和后续功能未改。
-- 用户后续要求删除养生音乐与养生小运动；最终养生模式在三张身体状态卡后直接结束，不再渲染 `.wellness-feature-grid` 或任何对应入口、占位提示和专用样式。日常运动记录卡属于身体状态数据，按要求保留。
-- 字体与文案：使用现有中文字体与字号体系；“今日养生建议、立秋、宜/建议/少、AI 食物识别”形成清晰层级，文案全部围绕顺时饮食与养生，不使用健身目标导向表达。
-- 间距与布局：建议区为单张 359 × 77 CSS px 横向卡片；节气说明和三条建议在同一背景上连续排布，没有独立缩略图或嵌套小卡。Banner 紧随其后，状态三卡仍保持原顺序。
-- 颜色与视觉：建议卡复用水墨节气资产作为整卡背景，使用暖白半透明遮罩保证文字对比；Banner 使用独立浅绿色养生食物图，不再复用均衡模式深色活动图。
-- 图片质量：养生 Banner 使用 1200 × 600、约 140KB 的本地 JPG，右侧食物清晰、左侧留白适合文案；水墨背景覆盖卡片内容区，边框造成的内边界差为 1 CSS px/侧，属于预期裁切。
-- 交互：点击养生 Banner 成功打开现有记录菜单，沿用登录与记录逻辑；未新建虚假识别能力或新路由。
-
-## Full-view comparison evidence
-
-- 并排图显示参考与实现都采用“热量概览 → 养生提醒/建议 → 养生食物识别 → 身体状态”的阅读顺序。
-- 实现保留项目现有热量主卡和三状态卡，属于用户要求的“其他不更改”；差异不构成功能或视觉回归。
-
-## Focused-region comparison evidence
-
-- 聚焦对比中，第一版参考的节气图仍是独立左侧块；最终实现把同一水墨视觉铺满整张卡片，并通过遮罩把标题、节气与三项建议融合为一个表面，符合用户最新纠正。
-- 背景运行时尺寸为 357 × 75 CSS px，卡片为 359 × 77 CSS px，恰好扣除 1px 四周边框；不存在孤立的 `.wellness-daily-advice__season` 节点。
-
-## Comparison history
-
-1. 第一轮根据整体参考将节气图放在建议卡左侧，用户指出图片应作为卡片背景而非孤立元素。
-2. 修复：删除节气缩略容器，把水墨图片改为绝对定位整卡背景，并增加全卡浅色遮罩与统一内容层。
-3. 修复后证据：`/private/tmp/foodlink-wellness-advice-comparison.png` 显示整卡已经融合；运行时确认旧独立节点不存在。
-
-## Runtime and static checks
-
-- 养生模式旧 `.wellness-handbook-swiper` 不存在，均衡活动 Banner 未混入养生模式。
-- 新 Banner 点击后 `.record-menu-modal` 正常出现。
-- 微信开发者工具运行时异常：0 条。
-- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
-- 删除两张养生功能卡后，编译产物中不再包含 `wellness-feature`、养生音乐、养生小运动、古琴舒缓或八段锦。微信开发者工具自动化重载连续遇到 `pageNotFound` 与响应超时，未生成新的删除后截图；前一版布局截图仅用于养生建议与 Banner 对比，不作为本次删除的运行时证据。
-
-## Follow-up Polish
-
-- P3：节气和建议当前仍是静态前端文案，后续接入日期、地区或天气数据后可动态生成，但不影响本轮布局和交互。
-
-final result: passed
+下一步是恢复微信运行截图后建立共同对照，修正可见P0/P1/P2差异并复验；当前禁止标为完成。
 
 ---
 
-# 养生模式暖白主体与绿色导航配色 QA
-
-- 初始色系参考：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-c6338865-e49a-41d1-8c96-2877f1e907a2.png`
-- 用户留白纠正截图：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-6646251f-242d-4855-878d-aad284b64739.png`
-- 最终实现截图：`/private/tmp/foodlink-home-wellness-light-body-green-nav-final.png`
-- 最终并排对比：`/private/tmp/foodlink-wellness-light-palette-comparison.png`
-- 均衡模式回归截图：`/private/tmp/foodlink-home-balanced-palette-regression.png`
-- 验证环境：微信开发者工具模拟器，浅色主题，登录用户
-- 视口与密度：页面内容约 390 × 753 CSS px；参考图 495 × 1067 px；最终实现 656 × 1418 px。并排对比将参考图等比关系归一为 656 × 1418 px，与实现同高同宽比较。
-
-## Findings
-
-- 无 P0/P1/P2 问题。
-- 字体与层级：养生模式继续使用项目中文字体和既有字号；问候标题由金色改为深森林绿，暖白背景下对比清晰；正文使用灰绿与暖灰，没有因换色改变换行或截断。
-- 间距与布局：日期、热量、建议、识别 Banner 和三状态卡的位置、圆角与间距保持原布局。删除的养生音乐/养生小运动未恢复。
-- 颜色：按用户最新纠正，页面主体从整屏墨绿改为暖白—浅灰绿渐变；宠物和问候区保留大面积留白。深墨绿仅用于底部导航和 AI 识别 Banner，小面积森林绿用于日期选中态、进度和按钮；卡片统一暖米白并使用低饱和金色边框。
-- 图片质量：水墨建议背景与养生食物 Banner 均继续使用清晰本地图片；主体变浅后图片边界和文字对比仍清晰，无透明边缘或错误裁切。
-- 文案与功能：所有养生文案、体重/喝水/运动记录入口、识别入口和模式切换保持不变；只调整颜色作用域。
-
-## Full-view comparison evidence
-
-- 初始参考用深墨绿作为全屏底色；用户最新明确否定大面积深绿，因此最终实现有意改为暖白主体，只继承参考中的墨绿导航、暖米白卡片和金色边框体系。
-- 最终并排图可见导航仍是完整深绿色，正文区域留白明显增加，宠物背景不再发绿；页面重点仍通过深绿选中日期和识别 Banner 建立。
-
-## Focused-region comparison evidence
-
-- 整屏对比已清楚覆盖顶部留白、全部卡片和底部导航，重要色面无需额外局部裁图。
-- 微信开发者工具实测主体背景为暖白渐变 `#fbf8f0 → #eef2ed`；模式按钮为 88% 暖白；热量与日期卡保持米白/金色边框。
-
-## Comparison history
-
-1. 第一轮按原参考将养生模式整个页面和宠物背景改为深墨绿，并将底部导航同步改绿。
-2. 用户指出整页绿色过深，只需要导航栏绿色，宠物背后等主体区域应留白。
-3. 修复：主体改为暖白渐变，问候与模式按钮恢复深色文字/浅色表面；保留深绿底部导航、识别 Banner 和少量选中态。
-4. 修复后证据：`/private/tmp/foodlink-home-wellness-light-body-green-nav-final.png`；运行时异常 0，均衡/养生双向切换后均能恢复各自配色。
-
-## Runtime and static checks
-
-- 养生根背景、日期卡、热量卡的运行时颜色与目标 token 一致。
-- 从养生切到均衡后，均衡主页恢复原浅绿色背景和白色导航；再切回养生后暖白主体与墨绿导航恢复。
-- 养生音乐/养生小运动卡片数量保持 0。
-- 微信开发者工具运行时异常：0 条。
-- TypeScript、目标 ESLint、custom-tab-bar JS 语法、78 条 Jest 与 `git diff --check` 通过。
-
-## Follow-up Polish
-
-- P3：微信开发者工具自定义导航样式下，顶部系统胶囊颜色由宿主管理；当前暖白主体保证黑色状态栏图标有足够对比，不影响底部导航配色。
+# 历史：首页 Meal Orbit 视觉验收（2026-10-01）
 
 final result: passed
 
----
+此结论针对本轮首页视觉实现及已覆盖的交互，不代表像素完全相同、不代表附近推荐质量或整个平台业务回归全部通过。
 
-# 首页养生模式设计 QA
+## 对照依据与视口
 
-- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-0eed55da-0f8f-41b2-9f9d-07d4bcd20269.png`
-- 顶部实现截图：`/private/tmp/foodlink-home-wellness-final-v2.png`
-- 下半屏实现截图：`/private/tmp/foodlink-home-wellness-lower-final-v3.png`
-- Banner 与中下部实现截图：`/private/tmp/foodlink-home-wellness-banner-switch-final.png`
-- 双向箭头切换截图：`/private/tmp/foodlink-home-wellness-switch-arrow-final.png`
-- 三身体状态卡最终截图：`/private/tmp/foodlink-home-wellness-three-status-cards-final.png`
-- 均衡模式回归截图：`/private/tmp/foodlink-home-balanced-final.png`
-- 并排对比图：`/private/tmp/foodlink-wellness-design-comparison-final.png`
-- 验证环境：微信开发者工具模拟器，浅色主题，同一登录用户；页面内容视口约 390 × 753 CSS px
-- 源图尺寸：906 × 1260 px；实现截图：656 × 1418 px；对比时三张图统一缩放至 1246 px 高并横向拼接，未改变宽高比
-- 页面状态：养生模式、当日无饮食记录；源图为已有饮食数据，因此空态文案属于真实数据差异，不作为视觉偏差
+- 主视觉真值：`C:/Users/29454/.codex/generated_images/01a0d42b-7c4e-7881-b4ad-6f78ddae344e/exec-fc3060bf-6329-470d-9994-8df522ff7181.png`（853 × 1844）。
+- 全选扩展：同目录 `exec-9ef67d45-d64b-44ee-9b7d-ba786b757e68.png`。
+- 最简扩展：同目录 `exec-e5643b40-3f31-454a-9590-be2df0617d54.png`。
+- 整理面板：同目录 `exec-9ac3ff46-5b7a-48b0-a34a-8cdddb7ec1bc.png`。
+- 实现：微信开发者工具中实际 `pages/index/index`，小马哥账号，日期 2026-10-01，默认均衡/浅色；CSS window 为 390 × 844，截图 470 × 1014（约 1.205 倍捕获密度）。不是浏览器静态复刻。
+- 证据根目录：`D:/files/food_link/.local-state/current-task/`。
+- 默认真实附近餐食：`home-ui-final-nearby-20261001.png`；真实带餐照选项：`home-ui-final-default-20261001.png`、`home-ui-final-photo-20261001.png`。
+- 全选上部/下部：`home-ui-all-modules-top-20261001.png`、`home-ui-all-modules-lower-final-20261001.png`；最简：`home-ui-minimal-final-20261001.png`；整理：`home-ui-organizer-final-20261001.png`；深色：`home-ui-dark-final-20261001.png`。
+- 对照将两侧等比例归一到 390 px 宽，不拉伸、不用假数据覆盖截图。全图 `home-ui-comparison-full-20261001.png`；除去微信顶部原生 chrome / 底部系统指示条的内容对照 `home-ui-comparison-content-20261001.png`（实现截取 top=110、height=886）。参考稿没有微信状态栏/胶囊，因此可用内容高度不同，不能把系统 chrome 当作首页留白误差。
+- 局部共同输入：`home-ui-comparison-nutrition-20261001.png`、`home-ui-comparison-meal-20261001.png`。整理和全选对照：`home-ui-comparison-organizer-20261001.png`、`home-ui-comparison-all-modules-20261001.png`。最后一份全选对照实现为下滚状态，只用于模块排列/密度，不用于逐像素上部位置判断。
 
-## Findings
+## 发现与修复历史
 
-- 无 P0/P1/P2 问题。
-- 信息架构：按用户最新指定，养生模式顺序改为“热量与三大营养 → 活动 Banner → 体重/喝水/运动 → 今日养生建议 → 养生音乐/小运动”；均衡模式仍是独立的原有内容树。
-- 字体：标题、正文、辅助信息和关键数字沿用首页现有中文系统字体与四级字号体系；关键热量数字保留数据强调级，不新增零散字号。
-- 间距：卡片使用 20rpx 纵向节奏、24–26rpx 内边距和 30rpx 圆角；三餐行、建议胶囊与双功能卡均未发生挤压、重叠或横向溢出。
-- 颜色：采用参考图的暖白表面、浅鼠尾草绿进度和低饱和语义色；营养图标继续沿用均衡模式的蓝/黄/橙语义，不造成两套数据含义冲突。
-- 图片：节气卡使用独立生成并压缩的水墨插画 `apps/wechat/src/assets/wellness/solar-term-autumn.jpg`；三餐有真实图片时继续展示用户记录图片，无记录时使用项目 iconfont，不伪造食物照片。
-- 文案：养生模式不再显示“今日食物记录”、早餐、午餐、晚餐或拍照识别；音乐未接业务页，点击明确提示“即将上线”。
+1. Pass 1，P1：营养区域装饰和按钮被旧卡片裁切；日期仍有旧实色圆；背景过重。证据 `home-ui-orbit-pass1-20261001.png`。移除旧卡片裁切/底板，降低植物背景透明度，日期改为细轨道与选中胶囊；Pass 2 / Pass 3 截图复核。
+2. Pass 2，P1：无图餐食使用通用餐照会错误暗示菜品内容。移除假餐照，优先读取对应公共库/本人记录照片，缺图用紧凑文字卡；`home-ui-final-nearby-20261001.png` 与真实历史照片卡分别复核。
+3. Pass 3，P2：无图卡保留大图卡高度，空白过多；补剂双层框、保质期空态过高。新增 no-photo 高度及内容网格，补剂去嵌套框，空态保留一行与原添加入口；`home-ui-all-modules-lower-final-20261001.png` 无重叠/裁切。
+4. 扩展状态，P2：仅选一个快捷指标时大片空白。单项改整行大卡，喝水展示真实目标和进度，仍进入原记录页，不新增未经确认的快捷写入；`home-ui-minimal-final-20261001.png` 复核。
+5. 模式复核，P2：养生旧底框/日期圆覆盖新方案，深色全局旧日期规则覆盖首页。只在首页覆盖，浅色/养生/深色复核；`home-ui-wellness-final-20261001.png`、`home-ui-dark-final-20261001.png`。深色宏量文字已提升对比，超标仍保留警示红。
+6. 最后局部对照，P2：主圆盘与数字偏小，地点和快捷标签偏小。圆盘 290 rpx，数字 74 rpx，地点与快捷标签 24 rpx；重新捕获 `home-ui-final-default-20261001.png`、`home-ui-final-photo-20261001.png` 并重建上述共同对照输入。当前未发现需继续阻塞交付的 P0/P1/P2。
 
-## Full-view comparison evidence
+## 五个必查视觉面
 
-- 并排图左侧为源图，中间为实现首屏，右侧为实现下半屏。热量半环、横向三大营养、浅绿建议条、三餐列表、水墨节气卡及双功能卡的区域顺序和视觉权重与源图一致。
-- 实现保留 FoodLink 原有问候区、日期选择器、悬浮宠物和底部 TabBar，这是现有产品基础设施，不是参考图内容的错误复刻。
-- 右上模式切换按钮位于宠物下方且可见；进入养生模式后宠物强制使用缩小视觉态，滚动时不再大面积遮住卡片，切回均衡模式仍恢复用户原宠物状态。
-- 养生模式活动 Banner 位于热量主卡与今日食物记录之间，复用真实活动数据、轮播尺寸、图片和整卡点击行为，不重复制造一套活动配置。
+- 字体：沿用小程序系统中文字体，标题/菜名与次级地点明确分级；真实长菜名限两行，地点限两行，不显示推理过程长段。数字为大号高字重；与生成稿不做不存在的精确字体识别承诺。
+- 间距布局：单宠物头部、大日期、窄周轨道、左圆盘/右宏量、主推荐、快捷卡、记录模块的顺序与主方向一致。已有定制排序保留；全选纵向滚动、四快捷项横向滚动，整理面板 footer 常驻。实际微信 chrome 与用户选中的额外模块会减少首屏可见内容，不强行删模块凑稿。
+- 色彩：奶油浅底、鼠尾草装饰、森林绿主操作与底栏、蜂蜜黄碳水进度，深色有独立可读状态；警示语义不被装饰配色覆盖。
+- 图片：植物背景与环绕装饰使用实际生成并优化后的 WebP；宠物沿用实际账号宠物；餐照来自对应业务记录，不用参考稿汉堡图伪装当前蒸饺/牛腩，不编造步行时间。无图状态不是加载占位。
+- 文案：具体菜名、实际商家/吃过日期、真实直线距离；统一“聊聊这餐”，不显示“附近可选/历史回选”。没有新增“今日要留意”产品模块，也不重复宠物。加载用 spinner/skeleton。
 
-## Focused-region comparison evidence
+## 微信运行时交互证据
 
-- 热量区：半环、剩余值、已摄入/目标、总进度条和三大营养在同一卡片内，层级与源图一致。
-- 身体记录区：与均衡模式共用同一份三卡 JSX，体重、喝水、运动的数值、单位、辅助信息、点击与长按处理完全一致。
-- 建议区：水墨节气插画占左侧主视觉，饮食/运动/作息三个胶囊在右侧；下方音乐和小运动为两张等宽卡片。
+- 三个指示点切换，原生 Swiper current 0 → 2；第三项 CTA 进入 `packageExtra/pages/pet-chat/index`，meal_id 与第三项来源一致，未自动发送/扣费。
+- 全选模块与四项快捷卡：通过实际 Switch 点击/完成保存，读取本账号布局为 hidden=[]、quickStats=四项；下滚和横向 ScrollView 查看无覆盖。
+- 整理排序：在第一行 handle 发送 touchstart(600) → touchmove(670) → touchend；第二行标题变为“饮食与营养”，证明移位。关闭不保存；密度选择保存为 compact 的存储亦验证，之后恢复原设置。
+- 日期月历展开/收起、营养展开/收起、目标编辑打开/关闭成功，未保存业务值。
+- 餐食缩略入口打开原餐食列表（两条加餐）；`home-ui-meal-detail-20261001.png`。
+- 体重快捷入口进入原记录页，等待后表单正常；`home-ui-weight-record-final-20261001.png`，没有点击保存。
+- 相机菜单：页面选择器不跨自定义 TabBar；通过运行时 getTabBar().switchTab 调用同一相机点击 handler，菜单实际出现并可关闭；`home-ui-camera-menu-20261001.png`。这不是物理点击证据。
+- 模式与主题：实际均衡↔养生切换，个人设置主题按钮切换深色↔浅色；分析/我的 Tab 导航保留。
+- 核验后恢复初始 order、hidden=['supplements']、quickStats=['weight','water','sleep']、density=smart、均衡，以及最初未写入的颜色主题 storage key。最终留在首页。
 
-## Interaction and runtime checks
+## 验证边界 / 后续细化
 
-- 点击模式切换：均衡模式 `.balanced-home-content` 与养生模式 `.wellness-home-content` 互斥，切换后按钮文案同步变化并本地记忆选择。
-- 模式按钮实测仅显示 `⇄` 与目标模式文字，旧 `.home-mode-switch .iconfont` 不存在；双向切换后的文字分别为“均衡模式”和“养生模式”。
-- 养生模式 `.wellness-handbook-swiper` 存在并位于三张身体状态卡之前，使用与均衡模式相同的活动数据与轮播状态。
-- 点击养生模式当前可见 Banner，成功进入 `packageExtra/pages/goose-duck-chicken/index` 并返回，证明整卡活动入口未因复用位置失效。
-- 最终截图确认 Banner 后直接显示体重、喝水、运动三张 `.body-status-card`，旧 `.wellness-food-card` 和三餐列表不再渲染。
-- 均衡模式回归：`.combined-card`、活动 Banner 和 3 张 `.body-status-card` 均存在，原功能树未删除。
-- 点击“拍照识别”：成功打开原 `.record-menu-modal`，关闭正常。
-- 点击“养生小运动”：成功进入 `packageExtra/pages/exercise-record/index` 并可返回。
-- 养生音乐：点击显示“养生音乐即将上线”，没有伪造不存在的播放能力。
-- 微信开发者工具运行时异常：0 条。
-- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
+- 指示点切换已验证，原生横滑使用既有 Swiper；本轮自动化触摸未可靠产生 Swiper current 变化，物理手指滑动仍需用户真机复核，不能把事件发送成功称为手势验证成功。
+- 控制台看到开发者工具自身 WAService automator timeout；未证明控制台零错误。早期空子包截图等待后已取得正常体重表单，不据此宣称子包故障。
+- P3：生成稿的不规则照片卡轮廓、光照/玻璃珠细节、系统字体抗锯齿并非逐像素复刻；当前为可交互的稳定圆角布局与真实数据。不能称“100% 一模一样”。
+- 未覆盖 Android/iOS 真机、全部窗口宽度、实际提交记录、付费聊天发送与全部旧业务；不执行这些有账号副作用的验证。
+- TypeScript、目标 ESLint、两份组件 SCSS 和目标 git diff --check 已通过。未更新测试、生产 build、发布、提交、部署，未重启用户服务。
 
-## Comparison history
+## 实施检查单
 
-1. 第一轮实现完整还原卡片结构，但原有展开态悬浮宠物会遮住模式切换按钮和滚动后的热量内容。
-2. 修复：模式按钮改为独立右对齐行；养生模式将宠物切为不改变持久状态的视觉收起态，并缩放为 62%。
-3. 修复后证据：最终顶部和下半屏截图中按钮清晰可点，宠物渲染约 51 CSS px，不再形成大面积遮挡；运行时异常仍为 0。
-4. 用户要求取消养生模式三餐列表；修复为两种模式共用 `bodyStatusCards`，并删除养生三餐 JSX、派生数据和废弃样式。最终截图显示 Banner 下方为三张独立状态卡。
+- [x] 先运行时基线，后实施。
+- [x] 真实图像资产落位，保留动态数据和原业务入口。
+- [x] 默认/全选/单快捷/养生/深色证据。
+- [x] 共同输入与局部对照，修复以上 P1/P2。
+- [x] 账号显示设置恢复，项目保持用户现有开发 watch。
+- [ ] 真机物理横滑与像素级 P3 精修由下一轮用户反馈继续收紧。
 
-## Follow-up Polish
+## 2026-10-01 后续用户要求：删除统计重复入口与模式开关
 
-- P3：节气、宜食和作息文案当前为前端静态内容；若后续接入日期/天气/地区服务，可改为每日动态建议，但不影响本轮双模式界面和现有数据功能。
-
-final result: passed
-
----
-
-# 宠物主页卡片精简设计 QA
-
-- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-2f39bf28-9a30-4b3e-ab7d-ba367dadbe6f.png`
-- 领取前截图：`/private/tmp/foodlink-pet-home-reward-before.png`
-- 领取后截图：`/private/tmp/foodlink-pet-home-reward-after.png`
-- 经验条参考图：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-29a9acf1-1ad0-4335-be6e-f0e2df365f59.png`
-- 经验条实现截图：`/private/tmp/foodlink-pet-home-level-bar.png`
-- 经验条聚焦对比：`/private/tmp/foodlink-pet-level-bar-comparison.png`
-- 大头像参考图：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-e04e8581-9b16-4718-ae3c-dc59187429b8.png`
-- 大头像实现截图：`/private/tmp/foodlink-pet-home-large-avatar.png`
-- 大头像聚焦对比：`/private/tmp/foodlink-pet-large-avatar-comparison.png`
-- 等级泡泡最终截图：`/private/tmp/foodlink-pet-home-level-bubble.png`
-- 名称在上最终截图：`/private/tmp/foodlink-pet-home-name-above-exp.png`
-- 成长融合最终截图：`/private/tmp/foodlink-pet-home-growth-merged.png`
-- 外观换装三项截图：`/private/tmp/foodlink-pet-home-outfit-three-items.png`
-- 并排对比图：`/private/tmp/foodlink-pet-home-local-comparison.png`
-- 验证环境：微信开发者工具模拟器，浅色主题，同一登录用户
-
-## Findings
-
-- 无 P0/P1/P2 问题。
-- 信息架构：删除“为什么是它”“今日状态”“外观试验箱”和独立“离线小惊喜”卡片；保留“常用形象”“成长进度”和“外观换装”。离线经验领取并入首卡，页面由解释型信息转为形象、成长和换装三个可操作区域。
-- 首卡：顶部改为连续的“Lv.1 + 经验进度条 + 当前/下级经验值”结构，经验不再作为头像旁的独立泡泡；头像只保留积分泡泡。宠物名称与中性箭头位于右侧，整行继续作为对话入口；存在未领取事件时，在名称下方显示“领取 +N 经验”轻量按钮。
-- 尺寸与间距：首卡最小高度由 246rpx 收紧为 212rpx，头像由 188rpx 收紧为 166rpx；头像信息区与右侧名称之间保持清晰分栏，没有恢复嵌套对话卡。
-- 颜色与图标：继续使用现有暖白表面、薄荷绿数据色和项目 iconfont；没有新增图片、Emoji、自绘 SVG 或占位资源。
-- 保留功能：常用形象选择、成长进度、离线经验领取、专属像素分身、首页悬浮宠物、随机换外观和挑选外观均继续存在；仅移动领取入口，没有改写后端领取逻辑。
-
-## Runtime checks
-
-- 页面卡片标题实测为：常用形象、成长进度、外观换装。
-- `.pet-home-reason-list`、`.pet-home-score-grid`、`.pet-home-inline-action.lab` 均不存在。
-- 领取前经验泡泡为“经验 20”，按钮为“领取 +16 经验”；点击后经验变为 36，成长进度同步变为 36/100，领取按钮消失。
-- 最终经验条实测文案为“Lv.1  36 / 100 经验值”，进度条宽度 196.594 CSS px；旧 `.pet-home-stage-stat--exp` 不存在。
-- 首卡 `background-image` 为 `none`，未增加参考图中的草地/装饰背景；卡片内部未增加三点菜单。
-- 第二轮布局将宠物头像放大至 216rpx，运行时为 112 × 112 CSS px；头像距首卡内容顶部约 21 CSS px，并占据左侧 135 × 118 CSS px 舞台。
-- 经验条收进右侧 202 CSS px 宽区域，文案精简为“Lv.1  36 / 100”，不再显示“经验值”三个字；名称保持在经验条下方右对齐。
-- 最终将 Lv.1 从经验条移到人物左上方，复用与“积分 42”一致的 `.pet-home-stage-stat` 泡泡结构；运行时等级泡泡 52 × 21 CSS px、积分泡泡 45 × 21 CSS px。右侧经验条只显示“36 / 100”，不再渲染 `.pet-home-level-badge`。
-- 名称与经验条最终交换顺序：运行时名称顶部偏移 23 CSS px、经验条顶部偏移 76 CSS px，确认“水滴汤圆 ›”位于经验进度上方；点击“专属像素分身”成功打开可编辑取名弹窗并可取消，异常 0。
-- 独立“成长进度”卡最终删除；页面卡片标题只剩“常用形象、外观换装”。陪伴天数改为人物周围同体系泡泡，运行时为“陪伴 3天”、50 × 21 CSS px。
-- 首卡底部使用左右对齐的“升级到 Lv.2 / 36 / 100”说明和全宽进度条，运行时区域 343 × 35 CSS px，明确进度条用于等级升级，不再重复展示总经验和距升级数据卡。
-- 外观换装最终只保留“专属像素分身、首页悬浮宠物、随机换外观”3 项；“挑选外观”和对应即将开放样式均已删除，开发者工具运行时确认 3 项且异常 0。
-- 点击 `.pet-home-name-link` 成功进入 `packageExtra/pages/pet-chat/index`，返回正常。
-- 微信开发者工具运行时异常：0 条。
-- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
-
-## Follow-up Polish
-
-- 无阻塞项。外观换装卡片内容较长，但可自然向下滚动，底部未出现被试验箱占据的冗余调试区。
-
-final result: passed
-
----
-
-# 宠物名称箭头入口设计 QA
-
-- 源视觉真值：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-ab545de5-e66a-45c8-9c9f-428727e9be12.png`
-- 实现截图：`/private/tmp/foodlink-pet-name-arrow-final.png`
-- 聚焦实现截图：`/private/tmp/foodlink-pet-name-arrow-focus.png`
-- 并排对比图：`/private/tmp/foodlink-pet-name-arrow-comparison.png`
-- 验证环境：微信开发者工具模拟器，页面内容视口约 390 × 753 CSS px；完整截图 656 × 1418 px
-- 源图像尺寸：666 × 260 px；实现聚焦图尺寸：656 × 256 px
-- 密度归一：源图缩放至 656 × 256 px；实现截图裁取同一首卡区域为 656 × 256 px，再横向合并比较
-- 页面状态：同一登录用户、浅色主题、宠物主页默认态
-
-## Findings
-
-- 无 P0/P1/P2 问题。
-- 信息架构：首卡不再显示绿色“和它聊聊”卡片、聊天图标、入口标题或说明；对话能力收敛为宠物名称右侧的单个箭头。
-- 字体：宠物名称继续使用页面强调字号 36rpx 和既有中文系统字体；删除入口两档附加字号后，首卡层级更单纯。
-- 间距：箭头与宠物名称使用 10rpx 间距并共同居中，名称或箭头均可点击；88rpx 隐形点击高度不增加可见背景、边框或卡片轮廓。
-- 颜色：名称保持主文字色，箭头使用中性灰；入口没有绿色背景、绿色描边或额外阴影，不与积分胶囊产生视觉竞争。
-- 图标与图片：宠物头像与三项状态胶囊保持不变；箭头复用项目 iconfont，没有新增图片、Emoji、自绘 SVG 或占位资源。
-- 文案：删除“和它聊聊”“饮食与训练分析”两行入口文案；其余宠物名称、等级、积分、今日经验和页面内容不变。
-
-## Full-view comparison evidence
-
-- 并排图左侧为修改前源图，右侧为最终实现。右侧绿色入口卡完全消失，仅在“水滴汤圆”右侧保留紧邻箭头。
-- 首卡白色表面保持统一，不再出现内部第二层有色卡片；宠物头像、等级、积分和今日经验的位置未被破坏。
-- 删除入口卡后首卡留白更自然，下面“为什么是它”等模块仍保持原布局。
-
-## Focused-region comparison evidence
-
-- 1312 × 256 px 聚焦并排图可直接判断名称、箭头、头像和三个状态胶囊的位置，无需额外放大。
-- 右侧实现未出现残留边框、绿色背景、聊天图标或两行聊天说明。
-
-## Interaction and runtime checks
-
-- `.pet-home-chat-entry` 确认不存在，`.pet-home-name-arrow` 确认存在。
-- 点击 `.pet-home-name-link` 成功进入 `packageExtra/pages/pet-chat/index`；返回后仍停留在宠物主页。
-- 微信开发者工具运行时错误日志：0 条。
-- TypeScript、目标 ESLint 与 `git diff --check` 通过。
-
-## Comparison history
-
-1. 修改前宠物名称下方存在有背景、描边、聊天图标和两行文字的独立入口，视觉上形成嵌套卡片。
-2. 修复：删除入口内容与全部有色卡样式，将点击事件移动到“宠物名称 + 右箭头”行。
-3. 修复后证据：`/private/tmp/foodlink-pet-name-arrow-final.png` 与并排对比图显示入口已完全扁平化；点击跳转正常，运行时错误 0。
-
-## Follow-up Polish
-
-- 无阻塞项。P3：名称特别长时继续使用现有省略号策略，箭头会保持可见。
-
-final result: passed
-
----
-
-# 养生模式日期栏去金色外环设计 QA
-
-- 源截图：`/var/folders/dl/j1hxj3fs3czd7lt458p170t80000gn/T/codex-clipboard-f41cabf9-a1de-438a-bfce-28a3e81befc5.png`
-- 实现截图：`/private/tmp/foodlink-home-wellness-date-no-gold-ring-final.png`
-- 验证环境：微信开发者工具模拟器，首页养生模式，浅色主题
-
-## Findings
-
-- 删除日期栏原有的金色实线描边与 5rpx 金色外圈，不再用边框、外环、渐变和重阴影同时强调同一组件。
-- 日期栏改为暖白单一表面、8% 低对比森林绿边界和 10% 中性阴影；日期选中胶囊继续承担主要状态强调。
-- 五秒视觉顺序恢复为问候 → 日期选择 → 热量主卡，日期容器不再与热量数据争夺焦点。
-- 页面没有文字重叠、裁切或状态泄漏；微信开发者工具运行时错误为 0。
-- TypeScript、目标 ESLint、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
-
-final result: passed
-
----
-
-# 养生模式全局导航保持设计 QA
-
-- “分析”截图：`/private/tmp/foodlink-wellness-global-nav-stats-final.png`
-- “圈子”截图：`/private/tmp/foodlink-wellness-global-nav-community-final.png`
-- “我的”截图：`/private/tmp/foodlink-wellness-global-nav-profile-final.png`
-- 验证环境：微信开发者工具模拟器，`home_display_mode_v1=wellness`
-
-## Findings
-
-- 养生模式的深墨绿底部导航已从首页局部状态改为全局持久化状态，跨 Tab 不再闪回白色。
-- 分析、圈子、我的页面主体继续使用各自原配色，仅底部导航延续养生主题，避免整页主题污染。
-- 三个页面的当前 Tab 均使用暖金色选中态，未选 Tab 保持低对比灰绿色；中间拍照按钮保持暖米白表面与森林绿图标。
-- 微信开发者工具依次完成首页 → 我的 → 分析 → 圈子 → 我的导航检查，运行时错误为 0。
-- 自定义 TabBar JS 语法、TypeScript、21 个 Jest 套件（78 条）与 `git diff --check` 通过。
-
-final result: passed
+- 此要求覆盖上文“保留/验证均衡养生模式”的当前产品口径，上文为历史验收记录。
+- 已删除首页底部统计卡与顶部模式开关，保留既有 Meal Orbit 视觉、原模块选择和底栏分析。旧模式设置不再驱动页面壳/导航/TabBar，正常浅深主题条件保留。
+- 新实截图已打开复核：`.local-state/current-task/home-ui-remove-mode-final-top-20261001.png`、`home-ui-remove-stats-bottom-20261001.png`，无删除后的空卡/按钮；底部有原有导航安全留白。
+- 实际 TabBar handler 导航到分析页成功，实截图 `home-ui-analysis-after-removal-20261001.png` 正常。最终回到首页，账号显示/主题设置未写入，业务数据未提交。
+- 本轮局部验收通过，详细静态检查与运行时边界见 `.local-state/current-task/home-ui-removal-verification-20261001.md`；不冒充新的深色/真机/全业务验收。

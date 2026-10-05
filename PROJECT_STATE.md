@@ -1,13 +1,14 @@
 # PROJECT_STATE
 
 - Project: `food_link`
-- Workspace: `D:\projects\food_link`
+- Workspace: `D:\files\food_link`
 - Ownership: dedicated coding agent for `food_link`
 - Surface: WeChat Mini Program
 - UI verification tool: `weapp-devtools`
-- DevTools port: `3001` (allocated by portman)
-- Automation note: prefer dedicated mini program automation target for this project; do not rely on a shared default target
+- DevTools service port: `28264`（2026-09-04 通过 `wechatide mcp` 实测；端口可能随工具重启变化，调试前应重新发现，不能继续硬编码旧 `3001/9420`）
+- Automation note: use the imported project `D:\files\food_link\apps\wechat` through `wechatide`; prefer the dedicated mini program automation target and do not rely on a shared default target
 - Memory rule: durable project facts must be written to `.local-state/current-task/active.md`, `.local-state/decisions/2026-05-active.md`, or `memory/YYYY-MM-DD.md` instead of living only in chat history
+- Server boundary: `ubuntu-ts` is a general-purpose remote processing host, not the FoodLink production server. FoodLink production diagnostics/deployment must target the project server documented as `coachlink.fit` / `154.8.205.78`, or its production PostgreSQL/Kubernetes environment.
 
 ## 后端迁移状态
 

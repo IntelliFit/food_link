@@ -28,6 +28,12 @@ import { SupplementCatalogScreen, SupplementEditScreen, SupplementsScreen } from
 import { StandardFoodContributionScreen } from '../screens/StandardFoodContributionScreen'
 import { FoodContributionScreen } from '../screens/FoodContributionScreen'
 import { RecordSettingsScreen } from '../screens/RecordSettingsScreen'
+import { ReminderSettingsScreen } from '../screens/ReminderSettingsScreen'
+import { MealSuggestionsScreen } from '../screens/MealSuggestionsScreen'
+import { CampusDiningSettingsScreen } from '../screens/CampusDiningSettingsScreen'
+import { SleepRecordScreen } from '../screens/SleepRecordScreen'
+import * as Notifications from 'expo-notifications'
+import { reminderDestination } from '../utils/businessNotifications'
 import { PackagedFoodCorrectionScreen } from '../screens/PackagedFoodCorrectionScreen'
 import {
   AboutScreen,
@@ -64,6 +70,7 @@ import { InviteFriendsScreen } from '../screens/InviteFriendsScreen'
 import { FollowListScreen } from '../screens/FollowListScreen'
 import { ExerciseLogEditScreen } from '../screens/ExerciseLogEditScreen'
 import { CirclePostEditScreen } from '../screens/CirclePostEditScreen'
+import { CampusFoodCollectorScreen } from '../screens/CampusFoodCollectorScreen'
 import {
   CampusCanteenScreen,
   ExpiryEditScreen,
@@ -123,6 +130,35 @@ export function RootNavigator() {
   const pendingProfileUserIdRef = useRef<string | null>(null)
   const pendingStaticRouteRef = useRef<StaticDeepLinkRoute | null>(null)
   const pendingRecordIdRef = useRef<string | null>(null)
+  const pendingNotificationRef = useRef<Notifications.NotificationResponse | null>(null)
+  const handledNotificationRef = useRef<string | null>(null)
+  const flushNotificationRef = useRef<() => void>(() => undefined)
+
+  useEffect(() => {
+    let active = true
+    const handle = async (response: Notifications.NotificationResponse) => {
+      const id = response.notification.request.identifier
+      if (handledNotificationRef.current === id) return
+      if (!navigationRef.isReady()) { pendingNotificationRef.current = response; return }
+      const destination = await reminderDestination(response)
+      if (!active || !isAuthenticated || !navigationRef.isReady()) return
+      handledNotificationRef.current = id
+      pendingNotificationRef.current = null
+      if (!destination) return
+      if (destination.route === 'MealSuggestions') navigationRef.navigate('MealSuggestions', { mealType: destination.mealType })
+      else if (destination.route === 'DayRecord') navigationRef.navigate('DayRecord', { date: destination.date })
+      else navigationRef.navigate('Expiry')
+      Notifications.clearLastNotificationResponse()
+    }
+    flushNotificationRef.current = () => {
+      const pending = pendingNotificationRef.current
+      if (pending) void handle(pending).catch(() => undefined)
+    }
+    const listener = Notifications.addNotificationResponseReceivedListener((response) => { void handle(response).catch(() => undefined) })
+    const previous = Notifications.getLastNotificationResponse()
+    if (previous) void handle(previous).catch(() => undefined)
+    return () => { active = false; listener.remove() }
+  }, [isAuthenticated])
 
   useEffect(() => {
     const navigateToInvite = (code: string) => {
@@ -250,6 +286,7 @@ export function RootNavigator() {
       ref={navigationRef}
       theme={navigationTheme}
       onReady={() => {
+        flushNotificationRef.current()
         const code = pendingInviteCodeRef.current
         if (code && navigationRef.isReady()) {
           navigationRef.navigate('InviteFriends', { fi: code })
@@ -299,6 +336,10 @@ export function RootNavigator() {
         <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
         {isAuthenticated ? (
           <>
+            <Stack.Screen name="ReminderSettings" component={ReminderSettingsScreen} options={{ title: '消息提醒' }} />
+            <Stack.Screen name="CampusDiningSettings" component={CampusDiningSettingsScreen} options={{ title: '校园就餐偏好' }} />
+            <Stack.Screen name="SleepRecord" component={SleepRecordScreen} options={{ title: '睡眠记录' }} />
+            <Stack.Screen name="MealSuggestions" component={MealSuggestionsScreen} options={{ title: '餐食建议' }} />
             <Stack.Screen name="PetChat" component={PetChatScreen} options={{ title: '问问宠物' }} />
             <Stack.Screen name="Supplements" component={SupplementsScreen} options={{ title: '我的补剂柜' }} />
             <Stack.Screen name="SupplementEdit" component={SupplementEditScreen} options={({ route }) => ({ title: route.params?.itemId ? '编辑补剂' : '添加补剂' })} />
@@ -386,6 +427,7 @@ export function RootNavigator() {
             <Stack.Screen name="PackagedFoodCorrection" component={PackagedFoodCorrectionScreen} options={{ title: '包装食品纠错' }} />
             <Stack.Screen name="LocationSearch" component={LocationSearchScreen} options={{ title: '定位搜索' }} />
             <Stack.Screen name="CampusCanteen" component={CampusCanteenScreen} options={{ title: '校园食堂' }} />
+            <Stack.Screen name="CampusFoodCollector" component={CampusFoodCollectorScreen} options={{ title: '校园代理批量采集' }} />
             <Stack.Screen name="PrivacySettings" component={PrivacySettingsScreen} options={{ title: '隐私设置' }} />
             <Stack.Screen name="RecordSettings" component={RecordSettingsScreen} options={{ title: '记录设置' }} />
             <Stack.Screen name="MembershipAgreement" component={MembershipAgreementScreen} options={{ title: '会员协议' }} />

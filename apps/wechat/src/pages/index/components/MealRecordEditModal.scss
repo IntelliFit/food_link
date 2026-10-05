@@ -804,3 +804,5 @@
     background: linear-gradient(135deg, #00a870 0%, #00bc7d 100%);
   }
 }
+.edit-modal-body--recalculating { pointer-events: none; }
+.ingredient-recalculation-spinner { border-top-color: #00bc7d !important; }

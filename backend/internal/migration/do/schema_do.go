@@ -2039,6 +2039,9 @@ func (SleepRecordDO) TableName() string { return "user_sleep_records" }
 
 func AllModels() []any {
 	return []any{
+		&PushPreferencesDO{},
+		&PushDeviceDO{},
+		&PushDeliveryDO{},
 		&UserDO{},
 		&UserDailyNutritionTargetDO{},
 		&UserFeedbackDO{},

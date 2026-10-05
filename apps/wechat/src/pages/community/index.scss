@@ -1,4 +1,5 @@
 @import '../../styles/tab-page-layout.scss';
+@import '../../styles/meal-orbit-tokens.scss';
 @import './components/FeedActionSheet.scss';
 
 /* 页面根节点：高度由 JS 通过 getSystemInfoSync 设定固定像素值（避免 100vh 随键盘变化）；
@@ -1658,6 +1659,7 @@ $community-border-soft: rgb(92 184 150 / 18%);
 .feed-sub-meta-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12rpx;
 }
 
@@ -1665,7 +1667,9 @@ $community-border-soft: rgb(92 184 150 / 18%);
   font-size: 24rpx;
   color: #6b7280;
   line-height: 32rpx;
-  white-space: nowrap;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .feed-tag-exercise {
@@ -1723,6 +1727,8 @@ $community-border-soft: rgb(92 184 150 / 18%);
 }
 
 .post-time {
+  flex-shrink: 0;
+  white-space: nowrap;
   font-size: 24rpx;
   color: #888;
   line-height: 32rpx;
@@ -2826,4 +2832,35 @@ $comment-body-font-size: 28rpx;
   line-height: 1;
   font-weight: 700;
   color: #64748b;
+}
+
+.community-page {
+  .ranking-mini-tabs { min-height: 48rpx; height: auto; }
+  .ranking-mini-tab { font-size: 22rpx; line-height: 32rpx; padding-top: 8rpx; padding-bottom: 8rpx; }
+  .ranking-mini-name,
+  .ranking-mini-value { font-size: 22rpx; }
+  .ranking-week-tag { font-size: 22rpx; }
+  .feed-card-name-row .user-name { min-width: 0; overflow-wrap: break-word; font-size: 32rpx; }
+  .feed-card-name-block { gap: 8rpx; }
+}
+
+.fl-page-theme-root:not(.fl-d) .community-page {
+  background: $orbit-page;
+
+  .ranking-banner {
+    background: linear-gradient(145deg, #285c45, #153e2d);
+    box-shadow: 0 10rpx 24rpx rgb(33 84 62 / 12%);
+  }
+
+  .ranking-mini-tab { color: #d7e4d8; }
+  .ranking-mini-tab.active { color: #fff; }
+  .feed-card { background: $orbit-surface; border-bottom-color: $orbit-border; }
+  .user-name,
+  .feed-content,
+  .feed-section-title { color: $orbit-ink; }
+  .post-time,
+  .feed-tag-plain { color: $orbit-muted; }
+  .feed-publish-btn { background: $orbit-forest; }
+  .feed-filter-chip.active { background: $orbit-soft; border-color: $orbit-forest; }
+  .feed-filter-chip.active .feed-filter-chip-text { color: $orbit-forest; }
 }

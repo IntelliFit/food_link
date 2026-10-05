@@ -1322,6 +1322,7 @@ export interface DietRecommendationFoodItem {
 }
 
 export interface DietRecommendationOption {
+  requires_campus_access_confirmation?: boolean
   history_date?: string
   source_label?: string
   meal_components?: DietRecommendationOption[]
@@ -1583,6 +1584,7 @@ export interface PetChatLocation {
 }
 
 export interface PetChatEntryContext {
+  selected_source_id?: string
   source: 'home_next_meal'
   date: string
   meal_type: 'breakfast' | 'lunch' | 'dinner'
@@ -2231,6 +2233,8 @@ export interface ReportExtract {
 
 /** 健康档案中的病史/饮食/过敏等 JSON */
 export interface HealthCondition {
+  /** 用户主动确认的学生身份；只有 true 且选择了学校时才直接推荐本校食堂。 */
+  is_student?: boolean
   medical_history?: string[]
   diet_preference?: string[]
   allergies?: string[]
@@ -2305,6 +2309,8 @@ export interface HealthProfileUpdateRequest {
   dashboard_targets?: DashboardTargets
   /** 精准模式默认参考物配置，写入 health_condition.precision_reference_defaults */
   precision_reference_defaults?: PrecisionReferenceDefaults
+  /** 是否为在校学生；false 会同时清除已保存的校园就餐学校。 */
+  is_student?: boolean
   /** 宠物校园餐推荐的常用学校/校区；学校 ID 为空时清除。 */
   campus_dining_preference?: {
     school_id: string
@@ -3610,6 +3616,7 @@ export async function submitAnalyzeBatch(body: AnalyzeBatchSubmitParams): Promis
 
 /** 文字分析提交参数 */
 export interface AnalyzeTextTaskSubmitParams {
+	correction_target_index?: number
   text: string
   meal_type?: MealType
   date?: string
@@ -3803,11 +3810,15 @@ export interface AnalyzeTaskListResponse {
 
 export interface AnalyzeTaskSummaryListResponse {
   tasks: AnalyzeTaskSummary[]
+  total?: number
+  filter_applied?: boolean
   has_more?: boolean
   next_offset?: number
 }
 
 export interface AnalyzeTaskListParams {
+  date?: string
+  waiting_record?: boolean
   task_type?: string
   status?: string
   search?: string
@@ -3823,6 +3834,7 @@ function buildAnalyzeTaskListQuery(params?: AnalyzeTaskListParams, summary = fal
   if (params?.limit != null && Number.isFinite(params.limit)) q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
   if (params?.offset != null && Number.isFinite(params.offset)) q.set('offset', String(Math.max(0, Math.floor(params.offset))))
   if (summary) q.set('summary', '1')
+  if (params?.waiting_record) { q.set('waiting_record', '1'); if (params.date) q.set('date', params.date) }
   return q.toString()
 }
 
@@ -3938,9 +3950,13 @@ export async function listAnalyzeTaskSummaries(params?: AnalyzeTaskListParams): 
     tasks?: Array<AnalysisTask | AnalyzeTaskSummary>
     has_more?: boolean
     next_offset?: number
+    total?: number
+    filter_applied?: boolean
   }
   return {
     tasks: (data.tasks || []).map(normalizeAnalyzeTaskSummary),
+    total: data.total,
+    filter_applied: data.filter_applied,
     has_more: data.has_more,
     next_offset: data.next_offset,
   }
@@ -4446,6 +4462,37 @@ export async function deleteSupplementIntake(intakeId: string): Promise<void> {
   if (res.statusCode !== 200) {
     throwHttpErrorWithStatus(res.statusCode, res.data, '删除补剂记录失败')
   }
+}
+
+export async function deleteSupplement(itemId: string): Promise<void> {
+  const res = await authenticatedRequest(`/api/supplements/${encodeURIComponent(itemId)}`, {
+    method: 'DELETE', timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '移除补剂失败')
+  }
+}
+
+export type OwnCommentHistoryItem = {
+  id: string
+  content: string
+  created_at: string | null
+  parent_comment_id?: string
+  target_type: string
+  target_id: string
+  target_available: boolean
+  target_preview?: string
+}
+
+export async function communityGetOwnComments(cursor = ''): Promise<{
+  list: OwnCommentHistoryItem[]; has_more: boolean; next_cursor?: string
+}> {
+  const query = `limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+  const res = await authenticatedRequest(`/api/community/comments/mine?${query}`, { method: 'GET', timeout: 15000 })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '获取评论历史失败')
+  }
+  return unwrapResponse(res)
 }
 
 export async function getPetSummary(date?: string): Promise<PetSummary> {
@@ -8898,10 +8945,10 @@ export async function deleteUserRecipe(recipeId: string): Promise<{ message: str
 }
 
 /** 使用食谱（一键记录，可指定餐次） */
-export async function applyUserRecipe(recipeId: string, mealType?: string, entryType?: FoodRecordEntryType): Promise<{ message: string; record_id: string }> {
+export async function applyUserRecipe(recipeId: string, mealType?: string, entryType?: FoodRecordEntryType, date?: string): Promise<{ message: string; record_id: string }> {
   const response = await authenticatedRequest(`/api/recipes/${recipeId}/use`, {
     method: 'POST',
-    data: { meal_type: mealType, entry_type: entryType },
+    data: { meal_type: mealType, entry_type: entryType, date },
     timeout: 15000
   })
   if (response.statusCode !== 200) {

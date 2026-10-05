@@ -18,7 +18,7 @@ describe('credit cost disclosure', () => {
     expect(readSource('packageExtra/pages/exercise-record/index.tsx')).toContain("className='exercise-compose-cost'>消耗 1 积分")
     expect(readSource('packageExtra/pages/expiry-edit/index.tsx')).toContain('消耗 {recognitionCreditCost} 积分')
     expect(readSource('pages/stats/index.tsx')).toContain('添加 · ${customFocusCost} 积分')
-    expect(readSource('pages/stats/index.tsx')).toContain('更新 · 1 积分')
+    expect(readSource('pages/stats/index.tsx')).toMatch(/更新 · 1\s*积分/)
     expect(readSource('pages/stats/index.tsx')).toContain('更新 · ${customFocusCost} 积分')
     expect(readSource('packageExtra/pages/result/index.tsx')).toContain('重新分析 · {correctionCreditCost} 积分')
   })

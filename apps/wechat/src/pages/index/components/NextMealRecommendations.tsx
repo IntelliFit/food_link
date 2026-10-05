@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Text, View } from '@tarojs/components'
+import { Image, Swiper, SwiperItem, Text, View } from '@tarojs/components'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
-import { getAccessToken, previewMeals, type DietRecommendationOption, type DietRecommendationResult } from '../../../utils/api'
+import { getAccessToken, getFoodRecordById, getPublicFoodLibraryItem, previewMeals, type DietRecommendationOption, type DietRecommendationResult } from '../../../utils/api'
 import { currentMealLocation, rememberMealLocation } from '../../../utils/meal-location'
 import { ensureWeappPrivacyAuthorized } from '../../../utils/weapp-privacy'
+import { mealSource, mealTitle } from '../../../utils/meal-presentation'
+import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
 import './NextMealRecommendations.scss'
 
 type Props = {
@@ -19,6 +21,8 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
   const [locating, setLocating] = useState(false)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState(0)
+  const [photos, setPhotos] = useState<Record<string, string>>({})
+  const [failedPhotos, setFailedPhotos] = useState<Record<string, boolean>>({})
   const sequence = useRef(0)
   const visible = useRef(true)
   const owner = getAccessToken() || ''
@@ -53,6 +57,21 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
       if (token !== getAccessToken() || seq !== sequence.current || !visible.current) return
       setSnapshot({ owner: token, result: data })
       setSelected(0)
+      setPhotos({})
+      setFailedPhotos({})
+      // Existing source details contain real photos that the lightweight preview may omit.
+      void Promise.allSettled(data.recommendations.slice(0, 3).map(async item => {
+        if (item.image_path || !item.source_id) return
+        const record = item.source === 'food_record'
+          ? (await getFoodRecordById(item.source_id)).record
+          : item.source === 'public_food_library'
+            ? await getPublicFoodLibraryItem(item.source_id)
+            : null
+        const photo = record ? collectFoodDisplayImageUrls(record)[0] : ''
+        if (photo && seq === sequence.current && token === getAccessToken() && visible.current) {
+          setPhotos(previous => ({ ...previous, [item.source_id!]: photo }))
+        }
+      }))
     } catch {
       if (seq === sequence.current && token === getAccessToken()) {
         setSnapshot(undefined)
@@ -66,44 +85,57 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
   useEffect(() => { void load(); return () => { sequence.current += 1 } }, [load, refreshKey, owner])
   useDidShow(() => { visible.current = true; void load() })
   useDidHide(() => { visible.current = false; sequence.current += 1 })
-  const options = result?.recommendations || []
+  const options = (result?.recommendations || []).slice(0, 3)
   const option = options[selected] || options[0]
-  const area = result?.location_hint
-  const areaLabel = area ? `${area.province}${area.city}${area.district}` : ''
-  const portion = option?.items.map(item => `${item.name}${item.amount ? ` ${item.amount}` : '（份量待确认）'}`).join(' + ')
+  const selectedPhoto = option && !failedPhotos[option.source_id || ''] && (option.image_path || photos[option.source_id || ''])
 
   return (
-    <View className='next-meal-guidance'>
-      <View className='next-meal-guidance__head'>
-        <Text className='next-meal-guidance__kicker'>下一餐 · {mealName}</Text>
-        <View className='meal-choices__locate' onClick={() => !busy && void load(true)}>
-          {locating ? <View className='meal-choices__spinner' /> : <Text>{currentMealLocation(owner) ? '更新位置' : '加入附近'}</Text>}
+    <View className='meal-picks'>
+      <View className='meal-picks__head'>
+        <View className='meal-picks__heading-copy'>
+          <Text className='meal-picks__kicker'>{mealName}吃这个</Text>
+        </View>
+        <View className='meal-picks__dots'>
+          {options.map((item, index) => <View key={item.source_id || index} aria-label={`查看第${index + 1}个餐食`} className={`meal-picks__dot${selected === index ? ' is-active' : ''}`} onClick={() => setSelected(index)} />)}
+        </View>
+        <View className='meal-picks__locate' aria-label='更新位置，查找附近餐食' onClick={() => !busy && void load(true)}>
+          {locating ? <View className='meal-picks__spinner' /> : <Text className='iconfont icon-dizhi' />}
         </View>
       </View>
       {busy ? (
-        <View className='next-meal-guidance__skeleton' aria-label='正在检索真实餐食'>
-          <View className='next-meal-guidance__skeleton-long' /><View className='next-meal-guidance__skeleton-medium' />
+        <View className='meal-picks__skeleton' aria-label='正在检索真实餐食'>
+          <View /><View />
         </View>
       ) : option ? (
         <>
-          <View className='meal-choices__tabs'>
-            {options.map((item, index) => <View key={`${item.source}:${item.source_id}`} className={`meal-choices__tab${index === selected ? ' is-active' : ''}`} onClick={() => setSelected(index)}><Text>{index + 1} · {item.decision_label || '餐食备选'}</Text></View>)}
-          </View>
-          <View onClick={() => onAdjust(option)}>
-            <Text className='next-meal-guidance__title'>{portion || option.title}</Text>
-            <Text className='next-meal-guidance__detail'>{option.source_label}{option.distance_km !== undefined ? ` · 直线约 ${option.distance_km.toFixed(1)}km` : ''}</Text>
-            <Text className='meal-choices__reason'>{option.reason}</Text>
-          </View>
+          <Swiper className={`meal-picks__swiper${selectedPhoto ? '' : ' meal-picks__swiper--no-photo'}`} current={selected} onChange={event => setSelected(event.detail.current)} duration={260}>
+            {options.map(item => {
+              const photo = failedPhotos[item.source_id || ''] ? '' : item.image_path || photos[item.source_id || '']
+              return (
+              <SwiperItem key={`${item.source}:${item.source_id}`}>
+                <View className={`meal-picks__slide${photo ? '' : ' meal-picks__slide--no-photo'}`}>
+                  {photo ? <Image className='meal-picks__image' src={photo} mode='aspectFill' onError={() => setFailedPhotos(previous => ({ ...previous, [item.source_id || '']: true }))} /> : null}
+                  <View className='meal-picks__content'>
+                    <Text className='meal-picks__title'>{mealTitle(item)}</Text>
+                    <View className='meal-picks__source-row'>
+                      <Text className='iconfont icon-dizhi meal-picks__source-icon' />
+                      <Text className='meal-picks__source'>{mealSource(item).replace(/ · 直线 [\d.]+ km$/, '')}</Text>
+                    </View>
+                    {item.distance_km != null ? <View className='meal-picks__fit'><Text className='iconfont icon-dizhi' /><Text>直线 {item.distance_km.toFixed(1)} km</Text></View> : null}
+                    <View className='meal-picks__cta' onClick={() => onAdjust(item)}>
+                      <Text>聊聊这餐</Text>
+                      <Text className='iconfont icon-right-arrow' />
+                    </View>
+                  </View>
+                </View>
+              </SwiperItem>
+            )})}
+          </Swiper>
         </>
-      ) : <Text className='next-meal-guidance__detail' onClick={() => void load()}>{error || '暂无满足条件、份量可核对的完整一餐，点此重试或补充需求'}</Text>}
+      ) : <View className='meal-picks__empty'><Text onClick={() => void load()}>{error || '暂时没找到合适的餐食'}</Text><View className='meal-picks__cta' onClick={() => onAdjust()}><Text>聊聊想吃什么</Text><Text className='iconfont icon-right-arrow' /></View></View>}
       {!busy && (
         <>
-          {!!error && !!option && <Text className='meal-choices__note'>{error}</Text>}
-          {!currentMealLocation(owner) && !!areaLabel && <Text className='meal-choices__note'>最近记录地区：{areaLabel} · 非实时位置</Text>}
-          <View className='next-meal-guidance__footer' onClick={() => onAdjust(option)}>
-            <Text className='next-meal-guidance__cost'>{options.length > 1 ? `${options.length} 个选择 · 选一份就好` : '真实数据参考 · 免费'}</Text>
-            <Text className='next-meal-guidance__action'>补充需求 / 调整 ›</Text>
-          </View>
+          {!!error && !!option && <Text className='meal-picks__error'>{error}</Text>}
         </>
       )}
     </View>

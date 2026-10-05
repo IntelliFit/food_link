@@ -847,6 +847,8 @@ export interface HealthReportExtract {
 }
 
 export interface HealthCondition {
+  is_student?: boolean
+  campus_dining_preference?: { school_id: string; school_name?: string; campus_id?: string; campus_name?: string }
   medical_history?: string[]
   diet_preference?: string[]
   allergies?: string[]
@@ -1620,6 +1622,10 @@ export interface PublicFoodItem {
   author?: PublicFoodAuthor
   recommend_reason?: string
   is_campus_food?: boolean
+  school_id?: string
+  campus_id?: string
+  canteen_id?: string
+  window_id?: string | null
   school_name?: string
   campus_name?: string
   canteen_name?: string
@@ -1636,9 +1642,106 @@ export interface PublicFoodItem {
   school_logo_url?: string
   analysis_status?: string
   analysis_error?: string
+  content_version?: number
+  nutrition_source_version?: number
+  nutrition_status?: 'pending' | 'current' | 'stale' | 'failed'
+  availability_status?: 'available' | 'temporarily_unavailable' | 'discontinued' | 'unknown'
+  last_verified_at?: string | null
   published_at?: string
   created_at?: string
   updated_at?: string
+}
+
+export type ReminderMealType = 'breakfast' | 'lunch' | 'dinner'
+
+export type SleepQuality = '' | 'good' | 'fair' | 'poor'
+export interface SleepRecord {
+  id: string
+  date: string
+  bedtime: string
+  wake_time: string
+  quality: SleepQuality
+  note: string
+  source: string
+  duration_minutes: number
+}
+export type SleepRecordInput = Pick<SleepRecord, 'bedtime' | 'wake_time' | 'quality' | 'note'>
+
+export interface ReminderPreferences {
+  enabled: boolean
+  meal_enabled: boolean
+  log_enabled: boolean
+  expiry_enabled: boolean
+  breakfast_time: string
+  lunch_time: string
+  dinner_time: string
+  log_time: string
+  expiry_time: string
+  timezone: string
+  quiet_start: string
+  quiet_end: string
+}
+
+export interface ReminderSettings {
+  preferences: ReminderPreferences
+  push_available: boolean
+}
+
+/** Request-scoped coordinates; never persisted as a health-profile location. */
+export interface MealPreviewLocation {
+  latitude: number
+  longitude: number
+  accuracy_m: number
+  captured_at: number
+  coordinate_type: 'gcj02' | 'wgs84'
+}
+
+export interface CampusFoodRevision {
+  id: string
+  catalog_item_id: string
+  base_version: number
+  result_version: number
+  actor_type: 'user' | 'admin' | 'system'
+  action_type: 'create' | 'update' | 'rollback' | 'merge'
+  before_snapshot: Record<string, unknown>
+  proposed_patch: Record<string, unknown>
+  after_snapshot: Record<string, unknown>
+  changed_fields: string[]
+  evidence_image_paths: string[]
+  reason?: string
+  reverts_revision_id?: string | null
+  created_at?: string
+}
+
+export interface CampusFoodCorrectionPatch {
+  name?: string
+  description?: string
+  school_id?: string
+  campus_id?: string
+  canteen_id?: string
+  window_id?: string | null
+  floor?: string
+  window_name?: string
+  price_type?: string
+  price?: number | null
+  price_min?: number | null
+  price_max?: number | null
+  price_unit?: string
+  price_collected_at?: string | null
+  portion_description?: string
+  image_paths?: string[]
+  append_image_paths?: string[]
+  availability_status?: 'available' | 'temporarily_unavailable' | 'discontinued' | 'unknown'
+  meal_periods?: string[]
+  available_weekdays?: string[]
+  availability_note?: string
+  service_mode?: string
+}
+
+export interface CampusFoodCorrectionResult {
+  item: PublicFoodItem
+  revision: CampusFoodRevision
+  reanalysis_queued: boolean
 }
 
 export interface PackagedFoodItem {

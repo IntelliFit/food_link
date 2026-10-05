@@ -3,11 +3,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"math"
 	"strings"
 
+	"food_link/backend/internal/common/dateutil"
 	commonerrors "food_link/backend/internal/common/errors"
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	"food_link/backend/internal/recipe/domain"
 	"food_link/backend/internal/recipe/repo"
 	"food_link/backend/pkg/logger"
@@ -21,6 +24,11 @@ type RecipeService struct {
 	storage                         *storage.Client
 	blockChecker                    BlockChecker
 	favoriteRecipeVisibilityChecker FavoriteRecipeVisibilityChecker
+	contentSecurity                 *contentsecurity.Service
+}
+
+func (s *RecipeService) ConfigureContentSecurity(checker *contentsecurity.Service) {
+	s.contentSecurity = checker
 }
 
 func NewRecipeService(repo *repo.RecipeRepo, storageClient ...*storage.Client) *RecipeService {
@@ -115,6 +123,11 @@ func (s *RecipeService) Create(ctx context.Context, userID string, input CreateI
 		MealType:         normalizeMealPtr(input.MealType),
 		IsFavorite:       input.IsFavorite,
 		SourceTaskID:     input.SourceTaskID,
+	}
+	if s.contentSecurity != nil {
+		if err := s.contentSecurity.CheckValue(ctx, userID, 4, recipe, s.storage); err != nil {
+			return "", err
+		}
 	}
 	if err := s.repo.Create(ctx, recipe); err != nil {
 		if input.SourceTaskID != nil && repo.IsUserSourceTaskUniqueViolation(err) {
@@ -244,6 +257,18 @@ func (s *RecipeService) Update(ctx context.Context, userID, recipeID string, inp
 	if len(updates) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "没有要更新的字段", HTTPStatus: 400}
 	}
+	if s.contentSecurity != nil {
+		current, err := s.repo.Get(ctx, recipeID, userID)
+		if err != nil {
+			return nil, err
+		}
+		if current == nil {
+			return nil, commonerrors.ErrNotFound
+		}
+		if err := s.contentSecurity.CheckUpdate(ctx, userID, 4, current, updates, s.storage); err != nil {
+			return nil, err
+		}
+	}
 	recipe, err := s.repo.Update(ctx, recipeID, userID, updates)
 	if err != nil {
 		return nil, err
@@ -264,9 +289,28 @@ func (s *RecipeService) Delete(ctx context.Context, userID, recipeID string) err
 	return nil
 }
 
-func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealType *string, entryType *string) (string, error) {
+func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealType *string, entryType *string, dates ...string) (string, error) {
+	date := ""
+	if len(dates) > 0 {
+		date = dates[0]
+	}
+	recordedOn, err := dateutil.ResolveRecordedOnDate(date, "date")
+	if err != nil {
+		logger.Warn(ctx, "收藏补录日期无效", slog.String("user_id", userID), slog.String("recipe_id", recipeID))
+		return "", err
+	}
+	recordTime, err := dateutil.BuildRecordTime(recordedOn)
+	if err != nil {
+		return "", err
+	}
 	recipe, err := s.Get(ctx, userID, recipeID)
 	if err != nil {
+		var businessErr *commonerrors.AppError
+		if errors.As(err, &businessErr) {
+			logger.Warn(ctx, "收藏餐食不可记录", slog.String("user_id", userID), slog.String("recipe_id", recipeID))
+		} else {
+			logger.Error(ctx, "读取待记录收藏失败", err, slog.String("user_id", userID), slog.String("recipe_id", recipeID))
+		}
 		return "", err
 	}
 	chosenMeal := "afternoon_snack"
@@ -297,11 +341,21 @@ func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealTy
 		TotalWeightGrams: int(recipe.TotalWeightGrams),
 		EntryType:        recordEntryType,
 		RecipeID:         &recipe.ID,
+		RecordTime:       &recordTime,
+	}
+	if s.contentSecurity != nil {
+		if err := s.contentSecurity.CheckValue(ctx, userID, 4, record, s.storage); err != nil {
+			return "", err
+		}
 	}
 	if err := s.repo.InsertFoodRecord(ctx, record); err != nil {
+		logger.Error(ctx, "保存收藏饮食记录失败", err, slog.String("user_id", userID), slog.String("recipe_id", recipeID), slog.String("date", recordedOn))
 		return "", err
 	}
-	_ = s.repo.MarkUsed(ctx, recipeID, userID, recipe.UseCount)
+	if err := s.repo.MarkUsed(ctx, recipeID, userID, recipe.UseCount); err != nil {
+		logger.Error(ctx, "更新收藏使用次数失败", err, slog.String("user_id", userID), slog.String("recipe_id", recipeID))
+	}
+	logger.Info(ctx, "收藏餐食已保存到目标日期", slog.String("user_id", userID), slog.String("recipe_id", recipeID), slog.String("record_id", record.ID), slog.String("date", recordedOn))
 	return record.ID, nil
 }
 

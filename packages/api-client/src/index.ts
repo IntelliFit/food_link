@@ -10,6 +10,9 @@ import type {
   CampusDietAgentProgress,
   CampusDietAgentResult,
   CampusFoodDetail,
+  CampusFoodCorrectionPatch,
+  CampusFoodCorrectionResult,
+  CampusFoodRevision,
   CheckinLeaderboardItem,
   FoodNutrientLeaderboardResult,
   HealthLeaderboardResult,
@@ -23,6 +26,12 @@ import type {
   ConversationSummary,
   ContinuePrecisionSessionParams,
   DietRecommendationResult,
+  ReminderMealType,
+  ReminderPreferences,
+  ReminderSettings,
+  MealPreviewLocation,
+  SleepRecord,
+  SleepRecordInput,
   DietGoal,
   ExecutionMode,
   ActivityTiming,
@@ -569,6 +578,7 @@ export interface HealthProfileInput {
   routine_type?: string
   routine_sleep_hour?: number
   routine_wake_hour?: number
+  is_student?: boolean
   dashboard_targets?: DashboardTargetsInput
   report_extract?: HealthReportExtract
   report_image_url?: string
@@ -701,13 +711,74 @@ export interface PublicFoodListParams {
   windowId?: string
   minCalories?: number
   maxCalories?: number
+  hasLocation?: boolean
 }
 
 export type DiningLocationType = 'university' | 'company' | 'community'
 export interface DiningLocationItem { id: string; name: string; location_type: DiningLocationType; province?: string; city?: string }
 export interface DiningLocationSiteItem { id: string; school_id: string; name: string; address?: string; campus_type?: string }
+export interface CampusCollectorApplication {
+  id: string
+  user_id: string
+  school_id: string
+  campus_id?: string | null
+  canteen_id?: string | null
+  applicant_note?: string
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn'
+  review_note?: string
+  created_at?: string
+}
+export interface CampusCollectorScope {
+  id: string
+  school_id: string
+  school_name?: string
+  campus_id?: string | null
+  campus_name?: string
+  canteen_id?: string | null
+  canteen_name?: string
+  status: 'active' | 'revoked' | 'expired'
+  expires_at?: string | null
+}
+export interface CampusCollectorProfile {
+  applications: CampusCollectorApplication[]
+  active_scopes: CampusCollectorScope[]
+  can_batch: boolean
+}
+export interface CampusCollectorBatchInput {
+  client_batch_key: string
+  batch_name?: string
+  venue_type: 'university'
+  school_id: string
+  campus_id: string
+  canteen_id: string
+  default_window_id?: string
+  organization_name: string
+  area_name?: string
+  canteen_name: string
+  default_floor?: string
+  default_window_name?: string
+  default_window_layout?: string
+  default_service_mode?: string
+  captured_at?: string
+  collector_name?: string
+  source_note?: string
+  entries: Array<{
+    entry_type?: string
+    name: string
+    image_paths: string[]
+    floor?: string
+    window_name?: string
+    price_type?: string
+    price?: number
+    price_min?: number
+    price_max?: number
+    price_unit?: string
+    portion_description?: string
+    notes?: string
+  }>
+}
 export interface DiningCanteenItem { id: string; school_id: string; campus_id?: string | null; campus_name?: string; name: string; building_or_floor?: string }
-export interface DiningFloorItem { name: string; sort_order: number }
+export interface DiningFloorItem { name: string; sort_order: number; is_default?: boolean }
 export interface DiningWindowItem { id: string; canteen_id: string; name: string; floor?: string }
 
 export interface CommunityNotificationListParams {
@@ -1204,6 +1275,29 @@ export class FoodLinkApiClient {
     if (!imageUrl) {
       throw new Error('服务器未返回图片地址')
     }
+    return { imageUrl }
+  }
+
+  async uploadCampusFoodImageFile(input: {
+    fileUri: string
+    fileName?: string
+    mimeType?: string
+  }): Promise<{ imageUrl: string }> {
+    const token = await this.adapters.tokenStorage.getAccessToken()
+    if (!token) throw new Error('请先登录')
+    const res = await this.adapters.uploadFile({
+      url: `${this.baseUrl}/api/campus-food-collection/images`,
+      fileUri: input.fileUri,
+      fieldName: 'file',
+      fileName: input.fileName || 'campus-food.jpg',
+      mimeType: input.mimeType || 'image/jpeg',
+      timeoutMs: 30000,
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    this.assertOk(res, '上传菜品照片失败')
+    const data = this.unwrapResponseData<UploadAnalyzeImageResponse>(res.data)
+    const imageUrl = String(data.imageUrl || data.image_url || data.url || '').trim()
+    if (!imageUrl) throw new Error('服务器未返回图片地址')
     return { imageUrl }
   }
 
@@ -2443,6 +2537,79 @@ export class FoodLinkApiClient {
     return this.authenticatedRequest<DiningWindowItem[]>(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows${query}`, { method: 'GET', timeoutMs: 10000 })
   }
 
+  /** Free library/history retrieval. Does not generate paid AI recommendations. */
+  async previewMeals(input: { meal_type: ReminderMealType; location?: MealPreviewLocation }): Promise<DietRecommendationResult> {
+    return this.authenticatedRequest<DietRecommendationResult>('/api/diet/recommendations/preview', {
+      method: 'POST', body: input, timeoutMs: 15000,
+    })
+  }
+
+  async getReminderSettings(): Promise<ReminderSettings> {
+    return this.authenticatedRequest<ReminderSettings>('/api/push/preferences', { timeoutMs: 10000 })
+  }
+
+  async getSleepRecord(date: string): Promise<SleepRecord | null> {
+    return this.authenticatedRequest<SleepRecord | null>(`/api/sleep-records/${encodeURIComponent(date)}`, { timeoutMs: 10000 })
+  }
+
+  async saveSleepRecord(date: string, input: SleepRecordInput): Promise<SleepRecord> {
+    return this.authenticatedRequest<SleepRecord>(`/api/sleep-records/${encodeURIComponent(date)}`, { method: 'PUT', body: input, timeoutMs: 10000 })
+  }
+
+  async deleteSleepRecord(date: string): Promise<{ deleted: boolean }> {
+    return this.authenticatedRequest<{ deleted: boolean }>(`/api/sleep-records/${encodeURIComponent(date)}`, { method: 'DELETE', timeoutMs: 10000 })
+  }
+
+  async saveReminderSettings(preferences: ReminderPreferences): Promise<ReminderSettings> {
+    return this.authenticatedRequest<ReminderSettings>('/api/push/preferences', {
+      method: 'PUT', body: preferences, timeoutMs: 10000,
+    })
+  }
+
+  async registerPushDevice(installationId: string, input: { token: string; project_id: string; platform: 'android' | 'ios' }): Promise<{ registered: boolean }> {
+    return this.authenticatedRequest<{ registered: boolean }>(`/api/push/devices/${encodeURIComponent(installationId)}`, {
+      method: 'PUT', body: input, timeoutMs: 15000,
+    })
+  }
+
+  async unregisterPushDevice(installationId: string): Promise<{ registered: boolean }> {
+    return this.authenticatedRequest<{ registered: boolean }>(`/api/push/devices/${encodeURIComponent(installationId)}`, {
+      method: 'DELETE', timeoutMs: 10000,
+    })
+  }
+
+  async getCampusCollectorProfile(): Promise<CampusCollectorProfile> {
+    return this.authenticatedRequest<CampusCollectorProfile>('/api/campus-food-collectors/profile', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async applyCampusCollector(input: {
+    school_id: string
+    campus_id?: string
+    canteen_id?: string
+    applicant_note?: string
+  }): Promise<{ application: CampusCollectorApplication }> {
+    return this.authenticatedRequest<{ application: CampusCollectorApplication }>('/api/campus-food-collectors/applications', {
+      method: 'POST',
+      body: input,
+      timeoutMs: 10000,
+    })
+  }
+
+  async createCampusCollectorBatch(input: CampusCollectorBatchInput): Promise<{
+    batch: { id: string }
+    items: Array<{ id: string; version: number; nutrition_status: string }>
+    idempotent: boolean
+  }> {
+    return this.authenticatedRequest('/api/campus-food-collection/batches', {
+      method: 'POST',
+      body: input,
+      timeoutMs: 30000,
+    })
+  }
+
   async listMyPublicFoods(): Promise<{ list: PublicFoodItem[] }> {
     return this.authenticatedRequest<{ list: PublicFoodItem[] }>('/api/public-food-library/mine', {
       method: 'GET',
@@ -2469,6 +2636,31 @@ export class FoodLinkApiClient {
       method: 'GET',
       timeoutMs: 10000,
     })
+  }
+
+  async getCampusFoodRevisions(itemId: string, page = 1, limit = 20): Promise<{ items: CampusFoodRevision[]; page: number; limit: number; total: number }> {
+    const id = itemId.trim()
+    if (!id) throw new Error('缺少校园菜品 ID')
+    const query = new URLSearchParams({ page: String(page), limit: String(limit) })
+    return this.authenticatedRequest<{ items: CampusFoodRevision[]; page: number; limit: number; total: number }>(
+      `/api/public-food-library/${encodeURIComponent(id)}/revisions?${query.toString()}`,
+      { method: 'GET', timeoutMs: 10000 },
+    )
+  }
+
+  async correctCampusFood(itemId: string, input: {
+    base_version: number
+    patch: CampusFoodCorrectionPatch
+    evidence_image_paths?: string[]
+    reason?: string
+  }): Promise<CampusFoodCorrectionResult> {
+    const id = itemId.trim()
+    if (!id) throw new Error('缺少校园菜品 ID')
+    if (!input.base_version) throw new Error('缺少校园菜品版本，请刷新后重试')
+    return this.authenticatedRequest<CampusFoodCorrectionResult>(
+      `/api/public-food-library/${encodeURIComponent(id)}/corrections`,
+      { method: 'POST', body: input, timeoutMs: 15000 },
+    )
   }
 
   async contributeCampusFoodImages(itemId: string, imagePaths: string[]): Promise<{ image_paths: string[]; accepted: boolean }> {
@@ -3421,6 +3613,7 @@ function buildPublicFoodQuery(params?: PublicFoodListParams): string {
   if (params.windowId?.trim()) q.set('window_id', params.windowId.trim())
   if (params.minCalories != null) q.set('min_calories', String(normalizeNumber(params.minCalories)))
   if (params.maxCalories != null) q.set('max_calories', String(normalizeNumber(params.maxCalories)))
+  if (params.hasLocation != null) q.set('has_location', String(params.hasLocation))
   return q.toString()
 }
 

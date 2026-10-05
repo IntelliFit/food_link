@@ -1,5 +1,4 @@
 const APP_COLOR_SCHEME_KEY = 'fl_app_color_scheme'
-const HOME_DISPLAY_MODE_KEY = 'home_display_mode_v1'
 const ANALYZE_TASK_REMINDER_STORAGE_KEY = 'analyze_task_reminder_state_v1'
 const ANALYZE_TASK_REMINDER_OPEN_KEY = 'analyze_task_reminder_open_task_v1'
 const ANALYZE_TASK_REMINDER_OPEN_EVENT = 'openAnalyzeTaskReminder'
@@ -60,8 +59,8 @@ Component({
     recordOpening: false,
     /** 与 React 端 `fl_app_color_scheme` 同步，供深色底栏 */
     colorScheme: 'light',
-    /** 养生模式使用全局墨绿导航配色，跨 Tab 保持直到切回均衡模式 */
-    wellnessActive: false,
+    /** 首页保留墨绿导航配色，其他 Tab 沿用正常浅色/深色主题。 */
+    homeActive: true,
     profileTabBadgeCount: 0,
     analyzeReminderKind: 'idle',
     analyzeReminderCount: 0,
@@ -124,7 +123,6 @@ Component({
       this.updateSelected()
       this.updateHidden()
       this.updateColorScheme()
-      this.updateHomeMode()
       this.updateWaitingBadge()
     },
 
@@ -193,6 +191,8 @@ Component({
         if (pages.length > 0) {
           const currentPage = pages[pages.length - 1]
           const currentPath = '/' + currentPage.route
+          const homeActive = currentPath === '/pages/index/index'
+          if (homeActive !== this.data.homeActive) this.setData({ homeActive })
           
           const index = this.data.tabList.findIndex(item => item.pagePath === currentPath)
           if (index !== -1 && index !== this.data.selectedIndex) {
@@ -211,19 +211,6 @@ Component({
         }
       } catch (e) {
         // ignore
-      }
-    },
-
-    updateHomeMode() {
-      try {
-        const next = wx.getStorageSync(HOME_DISPLAY_MODE_KEY) === 'wellness'
-        if (next !== this.data.wellnessActive) {
-          this.setData({ wellnessActive: next })
-        }
-      } catch (e) {
-        if (this.data.wellnessActive) {
-          this.setData({ wellnessActive: false })
-        }
       }
     },
 

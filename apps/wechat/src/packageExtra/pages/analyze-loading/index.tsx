@@ -15,7 +15,7 @@ import {
 } from '../../../utils/api'
 import { IconExercise } from '../../../components/iconfont'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
-import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { getStoredRecordTargetDate, persistRecordTargetDate, getTaskRecordTargetDate } from '../../../utils/record-date'
 import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import {
@@ -1608,7 +1608,7 @@ function AnalyzeLoadingPage() {
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzePendingCorrectionItems')
           const payload = task.payload || {}
-          const targetDate = persistRecordTargetDate(String((payload.recorded_on as string) || getStoredRecordTargetDate()))
+          const targetDate = getTaskRecordTargetDate(task)
           const settledMode = taskMode || executionMode
           const settledAnalysisEngine = normalizeAnalysisEngine(
             result.analysis_engine || (payload as Record<string, unknown>).analysis_engine,

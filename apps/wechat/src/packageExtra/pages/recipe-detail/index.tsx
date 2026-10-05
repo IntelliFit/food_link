@@ -1,5 +1,5 @@
 import { View, Text, Image, ScrollView, Button } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
 import {
@@ -14,7 +14,9 @@ import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import {
   refreshHomeDashboardLocalSnapshotFromCloud
 } from '../../../utils/home-dashboard-local-cache'
-import { getStoredRecordTargetDate } from '../../../utils/record-date'
+import { getTodayRecordDateKey, getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import RecordDateField from '../../../components/RecordDateField'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 
 import './index.scss'
@@ -32,11 +34,13 @@ const MEAL_NAMES: Record<string, string> = {
 function RecipeDetailPage() {
   const router = useRouter()
   const recipeId = String(router.params?.id || '').trim()
+  const [recordDate, setRecordDate] = useRecordDate(String(router.params?.date || getTodayRecordDateKey()))
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
 
   const [recipe, setRecipe] = useState<UserRecipe | null>(null)
   const [loading, setLoading] = useState(false)
   const [using, setUsing] = useState(false)
+  const useLock = useRef(false)
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
@@ -62,21 +66,23 @@ function RecipeDetailPage() {
   }
 
   const handleUse = async () => {
-    if (!recipe) return
+    if (!recipe || useLock.current || !requireAllowedRecordDate(recordDate)) return
+    useLock.current = true
+    const targetDate = recordDate
     setUsing(true)
     try {
       const mealType = recipe.meal_type || 'afternoon_snack'
-      await applyUserRecipe(recipe.id, mealType, 'favorite_recipe')
-      const targetDate = getStoredRecordTargetDate()
+      await applyUserRecipe(recipe.id, mealType, 'favorite_recipe', targetDate)
       try {
         await refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
       } catch (_) {}
       Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
-      Taro.showToast({ title: '已记录', icon: 'success' })
+      Taro.showToast({ title: `已记录到${getRecordDateLabel(targetDate)}`, icon: 'success' })
       returnHomeAfterFoodRecord()
     } catch (e) {
       await showUnifiedApiError(e, '记录失败')
     } finally {
+      useLock.current = false
       setUsing(false)
     }
   }
@@ -133,6 +139,7 @@ function RecipeDetailPage() {
       <ScrollView className='recipe-detail-scroll' scrollY>
         {/* 顶部：名称 + 标签 */}
         <View className='recipe-detail-header'>
+          <RecordDateField date={recordDate} onChange={setRecordDate} disabled={using} />
           <View className='recipe-detail-title-row'>
             <Text className='recipe-detail-name'>{recipe.recipe_name || '未命名食谱'}</Text>
             <View className='recipe-detail-badge'>
@@ -227,7 +234,7 @@ function RecipeDetailPage() {
             loading={using}
             onClick={handleUse}
           >
-            <Text className='recipe-detail-primary-btn-text'>{using ? '记录中...' : '一键记录'}</Text>
+            {using ? <View className='recipe-detail-spinner' /> : <Text className='recipe-detail-primary-btn-text'>一键记录</Text>}
           </Button>
         )}
       </View>

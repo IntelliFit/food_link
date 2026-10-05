@@ -389,7 +389,7 @@ func (r *TaskRepo) ListTasksByUserPage(ctx context.Context, userID, taskType, st
 // ListTaskHistorySummaryRows returns only the scalar fields needed to build an
 // analysis-history page. JSONB operators extract small values in PostgreSQL, so
 // payload and result are not transferred to or decoded by the Go process.
-func (r *TaskRepo) ListTaskHistorySummaryRows(ctx context.Context, userID, status, search string, limit, offset int) ([]TaskHistorySummaryRow, error) {
+func (r *TaskRepo) ListTaskHistorySummaryRows(ctx context.Context, userID, status, search string, limit, offset int, waitingDates ...string) ([]TaskHistorySummaryRow, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -409,6 +409,20 @@ func (r *TaskRepo) ListTaskHistorySummaryRows(ctx context.Context, userID, statu
 	}
 	if strings.TrimSpace(search) != "" {
 		q = q.Where("search_text ILIKE ?", "%"+strings.TrimSpace(search)+"%")
+	}
+	if len(waitingDates) > 0 && waitingDates[0] != "" {
+		q = q.Where("status = ? AND is_violated IS NOT TRUE", "done").
+			Where("COALESCE(NULLIF(BTRIM(payload->>'date'), ''), NULLIF(BTRIM(payload->>'recorded_on'), ''), NULLIF(BTRIM(payload->>'recordedOn'), ''), '') = ?", waitingDates[0]).
+			Where("COALESCE(payload->>'correction_root_task_id', '') = '' AND COALESCE(payload->>'correction_source_task_id', '') = ''").
+			Where("LOWER(COALESCE(payload->>'expiry_recognition', '')) NOT IN ('true', '1') AND LOWER(COALESCE(payload->>'exercise', '')) NOT IN ('true', '1')").
+			Where("COALESCE(result->>'redirectTaskId', result->>'redirect_task_id', '') = ''").
+			Where(`(CASE WHEN jsonb_typeof(result->'items') = 'array' THEN jsonb_array_length(result->'items') ELSE 0 END > 0
+				OR LOWER(COALESCE(result->>'userActionRequired', result->>'user_action_required', 'false')) IN ('true', '1'))`).
+			Where(`NOT EXISTS (SELECT 1 FROM user_food_records saved
+				JOIN analysis_tasks saved_task ON saved_task.id = saved.source_task_id
+				WHERE saved.user_id = ? AND (saved.source_task_id = analysis_tasks.id
+				OR saved_task.payload->>'correction_root_task_id' = analysis_tasks.id::text
+				OR saved_task.payload->>'correction_source_task_id' = analysis_tasks.id::text))`, userID)
 	}
 
 	const projection = `
@@ -433,7 +447,7 @@ func (r *TaskRepo) ListTaskHistorySummaryRows(ctx context.Context, userID, statu
 		COALESCE(payload->>'execution_mode', payload->>'executionMode', '') AS execution_mode,
 		COALESCE(payload->>'source_type', payload->>'sourceType', '') AS source_type,
 		COALESCE(payload->>'meal_type', payload->>'mealType', '') AS meal_type,
-		COALESCE(payload->>'date', payload->>'recorded_on', payload->>'recordedOn', '') AS recorded_on,
+		COALESCE(NULLIF(BTRIM(payload->>'date'), ''), NULLIF(BTRIM(payload->>'recorded_on'), ''), NULLIF(BTRIM(payload->>'recordedOn'), ''), '') AS recorded_on,
 		result IS NOT NULL AND result <> 'null'::jsonb AS has_result,
 		COALESCE(result->>'precisionStatus', result->>'precision_status', '') AS precision_status,
 		LOWER(COALESCE(result->>'userActionRequired', result->>'user_action_required', 'false')) IN ('true', '1') AS user_action_required,

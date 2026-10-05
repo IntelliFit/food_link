@@ -117,6 +117,11 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	// A dense menu from one nearby shop must not occupy the entire retrieval
+	// window. Interleave each merchant's nearest entries before paging.
+	if f.AllowUnknownNutrition && !f.CampusOnly {
+		q = r.db.WithContext(ctx).Table("(?) diversified", q.Select("nearby.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(merchant_name, ''), NULLIF(canteen_name, ''), school_id::text, id::text) ORDER BY distance_squared ASC, id ASC) AS merchant_rank")).Order("merchant_rank ASC")
+	}
 	var rows []struct {
 		Row             dietRecommendationRow `gorm:"embedded"`
 		DistanceSquared float64

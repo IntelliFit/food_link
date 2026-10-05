@@ -18,6 +18,9 @@
 .supplement-card, .supplement-history-card { padding: 24rpx; border-radius: 26rpx; background: #fff; box-shadow: 0 8rpx 24rpx rgb(31 41 55 / 5%); }
 .supplement-card { display: flex; align-items: center; gap: 20rpx; }
 .supplement-card-main { display: flex; align-items: center; min-width: 0; flex: 1; }
+.supplement-card-actions { display: flex; flex-direction: column; align-items: center; gap: 12rpx; flex-shrink: 0; }
+.supplement-delete-spinner { width: 22rpx; height: 22rpx; border: 3rpx solid rgb(189 90 90 / 25%); border-top-color: #bd5a5a; border-radius: 50%; animation: supplement-delete-spin .8s linear infinite; }
+@keyframes supplement-delete-spin { to { transform: rotate(360deg); } }
 .supplement-bottle { display: flex; align-items: center; justify-content: center; width: 70rpx; height: 70rpx; margin-right: 18rpx; border-radius: 22rpx; color: #1b9c70; background: #edf8f4; }
 .supplement-bottle .iconfont { font-size: 34rpx; }
 .supplement-copy { min-width: 0; flex: 1; }

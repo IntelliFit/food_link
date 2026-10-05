@@ -1,0 +1,16 @@
+.comment-history-page { height: 100vh; background: #f5f7f6; color: #20392f; }
+.comment-history-scroll { height: 100%; box-sizing: border-box; padding: 32rpx 28rpx; }
+.comment-history-heading { display: block; font-size: 40rpx; font-weight: 600; }
+.comment-history-caption { display: block; margin: 12rpx 0 28rpx; color: #728079; font-size: 24rpx; }
+.comment-history-card { margin-bottom: 20rpx; padding: 28rpx; border-radius: 20rpx; background: #fff; }
+.comment-history-meta { display: flex; justify-content: space-between; gap: 20rpx; color: #728079; font-size: 23rpx; }
+.comment-history-content { display: block; margin: 20rpx 0; font-size: 29rpx; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment-history-target { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; border-top: 1rpx solid #e8edea; padding-top: 20rpx; color: #728079; font-size: 24rpx; }
+.comment-history-arrow { flex-shrink: 0; color: #398269; font-size: 36rpx; }
+.comment-history-state { padding: 32rpx; text-align: center; color: #728079; font-size: 26rpx; }
+.comment-history-spinner { width: 36rpx; height: 36rpx; margin: 32rpx auto; border: 4rpx solid #d5e6df; border-top-color: #398269; border-radius: 50%; animation: comment-history-spin .8s linear infinite; }
+@keyframes comment-history-spin { to { transform: rotate(360deg); } }
+.fl-d .comment-history-page { background: #13221c; color: #e1eee7; }
+.fl-d .comment-history-card { background: #1c2d25; }
+.fl-d .comment-history-meta, .fl-d .comment-history-caption, .fl-d .comment-history-target, .fl-d .comment-history-state { color: #a2b6aa; }
+.fl-d .comment-history-target { border-color: #34473d; }

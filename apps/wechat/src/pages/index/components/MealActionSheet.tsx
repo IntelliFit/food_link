@@ -34,7 +34,7 @@ const ACTION_ITEMS = [
   },
   {
     id: 'share',
-    label: '分享到公共食物库',
+    label: '分享到美食图谱',
     iconClass: 'icon-shiwu',
     color: '#f97316',
     iconModifier: 'action-sheet-icon--library',

@@ -204,7 +204,12 @@ function PrecisionConfirmPage() {
         <View className={`precision-confirm-images ${isVideoCapture ? 'precision-confirm-images--video' : ''}`}>
           {imagePaths.map((path, index) => (
             <View key={`${path}-${index}`} className='precision-confirm-image-card'>
-              <Image className='precision-confirm-image' src={path} mode='aspectFill' />
+              <Image
+                className='precision-confirm-image'
+                src={path}
+                mode='aspectFit'
+                onClick={() => void Taro.previewImage({ current: path, urls: imagePaths })}
+              />
               <Text className='precision-confirm-image-label'>
                 {isVideoCapture ? `关键帧 ${index + 1}` : index === 0 ? '俯拍' : '45° 斜拍'}
               </Text>

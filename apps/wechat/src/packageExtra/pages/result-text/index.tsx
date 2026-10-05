@@ -17,7 +17,9 @@ import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
-import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import RecordDateField from '../../../components/RecordDateField'
 
 import './index.scss'
 
@@ -111,6 +113,11 @@ const scaleNutrients = (nutrients: Nutrients, factor: number): Nutrients => {
 const SUSPECT_DISTRUST_TIMEOUT_MS = 15000
 
 function ResultTextPage() {
+  const [recordContext] = useState(() => ({
+    date: String(Taro.getCurrentInstance().router?.params?.date || ''),
+    taskId: String(Taro.getStorageSync('analyzeSourceTaskId') || ''),
+  }))
+  const [recordDate, setRecordDate] = useRecordDate(recordContext.date, recordContext.taskId)
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
   const originalItemsRef = useRef<NutritionItem[]>([])
@@ -133,6 +140,7 @@ function ResultTextPage() {
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const recordSaveLock = useRef(false)
   const [noData, setNoData] = useState(false)
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
   const [insightCollapsed, setInsightCollapsed] = useState(false)
@@ -248,8 +256,6 @@ function ResultTextPage() {
   }, [clearSuspectDistrustTimer, submitFeedbackDeduped])
 
   useEffect(() => {
-    const params = Taro.getCurrentInstance().router?.params
-    persistRecordTargetDate(String(params?.date || ''))
     setInsightCollapsed(getAiInsightCollapsed())
     try {
       const stored = Taro.getStorageSync('analyzeTextResult')
@@ -409,6 +415,8 @@ function ResultTextPage() {
 
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
+    if (recordSaveLock.current || !requireAllowedRecordDate(recordDate)) return
+    recordSaveLock.current = true
     // 确定餐次
     let mealType = confirmedMealType || getSavedSelectableMealType(defaultMealType)
 
@@ -424,7 +432,7 @@ function ResultTextPage() {
     setSaving(true)
     try {
       const payload = {
-        date: getStoredRecordTargetDate(),
+        date: recordDate,
         meal_type: mealType as MealType,
         description: description || undefined,
         insight: healthAdvice || undefined,
@@ -446,7 +454,7 @@ function ResultTextPage() {
         entry_type: 'food_text' as const,
       }
       const saveResult = await saveFoodRecord(payload)
-      const targetDate = payload.date || getStoredRecordTargetDate() || formatDateKey(new Date())
+      const targetDate = recordDate
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate })
       } catch {
@@ -464,16 +472,17 @@ function ResultTextPage() {
       }
 
       if (saveOnly) {
-        Taro.showToast({ title: '记录成功', icon: 'success' })
+        Taro.showToast({ title: `已记录到${getRecordDateLabel(recordDate)}`, icon: 'success' })
         returnHomeAfterFoodRecord(800)
         return
       }
 
-      Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : '记录成功', icon: saveResult.already_saved ? 'none' : 'success' })
+      Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : `已记录到${getRecordDateLabel(recordDate)}`, icon: saveResult.already_saved ? 'none' : 'success' })
       returnHomeAfterFoodRecord()
     } catch (e: any) {
       await showUnifiedApiError(e, '保存失败')
     } finally {
+      recordSaveLock.current = false
       setSaving(false)
     }
   }
@@ -735,6 +744,7 @@ function ResultTextPage() {
       {/* 底部固定操作栏 */}
       <View className='footer-actions'>
         <View className='pba-safe-area'>
+          <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />
           <View className='action-grid'>
             <View className={`primary-btn ${saving ? 'loading' : ''}`} onClick={saving ? undefined : handleConfirmAndShare}>
               {saving ? <View className='btn-spinner' /> : <Text className='btn-text'>确认记录</Text>}
@@ -761,6 +771,7 @@ function ResultTextPage() {
             ))}
           </View>
 
+          <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />
           <View className='selector-actions'>
             <View className='cancel-btn' onClick={() => setShowMealSelector(false)}>
               取消

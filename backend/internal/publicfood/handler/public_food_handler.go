@@ -206,13 +206,13 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 	if filter.HasLocation != nil {
 		requestAttrs = append(requestAttrs, slog.Bool("has_location", *filter.HasLocation))
 	}
-	logger.Info(ctx, "收到公共食物库查询请求", requestAttrs...)
+	logger.Info(ctx, "收到美食图谱查询请求", requestAttrs...)
 	items, err := h.svc.List(ctx, userID, filter)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	logger.Info(ctx, "公共食物库查询完成", append(requestAttrs, slog.Int("item_count", len(items)))...)
+	logger.Info(ctx, "美食图谱查询完成", append(requestAttrs, slog.Int("item_count", len(items)))...)
 	response.Success(c, gin.H{"list": items})
 }
 
@@ -257,11 +257,15 @@ func (h *PublicFoodHandler) Get(c *gin.Context) {
 }
 
 func (h *PublicFoodHandler) GetCampusDetail(c *gin.Context) {
-	detail, err := h.svc.GetCampusDetail(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("item_id"))
+	ctx := c.Request.Context()
+	userID, itemID := c.GetString(authmw.ContextUserIDKey), c.Param("item_id")
+	logger.Info(ctx, "收到校园菜品详情请求", slog.String("user_id", userID), slog.String("item_id", itemID))
+	detail, err := h.svc.GetCampusDetail(ctx, userID, itemID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(ctx, "校园菜品详情请求完成", slog.String("user_id", userID), slog.String("item_id", itemID))
 	response.Success(c, detail)
 }
 

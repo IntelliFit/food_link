@@ -8,9 +8,7 @@ import './SleepCard.scss'
 
 function compactDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}分`
-  const hours = Math.floor(minutes / 60)
-  const remainder = minutes % 60
-  return remainder ? `${hours}时${remainder}分` : `${hours}小时`
+  return `${Number((minutes / 60).toFixed(1))}h`
 }
 
 export default function SleepCard({ date, guest, compact = false }: { date: string; guest: boolean; compact?: boolean }) {
@@ -51,7 +49,7 @@ export default function SleepCard({ date, guest, compact = false }: { date: stri
     >
       <View className='body-status-header'>
         <View className='body-status-title-wrap'>
-          <View className='sleep-quick-card__icon' />
+          <Text className='iconfont icon-wanshang sleep-quick-card__icon' />
           <Text className='body-status-title'>睡眠</Text>
         </View>
       </View>

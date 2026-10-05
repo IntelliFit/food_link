@@ -1,13 +1,10 @@
 import { View, Text } from '@tarojs/components'
 import type { ReactNode } from 'react'
-import type { HomeExperienceMode } from '../../../utils/home-experience'
 import { getGreeting } from '../utils/helpers'
 
 interface GreetingSectionProps {
   /** 保留既有今日小结能力，当前问候区不展示分享入口。 */
   onSharePress?: () => void
-  mode: HomeExperienceMode
-  onModeToggle: () => void
   petAvatar?: ReactNode
   onPetPress?: () => void
   petReminder?: {
@@ -18,17 +15,22 @@ interface GreetingSectionProps {
   onPetReminderPress?: () => void
 }
 
-export function GreetingSection({ mode, onModeToggle, petAvatar, onPetPress, petReminder, onPetReminderPress }: GreetingSectionProps) {
-  const { text, iconClass } = getGreeting()
-  const isWellness = mode === 'wellness'
+export function GreetingSection({ petAvatar, onPetPress, petReminder, onPetReminderPress }: GreetingSectionProps) {
+  const { text } = getGreeting()
+  const activeTone = petReminder?.tone === 'recognizing' || petReminder?.tone === 'waiting' ? petReminder.tone : ''
 
   return (
     <View className='greeting-section'>
-      <View className='greeting-main'>
+      <View className={`greeting-main${activeTone ? ` greeting-main--${activeTone}` : ''}`}>
         {petAvatar ? (
           <View id='home-greeting-pet' className='greeting-pet' onClick={onPetPress}>
+            {activeTone && <View className='greeting-pet__aura' />}
             <View className='greeting-pet__motion'>{petAvatar}</View>
             <View className='greeting-pet__ground' />
+            {activeTone === 'waiting' && <>
+              <Text className='greeting-pet__spark greeting-pet__spark--left'>✦</Text>
+              <Text className='greeting-pet__spark greeting-pet__spark--right'>✦</Text>
+            </>}
           </View>
         ) : null}
         {petReminder ? (
@@ -36,29 +38,22 @@ export function GreetingSection({ mode, onModeToggle, petAvatar, onPetPress, pet
             id='home-pet-analyze-reminder'
             className={`greeting-pet-reminder greeting-pet-reminder--${petReminder.tone}`}
             onClick={onPetReminderPress}
+            role='button'
+            aria-label={petReminder.text}
           >
             <Text className='greeting-pet-reminder__text'>{petReminder.text}</Text>
+            {activeTone === 'recognizing' && <View className='greeting-pet-reminder__dots'>
+              <View /><View /><View />
+            </View>}
             {petReminder.count && petReminder.count > 1 ? (
               <Text className='greeting-pet-reminder__count'>{petReminder.count}</Text>
             ) : null}
           </View>
         ) : (
-          <View className='greeting-text'>
-            <View className='greeting-title'>
-              <Text className={`iconfont ${iconClass} greeting-title-icon`} />
-              <Text>{text}</Text>
-            </View>
-            <Text className='greeting-subtitle'>今天也要健康饮食哦</Text>
+          <View className='greeting-pet-reminder greeting-pet-reminder--default'>
+            <Text className='greeting-pet-reminder__text'>{text}，今天也要好好吃饭</Text>
           </View>
         )}
-      </View>
-      <View
-        id='home-mode-toggle'
-        className={`greeting-mode-toggle greeting-mode-toggle--${mode}`}
-        onClick={onModeToggle}
-      >
-        <Text className='greeting-mode-toggle__label'>{isWellness ? '养生' : '均衡'}</Text>
-        <Text className='greeting-mode-toggle__switch'>⇄</Text>
       </View>
     </View>
   )

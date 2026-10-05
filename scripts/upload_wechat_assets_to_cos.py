@@ -9,6 +9,7 @@ Credentials (first match wins):
 Usage:
   python scripts/upload_wechat_assets_to_cos.py
   python scripts/upload_wechat_assets_to_cos.py --dry-run
+  python scripts/upload_wechat_assets_to_cos.py --home-only
 """
 
 from __future__ import annotations
@@ -38,6 +39,12 @@ UPLOADS: dict[str, str] = {
     "bg/cafeteria-hero.jpg": "wechat/cafeteria-hero.jpg",
     "image.png": "wechat/source-login-logo.png",
     "default_avatar.jpg": "wechat/default_avatar.jpg",
+}
+
+HOME_ASSETS = ROOT / "apps" / "wechat" / "src" / "assets" / "home"
+HOME_UPLOADS: dict[str, str] = {
+    "home-botanical-bg-v1.webp": "wechat/home/home-botanical-bg-v1-63ba25c9e4fe.webp",
+    "nutrition-orbit-v1.webp": "wechat/home/nutrition-orbit-v1-d593efc274a1.webp",
 }
 
 
@@ -145,6 +152,8 @@ def upload_file(local_path: Path, key: str, *, dry_run: bool) -> str:
 
     secret_id, secret_key, region, bucket, cdn_base = resolve_cos_config()
     content_type, _ = mimetypes.guess_type(str(local_path))
+    if local_path.suffix.lower() == ".webp":
+        content_type = "image/webp"
     if not content_type:
         content_type = "application/octet-stream"
 
@@ -175,13 +184,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Upload wechat/assets static files to COS food-images bucket")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--home-only", action="store_true", help="Upload the two versioned homepage assets only")
     args = parser.parse_args()
 
     load_env(args.env_file)
 
     uploaded: list[str] = []
-    for rel_path, cos_key in UPLOADS.items():
-        local_path = WECHAT_ASSETS / rel_path
+    assets_dir = HOME_ASSETS if args.home_only else WECHAT_ASSETS
+    uploads = HOME_UPLOADS if args.home_only else UPLOADS
+    for rel_path, cos_key in uploads.items():
+        local_path = assets_dir / rel_path
         if not local_path.exists():
             print(f"Skip missing: {local_path}", file=sys.stderr)
             continue

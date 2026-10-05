@@ -34,9 +34,10 @@ func main() {
 	onlyMarketingQR := flag.Bool("only-marketing-qr", false, "only add offline marketing QR attribution tables")
 	onlyCampusMapLocations := flag.Bool("only-campus-map-locations", false, "only add school, campus, and canteen coordinates used by the food map")
 	onlySleep := flag.Bool("only-sleep-records", false, "only add manual daily sleep records")
+	onlyPushReminders := flag.Bool("only-push-reminders", false, "only migrate the three push reminder tables and constraints")
 	flag.Parse()
 	selectedOnlyModes := 0
-	for _, selected := range []bool{*onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -95,7 +96,9 @@ func main() {
 		return
 	}
 	var migrateErr error
-	if *onlySleep {
+	if *onlyPushReminders {
+		migrateErr = migration.MigratePushReminders(ctx, db, cfg.Database.Schema)
+	} else if *onlySleep {
 		migrateErr = migration.MigrateSleepRecords(ctx, db, cfg.Database.Schema)
 	} else if *onlyPapay {
 		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
@@ -130,6 +133,10 @@ func main() {
 	}
 	if migrateErr != nil {
 		log.Fatalf("自动迁移失败: %v", migrateErr)
+	}
+	if *onlyPushReminders {
+		log.Printf("提醒三表迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
 	}
 	if *onlyPapay {
 		log.Printf("微信自动续费迁移完成: config_dir=%s schema=%s", resolvedDir, schema)

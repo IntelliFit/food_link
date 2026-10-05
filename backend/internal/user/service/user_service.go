@@ -211,6 +211,7 @@ type UpdateHealthProfileInput struct {
 	ReportExtract              map[string]any               `json:"report_extract"`
 	ReportImageURL             *string                      `json:"report_image_url"`
 	PrecisionReferenceDefaults map[string]any               `json:"precision_reference_defaults"`
+	IsStudent                  *bool                        `json:"is_student"`
 	CampusDiningPreference     *CampusDiningPreferenceInput `json:"campus_dining_preference"`
 }
 
@@ -354,7 +355,16 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 			delete(healthCondition, "precision_reference_defaults")
 		}
 	}
+	if input.IsStudent != nil {
+		healthCondition["is_student"] = *input.IsStudent
+		if !*input.IsStudent {
+			delete(healthCondition, "campus_dining_preference")
+		}
+	}
 	if input.CampusDiningPreference != nil {
+		if input.IsStudent != nil && !*input.IsStudent && strings.TrimSpace(input.CampusDiningPreference.SchoolID) != "" {
+			return nil, &commonerrors.AppError{Code: 10002, Message: "非学生身份不能保存校园食堂学校", HTTPStatus: 400}
+		}
 		preference, err := s.resolveCampusDiningPreference(ctx, *input.CampusDiningPreference)
 		if err != nil {
 			return nil, err
@@ -483,6 +493,17 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 	updated, err := s.users.UpdateFields(ctx, userID, updates)
 	if err != nil {
 		return nil, err
+	}
+	if input.IsStudent != nil {
+		schoolID := ""
+		if preference, ok := updated.HealthCondition["campus_dining_preference"].(map[string]any); ok {
+			schoolID = strings.TrimSpace(fmt.Sprintf("%v", preference["school_id"]))
+		}
+		logger.Info(ctx, "学生身份资料更新完成",
+			slog.String("user_id", userID),
+			slog.Bool("is_student", *input.IsStudent),
+			slog.String("school_id", schoolID),
+		)
 	}
 
 	if modeChanged {

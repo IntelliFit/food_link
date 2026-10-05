@@ -65,6 +65,7 @@ func (r *SupplementRepo) Update(ctx context.Context, userID, itemID string, item
 	}
 	res := r.db.WithContext(ctx).Model(&domain.UserSupplement{}).
 		Where("id = ? AND user_id = ?", itemID, userID).
+		Where("status = ?", "active").
 		Select(fields).
 		Updates(item)
 	if res.Error != nil {
@@ -81,6 +82,14 @@ func (r *SupplementRepo) CreateIntake(ctx context.Context, intake *domain.Supple
 		intake.ID = uuid.New().String()
 	}
 	return r.db.WithContext(ctx).Create(intake).Error
+}
+
+// Archive removes a cabinet item without deleting its intake snapshots.
+func (r *SupplementRepo) Archive(ctx context.Context, userID, itemID string) (bool, error) {
+	res := r.db.WithContext(ctx).Model(&domain.UserSupplement{}).
+		Where("id = ? AND user_id = ?", itemID, userID).
+		Updates(map[string]any{"status": "archived", "schedule_enabled": false, "updated_at": time.Now()})
+	return res.RowsAffected > 0, res.Error
 }
 
 func (r *SupplementRepo) FindIntakeByIdempotencyKey(ctx context.Context, userID, key string) (*domain.SupplementIntake, error) {

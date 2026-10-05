@@ -491,7 +491,9 @@ func (s *PublicFoodService) Get(ctx context.Context, userID, itemID string) (*do
 	if item == nil || isDeletedStatus(item.Status) {
 		return nil, commonerrors.ErrNotFound
 	}
-	if isCampusPublicFood(item) && (item.Status != "published" || item.TotalCalories <= 0 || !hasPreciseCampusMicronutrients(item)) && strings.TrimSpace(item.UserID) != strings.TrimSpace(userID) {
+	// Publication controls visibility; nutrition completeness only controls the
+	// displayed snapshot. Published community entries can await enrichment.
+	if isCampusPublicFood(item) && item.Status != "published" && (strings.TrimSpace(userID) == "" || strings.TrimSpace(item.UserID) != strings.TrimSpace(userID)) {
 		return nil, commonerrors.ErrNotFound
 	}
 	if err := s.ensureItemVisible(ctx, userID, item); err != nil {
@@ -505,14 +507,17 @@ func (s *PublicFoodService) Get(ctx context.Context, userID, itemID string) (*do
 }
 
 func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID string) (*domain.CampusFoodDetailView, error) {
+	logger.Info(ctx, "读取校园菜品详情", slog.String("user_id", userID), slog.String("item_id", itemID))
 	item, err := s.repo.GetItem(ctx, itemID)
 	if err != nil {
+		logger.Error(ctx, "查询校园菜品详情失败", err, slog.String("user_id", userID), slog.String("item_id", itemID))
 		return nil, err
 	}
 	if item == nil || isDeletedStatus(item.Status) || !isCampusPublicFood(item) {
 		return nil, commonerrors.ErrNotFound
 	}
-	if (item.Status != "published" || item.TotalCalories <= 0 || !hasPreciseCampusMicronutrients(item)) && strings.TrimSpace(item.UserID) != strings.TrimSpace(userID) {
+	if item.Status != "published" && (strings.TrimSpace(userID) == "" || strings.TrimSpace(item.UserID) != strings.TrimSpace(userID)) {
+		logger.Warn(ctx, "校园菜品尚未发布", slog.String("user_id", userID), slog.String("item_id", itemID), slog.String("status", item.Status))
 		return nil, commonerrors.ErrNotFound
 	}
 	if err := s.ensureItemVisible(ctx, userID, item); err != nil {
@@ -524,6 +529,7 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 	}
 	similarItems, err := s.repo.ListSimilarCampusFoods(ctx, *item, 6, userID)
 	if err != nil {
+		logger.Error(ctx, "查询校园相似菜品失败", err, slog.String("item_id", itemID))
 		return nil, err
 	}
 	similarItems, err = s.filterVisibleItems(ctx, userID, similarItems)
@@ -536,6 +542,7 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 	}
 	relatedFeeds, err := s.repo.ListRelatedCampusFeeds(ctx, *item, 6, userID)
 	if err != nil {
+		logger.Error(ctx, "查询校园菜品相关动态失败", err, slog.String("item_id", itemID))
 		return nil, err
 	}
 	relatedFeeds, err = s.filterVisibleRelatedFeeds(ctx, userID, relatedFeeds)
@@ -543,6 +550,8 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 		return nil, err
 	}
 	s.normalizeRelatedCampusFeeds(relatedFeeds)
+	logger.Info(ctx, "校园菜品详情读取完成", slog.String("user_id", userID), slog.String("item_id", itemID),
+		slog.String("nutrition_status", item.NutritionStatus), slog.Int("similar_count", len(similarViews)), slog.Int("related_count", len(relatedFeeds)))
 	return &domain.CampusFoodDetailView{
 		Item:         views[0],
 		Metrics:      campusFoodMetrics(views[0].PublicFoodItem),

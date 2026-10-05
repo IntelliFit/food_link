@@ -7,6 +7,7 @@ import (
 
 	"food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/repo"
+	"food_link/backend/internal/common/dateutil"
 )
 
 const taskSummaryTextPreviewRunes = 80
@@ -15,9 +16,11 @@ const taskSummaryTextPreviewRunes = 80
 // The default task list response deliberately remains TaskListPage so existing
 // consumers can continue to receive the complete payload and result documents.
 type TaskSummaryListPage struct {
-	Tasks      []TaskSummary `json:"tasks"`
-	HasMore    bool          `json:"has_more"`
-	NextOffset int           `json:"next_offset"`
+	Tasks         []TaskSummary `json:"tasks"`
+	HasMore       bool          `json:"has_more"`
+	NextOffset    int           `json:"next_offset"`
+	Total         *int          `json:"total,omitempty"`
+	FilterApplied bool          `json:"filter_applied,omitempty"`
 }
 
 // TaskSummary contains only fields needed to render and paginate task history.
@@ -71,6 +74,16 @@ func SummarizeTaskListPage(page TaskListPage) TaskSummaryListPage {
 // Unlike ListTasksPage, this path never transfers complete payload/result JSONB
 // documents to Go, which keeps list latency stable when task results are large.
 func (s *TaskService) ListTaskSummariesPage(ctx context.Context, userID, status, search string, limit, offset int) (TaskSummaryListPage, error) {
+	return s.listTaskSummariesPage(ctx, userID, status, search, limit, offset, "")
+}
+
+// ListWaitingRecordTaskSummariesPage uses the same projection and paging contract,
+// while keeping existing history and open-platform callers unchanged.
+func (s *TaskService) ListWaitingRecordTaskSummariesPage(ctx context.Context, userID, date, search string, limit, offset int) (TaskSummaryListPage, error) {
+	return s.listTaskSummariesPage(ctx, userID, "done", search, limit, offset, date)
+}
+
+func (s *TaskService) listTaskSummariesPage(ctx context.Context, userID, status, search string, limit, offset int, waitingDate string) (TaskSummaryListPage, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -81,9 +94,45 @@ func (s *TaskService) ListTaskSummariesPage(ctx context.Context, userID, status,
 		offset = 0
 	}
 
-	rows, hasMore, nextOffset, err := collectAnalyzeHistorySummaryPage(offset, limit, func(rawOffset, rawLimit int) ([]repo.TaskHistorySummaryRow, error) {
-		return s.tasks.ListTaskHistorySummaryRows(ctx, userID, status, search, rawLimit, rawOffset)
-	})
+	var rows []repo.TaskHistorySummaryRow
+	var hasMore bool
+	nextOffset := offset
+	var total *int
+	var err error
+	if waitingDate != "" {
+		date, dateErr := dateutil.NormalizeChinaDate(waitingDate, "date")
+		if dateErr != nil {
+			return TaskSummaryListPage{}, dateErr
+		}
+		allRows := make([]repo.TaskHistorySummaryRow, 0)
+		seen := make(map[string]bool)
+		for rawOffset := 0; ; rawOffset += 200 {
+			batch, batchErr := s.tasks.ListTaskHistorySummaryRows(ctx, userID, "done", search, 200, rawOffset, date)
+			if batchErr != nil {
+				return TaskSummaryListPage{}, batchErr
+			}
+			for _, row := range batch {
+				key := summaryHistoryGroupKey(row)
+				if isSummaryRowExcludedFromAnalyzeHistory(row) || seen[key] {
+					continue
+				}
+				seen[key] = true
+				allRows = append(allRows, row)
+			}
+			if len(batch) < 200 {
+				break
+			}
+		}
+		count := len(allRows)
+		total = &count
+		start := min(offset, count)
+		end := min(start+limit, count)
+		rows, hasMore, nextOffset = allRows[start:end], end < count, end
+	} else {
+		rows, hasMore, nextOffset, err = collectAnalyzeHistorySummaryPage(offset, limit, func(rawOffset, rawLimit int) ([]repo.TaskHistorySummaryRow, error) {
+			return s.tasks.ListTaskHistorySummaryRows(ctx, userID, status, search, rawLimit, rawOffset)
+		})
+	}
 	if err != nil {
 		return TaskSummaryListPage{}, err
 	}
@@ -172,7 +221,7 @@ func (s *TaskService) ListTaskSummariesPage(ctx context.Context, userID, status,
 		tasks = append(tasks, task)
 	}
 
-	return TaskSummaryListPage{Tasks: tasks, HasMore: hasMore, NextOffset: nextOffset}, nil
+	return TaskSummaryListPage{Tasks: tasks, HasMore: hasMore, NextOffset: nextOffset, Total: total, FilterApplied: total != nil}, nil
 }
 
 type analyzeHistorySummaryPageFetcher func(offset, limit int) ([]repo.TaskHistorySummaryRow, error)

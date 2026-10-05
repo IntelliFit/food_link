@@ -1,4 +1,4 @@
-import { View, Text, Image, ScrollView, Slider, Swiper, SwiperItem, Input, Textarea } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Slider, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
@@ -34,6 +34,7 @@ import {
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
 import { ANALYSIS_ENGINE_OPTIONS, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
+import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { getRecommendedMealTypeWithFallback, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
 import { withAuth } from '../../../utils/withAuth'
@@ -45,8 +46,11 @@ import {
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { applyEnergyEdit } from '../../../utils/nutrition-edit'
+import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
-import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import RecordDateField from '../../../components/RecordDateField'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -549,11 +553,15 @@ function toSafeNumber(value: unknown, fallback = 0): number {
 }
 
 function ResultPage() {
+  const [recordContext] = useState(() => ({
+    date: String(Taro.getCurrentInstance().router?.params?.date || ''),
+    taskId: String(Taro.getCurrentInstance().router?.params?.task_id || Taro.getStorageSync('analyzeSourceTaskId') || ''),
+  }))
+  const [recordDate, setRecordDate] = useRecordDate(recordContext.date, recordContext.taskId)
   const { scheme } = useAppColorScheme()
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
   const [textRecordInput, setTextRecordInput] = useState('')
   const [imagePaths, setImagePaths] = useState<string[]>([])
-  const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [imagePath, setImagePath] = useState<string>('') // Keep for compatibility/fallback logic
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
@@ -580,6 +588,7 @@ function ResultPage() {
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const recordSaveLock = useRef(false)
 	const [savingRecipe, setSavingRecipe] = useState(false)
 	const [savedRecipeId, setSavedRecipeId] = useState<string | null>(null)
 	const recipeSaveInFlightRef = useRef(false)
@@ -619,14 +628,6 @@ function ResultPage() {
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
   const [insightCollapsed, setInsightCollapsed] = useState(false)
 
-  useEffect(() => {
-    if (imagePaths.length <= 1) {
-      setCurrentImageIndex(0)
-      return
-    }
-    setCurrentImageIndex(prev => (prev >= imagePaths.length ? 0 : prev))
-  }, [imagePaths])
-
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
   const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(
@@ -642,6 +643,13 @@ function ResultPage() {
   const [snackDraft, setSnackDraft] = useState<SnackContributionDraft | null>(null)
   const [savingSnackDraft, setSavingSnackDraft] = useState(false)
   const [foodEditDraft, setFoodEditDraft] = useState<FoodEditDraft | null>(null)
+  const [foodRecalculating, setFoodRecalculating] = useState(false)
+  const foodRecalculationBusyRef = useRef(false)
+  const foodEditorMountedRef = useRef(true)
+  useEffect(() => {
+    foodEditorMountedRef.current = true
+    return () => { foodEditorMountedRef.current = false }
+  }, [])
 
   /** 驱动头图收缩：与 ScrollView 的 scrollTop 同步 */
   const [resultScrollTop, setResultScrollTop] = useState(0)
@@ -742,11 +750,6 @@ function ResultPage() {
 
   useEffect(() => {
     setInsightCollapsed(getAiInsightCollapsed())
-  }, [])
-
-  useEffect(() => {
-    const params = Taro.getCurrentInstance().router?.params
-    persistRecordTargetDate(String(params?.date || ''))
   }, [])
 
   /** 上滑进度 0~1：驱动头图高度与内层圆角 */
@@ -1631,6 +1634,7 @@ function ResultPage() {
     description,
     insight: healthAdvice,
     items: items.map(item => ({
+      itemId: item.id,
       name: item.name,
       estimatedWeightGrams: item.weight,
       originalWeightGrams: item.originalWeight,
@@ -1680,6 +1684,7 @@ function ResultPage() {
   }
 
   const openFoodEditDrawer = (item: NutritionItem) => {
+    if (foodRecalculationBusyRef.current) return
     setFoodEditDraft({
       itemId: item.id,
       name: item.name,
@@ -1693,6 +1698,7 @@ function ResultPage() {
   }
 
   const updateFoodEditDraftField = (field: keyof FoodEditDraft, value: string) => {
+    if (foodRecalculationBusyRef.current) return
     setFoodEditDraft(current => {
       if (!current) return current
       if (field !== 'calories' && field !== 'protein' && field !== 'carbs' && field !== 'fat') {
@@ -1723,9 +1729,8 @@ function ResultPage() {
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
   }
 
-  const handleSaveFoodEditDraft = () => {
-    if (!foodEditDraft) return
-    nutritionAdjustedRef.current = true
+  const handleSaveFoodEditDraft = async () => {
+    if (!foodEditDraft || foodRecalculationBusyRef.current) return
     const name = foodEditDraft.name.trim()
     const weight = parseFoodEditNumber(foodEditDraft.weight)
     const calories = parseFoodEditNumber(foodEditDraft.calories)
@@ -1742,11 +1747,55 @@ function ResultPage() {
       Taro.showToast({ title: '请输入大于0的重量', icon: 'none' })
       return
     }
+    const targetIndex = nutritionItems.findIndex(item => item.id === foodEditDraft.itemId)
+    const original = nutritionItems[targetIndex]
+    if (!original) return
+    if (name !== original.name.trim()) {
+      foodRecalculationBusyRef.current = true
+      try {
+        if (!await confirmSingleItemRecalculation(name) || !foodEditorMountedRef.current) return
+        setFoodRecalculating(true)
+        const resolved = await recalculateSingleFoodItem({
+          previous: buildAnalyzeResultFromItems(nutritionItems),
+          index: targetIndex,
+          name,
+          weight,
+          sourceTaskId: Taro.getStorageSync('analyzeSourceTaskId') || undefined,
+          isCurrent: () => foodEditorMountedRef.current,
+        })
+        if (!foodEditorMountedRef.current) return
+        const converted = convertApiFoodItemsToNutritionItems([resolved])[0]
+        const nextItems = nutritionItems.map(item => item.id === original.id ? {
+          ...converted,
+          id: original.id,
+          sourceItemId: original.sourceItemId,
+          sourceName: name,
+          ratio: original.ratio,
+          intake: Math.round(weight * original.ratio / 100),
+          suggestedRatio: original.suggestedRatio,
+          suggestedRatioReason: original.suggestedRatioReason,
+          suggestedRatioSource: original.suggestedRatioSource,
+        } : item)
+        nutritionAdjustedRef.current = true
+        calculateNutritionStats(nextItems)
+        setNutritionItems(nextItems)
+        setFoodEditDraft(null)
+        void syncEditedAnalyzeResult(nextItems)
+        Taro.showToast({ title: '已重算这一项', icon: 'success' })
+      } catch (error) {
+        if (foodEditorMountedRef.current) showUnifiedApiError(error, '重算失败，原数据保留')
+      } finally {
+        foodRecalculationBusyRef.current = false
+        if (foodEditorMountedRef.current) setFoodRecalculating(false)
+      }
+      return
+    }
     if (calories == null || protein == null || carbs == null || fat == null || waterMl == null) {
       Taro.showToast({ title: '营养值需为不小于0的数字', icon: 'none' })
       return
     }
 
+    nutritionAdjustedRef.current = true
     const nextItems = nutritionItems.map(item => {
         if (item.id !== foodEditDraft.itemId) return item
 
@@ -1923,6 +1972,7 @@ function ResultPage() {
   }
 
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
+    if (!requireAllowedRecordDate(recordDate)) return
     // 避免用户快速连续点击导致重复保存
     if (saving) return
     if (nutritionItems.some(isPackagedChoicePending)) {
@@ -1943,10 +1993,12 @@ function ResultPage() {
     const activityTiming = savedActivityTiming || 'none'
 
     const doSave = async () => {
+      if (recordSaveLock.current || !requireAllowedRecordDate(recordDate)) return
       if (isAnalyzeSessionCommitted()) {
         Taro.showToast({ title: '该餐已记录', icon: 'none' })
         return
       }
+      recordSaveLock.current = true
       // 保存前根据用户编辑行为提交对应的反馈样本
       clearSuspectDistrustTimer()
       const hasWeightChangeOnly = weightAdjustedRef.current && !nutritionAdjustedRef.current && !ratioAdjustedRef.current
@@ -1963,9 +2015,9 @@ function ResultPage() {
         Taro.removeStorageSync('analyzeDietGoal')
         Taro.removeStorageSync('analyzeActivityTiming')
 
-        const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId') || undefined
+        const sourceTaskId = recordContext.taskId || undefined
         const payload: SaveFoodRecordRequest = {
-          date: getStoredRecordTargetDate(),
+          date: recordDate,
           meal_type: mealType as MealType,
           image_path: hasUploadableImage ? (imagePath || undefined) : undefined,
           image_paths: hasUploadableImage && imagePaths.length > 0 ? imagePaths : undefined,
@@ -2015,7 +2067,7 @@ function ResultPage() {
         }
 
         const saveResult = await saveFoodRecord(payload)
-        const targetDateKey = payload.date || getStoredRecordTargetDate() || formatDateKey(new Date())
+        const targetDateKey = recordDate
         if (!saveResult.already_saved) {
           applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
         }
@@ -2049,7 +2101,7 @@ function ResultPage() {
 
         if (saveOnly) {
           Taro.showToast({
-            title: saveResult.already_saved ? '该餐已记录，未重复发布' : '记录成功',
+            title: saveResult.already_saved ? '该餐已记录，未重复发布' : `已记录到${getRecordDateLabel(recordDate)}`,
             icon: saveResult.already_saved ? 'none' : 'success',
           })
           returnHomeAfterFoodRecord(800)
@@ -2057,13 +2109,14 @@ function ResultPage() {
         }
 
         Taro.showToast({
-          title: saveResult.already_saved ? '该餐已记录，未重复发布' : '记录成功',
+          title: saveResult.already_saved ? '该餐已记录，未重复发布' : `已记录到${getRecordDateLabel(recordDate)}`,
           icon: saveResult.already_saved ? 'none' : 'success',
         })
         returnHomeAfterFoodRecord()
       } catch (e: any) {
         await showUnifiedApiError(e, '保存失败')
       } finally {
+        recordSaveLock.current = false
         setSaving(false)
       }
     }
@@ -2075,7 +2128,7 @@ function ResultPage() {
       // 否则走旧的确认流程（防止直接调用时没有确认）
       Taro.showModal({
         title: '确认记录',
-        content: `餐次：${mealLabel}\n确定保存当前饮食记录吗？`,
+        content: `记录到${getRecordDateLabel(recordDate)} · ${mealLabel}\n确定保存当前饮食记录吗？`,
         success: async (res) => {
           if (!res.confirm) return
           await doSave()
@@ -2383,7 +2436,7 @@ function ResultPage() {
             const res = await submitAnalyzeTask({
               image_url: imagePaths[0] || imagePath,
               image_urls: imagePaths.length > 0 ? imagePaths : undefined,
-              date: getStoredRecordTargetDate(),
+              date: recordDate,
               additionalContext: finalCorrectionContext,
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
@@ -2410,7 +2463,7 @@ function ResultPage() {
             const textPayload = originalText || currentResultSummary
             const res = await submitTextAnalyzeTask({
               text: textPayload,
-              date: getStoredRecordTargetDate(),
+              date: recordDate,
               additionalContext: textContextParts.join('\n'),
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
@@ -2450,68 +2503,28 @@ function ResultPage() {
     })
   }
 
-  // 预览大图
-  const handlePreviewImage = (current: string) => {
-    if (imagePaths.length > 0) {
-      Taro.previewImage({
-        current,
-        urls: imagePaths
-      })
-    }
-  }
-
   const pendingPackagedChoiceCount = nutritionItems.filter(isPackagedChoicePending).length
 
   return (
     <View className={`result-page ${scheme === 'dark' ? 'result-page--dark' : ''}`}>
-      {/* 固定头图：不随列表平移；上滑时高度缩小，内层始终全宽无左右 margin */}
-      <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
-        <View
-          className='scanner-hero-inner'
-          style={{
-            borderRadius: `${resultHeroInnerRadiusRpx}rpx`
-          }}
-        >
-          {imagePaths.length > 0 ? (
-            <Swiper
-              className='scanner-hero-swiper'
-              circular
-              indicatorDots={false}
-              onChange={(e) => setCurrentImageIndex(e.detail.current)}
-              current={currentImageIndex}
-            >
-              {imagePaths.map((path, index) => (
-                <SwiperItem key={index} className='scanner-hero-swiper-item'>
-                  <Image
-                    src={path}
-                    mode='aspectFill'
-                    className='scanner-hero-image'
-                    onClick={() => handlePreviewImage(path)}
-                  />
-                </SwiperItem>
-              ))}
-            </Swiper>
-          ) : (
+      {imagePaths.length === 0 && (
+        <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
+          <View
+            className='scanner-hero-inner'
+            style={{
+              borderRadius: `${resultHeroInnerRadiusRpx}rpx`
+            }}
+          >
             <View className='scanner-hero-placeholder'>
               <View className='placeholder-icon-wrap'>
                 <Text className='iconfont icon-shiwu' style={{ fontSize: '72rpx', color: '#00bc7d' }} />
               </View>
               <Text className='placeholder-text'>{textRecordInput || '文字记录，未提供实物照片'}</Text>
             </View>
-          )}
-          <View className='scanner-hero-gradient' />
-          {imagePaths.length > 1 && (
-            <View className='image-counter'>
-              <Text className='counter-text'>{currentImageIndex + 1}/{imagePaths.length}</Text>
-            </View>
-          )}
-          {imagePaths.length > 1 && (
-            <View className='image-batch-badge result-batch-badge'>
-              <Text className='image-batch-badge-text'>共 {imagePaths.length} 张</Text>
-            </View>
-          )}
+            <View className='scanner-hero-gradient' />
+          </View>
         </View>
-      </View>
+      )}
 
       {/*
         iOS 微信小程序：scroll-view 上直接设 padding、或在 scroll-view 内嵌套 position:fixed，
@@ -2523,13 +2536,14 @@ function ResultPage() {
         scrollWithAnimation={false}
         enhanced={false}
         showScrollbar={false}
-        onScroll={handleResultScroll}
+        onScroll={imagePaths.length === 0 ? handleResultScroll : undefined}
       >
         <View
           className='result-scroll-inner'
-          style={{ paddingTop: `${resultScrollPaddingTopRpx}rpx` }}
+          style={{ paddingTop: imagePaths.length > 0 ? '24rpx' : `${resultScrollPaddingTopRpx}rpx` }}
         >
         <View className='content-container'>
+          <AdaptiveImageGrid urls={imagePaths} className='result-photo-gallery' presentation='detail' />
           <View className='execution-mode-row'>
             <View className='execution-mode-left'>
               <View className={`execution-mode-tag ${executionMode}`}>
@@ -3132,6 +3146,7 @@ function ResultPage() {
 
       {/* 底部固定栏：必须放在 scroll-view 外，避免 iOS 上 fixed 相对滚动容器失效 */}
       <View className='footer-actions'>
+        {!isAnalyzeSessionCommitted() && !committedRecordId && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
         {(taskType === 'food' || taskType === 'food_text') && !isAnalyzeSessionCommitted() && !committedRecordId && (
           <View className='eating-mood-bar'>
             <View className='eating-mood-heading'>
@@ -3200,7 +3215,7 @@ function ResultPage() {
 
       <View
         className={`food-edit-drawer-overlay ${foodEditDraft ? 'visible' : ''}`}
-        onClick={() => setFoodEditDraft(null)}
+        onClick={() => { if (!foodRecalculationBusyRef.current) setFoodEditDraft(null) }}
       >
         <View
           className={`food-edit-drawer-content ${foodEditDraft ? 'slide-up' : ''}`}
@@ -3208,7 +3223,7 @@ function ResultPage() {
         >
           <View className='drawer-header'>
             <Text className='drawer-title'>修改食物</Text>
-            <View className='drawer-close' onClick={() => setFoodEditDraft(null)}>
+            <View className='drawer-close' onClick={() => { if (!foodRecalculationBusyRef.current) setFoodEditDraft(null) }}>
               <Text className='close-icon'>×</Text>
             </View>
           </View>
@@ -3216,6 +3231,7 @@ function ResultPage() {
             <ScrollView className='drawer-scroll food-edit-drawer-scroll' scrollY>
               <View className='food-edit-section'>
                 <Text className='food-edit-section-title'>基础信息</Text>
+                <Text className='food-edit-recalculation-hint'>修改名称后，保存时按当前重量重算这一项；其他食物和摄入比例保留。</Text>
                 <View className='food-edit-field'>
                   <Text className='food-edit-label'>名称</Text>
                   <Input
@@ -3270,11 +3286,11 @@ function ResultPage() {
             </ScrollView>
           )}
           <View className='food-edit-footer'>
-            <View className='food-edit-cancel' onClick={() => setFoodEditDraft(null)}>
+            <View className='food-edit-cancel' onClick={() => { if (!foodRecalculationBusyRef.current) setFoodEditDraft(null) }}>
               <Text className='food-edit-cancel-text'>取消</Text>
             </View>
             <View className='food-edit-save' onClick={handleSaveFoodEditDraft}>
-              <Text className='food-edit-save-text'>保存修改</Text>
+              {foodRecalculating ? <View className='food-edit-recalculation-spinner' /> : <Text className='food-edit-save-text'>保存修改</Text>}
             </View>
           </View>
         </View>

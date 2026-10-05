@@ -60,7 +60,7 @@ func New(db *gorm.DB) *Syncer {
 
 func (s *Syncer) Run(ctx context.Context, apply bool) (Report, error) {
 	if s == nil || s.db == nil {
-		return Report{}, errors.New("公共食物库同步数据库未配置")
+		return Report{}, errors.New("美食图谱同步数据库未配置")
 	}
 	if apply {
 		var report Report
@@ -95,7 +95,7 @@ func (s *Syncer) run(ctx context.Context, db *gorm.DB, apply bool) (Report, erro
 	for _, product := range s.dataset.Products {
 		itemID, ok := catalog.PublicFoodItemID(product.Code)
 		if !ok {
-			return report, fmt.Errorf("商品 %s 无法生成公共食物库 ID", product.Code)
+			return report, fmt.Errorf("商品 %s 无法生成美食图谱 ID", product.Code)
 		}
 		if current, exists := byID[itemID]; exists {
 			report.ExistingByID++
@@ -359,7 +359,7 @@ func buildSeedRow(dataset catalog.Dataset, product catalog.Product, directory Di
 		Insight:     "当前为首版估算数据，配方、杯型、糖度、冰量或加料变化后应重新核验。",
 		FoodName:    product.Name, MerchantName: dataset.MerchantName,
 		MerchantAddress: dataset.Address, DetailAddress: dataset.Address,
-		UserTags: datatypes.JSON(tags), UserNotes: "门店定位和营养数据均按首版资料估算，后续可在公共食物库修订。",
+		UserTags: datatypes.JSON(tags), UserNotes: "门店定位和营养数据均按首版资料估算，后续可在美食图谱修订。",
 		Latitude: dataset.Latitude, Longitude: dataset.Longitude,
 		Province: "吉林省", City: "长春市", District: "九台区",
 		Status: "published", Type: "campus", PublishedAt: now, CreatedAt: now, UpdatedAt: now,

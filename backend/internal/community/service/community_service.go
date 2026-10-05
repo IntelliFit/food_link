@@ -9,11 +9,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	authrepo "food_link/backend/internal/auth/repo"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/community/domain"
 	"food_link/backend/internal/community/repo"
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	"food_link/backend/internal/foodmedia"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
@@ -82,6 +84,26 @@ type CommunityService struct {
 	storage             *storage.Client
 	blockChecker        BlockChecker
 	healthScoreProvider HealthScoreProvider
+	contentSecurity     *contentsecurity.Service
+}
+
+func (s *CommunityService) ConfigureContentSecurity(checker *contentsecurity.Service) {
+	s.contentSecurity = checker
+}
+
+func (s *CommunityService) checkContent(ctx context.Context, userID string, scene int, doc map[string]any) error {
+	if s.contentSecurity == nil {
+		return nil
+	}
+	err := s.contentSecurity.CheckDocument(ctx, userID, scene, doc, s.storage)
+	if err != nil {
+		if err == contentsecurity.ErrUnavailable {
+			logger.Error(ctx, "圈子内容审核服务不可用", err, slog.String("user_id", userID), slog.Int("scene", scene))
+		} else {
+			logger.Warn(ctx, "圈子内容审核未通过", slog.String("user_id", userID), slog.Int("scene", scene))
+		}
+	}
+	return err
 }
 
 type UserFinder interface {
@@ -1559,6 +1581,9 @@ func (s *CommunityService) PostTargetComment(ctx context.Context, userID, target
 	}
 
 	normalizedContent := strings.TrimSpace(content)
+	if err := s.checkContent(ctx, userID, 2, map[string]any{"content": normalizedContent}); err != nil {
+		return nil, err
+	}
 	duplicate, err := s.feedRepo.FindRecentDuplicateForTarget(ctx, userID, targetType, targetID, normalizedContent, parentCommentID, replyToUserID, 8*time.Second)
 	if err != nil {
 		return nil, err
@@ -1700,10 +1725,10 @@ func (s *CommunityService) CreateCirclePost(ctx context.Context, userID, title, 
 	if title == "" && body == "" && len(imageKeys) == 0 {
 		return "", commonerrors.ErrBadRequest
 	}
-	if len(title) > circlePostMaxTitleLength {
+	if utf8.RuneCountInString(title) > circlePostMaxTitleLength {
 		return "", commonerrors.ErrBadRequest
 	}
-	if len(body) > circlePostMaxBodyLength {
+	if utf8.RuneCountInString(body) > circlePostMaxBodyLength {
 		return "", commonerrors.ErrBadRequest
 	}
 	post := &domain.UserCirclePost{
@@ -1726,6 +1751,9 @@ func (s *CommunityService) CreateCirclePost(ctx context.Context, userID, title, 
 		post.Sugar = nutrition.Sugar
 		post.SodiumMg = nutrition.SodiumMg
 		post.TotalWeightGrams = nutrition.TotalWeightGrams
+	}
+	if err := s.checkContent(ctx, userID, 4, map[string]any{"title": title, "body": body, "image_paths": imageKeys}); err != nil {
+		return "", err
 	}
 	if err := s.feedRepo.CreateCirclePost(ctx, post); err != nil {
 		return "", err
@@ -1753,11 +1781,14 @@ func (s *CommunityService) UpdateCirclePost(ctx context.Context, userID, postID,
 	if title == "" && body == "" && len(imageKeys) == 0 {
 		return commonerrors.ErrBadRequest
 	}
-	if len(title) > circlePostMaxTitleLength {
+	if utf8.RuneCountInString(title) > circlePostMaxTitleLength {
 		return commonerrors.ErrBadRequest
 	}
-	if len(body) > circlePostMaxBodyLength {
+	if utf8.RuneCountInString(body) > circlePostMaxBodyLength {
 		return commonerrors.ErrBadRequest
+	}
+	if err := s.checkContent(ctx, userID, 4, map[string]any{"title": title, "body": body, "image_paths": imageKeys}); err != nil {
+		return err
 	}
 	return s.feedRepo.UpdateCirclePost(ctx, userID, postID, title, body, imageKeys, nutrition)
 }

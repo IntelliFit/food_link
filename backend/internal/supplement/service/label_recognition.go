@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/nutrition"
@@ -55,9 +57,16 @@ func (s *SupplementService) RecognizeLabel(ctx context.Context, imageURLs []stri
 		return nil, &commonerrors.AppError{Code: 10000, Message: "补剂标签识别服务未配置", HTTPStatus: http.StatusInternalServerError}
 	}
 
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
+	defer cancel()
+	logger.Info(ctx, "开始补剂标签识别", slog.Int("image_count", len(imageURLs)))
 	raw, err := s.labelVisionClient.AnalyzeWithImagesAndTemperature(ctx, buildSupplementLabelPrompt(len(imageURLs)), imageURLs, 0.1)
 	if err != nil {
-		logger.Error(ctx, "补剂标签多图识别失败", err, slog.Int("image_count", len(imageURLs)))
+		logger.Error(ctx, "补剂标签多图识别失败", err, slog.Int("image_count", len(imageURLs)), slog.Duration("duration", time.Since(start)))
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, &commonerrors.AppError{Code: 10000, Message: "标签识别超时，请稍后重试或手动填写成分", HTTPStatus: http.StatusGatewayTimeout}
+		}
 		return nil, fmt.Errorf("识别补剂标签失败: %w", err)
 	}
 	encoded, err := json.Marshal(raw)
@@ -85,7 +94,7 @@ func (s *SupplementService) RecognizeLabel(ctx context.Context, imageURLs []stri
 		Name: name, Brand: strings.TrimSpace(parsed.Brand), ServingLabel: servingLabel,
 		Components: components, Confidence: parsed.Confidence, RawText: strings.TrimSpace(parsed.RawText),
 	}
-	logger.Info(ctx, "补剂标签多图识别完成", slog.Int("image_count", len(imageURLs)), slog.Int("component_count", len(components)), slog.Bool("has_name", name != ""))
+	logger.Info(ctx, "补剂标签多图识别完成", slog.Int("image_count", len(imageURLs)), slog.Int("component_count", len(components)), slog.Bool("has_name", name != ""), slog.Duration("duration", time.Since(start)))
 	return result, nil
 }
 

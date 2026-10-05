@@ -1,7 +1,13 @@
 import SleepCard from './components/SleepCard'
 import NextMealRecommendations from './components/NextMealRecommendations'
+import { Success } from '@taroify/icons'
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, ScrollView } from '@tarojs/components'
-import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
+import {
+  CAFETERIA_HERO_BG_URL,
+  GOOSE_DUCK_CHICKEN_BG_URL,
+  HOME_BOTANICAL_BG_URL as homeBotanicalBackground,
+  HOME_NUTRITION_ORBIT_URL as nutritionOrbitImage,
+} from '../../utils/static-asset-cdn-url'
 import * as React from 'react'
 import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
@@ -87,13 +93,9 @@ import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from '../../utils/food-display-image'
-import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
+import { isAllowedRecordDate, isTodayRecordDate, getRecordDateLabel } from '../../utils/record-date'
 import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
-import {
-  getStoredHomeExperienceConfig,
-  saveHomeExperienceConfig,
-} from '../../utils/home-experience'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -112,7 +114,6 @@ import {
   TargetEditor,
   GreetingSection,
   DateSelector,
-  StatsEntry,
   RecordMenu,
   MealActionSheet,
   MealRecordsDialog,
@@ -161,7 +162,6 @@ import {
   normalizeNextMainMeal,
 } from './utils/next-meal-guidance'
 
-const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const DEFAULT_SUPPLEMENT_SUMMARY: SupplementDashboardSummary = {
   planned_count: 0,
   completed_count: 0,
@@ -752,17 +752,6 @@ function clearEditableWaterForDate(metrics: BodyMetricsStorage, date: string): B
   }
 }
 
-function getDismissedBackfillDates(): string[] {
-  const stored = Taro.getStorageSync(BACKFILL_HINT_DISMISSED_DATES_KEY)
-  return Array.isArray(stored)
-    ? stored.filter((date): date is string => typeof date === 'string' && date.length > 0)
-    : []
-}
-
-function saveDismissedBackfillDates(dates: string[]) {
-  Taro.setStorageSync(BACKFILL_HINT_DISMISSED_DATES_KEY, Array.from(new Set(dates)))
-}
-
 /** 真机弱网时身体指标接口偶发失败，短延迟重试一次；仍失败则返回 null，由本机缓存 + 日期键规范化兜底 */
 async function fetchBodyMetricsSummaryRetry(): Promise<
   Awaited<ReturnType<typeof getBodyMetricsSummary>> | null
@@ -829,7 +818,6 @@ const MACRO_CONFIGS: Array<{
 
 function IndexPage() {
   const { scheme } = useAppColorScheme()
-  const [homeExperienceConfig, setHomeExperienceConfig] = React.useState(getStoredHomeExperienceConfig)
   const [moduleLayout, setModuleLayout] = React.useState(readHomeModuleLayout)
   const [showHomeModuleManager, setShowHomeModuleManager] = React.useState(false)
   const moduleOwner = React.useRef(homeLayoutOwner())
@@ -902,7 +890,6 @@ function IndexPage() {
   const [showHomeOnboardingGuide, setShowHomeOnboardingGuide] = React.useState(false)
   const [homeGuideTransitionPending, setHomeGuideTransitionPending] = React.useState(false)
   const homeGuideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [dismissedBackfillDates, setDismissedBackfillDates] = React.useState<string[]>(() => getDismissedBackfillDates())
   const selectedDateRef = React.useRef(selectedDate)
   const calendarMonthLoadSeqRef = React.useRef(0)
   const commitSelectedDate = React.useCallback((date: string) => {
@@ -1870,16 +1857,6 @@ function IndexPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${encodeURIComponent(d)}` })
   }
 
-  /** 「查看饮食统计」入口：进入当日记录列表 */
-  const openDayRecordForSelectedDate = React.useCallback(() => {
-    if (!getAccessToken()) {
-      redirectToLogin()
-      return
-    }
-    const d = mapCalendarDateToApi(selectedDate) || selectedDate
-    Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${encodeURIComponent(d)}` })
-  }, [selectedDate])
-
   /** 今日餐食单条 → 弹出记录操作菜单（多条同餐时先选记录） */
   const openMealRecordDetail = React.useCallback((meal: HomeMealItem) => {
     if (!getAccessToken()) {
@@ -2420,7 +2397,6 @@ function IndexPage() {
   const remainingCalories = Math.max(0, Number((totalTarget - totalCurrent).toFixed(1)))
   const calorieProgress = normalizeProgressPercent(intakeData.progress, totalCurrent, totalTarget)
   const wellnessCaloriePct = Math.min(100, calculateProgressPercent(totalCurrent, totalTarget))
-  const wellnessGaugePct = wellnessCaloriePct * 0.75
   /** 摄入超过目标时，下方进度条用警示红（与营养素超标一致） */
   const isCalorieOver = totalCurrent > totalTarget
   /** 左侧主数字：未超标为剩余可摄入；超标为超出目标的量（正数） */
@@ -2489,14 +2465,14 @@ function IndexPage() {
   const nextMealName = nextMealLabel(nextMealType)
   const showNextMealGuidance = !isGuest && isTodayRecordDate(selectedDate)
   const openNextMealGuidance = React.useCallback((option?: DietRecommendationOption) => {
-    const detail = option ? option.items.map(item => `${item.name} ${item.amount}`).join(' + ') : ''
     openPetChat({
       source: 'home_next_meal',
       date: selectedDate,
       mealType: nextMealType,
       mealLabel: nextMealName,
-      basicAdvice: option ? `${option.source_label}：${detail}` : '结合附近和本人历史餐食选一餐',
-      starterQuestion: option ? `帮我调整今天的${nextMealName}。我选的首页餐食：${detail}；来源：${option.source_label}；餐食ID：${option.source_id}。请先核对这份餐食，再结合我补充的需求调整。` : `请综合当前位置和我历史吃过的餐食，为${nextMealName}选2–3个真实方案。`,
+      basicAdvice: option?.title || '',
+      selectedSourceID: option?.source_id,
+      starterQuestion: '',
     })
   }, [nextMealName, nextMealType, selectedDate])
 
@@ -2913,13 +2889,6 @@ function IndexPage() {
     homeAchievement
   ])
 
-  const backfillDismissedDateSet = new Set(dismissedBackfillDates)
-  const showBackfillHint =
-    isAllowedRecordDate(selectedDate) &&
-    !isTodayRecordDate(selectedDate) &&
-    !dashboardBusy &&
-    !isGuest &&
-    !backfillDismissedDateSet.has(selectedDate)
   const membershipCredits = getMembershipCreditSummary(membershipStatus)
   const availableRewardCredits = getAvailableRewardCredits(rewardCenter)
   const rewardHintTasks = rewardCenter?.tasks || []
@@ -2992,41 +2961,12 @@ function IndexPage() {
       },
     })
   }, [])
-  const openBackfillRecordMenu = () => {
-    setShowRecordMenu(true)
-  }
-  const handleDismissBackfillHint = async () => {
-    const { confirm } = await Taro.showModal({
-      title: '取消补录提醒',
-      content: '取消后，这一天的补录提醒将不再显示。仍可随时通过首页记录入口补录历史餐食。',
-      confirmText: '确认取消',
-      cancelText: '继续保留',
-      confirmColor: '#5cb896'
-    })
-    if (!confirm) return
-    setDismissedBackfillDates((prev) => {
-      const next = Array.from(new Set([...prev, selectedDate]))
-      saveDismissedBackfillDates(next)
-      return next
-    })
-  }
 
-  const handleHomeExperienceModeToggle = React.useCallback(() => {
-    const nextMode = homeExperienceConfig.mode === 'wellness' ? 'balanced' : 'wellness'
-    const saved = saveHomeExperienceConfig({ version: 2, mode: nextMode })
-    setHomeExperienceConfig(saved)
-    Taro.showToast({
-      title: nextMode === 'wellness' ? '已切换至养生模式' : '已切换至均衡模式',
-      icon: 'none',
-    })
-  }, [homeExperienceConfig.mode])
-
-  const isWellnessMode = homeExperienceConfig.mode === 'wellness'
   const moduleLocks = homeModuleLocks(expirySummary.items.some(item => ['overdue', 'today', 'soon'].includes(item.urgency_level)))
 
   return (
     <View
-      className={`home-page home-page--mode-${homeExperienceConfig.mode} ${scheme === 'dark' ? 'home-page--dark' : ''} ${homePageScrollLocked ? 'home-page--modal-open' : ''}`}
+      className={`home-page home-layout-density-${moduleLayout.density} ${scheme === 'dark' ? 'home-page--dark' : ''} ${homePageScrollLocked ? 'home-page--modal-open' : ''}`}
     >
       <PageMeta
         pageStyle={
@@ -3035,19 +2975,19 @@ function IndexPage() {
             : 'overflow: visible;'
         }
       />
+      <Image className='home-botanical-background' src={homeBotanicalBackground} mode='aspectFill' />
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}
         <GreetingSection
           onSharePress={handleShareDailySummary}
-          mode={homeExperienceConfig.mode}
-          onModeToggle={handleHomeExperienceModeToggle}
           petAvatar={petHidden ? undefined : (
             <PetAvatar
               pet={petSummary?.pet}
               size={67}
               mood={petMood}
               state={petState}
+              motion='companion'
               className='greeting-pet__avatar'
             />
           )}
@@ -3104,23 +3044,16 @@ function IndexPage() {
           monthLoadError={calendarMonthLoadError}
         />
 
-        {showBackfillHint && (
+        {!isGuest && isAllowedRecordDate(selectedDate) && !isTodayRecordDate(selectedDate) && (
           <View className='home-backfill-hint'>
             <Text className='home-backfill-hint__dot' />
-            <View className='home-backfill-hint__copy'>
-              <Text className='home-backfill-hint__text'>可补录这一天的食物、体重、喝水和运动记录</Text>
-            </View>
-            <View className='home-backfill-hint__actions'>
-              <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
-              <Text className='home-backfill-hint__cancel' onClick={handleDismissBackfillHint}>取消</Text>
-            </View>
+            <Text className='home-backfill-hint__text'>
+              当前选择{getRecordDateLabel(selectedDate)}，直接在首页记录饮食、体重、喝水或运动，即可补录到这一天。
+            </Text>
           </View>
         )}
 
-        <View
-          key={homeExperienceConfig.mode}
-          className={`home-experience-stage home-module-list home-experience-stage--${homeExperienceConfig.mode}`}
-        >
+        <View className='home-experience-stage home-module-list'>
 
         <HomeModule id='nextMeal' layout={moduleLayout} locks={moduleLocks}>
         {showNextMealGuidance && (
@@ -3130,20 +3063,20 @@ function IndexPage() {
         </HomeModule>
 
         <HomeModule id='diet' layout={moduleLayout} locks={moduleLocks}>
-        {/* 养生模式使用表盘；均衡模式保留横向热量卡。两者复用同一份营养数据。 */}
-        {isWellnessMode ? (
+        {/* 两种模式共用真实营养数据的圆盘概览。 */}
           <View className='wellness-overview-card home-experience-card'>
+            <Image className='wellness-orbit-decoration' src={nutritionOrbitImage} mode='aspectFit' />
             <View className='wellness-overview-main'>
               <View
                 className={`wellness-calorie-gauge${isCalorieOver ? ' is-over' : ''}`}
-                style={{ '--wellness-progress': `${wellnessGaugePct}%` } as React.CSSProperties}
+                style={{ '--wellness-progress': `${animatedMainCalorieBarPct * 0.75}%` } as React.CSSProperties}
               >
                 <View className='wellness-calorie-gauge__center'>
-                  <Text className='wellness-calorie-gauge__label'>{isCalorieOver ? '已超出' : '剩余可摄入'}</Text>
+                  <Text className='wellness-calorie-gauge__label'>{isCalorieOver ? '已超出' : '今日还可摄入'}</Text>
                   <Text className={`wellness-calorie-gauge__value${isCalorieOver ? ' is-over' : ''}`}>
                     {dashboardBusy || isGuest
                       ? '--'
-                      : formatNumberWithComma(Math.round(isCalorieOver ? totalCurrent - totalTarget : totalTarget - totalCurrent))}
+                      : formatNumberWithComma(Math.round(animatedHeadlineCalories))}
                   </Text>
                   {dashboardBusy && <View className='loading-spinner wellness-calorie-gauge__spinner' />}
                   <Text className='wellness-calorie-gauge__unit'>kcal</Text>
@@ -3169,7 +3102,8 @@ function IndexPage() {
                     const macro = intakeData.macros[key]
                     const current = normalizeDisplayNumber(macro?.current)
                     const target = normalizeDisplayNumber(macro?.target)
-                    const pct = Math.min(100, calculateProgressPercent(current, target))
+                    const pct = key === 'protein' ? animatedMacroProteinRing : key === 'carbs' ? animatedMacroCarbsRing : animatedMacroFatRing
+                    const animatedCurrent = key === 'protein' ? animatedMacroProteinNum : key === 'carbs' ? animatedMacroCarbsNum : animatedMacroFatNum
                     const isMacroOver = current > target && target > 0
                     return (
                       <View key={key} className='wellness-macro'>
@@ -3178,7 +3112,7 @@ function IndexPage() {
                           <Text>{label}</Text>
                         </View>
                         <View className='wellness-macro__numbers'>
-                          <Text className={`wellness-macro__current${isMacroOver ? ' is-over' : ''}`}>{dashboardBusy || isGuest ? '--' : formatDisplayNumber(current)}</Text>
+                          <Text className={`wellness-macro__current${isMacroOver ? ' is-over' : ''}`}>{dashboardBusy || isGuest ? '--' : formatDisplayNumber(animatedCurrent)}</Text>
                           <Text className='wellness-macro__target'> / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(target)}{unit}</Text>
                         </View>
                         <View className='wellness-macro__track'>
@@ -3215,159 +3149,6 @@ function IndexPage() {
               )}
             </View>
           </View>
-        ) : (
-        <View className='main-card combined-card home-experience-card'>
-          <View className='main-card-header'>
-            <View className='main-card-title'>
-              <Text className='card-label'>
-                {dashboardBusy ? '剩余可摄入' : isCalorieOver ? '已超出' : '剩余可摄入'}
-              </Text>
-              {dashboardBusy ? (
-                <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx', marginTop: '8rpx' }}>
-                  <Text className='card-value' style={{ fontSize: '36rpx', color: '#9ca3af' }}>--</Text>
-                  <View className='loading-spinner' style={{ width: '24rpx', height: '24rpx', borderWidth: '3rpx' }} />
-                </View>
-              ) : isGuest ? (
-                <Text className='card-value' style={{ color: '#9ca3af' }}>--</Text>
-              ) : (
-                <Text className={`card-value${isCalorieOver ? ' is-over' : ''}`}>
-                  {isCalorieOver
-                    ? formatDisplayNumber(Math.round(animatedHeadlineCalories))
-                    : formatNumberWithComma(Math.round(animatedHeadlineCalories))}
-                </Text>
-              )}
-              {!dashboardBusy && !isGuest && <Text className='card-unit'>kcal</Text>}
-            </View>
-            <View className='target-section'>
-              {dashboardBusy || isGuest ? (
-                <View className='target-energy-nums-only'>
-                  <Text className='target-energy-num-muted'>--</Text>
-                  <Text className='target-energy-slash-only'>/</Text>
-                  <Text className='target-energy-num-muted'>--</Text>
-                </View>
-              ) : (
-                <View className='target-energy-nums-only'>
-                  <Text className={`target-energy-intake-num${isCalorieOver ? ' is-over' : ''}`}>
-                    {formatDisplayNumber(Math.round(intakeData.current))}
-                  </Text>
-                  <Text className='target-energy-slash-only'>/</Text>
-                  <Text className='target-energy-target-num'>
-                    {formatDisplayNumber(Math.round(intakeData.target))}
-                  </Text>
-                </View>
-              )}
-              <View className='target-action-row'>
-                <View className='target-edit-btn' onClick={openTargetEditor}>
-                  <Text className='iconfont icon-target target-edit-icon' />
-                  <Text className='target-edit-text'>目标设置</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View className='progress-section'>
-            <View className={`progress-bar-bg thick${dashboardBusy ? ' loading-pulse' : ''}`}>
-              <View
-                className={`progress-bar-fill thick${isCalorieOver ? ' is-over' : ''}`}
-                style={{ width: `${animatedMainCalorieBarPct}%` }}
-              />
-            </View>
-          </View>
-
-          <View className={`nutrition-expand-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
-            <View
-              className='nutrition-expand-main'
-              onClick={() => setNutritionExpanded((value) => !value)}
-            >
-              <View className='nutrition-expand-title-row'>
-                <Text className='nutrition-expand-title'>营养概览</Text>
-                <View className='nutrition-expand-affordance'>
-                  <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
-                  <Text className='nutrition-expand-affordance-text'>
-                    {nutritionExpanded ? '收起' : '展开更多'}
-                  </Text>
-                </View>
-              </View>
-
-              <View className='macros-section-horizontal'>
-                {MACRO_CONFIGS.map(({ key, label, color, unit, iconClass }) => {
-                  const macro = intakeData.macros[key]
-                  const targetValue = macro?.target || 0
-                  const currentRaw = normalizeDisplayNumber(macro?.current)
-                  const targetRaw = normalizeDisplayNumber(macro?.target)
-                  const macroPct = calculateProgressPercent(currentRaw, targetRaw)
-                  const isMacroOver = macroPct > 100
-                  const macroExcessG = isMacroOver
-                    ? Number((Math.max(0, currentRaw - targetRaw)).toFixed(1))
-                    : null
-                  const ringStrokeColor = isMacroOver ? HOME_WARNING_RED : color
-                  const intakeTextColor = isMacroOver ? HOME_WARNING_RED : color
-
-                  const ringAnimPct =
-                    key === 'protein'
-                      ? animatedMacroProteinRing
-                      : key === 'carbs'
-                        ? animatedMacroCarbsRing
-                        : animatedMacroFatRing
-                  const intakeAnimNum =
-                    key === 'protein'
-                      ? animatedMacroProteinNum
-                      : key === 'carbs'
-                        ? animatedMacroCarbsNum
-                        : animatedMacroFatNum
-
-                  return (
-                    <View key={key} className={`macro-card-horizontal ${isMacroOver ? 'is-warning' : ''}`}>
-                      <View className='macro-left-content'>
-                        <View className='macro-excess-slot'>
-                          {macroExcessG != null && macroExcessG > 0 && (
-                            <Text className='macro-over-hint'>+{formatDisplayNumber(macroExcessG)}{unit}</Text>
-                          )}
-                        </View>
-                        <View className='macro-title-row'>
-                          <Text className={`iconfont ${iconClass}`} style={{ color, marginRight: '6rpx', fontSize: '26rpx' }} />
-                          <Text className='macro-label-horizontal'>{label}</Text>
-                        </View>
-                        <View className='macro-value-row'>
-                          <Text className='macro-current-value-inline' style={{ color: intakeTextColor }}>
-                            {formatDisplayNumber(intakeAnimNum)}
-                          </Text>
-                          <Text className='macro-target-total'>
-                            / {formatDisplayNumber(targetValue)}{unit}
-                          </Text>
-                        </View>
-                        <View className='macro-progress-bar-bg'>
-                          <View
-                            className='macro-progress-bar-fill'
-                            style={{
-                              width: `${dashboardBusy ? 0 : Math.min(100, ringAnimPct)}%`,
-                              backgroundColor: ringStrokeColor
-                            }}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  )
-                })}
-              </View>
-            </View>
-
-            {nutritionExpanded && (
-              <View className='nutrition-expanded-body'>
-                <MicrosSection
-                  intakeData={intakeData}
-                  dashboardBusy={dashboardBusy}
-                  isGuest={isGuest}
-                  supplementSummary={supplementSummary}
-                  hiddenMicronutrientKeys={hiddenMicronutrientKeys}
-                  onManageMicronutrients={openTargetEditor}
-                />
-              </View>
-            )}
-          </View>
-        </View>
-        )}
-
         </HomeModule>
 
         <HomeModule id='supplements' layout={moduleLayout} locks={moduleLocks}>
@@ -3429,6 +3210,7 @@ function IndexPage() {
         </HomeModule>
 
         <HomeModule id='body' layout={moduleLayout} locks={moduleLocks}>
+        <Text className='home-quick-heading'>快速记录</Text>
         {/* 体重、喝水、运动与睡眠快捷卡片 */}
         <ScrollView
           className={`body-status-scroll body-status-scroll--count-${moduleLayout.quickStats.length}`}
@@ -3498,13 +3280,14 @@ function IndexPage() {
               ) : (
                 <>
                   <Text className='body-status-value'>{Math.round(animatedWaterTotal)}</Text>
-                  <Text className='body-status-unit'>ml</Text>
+                  <Text className='body-status-unit'>{moduleLayout.quickStats.length === 1 ? ` / ${bodyMetrics.waterGoalMl} ml` : 'ml'}</Text>
                 </>
               )}
             </View>
             <Text className='body-status-hint'>
               {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
             </Text>
+            {moduleLayout.quickStats.length === 1 && <View className='water-single-progress'><View className='water-single-progress__fill' style={{ width: `${dashboardBusy || isGuest ? 0 : Math.min(100, Math.max(0, animatedWaterProgress))}%` }} /></View>}
           </View>
           )}
 
@@ -3554,157 +3337,38 @@ function IndexPage() {
           <View className='section-header'>
             <View className='meals-title-wrap'>
               <Text className='iconfont icon-canciguanli meals-title-icon' />
-              <Text className='meals-title'>今日餐食</Text>
+              <Text className='meals-title'>{selectedDate === formatDateKey(new Date()) ? '今日餐食' : `${getRecordDateLabel(selectedDate)}餐食`}</Text>
+              {!loading && meals.length > 0 ? <Text className='home-meal-count'>{meals.length} 餐</Text> : null}
             </View>
             <View className='view-all-btn' onClick={handleViewAllMeals}>
               <Text className='iconfont icon-right-arrow view-all-arrow' />
             </View>
           </View>
 
-          <View className='meals-list'>
+          <ScrollView className='home-meal-strip' scrollX enhanced showScrollbar={false}>
             {loading ? (
-              <View className='meals-skeleton'>
-                {[1, 2, 3].map((i) => (
-                  <View key={i} className='meal-skeleton-item'>
-                    <View className='meal-skeleton-thumb' />
-                    <View className='meal-skeleton-body'>
-                      <View className='meal-skeleton-top'>
-                        <View className='home-line-title' />
-                        <View className='home-line-cal' />
-                      </View>
-                      <View className='home-skeleton-bar' />
-                      <View className='meal-skeleton-foot'>
-                        <View className='home-line-foot-l' />
-                        <View className='home-line-foot-r' />
-                      </View>
-                    </View>
-                  </View>
-                ))}
-              </View>
+              <View className='home-meal-strip__skeleton'><View /><View /></View>
             ) : meals.length === 0 ? (
-              <View className='meals-empty'>
-                <Text className='meals-empty-icon'>🍽️</Text>
-                <Text className='meals-empty-text'>暂无今日餐食</Text>
-                <Button className='empty-record-btn' onClick={handleQuickRecord}>去记录一餐</Button>
+              <View className='home-meal-strip__empty' onClick={handleQuickRecord}>
+                <Text>记录今天的第一餐</Text><Text className='iconfont icon-right-arrow' />
               </View>
             ) : (
-              meals.map((meal, index) => {
-                const config = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
-                const { Icon, color, bgColor, label } = config
-                const mealCalorie = normalizeDisplayNumber(meal.calorie)
-                const mealTarget = normalizeDisplayNumber(meal.target)
-                const mealProgress = normalizeProgressPercent(meal.progress, mealCalorie, mealTarget)
-                const mealImageUrls = collectFoodDisplayImageUrls(meal)
-                const previewImage = mealImageUrls[0] || ''
-                const hasRealImage = hasFoodDisplayImage(meal)
-                const mealRecordCount = Array.isArray(meal.meal_record_entries)
-                  ? meal.meal_record_entries.filter((entry) => entry && String(entry.id || '').trim()).length
-                  : 0
-                const mealIntakeRatio = typeof (meal.intake_ratio ?? meal.intakeRatio) === 'number'
-                  ? Number(meal.intake_ratio ?? meal.intakeRatio)
-                  : null
-
-
-                return (
-                  <View
-                    key={`${meal.type}-${index}`}
-                    className={`meal-item meal-item--tappable ${mealProgress > 100 ? 'is-warning' : ''}`}
-                    onClick={() => openMealRecordDetail(meal)}
-                  >
-                    <View
-                      className={`meal-media-wrap ${hasRealImage ? 'is-photo' : 'is-icon'}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (hasRealImage) previewHomeMealImages(meal)
-                      }}
-                    >
-                      {hasRealImage ? (
-                        <Image
-                          className='meal-thumb-image'
-                          src={previewImage}
-                          mode='aspectFill'
-                        />
-                      ) : (
-                        <View className='meal-icon-wrap' style={{ backgroundColor: bgColor }}>
-                          <Icon size={24} color={color} />
-                        </View>
-                      )}
-                      <View className='meal-media-type-tag'>
-                        <Text className='meal-media-type-tag-text'>{label}</Text>
-                      </View>
+              <View className='home-meal-strip__list'>
+                {meals.map((meal, index) => {
+                  const { Icon, color, bgColor, label } = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
+                  const previewImage = collectFoodDisplayImageUrls(meal)[0]
+                  const hasImage = hasFoodDisplayImage(meal)
+                  return <View key={`${meal.type}-${index}`} className='home-meal-strip__item' onClick={() => openMealRecordDetail(meal)}>
+                    <View className='home-meal-strip__media' onClick={event => { if (hasImage) { event.stopPropagation(); previewHomeMealImages(meal) } }}>
+                      {hasImage ? <Image className='home-meal-strip__image' src={previewImage} mode='aspectFill' /> : <View className='home-meal-strip__icon' style={{ backgroundColor: bgColor }}><Icon size={24} color={color} /></View>}
                     </View>
-                    <View className='meal-content'>
-                      {/* 第一行：描述 + 时间胶囊 */}
-                      <View className='meal-header-block'>
-                        <Text className='meal-desc' numberOfLines={1}>
-                          {meal.description || meal.meal_record_entries?.map((e) => e.title).filter(Boolean).join('、') || meal.name || label}
-                        </Text>
-                        {mealRecordCount > 1 ? (
-                          <View className='meal-count-badge'>
-                            <Text className='meal-count-badge-text'>{mealRecordCount}次</Text>
-                          </View>
-                        ) : null}
-                        {meal.time ? (
-                          <View className='meal-time-pill'>
-                            <Text className='meal-time-pill-text'>{meal.time}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      {/* 第二行：🔥 卡路里 + 餐次目标 */}
-                      <View className='meal-calorie-row'>
-                        <View className='meal-calorie-wrap'>
-                          <Text className='iconfont icon-huore' style={{ color: '#f0985c', fontSize: '24rpx', marginRight: '4rpx' }} />
-                          <Text className='meal-calorie'>
-                            {formatDisplayNumber(mealCalorie)}
-                            <Text className='meal-calorie-unit'> kcal</Text>
-                          </Text>
-                        </View>
-                        <View className='meal-calorie-extra'>
-                          {mealIntakeRatio != null ? (
-                            <>
-                              <Text
-                                className='meal-intake-ratio-text'
-                                style={{ color: mealIntakeRatio > 100 ? HOME_WARNING_RED : undefined }}
-                              >
-                                摄入 {formatDisplayNumber(mealIntakeRatio)}%
-                              </Text>
-                            </>
-                          ) : null}
-                        </View>
-                      </View>
-                      {/* 第三行：三大营养素 + 含水量 */}
-                      <View className='meal-macros-row'>
-                        {typeof meal.protein === 'number' && (
-                          <View className='meal-macro-pill'>
-                            <Text className='iconfont icon-danbaizhi' style={{ color: '#5c9ed4', fontSize: '22rpx', marginRight: '4rpx' }} />
-                            <Text className='meal-macro-text'>{formatDisplayNumber(meal.protein)}g</Text>
-                          </View>
-                        )}
-                        {typeof meal.carbs === 'number' && (
-                          <View className='meal-macro-pill'>
-                            <Text className='iconfont icon-tanshui-dabiao' style={{ color: '#dcac52', fontSize: '22rpx', marginRight: '4rpx' }} />
-                            <Text className='meal-macro-text'>{formatDisplayNumber(meal.carbs)}g</Text>
-                          </View>
-                        )}
-                        {typeof meal.fat === 'number' && (
-                          <View className='meal-macro-pill'>
-                            <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin' style={{ color: '#f0985c', fontSize: '22rpx', marginRight: '4rpx' }} />
-                            <Text className='meal-macro-text'>{formatDisplayNumber(meal.fat)}g</Text>
-                          </View>
-                        )}
-                        {typeof (meal.water_ml ?? meal.waterMl) === 'number' && Number(meal.water_ml ?? meal.waterMl) > 0 && (
-                          <View className='meal-macro-pill'>
-                            <Text className='iconfont icon-drink' style={{ color: '#70B8A0', fontSize: '22rpx', marginRight: '4rpx' }} />
-                            <Text className='meal-macro-text'>{formatDisplayNumber(Number(meal.water_ml ?? meal.waterMl))}ml</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
+                    <View className='home-meal-strip__copy'><Text className='home-meal-strip__label'>{label}</Text>{meal.time ? <Text className='home-meal-strip__time'>{meal.time}</Text> : null}</View>
+                    <Success className='home-meal-strip__check' />
                   </View>
-                )
-              })
+                })}
+              </View>
             )}
-          </View>
+          </ScrollView>
         </View>
 
         </HomeModule>
@@ -3744,9 +3408,7 @@ function IndexPage() {
               ) : expirySummary.pendingCount === 0 ? (
                 <View className='expiry-empty' onClick={openFoodExpiryList}>
                   <Text className='expiry-empty-title'>暂无待吃完记录</Text>
-                  <Text className='expiry-empty-desc'>
-                    添加家中食物与预计吃完时间，我们会在首页展示最紧急的几项并提醒即将过期。
-                  </Text>
+                  <Text className='expiry-empty-add'>添加食物</Text>
                 </View>
               ) : (
                 <>
@@ -3802,11 +3464,6 @@ function IndexPage() {
         <HomeModule id='recap' layout={moduleLayout} locks={moduleLocks}>
         {!isGuest && <WeeklyRecapEntry />}
         </HomeModule>
-
-        {/* 查看统计入口 */}
-        <View className='home-experience-card' style={{ order: 100 }}>
-          <StatsEntry onClick={openDayRecordForSelectedDate} />
-        </View>
 
         </View>
 

@@ -1,12 +1,14 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { getUserRecipes, deleteUserRecipe, applyUserRecipe, updateUserRecipe, showUnifiedApiError, type UserRecipe } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
-import { getStoredRecordTargetDate } from '../../../utils/record-date'
+import { getTodayRecordDateKey, getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import RecordDateField from '../../../components/RecordDateField'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import './index.scss'
 
@@ -237,6 +239,8 @@ function scaleRecipeItemsNutrients(
 }
 
 function RecipesPage() {
+  const [recordDate, setRecordDate] = useRecordDate(String(Taro.getCurrentInstance().router?.params?.date || getTodayRecordDateKey()))
+  const useRecipeLock = useRef(false)
   const [recipes, setRecipes] = useState<UserRecipe[]>([])
   const [loading, setLoading] = useState(false)
   const [editingRecipe, setEditingRecipe] = useState<UserRecipe | null>(null)
@@ -285,19 +289,22 @@ function RecipesPage() {
 
   /** 使用食谱（一键记录） */
   const handleUseRecipe = async (recipe: UserRecipe) => {
+    if (useRecipeLock.current || !requireAllowedRecordDate(recordDate)) return
+    useRecipeLock.current = true
+    const targetDate = recordDate
     try {
       const MEAL_KEYS = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
       const MEAL_NAMES = ['早餐', '早加餐', '午餐', '午加餐', '晚餐', '晚加餐']
       const { tapIndex } = await Taro.showActionSheet({
         itemList: MEAL_NAMES,
-        alertText: `将"${recipe.recipe_name}"记录为：`
+        alertText: `记录到${getRecordDateLabel(targetDate)}：${recipe.recipe_name}`
       })
 
       const selectedMealType = MEAL_KEYS[tapIndex]
-      const targetDate = getStoredRecordTargetDate()
 
-      Taro.showLoading({ title: '记录中...', mask: true })
-      await applyUserRecipe(recipe.id, selectedMealType, 'favorite_recipe')
+      if (!requireAllowedRecordDate(targetDate)) return
+      Taro.showLoading({ title: '', mask: true })
+      await applyUserRecipe(recipe.id, selectedMealType, 'favorite_recipe', targetDate)
       Taro.hideLoading()
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
@@ -309,7 +316,7 @@ function RecipesPage() {
       } catch {
         /* ignore */
       }
-      Taro.showToast({ title: '已添加到饮食记录', icon: 'success' })
+      Taro.showToast({ title: `已记录到${getRecordDateLabel(targetDate)}`, icon: 'success' })
       returnHomeAfterFoodRecord()
     } catch (e: any) {
       // 点击取消也会抛出错误，需区分
@@ -317,6 +324,8 @@ function RecipesPage() {
 
       Taro.hideLoading()
       await showUnifiedApiError(e, '记录失败')
+    } finally {
+      useRecipeLock.current = false
     }
   }
 
@@ -447,7 +456,7 @@ function RecipesPage() {
   }
 
   const handleGoDetail = (recipe: UserRecipe) => {
-    Taro.navigateTo({ url: `${extraPkgUrl('/pages/recipe-detail/index')}?id=${encodeURIComponent(recipe.id)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/recipe-detail/index')}?id=${encodeURIComponent(recipe.id)}&date=${encodeURIComponent(recordDate)}` })
   }
 
   return (
@@ -455,6 +464,7 @@ function RecipesPage() {
       <View className='page-header'>
         <Text className='page-title'>我的收藏</Text>
         <Text className='page-subtitle'>这里会显示你收藏过的餐食，方便之后快速记录。</Text>
+        <RecordDateField date={recordDate} onChange={setRecordDate} />
       </View>
 
       <ScrollView className='recipe-list' scrollY>

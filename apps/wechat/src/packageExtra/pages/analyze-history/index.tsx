@@ -1,7 +1,7 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import * as React from 'react'
-import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
+import Taro, { useDidShow, useDidHide, useRouter } from '@tarojs/taro'
 import {
   listAnalyzeTaskSummaries,
   deleteAnalysisTask,
@@ -34,6 +34,8 @@ import { buildFoodRecordItemPayloadFromAnalyzeItem } from '../../../utils/food-r
 import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { acknowledgeAnalyzeTaskReminders } from '../../../utils/analyze-task-reminder'
+import { requireAllowedRecordDate, getRecordDateLabel } from '../../../utils/record-date'
+import { openAnalyzeTaskFromReminder } from '../../../utils/open-analyze-task'
 import {
   MealTypeSelectSheet,
   normalizeSelectableMealType,
@@ -444,6 +446,9 @@ const TaskCard = React.memo(function TaskCard({ task, onTap, onMore }: TaskCardP
 })
 
 function AnalyzeHistoryPage() {
+  const router = useRouter()
+  const [waitingDate] = React.useState(() => router.params?.waiting_record === '1'
+    ? String(router.params?.date || '') : '')
   const { scheme } = useAppColorScheme()
   const [tasks, setTasks] = React.useState<AnalyzeTaskSummary[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -600,6 +605,7 @@ function AnalyzeHistoryPage() {
       const search = keyword?.trim()
       const res = await withTimeout(
         listAnalyzeTaskSummaries({
+          ...(waitingDate ? { date: waitingDate, waiting_record: true } : {}),
           limit: append ? ANALYZE_HISTORY_PAGE_SIZE : refreshLimit,
           offset,
           search,
@@ -612,6 +618,7 @@ function AnalyzeHistoryPage() {
         duration_ms: Date.now() - startedAt,
         response_task_count: Array.isArray(res.tasks) ? res.tasks.length : -1,
       })
+      if (waitingDate && res.filter_applied !== true) throw new Error('待确认日期筛选暂不可用')
       const pageTasks = (res.tasks || []).filter((t) => isAnalyzeHistoryTaskType(t.task_type))
       pageTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       if (seq !== loadSeqRef.current) {
@@ -710,7 +717,7 @@ function AnalyzeHistoryPage() {
         })
       }
     }
-  }, [clearTaskRenderTimers])
+  }, [clearTaskRenderTimers, waitingDate])
 
   const handleSearchInput = (value: string) => {
     setSearchKeyword(value)
@@ -833,7 +840,7 @@ function AnalyzeHistoryPage() {
     // 分享功能：跳转到分享页面
     if (task.status === 'done' && task.result) {
       const result = task.result as AnalyzeResponse
-      // 准备分享数据：自动填充到公共食物库分享页
+      // 准备分享数据：自动填充到美食图谱分享页
       const imageUrls = pickTaskImageUrls(task)
       const items = (result.items || []).map(it => ({
         name: it.name || '',
@@ -1064,6 +1071,11 @@ function AnalyzeHistoryPage() {
       closeQuickRecordMealSelector()
       return
     }
+    if (!requireAllowedRecordDate(getTaskRecordDate(task) || '')) {
+      closeQuickRecordMealSelector()
+      void openAnalyzeTaskFromReminder(task.id)
+      return
+    }
     const mealType = quickRecordMealType
     closeQuickRecordMealSelector()
 
@@ -1123,7 +1135,7 @@ function AnalyzeHistoryPage() {
           /* ignore */
         }
         Taro.showToast({
-          title: saveResult.already_saved ? '该餐已记录' : '记录成功',
+          title: saveResult.already_saved ? '该餐已记录' : `已记录到${getRecordDateLabel(targetDateKey)}`,
           icon: saveResult.already_saved ? 'none' : 'success'
         })
       } catch (e: any) {
@@ -1214,7 +1226,7 @@ function AnalyzeHistoryPage() {
         Taro.removeStorageSync('analyzeTaskIsRecorded')
         Taro.removeStorageSync('analyzeCommittedRecordId')
       }
-      Taro.navigateTo({ url: extraPkgUrl('/pages/result/index') })
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(getTaskRecordDate(task) || '')}&task_id=${encodeURIComponent(task.id)}` })
       return
     }
     if (task.status === 'pending' || task.status === 'processing') {
@@ -1275,7 +1287,7 @@ function AnalyzeHistoryPage() {
   return (
     <View className={`analyze-history-page ${scheme === 'dark' ? 'analyze-history-page--dark' : ''}`}>
       <CustomNavBar
-        title='识别记录'
+        title={waitingDate ? `${getRecordDateLabel(waitingDate)}待确认饮食` : '识别记录'}
         showBack
         onBack={handleBack}
         color={scheme === 'dark' ? '#f3f7f4' : '#0f172a'}
@@ -1388,7 +1400,7 @@ function AnalyzeHistoryPage() {
                 onClick={actionSheetShare}
               >
                 <Text className='iconfont icon-shiwu action-sheet-icon action-sheet-icon--library' />
-                <Text className='action-sheet-label'>分享到公共食物库</Text>
+                <Text className='action-sheet-label'>分享到美食图谱</Text>
               </View>
               <View className='action-sheet-divider' />
               <View className='action-sheet-item action-sheet-item--danger' onClick={actionSheetDelete}>

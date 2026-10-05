@@ -17,10 +17,7 @@ describe('wellness home final layout', () => {
 
   it('maps calorie progress onto the visible three-quarter gauge track', () => {
     expect(pageSource).toContain(
-      'const wellnessGaugePct = wellnessCaloriePct * 0.75',
-    )
-    expect(pageSource).toContain(
-      "'--wellness-progress': `${wellnessGaugePct}%`",
+      "'--wellness-progress': `${animatedMainCalorieBarPct * 0.75}%`",
     )
     expect(pageSource).toContain(
       'style={{ width: `${wellnessCaloriePct}%` }}',

@@ -180,7 +180,7 @@ func feedbackSourceLabel(source string) string {
 	case domain.SourceCampusFood:
 		return "校园菜品纠错"
 	case domain.SourceFoodLibrary:
-		return "公共食物库纠错"
+		return "美食图谱纠错"
 	default:
 		return "App 意见反馈"
 	}

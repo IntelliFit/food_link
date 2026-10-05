@@ -115,7 +115,7 @@ func (s *SupplementService) Update(ctx context.Context, userID, itemID string, i
 	if err != nil {
 		return nil, err
 	}
-	if current == nil {
+	if current == nil || current.Status != "active" {
 		return nil, commonerrors.ErrNotFound
 	}
 	// Older mini-program builds only send image_url. Treat an omitted image_urls
@@ -202,6 +202,20 @@ func (s *SupplementService) DeleteIntake(ctx context.Context, userID, intakeID s
 		return commonerrors.ErrNotFound
 	}
 	logger.Info(ctx, "补剂摄入记录已删除", slog.String("user_id", userID), slog.String("intake_id", intakeID))
+	return nil
+}
+
+func (s *SupplementService) Delete(ctx context.Context, userID, itemID string) error {
+	archived, err := s.repo.Archive(ctx, userID, itemID)
+	if err != nil {
+		logger.Error(ctx, "移除补剂柜条目失败", err, slog.String("user_id", userID), slog.String("supplement_id", itemID))
+		return err
+	}
+	if !archived {
+		logger.Warn(ctx, "补剂柜条目不存在或不属于当前用户", slog.String("user_id", userID), slog.String("supplement_id", itemID))
+		return commonerrors.ErrNotFound
+	}
+	logger.Info(ctx, "补剂柜条目已移除并保留摄入历史", slog.String("user_id", userID), slog.String("supplement_id", itemID))
 	return nil
 }
 

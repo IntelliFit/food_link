@@ -1,28 +1,16 @@
 import Taro from '@tarojs/taro'
 import type { AppColorScheme } from './app-color-scheme'
-import { HOME_DISPLAY_MODE_STORAGE_KEY } from './home-display-mode'
 
 interface NavigationBarThemeOptions {
   lightBackground?: string
   darkBackground?: string
-  wellnessBackground?: string
-}
-
-function isWellnessMode(): boolean {
-  try {
-    return Taro.getStorageSync(HOME_DISPLAY_MODE_STORAGE_KEY) === 'wellness'
-  } catch {
-    return false
-  }
 }
 
 export function applyThemeNavigationBar(
   scheme: AppColorScheme,
   options?: NavigationBarThemeOptions
 ): void {
-  const lightBackground = isWellnessMode()
-    ? options?.wellnessBackground || '#f7f3e8'
-    : options?.lightBackground || '#ffffff'
+  const lightBackground = options?.lightBackground || '#ffffff'
   const darkBackground = options?.darkBackground || '#101716'
   const isDark = scheme === 'dark'
 

@@ -17,6 +17,11 @@ import (
 // into a normal food record. Save remains the single write path, so the
 // user/source_task_id uniqueness guard also protects worker/HTTP races.
 func (s *FoodRecordService) AutoRecordCompletedTask(ctx context.Context, task *analyzedomain.AnalysisTask) (string, bool, error) {
+	if task != nil {
+		if _, single := task.Payload["correction_target_index"]; single {
+			return "", false, nil
+		}
+	}
 	if task == nil || task.Status != "done" || !autoRecordRequested(task.Payload) {
 		return "", false, nil
 	}

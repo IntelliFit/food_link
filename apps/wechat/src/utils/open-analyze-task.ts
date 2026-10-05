@@ -3,6 +3,7 @@ import { getAnalyzeTask, markAnalyzeHistorySeen, type AnalysisTask, type Analyze
 import { normalizeAnalysisEngine } from './analysis-engine'
 import { needsPrecisionUserAction } from './precision-mode'
 import { extraPkgUrl } from './subpackage-extra'
+import { getTaskRecordTargetDate } from './record-date'
 
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 
@@ -110,7 +111,7 @@ export async function openAnalyzeTaskFromReminder(taskId: string): Promise<void>
     }
     persistTaskResultContext(task, result)
     void markAnalyzeHistorySeen().catch(() => undefined)
-    Taro.navigateTo({ url: extraPkgUrl('/pages/result/index') })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(getTaskRecordTargetDate(task))}&task_id=${encodeURIComponent(task.id)}` })
   } catch (error) {
     Taro.hideLoading()
     console.error('打开识别提醒失败:', error)

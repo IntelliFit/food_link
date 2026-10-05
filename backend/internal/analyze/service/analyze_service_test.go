@@ -1708,12 +1708,18 @@ func TestAnalyzeService_AnalyzeImageStandardIgnoresExplicitDoubaoAndUsesGemini3F
 func TestAnalyzeService_AnalyzeImageFastKeepsExplicitQwen38Model(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
 	gemini3Client := &mockLLMClient{err: assert.AnError}
-	qwenClient := &mockLLMClient{result: map[string]any{"description": "qwen fast image", "items": []any{}}}
+	qwenClient := &mockLLMClient{result: map[string]any{"description": "qwen fast image", "items": []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}}}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureImageProvider("doubao")
 	svc.ConfigureDashScopeLLMClient(qwenClient)
 	svc.ConfigureWebSearcher(nil)
 	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+	// Keep nutrition enrichment independent from the image-routing assertion.
+	micronutrients := map[string]any{fallbackNutritionSourceKey: "qwen_generated"}
+	for _, key := range preciseMicronutrientKeys {
+		micronutrients[key] = 1.0
+	}
+	svc.ConfigureNutritionFallbackEstimator(&fakeNutritionFallbackEstimator{rows: map[int]map[string]any{0: micronutrients}})
 	mode := fastExecutionMode
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{

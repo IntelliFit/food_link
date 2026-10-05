@@ -32,6 +32,8 @@ import (
 	communityhandler "food_link/backend/internal/community/handler"
 	communityrepo "food_link/backend/internal/community/repo"
 	communityservice "food_link/backend/internal/community/service"
+	contentsecurityhandler "food_link/backend/internal/contentsecurity/handler"
+	contentsecurityservice "food_link/backend/internal/contentsecurity/service"
 	expiryhandler "food_link/backend/internal/expiry/handler"
 	expiryrepo "food_link/backend/internal/expiry/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
@@ -76,6 +78,9 @@ import (
 	publicfoodhandler "food_link/backend/internal/publicfood/handler"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
+	pushhandler "food_link/backend/internal/push/handler"
+	pushrepo "food_link/backend/internal/push/repo"
+	pushservice "food_link/backend/internal/push/service"
 	recipehandler "food_link/backend/internal/recipe/handler"
 	reciperepo "food_link/backend/internal/recipe/repo"
 	recipeservice "food_link/backend/internal/recipe/service"
@@ -130,8 +135,11 @@ type App struct {
 	catalogBackfillDone   chan struct{}
 	openPlatformCancel    context.CancelFunc
 	openPlatformDone      chan struct{}
+	pushCancel            context.CancelFunc
+	pushDone              chan struct{}
 	taskQueue             taskqueue.Queue
 	campusCatalogService  *campuscatalogservice.CatalogService
+	contentSecurity       *contentsecurityservice.Service
 }
 
 type campusCatalogNutritionBackfiller interface {
@@ -189,6 +197,14 @@ func New(cfg *config.Config) (*App, error) {
 
 	jwtSvc := authservice.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTokenTTLSeconds, cfg.JWT.RefreshTokenTTLSeconds)
 	userRepo := authrepo.NewUserRepo(db)
+	contentSecurity, err := contentsecurityservice.New(cfg, userRepo)
+	if err != nil {
+		return nil, err
+	}
+	contentGuard := func(scene int) gin.HandlerFunc {
+		return contentsecurityhandler.Guard(contentSecurity, storageClient, scene)
+	}
+	contentCallback := contentsecurityhandler.NewCallback(contentSecurity, cfg)
 	loginSvc := authservice.NewLoginService(cfg, userRepo, jwtSvc)
 	loginHandler := authhandler.NewLoginHandler(loginSvc)
 	smsStore, err := authservice.NewSMSCodeStore(cfg.Redis, cfg.App.Env)
@@ -230,6 +246,7 @@ func New(cfg *config.Config) (*App, error) {
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(doubaoClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureOpenLuxGeminiClients(cfg.External.OpenLuxAPIKey, cfg.External.OpenLuxBaseURL)
+	analyzeSvc.ConfigureA6VisionRouting(cfg.External.A6APIKey, cfg.External.A6BaseURL, cfg.External.VisionRouting)
 	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
 	var dashscopeClient *analyzeservice.OfoxAIClient
 	if strings.TrimSpace(cfg.External.DashScopeAPIKey) != "" {
@@ -303,6 +320,7 @@ func New(cfg *config.Config) (*App, error) {
 	frNutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	bodyMetricsRepo := healthrepo.NewBodyMetricsRepo(db)
 	frSvc := foodrecordservice.NewFoodRecordService(frRepo, frTaskRepo, userRepo, storageClient)
+	frSvc.ConfigureContentSecurity(contentSecurity)
 	analyzeTaskSvc.ConfigureAutoRecorder(frSvc)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
@@ -356,6 +374,7 @@ func New(cfg *config.Config) (*App, error) {
 	feedReportNotifier := communityservice.NewReportNotifier(cfg.Feishu.ReportWebhookURL, cfg.Feishu.ReportWebhookSecret, cfg.App.AdminBaseURL, cfg.Feishu.AppID, cfg.Feishu.AppSecret)
 	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, messageSvc, storageClient)
 	communitySvc.ConfigureBlockChecker(friendSvc)
+	communitySvc.ConfigureContentSecurity(contentSecurity)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
 	// Search module DI
@@ -451,6 +470,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
 	recipeSvc := recipeservice.NewRecipeService(recipeRepo, storageClient)
+	recipeSvc.ConfigureContentSecurity(contentSecurity)
 	recipeSvc.ConfigureBlockChecker(friendSvc)
 	recipeSvc.ConfigureFavoriteRecipeVisibilityChecker(userSvc)
 	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
@@ -468,6 +488,8 @@ func New(cfg *config.Config) (*App, error) {
 	expirySvc.ConfigureCreditGuard(membershipSvc)
 	expirySvc.ConfigureStorage(storageClient)
 	expiryHandler := expiryhandler.NewExpiryHandler(expirySvc)
+	pushSvc := pushservice.New(pushrepo.New(db), cfg.Push)
+	pushHandler := pushhandler.New(pushSvc)
 
 	// Utility module DI
 	locationSvc := utilityservice.NewLocationService(cfg)
@@ -497,14 +519,25 @@ func New(cfg *config.Config) (*App, error) {
 	system := systemhandler.New(cfg)
 
 	app := &App{
-		engine:        engine,
-		db:            db,
-		shutdownTrace: traceShutdown,
-		shutdownLog:   logShutdown,
-		taskQueue:     taskQueue,
+		engine:          engine,
+		db:              db,
+		shutdownTrace:   traceShutdown,
+		shutdownLog:     logShutdown,
+		taskQueue:       taskQueue,
+		contentSecurity: contentSecurity,
 	}
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campusCatalogRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, statsSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
+		if cfg.Push.Enabled {
+			pushCtx, pushCancel := context.WithCancel(context.Background())
+			app.pushCancel = pushCancel
+			app.pushDone = make(chan struct{})
+			go func() {
+				defer close(app.pushDone)
+				pushSvc.Run(pushCtx)
+			}()
+			logger.Info(context.Background(), "APP 业务提醒巡检已启动")
+		}
 		app.startOpenPlatformReconciliation(openPlatformSvc)
 		app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
 	}
@@ -529,8 +562,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/ws/stats/insight", statsInsightWebsocket(statsSvc))
 
 	// User routes
+	pushHandler.RegisterRoutes(engine.Group("/api/push", authmw.RequireJWT(jwtSvc)))
 	engine.GET("/api/user/profile", authmw.RequireJWT(jwtSvc), userHandler.GetProfile)
-	engine.PUT("/api/user/profile", authmw.RequireJWT(jwtSvc), userHandler.UpdateProfile)
+	engine.PUT("/api/user/profile", authmw.RequireJWT(jwtSvc), contentGuard(1), userHandler.UpdateProfile)
 	engine.POST("/api/user/bind-phone", authmw.RequireJWT(jwtSvc), userHandler.BindPhone)
 	engine.POST("/api/user/upload-avatar", authmw.RequireJWT(jwtSvc), userHandler.UploadAvatar)
 	engine.POST("/api/user/upload-cover", authmw.RequireJWT(jwtSvc), userHandler.UploadCoverImage)
@@ -561,6 +595,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/supplements/label/recognize", authmw.RequireJWT(jwtSvc), supplementHandler.RecognizeLabel)
 	engine.POST("/api/supplements", authmw.RequireJWT(jwtSvc), supplementHandler.Create)
 	engine.PUT("/api/supplements/:item_id", authmw.RequireJWT(jwtSvc), supplementHandler.Update)
+	engine.DELETE("/api/supplements/:item_id", authmw.RequireJWT(jwtSvc), supplementHandler.Delete)
 	engine.GET("/api/supplements/dashboard", authmw.RequireJWT(jwtSvc), supplementHandler.Dashboard)
 	engine.POST("/api/supplements/:item_id/intakes", authmw.RequireJWT(jwtSvc), supplementHandler.Record)
 	engine.DELETE("/api/supplement-intakes/:intake_id", authmw.RequireJWT(jwtSvc), supplementHandler.DeleteIntake)
@@ -623,7 +658,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/user/:user_id/follow-stats", authmw.RequireJWT(jwtSvc), followHandler.GetFollowStats)
 
 	// Message routes
-	engine.POST("/api/messages/send", authmw.RequireJWT(jwtSvc), messageHandler.Send)
+	engine.POST("/api/messages/send", authmw.RequireJWT(jwtSvc), contentGuard(4), messageHandler.Send)
 	engine.GET("/api/messages/conversation/:user_id", authmw.RequireJWT(jwtSvc), messageHandler.GetConversation)
 	engine.GET("/api/messages/conversations", authmw.RequireJWT(jwtSvc), messageHandler.GetConversations)
 	engine.PUT("/api/messages/read/:user_id", authmw.RequireJWT(jwtSvc), messageHandler.MarkRead)
@@ -633,7 +668,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Friend routes
 	engine.GET("/api/friend/search", authmw.RequireJWT(jwtSvc), friendHandler.Search)
-	engine.POST("/api/friend/request", authmw.RequireJWT(jwtSvc), friendHandler.SendRequest)
+	engine.POST("/api/friend/request", authmw.RequireJWT(jwtSvc), contentGuard(4), friendHandler.SendRequest)
 	engine.GET("/api/friend/requests", authmw.RequireJWT(jwtSvc), friendHandler.GetRequests)
 	engine.POST("/api/friend/request/:request_id/respond", authmw.RequireJWT(jwtSvc), friendHandler.RespondRequest)
 	engine.DELETE("/api/friend/request/:request_id", authmw.RequireJWT(jwtSvc), friendHandler.CancelRequest)
@@ -654,6 +689,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Community routes
 	engine.GET("/api/community/public-feed", authmw.OptionalJWT(jwtSvc), communityHandler.PublicFeed)
 	engine.GET("/api/community/feed", authmw.RequireJWT(jwtSvc), communityHandler.Feed)
+	engine.GET("/api/community/comments/mine", authmw.RequireJWT(jwtSvc), communityHandler.OwnComments)
 	engine.GET("/api/community/checkin-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.CheckinLeaderboard)
 	engine.GET("/api/community/health-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.HealthLeaderboard)
 	engine.GET("/api/community/food-nutrient-leaderboard", authmw.OptionalJWT(jwtSvc), communityHandler.FoodNutrientLeaderboard)
@@ -703,9 +739,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/diet/recommendations/preview", authmw.RequireJWT(jwtSvc), healthHandler.PreviewMeals)
 	engine.GET("/api/exercise-calories/daily", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseCaloriesDaily)
 	engine.GET("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseLogs)
-	engine.POST("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.CreateExerciseLog)
+	engine.POST("/api/exercise-logs", authmw.RequireJWT(jwtSvc), contentGuard(4), healthHandler.CreateExerciseLog)
 	engine.POST("/api/exercise-logs/estimate-calories", authmw.RequireJWT(jwtSvc), healthHandler.EstimateExerciseCalories)
-	engine.PUT("/api/exercise-logs/:log_id", authmw.RequireJWT(jwtSvc), healthHandler.UpdateExerciseLog)
+	engine.PUT("/api/exercise-logs/:log_id", authmw.RequireJWT(jwtSvc), contentGuard(4), healthHandler.UpdateExerciseLog)
 	engine.DELETE("/api/exercise-logs/:log_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteExerciseLog)
 
 	// Membership routes
@@ -717,7 +753,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
 	engine.POST("/api/membership/xpay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreateVirtualPayment)
 	engine.GET("/api/payment/wechat/xpay/notify", membershipHandler.XPayNotify)
-	engine.POST("/api/payment/wechat/xpay/notify", membershipHandler.XPayNotify)
+	engine.POST("/api/payment/wechat/xpay/notify", contentCallback.Intercept, membershipHandler.XPayNotify)
+	engine.GET("/api/wechat/content-security/notify", contentCallback.Notify)
+	engine.POST("/api/wechat/content-security/notify", contentCallback.Notify)
 	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
 	engine.POST("/api/membership/auto-renew/signing", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePapaySigning)
@@ -752,7 +790,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/public-food-library/map-spots", authmw.RequireJWT(jwtSvc), publicFoodHandler.ListMapSpots)
 	engine.POST("/api/food-nutrition-contributions", authmw.RequireJWT(jwtSvc), foodContributionHandler.Submit)
 	engine.GET("/api/food-nutrition-contributions/mine", authmw.RequireJWT(jwtSvc), foodContributionHandler.Mine)
-	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.Create)
+	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), contentGuard(3), publicFoodHandler.Create)
 	engine.GET("/api/public-food-library/mine", authmw.RequireJWT(jwtSvc), publicFoodHandler.Mine)
 	engine.GET("/api/public-food-library/collections", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collections)
 	engine.POST("/api/public-food-library/feedback", authmw.RequireJWT(jwtSvc), publicFoodHandler.Feedback)
@@ -762,17 +800,17 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/public-food-library/:item_id/like", authmw.RequireJWT(jwtSvc), publicFoodHandler.Unlike)
 	engine.POST("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collect)
 	engine.DELETE("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Uncollect)
-	engine.POST("/api/public-food-library/:item_id/contribute-images", authmw.RequireJWT(jwtSvc), publicFoodHandler.ContributeCampusImages)
-	engine.POST("/api/public-food-library/:item_id/corrections", authmw.RequireJWT(jwtSvc), campusCommunityHandler.Correct)
+	engine.POST("/api/public-food-library/:item_id/contribute-images", authmw.RequireJWT(jwtSvc), contentGuard(3), publicFoodHandler.ContributeCampusImages)
+	engine.POST("/api/public-food-library/:item_id/corrections", authmw.RequireJWT(jwtSvc), contentGuard(3), campusCommunityHandler.Correct)
 	engine.GET("/api/public-food-library/:item_id/revisions", authmw.RequireJWT(jwtSvc), campusCommunityHandler.Revisions)
 	engine.POST("/api/campus-food-collection/images", authmw.RequireJWT(jwtSvc), campusCommunityHandler.UploadImage)
 	engine.POST("/api/campus-food-collectors/applications", authmw.RequireJWT(jwtSvc), campusCommunityHandler.ApplyCollector)
 	engine.GET("/api/campus-food-collectors/profile", authmw.RequireJWT(jwtSvc), campusCommunityHandler.CollectorProfile)
-	engine.POST("/api/campus-food-collection/batches", authmw.RequireJWT(jwtSvc), campusCommunityHandler.CreateCollectorBatch)
-	engine.PUT("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Update)
+	engine.POST("/api/campus-food-collection/batches", authmw.RequireJWT(jwtSvc), contentGuard(3), campusCommunityHandler.CreateCollectorBatch)
+	engine.PUT("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), contentGuard(3), publicFoodHandler.Update)
 	engine.DELETE("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Delete)
 	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)
-	engine.POST("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.AddComment)
+	engine.POST("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), contentGuard(2), publicFoodHandler.AddComment)
 	engine.DELETE("/api/public-food-library/:item_id/comments/:comment_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.DeleteComment)
 	engine.GET("/api/user/:user_id/collections", authmw.RequireJWT(jwtSvc), publicFoodHandler.UserCollections)
 	engine.GET("/api/marketing-qr/:code", authmw.OptionalJWT(jwtSvc), marketingQRHandler.Landing)
@@ -1373,6 +1411,19 @@ func embeddedWorkerID(cfg *config.Config) string {
 }
 
 func (a *App) Close(ctx context.Context) error {
+	if a.contentSecurity != nil {
+		defer func() { _ = a.contentSecurity.Close() }()
+	}
+	if a.pushCancel != nil {
+		a.pushCancel()
+	}
+	if a.pushDone != nil {
+		select {
+		case <-a.pushDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "APP 业务提醒巡检关闭超时", logger.Err(ctx.Err()))
+		}
+	}
 	if a.openPlatformCancel != nil {
 		a.openPlatformCancel()
 	}
