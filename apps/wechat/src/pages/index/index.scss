@@ -4047,11 +4047,12 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 }
 
 .body-status-section--count-4 {
-  width: 872rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
 
   .body-status-card {
-    flex: 0 0 206rpx;
-    width: 206rpx;
+    width: 100%;
   }
 }
 
@@ -7064,8 +7065,19 @@ button.poster-share-channel--btn {
 }
 
 .body-status-section--count-4 {
-  width: 858rpx;
-  .body-status-card { width: 202rpx; flex-basis: 202rpx; }
+  width: 100%;
+  .body-status-card {
+    width: 100%;
+    min-height: 132rpx;
+    padding: 18rpx;
+    grid-template-columns: 66rpx minmax(0, 1fr);
+    column-gap: 14rpx;
+  }
+  .body-status-title { grid-row: 1; }
+  .body-status-content { grid-row: 2; }
+  .body-status-value { font-size: 34rpx; }
+  .body-status-title-wrap .iconfont,
+  .sleep-quick-card__icon { width: 66rpx; height: 66rpx; }
 }
 
 .body-status-section--count-1 {

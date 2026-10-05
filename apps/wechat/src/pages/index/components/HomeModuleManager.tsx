@@ -82,7 +82,7 @@ export function HomeModuleManager({ layout, locks, onSave, onClose }: { layout: 
         <View className='home-organizer__quick-heading'>
           <View>
             <Text className='home-organizer__quick-title'>快捷数据卡</Text>
-            <Text className='home-organizer__quick-description'>1–3 项自适应铺满，4 项可左右滑动</Text>
+            <Text className='home-organizer__quick-description'>1–3 项一行铺满，4 项自动排成两行</Text>
           </View>
           <Text className='home-organizer__quick-count'>已选 {draft.quickStats.length}</Text>
         </View>

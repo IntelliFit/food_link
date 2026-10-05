@@ -10,6 +10,7 @@ import {
 } from '../../utils/static-asset-cdn-url'
 import * as React from 'react'
 import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
+import { useLocalToday } from '../../hooks/useLocalToday'
 import {
   getHomeDashboard,
   getStatsSummary,
@@ -1329,6 +1330,15 @@ function IndexPage() {
   // 每次显示页面时刷新数据
   const skipNextRefreshRef = React.useRef(false)
 
+  const todayKey = useLocalToday((previousDay, today) => {
+    // Follow the new day only when the user was viewing today; preserve historical backfill.
+    if (selectedDateRef.current !== previousDay) return
+    skipNextRefreshRef.current = false
+    homeDataStaleRef.current = true
+    const targetDate = commitSelectedDate(today)
+    void loadDashboard(targetDate)
+  })
+
   useDidShow(() => {
     homeVisibleRef.current = true
     clearHomeAuxiliaryTimers()
@@ -2515,7 +2525,7 @@ function IndexPage() {
         setPetSummary(summary)
       }
     } catch (error) {
-      console.warn('宠物状态加载失败，使用本地原型兜底:', error)
+      console.warn('宠物状态加载失败，暂不显示宠物:', error)
       if (seq === petSummarySeqRef.current) {
         setPetSummary(null)
       }
@@ -3038,6 +3048,7 @@ function IndexPage() {
           cells={weekHeatmapCells}
           historyCells={calendarHistoryCells}
           selectedDate={selectedDate}
+          todayKey={todayKey}
           onSelect={handleDateSelect}
           onVisibleMonthChange={loadCalendarMonth}
           monthLoading={calendarMonthLoading}
@@ -3214,7 +3225,7 @@ function IndexPage() {
         {/* 体重、喝水、运动与睡眠快捷卡片 */}
         <ScrollView
           className={`body-status-scroll body-status-scroll--count-${moduleLayout.quickStats.length}`}
-          scrollX={moduleLayout.quickStats.length === 4}
+          scrollX={false}
           enhanced
           showScrollbar={false}
         >

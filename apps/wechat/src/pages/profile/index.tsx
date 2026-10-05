@@ -582,6 +582,7 @@ function ProfilePage() {
               key.startsWith('home_experience_config_v2:') ||
               key.startsWith('home_module_layout_v2:') ||
               key.startsWith('home_module_layout_v3:') ||
+              key.startsWith('home_module_layout_v4:') ||
               key.startsWith('home_check_in_snooze_v1:')
             ) {
               try { Taro.removeStorageSync(key) } catch (_) {}
