@@ -59,6 +59,7 @@ func (h *PetHandler) Summary(c *gin.Context) {
 		return
 	}
 	date := strings.TrimSpace(c.Query("date"))
+	logger.Info(c.Request.Context(), "开始获取宠物状态", slog.String("user_id", userID), slog.String("date", date))
 	data, err := h.svc.Summary(c.Request.Context(), userID, date)
 	if err != nil {
 		logger.Error(c.Request.Context(), "获取宠物状态失败", err,
@@ -68,6 +69,7 @@ func (h *PetHandler) Summary(c *gin.Context) {
 		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "获取宠物状态失败", HTTPStatus: 500})
 		return
 	}
+	logger.Info(c.Request.Context(), "获取宠物状态完成", slog.String("user_id", userID))
 	response.Success(c, data)
 }
 
@@ -465,6 +467,7 @@ func (h *PetHandler) RerollAppearance(c *gin.Context) {
 		response.Error(c, commonerrors.ErrUnauthorized)
 		return
 	}
+	logger.Info(c.Request.Context(), "开始更换宠物内置形象", slog.String("user_id", userID))
 	data, err := h.svc.RerollAppearance(c.Request.Context(), userID)
 	if err != nil {
 		if service.IsInsufficientEarnedCreditsError(err) {
@@ -474,6 +477,7 @@ func (h *PetHandler) RerollAppearance(c *gin.Context) {
 		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "更换宠物外观失败", HTTPStatus: 500})
 		return
 	}
+	logger.Info(c.Request.Context(), "更换宠物内置形象请求完成", slog.String("user_id", userID))
 	response.Success(c, data)
 }
 

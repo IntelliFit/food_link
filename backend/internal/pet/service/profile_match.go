@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	petProfileMatchVersion = 5
+	petProfileMatchVersion = 6
 
 	builtinAvatarJianwen01ID   = "jianwen-01"
 	builtinAvatarHuatuo01ID    = "huatuo-01"
