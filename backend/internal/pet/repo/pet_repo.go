@@ -117,6 +117,27 @@ func (r *PetRepo) UpdatePet(ctx context.Context, petID string, updates map[strin
 	return r.db.WithContext(ctx).Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(normalizedUpdates).Error
 }
 
+// UpdatePetIfMetaUnchanged prevents background profile upgrades from replacing a
+// name or avatar that the user has just changed in another request.
+func (r *PetRepo) UpdatePetIfMetaUnchanged(ctx context.Context, userID, petID string, expectedMeta map[string]any, updates map[string]any) (bool, error) {
+	if expectedMeta == nil {
+		expectedMeta = map[string]any{}
+	}
+	expected, err := jsonbValue(expectedMeta)
+	if err != nil {
+		return false, err
+	}
+	updates["updated_at"] = time.Now()
+	normalized, err := normalizePetJSONUpdates(updates, "meta")
+	if err != nil {
+		return false, err
+	}
+	result := r.db.WithContext(ctx).Model(&petdomain.UserPet{}).
+		Where("id = ? AND user_id = ? AND COALESCE(NULLIF(meta, 'null'::jsonb), '{}'::jsonb) = ?", petID, userID, expected).
+		Updates(normalized)
+	return result.RowsAffected == 1, result.Error
+}
+
 func (r *PetRepo) SelectAppearance(ctx context.Context, userID, petID string, updates map[string]any) (*petdomain.UserPet, error) {
 	var updatedPet petdomain.UserPet
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

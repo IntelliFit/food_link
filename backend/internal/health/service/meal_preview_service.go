@@ -35,7 +35,6 @@ func (s *StatsService) PreviewMeals(ctx context.Context, userID string, input Me
 			state.School = *school
 			state.CampusID = campusID
 			state.CampusName = campusName
-			state.Constraints.AllowedSchoolIDs = []string{school.ID}
 		}
 	}
 	if slices.Contains([]string{"breakfast", "lunch", "dinner"}, input.MealType) {
@@ -96,7 +95,7 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 		if radius <= 0 {
 			radius = 3
 		}
-		nearby, _, err := s.repo.SearchCampusDietCandidates(ctx, domain.CampusDietSearchFilter{AllowUnknownNutrition: true, ViewerID: state.UserID, Location: state.Location, RadiusKM: radius, MerchantOnly: state.Constraints.CampusAccessDenied, Limit: 100, MaxPrice: state.Constraints.MaxPrice, SortBy: "best_match"})
+		nearby, _, err := s.repo.SearchCampusDietCandidates(ctx, domain.CampusDietSearchFilter{AllowUnknownNutrition: true, ViewerID: state.UserID, Location: state.Location, RadiusKM: radius, MerchantOnly: state.Constraints.Scene == "takeout", Limit: 100, MaxPrice: state.Constraints.MaxPrice, SortBy: "best_match"})
 		state.ToolCount++
 		status := "success"
 		if err != nil {
@@ -113,7 +112,7 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 						}
 					}
 				}
-				if candidate.DistanceKM == nil || *candidate.DistanceKM > radius || candidate.IsCampusFood && state.Constraints.CampusAccessDenied {
+				if candidate.DistanceKM == nil || *candidate.DistanceKM > radius {
 					continue
 				}
 				if len(candidate.Items) == 0 {
@@ -126,7 +125,7 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 			}
 		}
 		state.ToolTrace = append(state.ToolTrace, CampusDietAgentToolTrace{ToolName: "search_nearby_foods", Status: status, ResultCount: len(nearby)})
-	} else if state.School.ID != "" && slices.Contains(state.Constraints.AllowedSchoolIDs, state.School.ID) && !historyOnly {
+	} else if state.School.ID != "" && !historyOnly {
 		result.SearchScope = "campus_and_history"
 		campusMeals, _, err := s.repo.SearchCampusDietCandidates(ctx, domain.CampusDietSearchFilter{
 			AllowUnknownNutrition: true,
@@ -196,7 +195,7 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 		if selectedID != "" && c.SourceID != selectedID {
 			continue
 		}
-		structured := mealHasStructure(c) || (c.Source != "food_record" && c.NutritionBasis == "unavailable" && mealHasNamedStructure(c))
+		structured := mealHasEvidenceStructure(c)
 		if !structured || excluded[mealFingerprint(c)] {
 			continue
 		}
@@ -214,7 +213,7 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 		if c.DistanceKM != nil {
 			meal.score -= math.Min(15, *c.DistanceKM*2)
 		}
-		if c.SchoolID != "" && slices.Contains(state.Constraints.AllowedSchoolIDs, c.SchoolID) {
+		if c.SchoolID != "" && c.SchoolID == state.School.ID {
 			meal.score += 10
 		}
 		text := normalizedDietDecisionCandidateText(c)
@@ -264,10 +263,6 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 		option.SourceLabel = strings.Join(compactDietStrings(c.MerchantName, c.SchoolName, c.CanteenName), " · ")
 		if c.IsCampusFood {
 			option.SourceLabel = strings.Join(compactDietStrings(c.SchoolName, c.CanteenName), " · ")
-		}
-		option.RequiresCampusAccessConfirmation = c.IsCampusFood && !slices.Contains(state.Constraints.AllowedSchoolIDs, c.SchoolID)
-		if option.RequiresCampusAccessConfirmation {
-			option.Tips = append(option.Tips, "校内餐食，需确认本次能否进入并在食堂就餐")
 		}
 		if c.NutritionBasis == "unavailable" {
 			option.DecisionMissingEvidence = []string{"营养数据缺失", "需向商家确认份量与配料"}

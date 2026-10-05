@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -16,17 +18,19 @@ import (
 )
 
 type fakePetRepo struct {
-	pet              *petdomain.UserPet
-	profile          *repo.UserProfile
-	dailyScores      map[string]*petdomain.UserPetDailyScore
-	events           map[string]*petdomain.UserPetEvent
-	foodByDate       map[string][]repo.FoodRecord
-	waterByDate      map[string]int
-	exerciseByDate   map[string]int
-	createPetCalls   int
-	createEventCalls int
-	balance          int
-	nextID           int
+	pet                  *petdomain.UserPet
+	profile              *repo.UserProfile
+	dailyScores          map[string]*petdomain.UserPetDailyScore
+	events               map[string]*petdomain.UserPetEvent
+	foodByDate           map[string][]repo.FoodRecord
+	waterByDate          map[string]int
+	exerciseByDate       map[string]int
+	createPetCalls       int
+	createEventCalls     int
+	balance              int
+	nextID               int
+	profileUpgradeCalls  int
+	beforeProfileUpgrade func(*fakePetRepo)
 }
 
 type fakeFoodWaterProvider struct {
@@ -139,6 +143,19 @@ func (f *fakePetRepo) SelectAppearance(ctx context.Context, userID, petID string
 	}
 	copy := *f.pet
 	return &copy, nil
+}
+
+func (f *fakePetRepo) UpdatePetIfMetaUnchanged(ctx context.Context, userID, petID string, expectedMeta map[string]any, updates map[string]any) (bool, error) {
+	f.profileUpgradeCalls++
+	if f.beforeProfileUpgrade != nil {
+		hook := f.beforeProfileUpgrade
+		f.beforeProfileUpgrade = nil
+		hook(f)
+	}
+	if f.pet == nil || f.pet.UserID != userID || f.pet.ID != petID || !reflect.DeepEqual(f.pet.Meta, expectedMeta) {
+		return false, nil
+	}
+	return true, f.UpdatePet(ctx, petID, updates)
 }
 
 func (f *fakePetRepo) AddPetExperience(ctx context.Context, petID string, delta int) (*petdomain.UserPet, error) {
@@ -360,7 +377,9 @@ func TestSummaryCreatesStablePetAndSingleOfflineEvent(t *testing.T) {
 	assert.Equal(t, 1, fake.createEventCalls)
 	assert.Equal(t, 1, first.Event.CreditReward)
 	assert.Equal(t, archetypeLightLifestyle, first.Pet.Archetype)
-	assert.True(t, first.Pet.NeedsSelection)
+	assert.False(t, first.Pet.NeedsSelection)
+	assert.Equal(t, builtinAvatarType, first.Pet.AvatarType)
+	assert.Equal(t, builtinAvatarJianwen01ID, first.Pet.BuiltinAvatarID)
 	require.Len(t, first.Pet.SelectionCandidates, 5)
 	for _, candidate := range first.Pet.SelectionCandidates {
 		assert.NotEmpty(t, candidate.BuiltinAvatarID)
@@ -543,6 +562,87 @@ func TestRerollAppearanceConsumesEarnedCredits(t *testing.T) {
 	assert.Equal(t, "薄荷团子", result.Pet.Name)
 	require.NotNil(t, result.EarnedCreditsBalance)
 	assert.Equal(t, 4, *result.EarnedCreditsBalance)
+	assert.Equal(t, builtinAvatarType, result.Pet.AvatarType)
+	assert.NotEmpty(t, result.Pet.BuiltinAvatarID)
+	assert.NotEqual(t, builtinAvatarJianwen01ID, result.Pet.BuiltinAvatarID)
+	assert.False(t, result.Pet.NeedsSelection)
+}
+
+func TestProfileUpgradeRepairsLegacyAndIncompleteAvatarsAutomatically(t *testing.T) {
+	cases := []struct {
+		name   string
+		seed   string
+		meta   map[string]any
+		wantID string
+	}{
+		{"unversioned", "pet:old", nil, builtinAvatarJianwen01ID},
+		{"old selected avatar", "pet:old", map[string]any{"profile_match_version": 2, "selected_candidate_id": "cand_old"}, builtinAvatarJianwen01ID},
+		{"version5 missing image", "builtin:jianwen-01", map[string]any{"profile_match_version": 5}, builtinAvatarJianwen01ID},
+		{"current version still missing image", "builtin:huatuo-01", map[string]any{"profile_match_version": petProfileMatchVersion}, builtinAvatarHuatuo01ID},
+		{"recover selected image", "pet:old", map[string]any{"selected_candidate_id": "builtin:doudou-01"}, builtinAvatarDoudou01ID},
+		{"preserve image choice", "pet:old", map[string]any{"avatar_type": builtinAvatarType, "builtin_avatar_id": "xiaomai-01"}, builtinAvatarXiaomai01ID},
+		{"invalid custom avatar", "pet:old", map[string]any{"avatar_type": "pixel_self", "pixel_avatar_key": ""}, builtinAvatarJianwen01ID},
+		{"unknown image id", "pet:old", map[string]any{"avatar_type": builtinAvatarType, "builtin_avatar_id": "retired"}, builtinAvatarJianwen01ID},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			fake := newFakePetRepo()
+			meta := cloneMeta(tt.meta)
+			meta["profile_fingerprint"] = buildProfileMatch("user-1", nil).Fingerprint
+			meta["custom_name"] = true
+			meta["unrelated_preference"] = "keep"
+			fake.pet = &petdomain.UserPet{ID: "pet-1", UserID: "user-1", PetSeed: tt.seed, Name: "牛来", Level: 4, Experience: 345, TotalEvents: 7, Meta: meta}
+			svc := NewService(fake)
+			upgraded, err := svc.ensureProfileMatch(context.Background(), "user-1", fake.pet, nil)
+			require.NoError(t, err)
+			view := svc.profileFromPet(upgraded)
+			assert.Equal(t, builtinAvatarType, view.AvatarType)
+			assert.Equal(t, tt.wantID, view.BuiltinAvatarID)
+			assert.Equal(t, "builtin:"+tt.wantID, view.PetSeed)
+			assert.False(t, view.NeedsSelection)
+			assert.Equal(t, "牛来", view.Name)
+			assert.Equal(t, 4, view.Level)
+			assert.Equal(t, 345, view.Experience)
+			assert.Equal(t, 7, view.TotalEvents)
+			assert.Equal(t, "keep", upgraded.Meta["unrelated_preference"])
+			assert.Zero(t, fake.balance)
+			_, err = svc.ensureProfileMatch(context.Background(), "user-1", upgraded, nil)
+			require.NoError(t, err)
+			assert.Equal(t, 1, fake.profileUpgradeCalls, "the next read must not rewrite the profile")
+		})
+	}
+}
+
+func TestProfileUpgradePreservesCustomAvatarAndConcurrentChanges(t *testing.T) {
+	for _, concurrent := range []bool{false, true} {
+		t.Run(fmt.Sprintf("concurrent=%t", concurrent), func(t *testing.T) {
+			fake := newFakePetRepo()
+			custom := map[string]any{"avatar_type": "pixel_self", "pixel_avatar_key": "photos/custom.png", "pixel_avatar_jump_key": "photos/jump.png", "custom_name": true}
+			fake.pet = &petdomain.UserPet{ID: "pet-1", UserID: "user-1", PetSeed: "pet:original", Name: "牛来", Level: 4, Experience: 345, Meta: cloneMeta(custom)}
+			if concurrent {
+				fake.pet.Meta = map[string]any{}
+				fake.beforeProfileUpgrade = func(f *fakePetRepo) { f.pet.Meta = cloneMeta(custom); f.pet.Name = "刚改的新名字" }
+			}
+			svc := NewService(fake)
+			viewPet, err := svc.ensureProfileMatch(context.Background(), "user-1", fake.pet, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "pixel_self", viewPet.Meta["avatar_type"])
+			assert.Equal(t, "photos/custom.png", viewPet.Meta["pixel_avatar_key"])
+			assert.Equal(t, "photos/jump.png", viewPet.Meta["pixel_avatar_jump_key"])
+			assert.Equal(t, "pet:original", viewPet.PetSeed)
+			assert.Equal(t, 345, viewPet.Experience)
+			assert.Empty(t, viewPet.Meta["builtin_avatar_id"])
+			assert.False(t, svc.profileFromPet(viewPet).NeedsSelection)
+			if concurrent {
+				assert.Equal(t, "刚改的新名字", viewPet.Name)
+				assert.Equal(t, 2, fake.profileUpgradeCalls)
+			}
+			calls := fake.profileUpgradeCalls
+			_, err = svc.ensureProfileMatch(context.Background(), "user-1", viewPet, nil)
+			require.NoError(t, err)
+			assert.Equal(t, calls, fake.profileUpgradeCalls)
+		})
+	}
 }
 
 func TestRerollAppearanceRequiresEnoughEarnedCredits(t *testing.T) {

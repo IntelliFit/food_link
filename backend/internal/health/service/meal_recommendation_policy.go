@@ -5,85 +5,60 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-
-	"food_link/backend/internal/health/domain"
 )
 
 var mealCampusDenied = regexp.MustCompile(`(?:不要|不去|不进|不能|没法|无法|不方便)[^，。；！？,;!?]{0,16}(?:学校|校园|校内|食堂)|不在[^，。；！？,;!?]{0,16}食堂(?:吃|就餐|消费)|(?:只看|只要|只吃|仅看|仅限)[^，。；！？,;!?]{0,8}(?:校外|外卖|商家)`)
 var mealCampusConfirmed = regexp.MustCompile(`(?:可以|能够|能|方便)在[^，。；！？,;!?]{0,16}食堂(?:吃|就餐|消费)|(?:就在|已经在|正在)[^，。；！？,;!?]{0,12}食堂(?:吃|就餐|点餐)`)
 var mealRelocation = regexp.MustCompile(`外地|出差|离开.{0,10}(?:学校|大学|校园)|换了(?:城市|学校|位置)|换到|现在不在|不在常用学校`)
 
+// A polite question such as 能不能推荐北大食堂 is not a denial of access.
+// This is a conversation preference, not a real university permission check.
+func mealDeniesCampusAccess(question string) bool {
+	question = strings.NewReplacer("能不能", "能否", "可不可以", "是否可以", "方不方便", "是否方便").Replace(question)
+	return mealCampusDenied.MatchString(question)
+}
+
+func mealRequestsCampusDining(question string) bool {
+	return !mealDeniesCampusAccess(question) && strings.Contains(question, "食堂") &&
+		regexp.MustCompile(`推荐|想吃|吃什么|饭菜|菜品|点餐|去吃|就餐|吃饭`).MatchString(question)
+}
+
 func mealExplicitPlaceText(question string) string {
 	parts := []string{}
-	for _, match := range regexp.MustCompile(`(?:现在在|目前在|在|换到|到了)([^，。；！？,;!?]{1,50})`).FindAllStringSubmatch(question, -1) {
+	for _, match := range regexp.MustCompile(`(?:现在在|目前在|今天在|今天来(?:了|到)?|今天回(?:到)?|来了|来到|在|换到|到了)([^，。；！？,;!?]{1,50})`).FindAllStringSubmatch(question, -1) {
 		if strings.HasPrefix(match[1], "校") || strings.HasPrefix(match[1], "读") || strings.HasPrefix(match[1], "线") {
 			continue
 		}
 		parts = append(parts, match[1])
 	}
-	return strings.Join(parts, "，")
+	if len(parts) == 0 {
+		return ""
+	}
+	// The latest explicitly stated place wins over a usual/earlier campus.
+	return parts[len(parts)-1]
 }
 
-// A location or merely saved university is not an assertion that a dining
-// facility can be used. Explicit registration identity is injected into
-// AllowedSchoolIDs by the service; conversation confirmation remains durable
-// for other schools, and models cannot grant access through tool arguments.
+// Published university dining data is available to every user. A school is a
+// search scope, never an authorization allowlist. Forget old access metadata.
 func initializeMealAccess(state *campusDietAgentRunState) {
 	c := &state.Constraints
 	q := strings.ReplaceAll(state.Question, " ", "")
-	if mealRelocation.MatchString(q) {
-		c.AllowedSchoolIDs, c.PendingSchool = nil, nil
-		c.CampusAccessDenied = false
-	}
-	if mealCampusDenied.MatchString(q) {
-		c.AllowedSchoolIDs, c.PendingSchool = nil, nil
-		c.CampusAccessDenied = true
+	c.AllowedSchoolIDs, c.PendingSchool, c.CampusAccessDenied = nil, nil, false
+	if mealDeniesCampusAccess(q) {
 		c.Scene = "takeout"
 		return
 	}
 	if school := state.ConfirmedStudentSchool; school != nil && school.ID != "" {
-		c.AllowedSchoolIDs = []string{school.ID}
-		c.PendingSchool = nil
-		c.CampusAccessDenied = false
 		state.School = *school
 	}
-	target := state.School
-	if target.ID == "" && c.PendingSchool != nil {
-		target = *c.PendingSchool
+	if school := state.RequestedDiningSchool; school != nil && school.ID != "" {
+		c.Scene = "campus"
+		state.School = *school
 	}
-	confirmed := mealCampusConfirmed.MatchString(q)
-	if c.PendingSchool != nil && regexp.MustCompile(`^(可以|能|方便|可以的|能在食堂吃饭)[。！!，,]*$`).MatchString(q) {
-		confirmed = true
-		target = *c.PendingSchool
-	}
-	if confirmed && target.ID != "" {
-		c.AllowedSchoolIDs = []string{target.ID}
-		c.PendingSchool = nil
-		c.CampusAccessDenied = false
-		if c.Scene == "takeout" {
-			c.Scene = "any"
-		}
-		if state.Location == nil {
-			state.School = target
-		}
-	}
-}
-
-func mealCampusAvailable(state *campusDietAgentRunState, candidate DietRecommendationCandidate) bool {
-	if !candidate.IsCampusFood {
-		return true
-	}
-	if !state.Constraints.CampusAccessDenied && candidate.SchoolID != "" && slices.Contains(state.Constraints.AllowedSchoolIDs, candidate.SchoolID) {
-		return true
-	}
-	if !state.Constraints.CampusAccessDenied && state.Constraints.Scene != "takeout" && candidate.SchoolID != "" && state.Constraints.PendingSchool == nil {
-		state.Constraints.PendingSchool = &domain.DietRecommendationSchool{ID: candidate.SchoolID, Name: candidate.SchoolName}
-	}
-	return false
 }
 
 func mealExplicitScene(q string) string {
-	if mealCampusDenied.MatchString(q) {
+	if mealDeniesCampusAccess(q) {
 		return "takeout"
 	}
 	if regexp.MustCompile(`(?:不要|不点|不吃)外卖`).MatchString(q) {
@@ -122,10 +97,10 @@ func mealEvidenceText(state *campusDietAgentRunState, answer string) string {
 	answer = strings.ReplaceAll(answer, `\n`, "\n")
 	segments := strings.FieldsFunc(answer, func(r rune) bool { return r == '。' || r == '；' || r == '\n' })
 	kept := []string{}
-	unsafe := regexp.MustCompile(`完美契合|不会给.{0,8}(?:肠胃|胃|消化)|胃炎|胃部|胃黏膜|易消化|促进消化|升糖指数|肌酸|即可满足.{0,8}需求|长期偏低|今天.{0,6}(?:没吃|空着)|不含花生|不含虾|均不含|均避开|(?:验证|核实|确认|过敏).{0,4}安全|一次买齐|一起解决|稳稳控制|实时外卖平台`)
+	unsafe := regexp.MustCompile(`完美契合|不会给.{0,8}(?:肠胃|胃|消化)|胃炎|胃部|胃黏膜|易消化|促进消化|升糖指数|肌酸|即可满足.{0,8}需求|长期偏低|今天.{0,6}(?:没吃|空着)|不含花生|不含虾|均不含|均避开|(?:验证|核实|确认|过敏).{0,4}安全|一次买齐|一起解决|稳稳控制|实时外卖平台|一碗管饱|保证.{0,4}吃饱|皮薄馅大|饱腹感强`)
 	for _, segment := range segments {
 		segment = strings.TrimSpace(segment)
-		if segment == "" || campusDietAgentUnsupportedClaimPattern.MatchString(segment) || unsafe.MatchString(segment) || regexp.MustCompile(`(?i:低GI|高GI)`).MatchString(segment) {
+		if segment == "" || campusDietAgentUnsupportedClaimPattern.MatchString(segment) || unsafe.MatchString(segment) || regexp.MustCompile(`(?i:低GI|高GI)|campus_access_denied|allowed_school_ids|pending_school|系统.{0,12}(?:权限受限|无权限)|就餐权限受限`).MatchString(segment) {
 			continue
 		}
 		if regexp.MustCompile(`可以吃|可食用|可以接受|可接受|不再忌口|不过敏`).MatchString(segment) && matchedDietDecisionAllergen(state.MealContext.Allergies, DietRecommendationCandidate{Title: segment}) != "" {

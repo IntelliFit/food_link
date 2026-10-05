@@ -43,6 +43,7 @@ type PetRepo interface {
 	CreatePet(ctx context.Context, pet *petdomain.UserPet) error
 	GetUserProfile(ctx context.Context, userID string) (*repo.UserProfile, error)
 	UpdatePet(ctx context.Context, petID string, updates map[string]any) error
+	UpdatePetIfMetaUnchanged(ctx context.Context, userID, petID string, expectedMeta map[string]any, updates map[string]any) (bool, error)
 	SelectAppearance(ctx context.Context, userID, petID string, updates map[string]any) (*petdomain.UserPet, error)
 	AddPetExperience(ctx context.Context, petID string, delta int) (*petdomain.UserPet, error)
 	ListFoodRecordsByDate(ctx context.Context, userID, date string) ([]repo.FoodRecord, error)
@@ -420,13 +421,20 @@ func (s *Service) RerollAppearance(ctx context.Context, userID string) (*Appeara
 	if err != nil {
 		return nil, err
 	}
+	pet, err = s.ensureProfileMatch(ctx, userID, pet, profile)
+	if err != nil {
+		return nil, err
+	}
 	match := buildProfileMatch(userID, profile)
-	style := []string{"pretty", "quirky", "stable"}[stableHash(fmt.Sprintf("pet:%s:%d:style", userID, time.Now().UnixNano()))%3]
-	candidate := candidateFromSeed(fmt.Sprintf("pet:%s:reroll:%d", userID, time.Now().UnixNano()), match.Archetype, style, match.Reasons)
+	candidates := make([]AppearanceCandidate, 0, len(match.Candidates))
+	for _, candidate := range match.Candidates {
+		if hasCustomPetAvatar(pet.Meta) || candidate.BuiltinAvatarID != stringFromMeta(pet.Meta, "builtin_avatar_id") {
+			candidates = append(candidates, candidate)
+		}
+	}
+	candidate := candidates[stableHash(fmt.Sprintf("pet:%s:reroll:%d", userID, time.Now().UnixNano()))%uint32(len(candidates))]
 	meta := mergedProfileMeta(pet.Meta, match)
-	meta["selected_candidate_id"] = candidate.ID
-	delete(meta, "avatar_type")
-	delete(meta, "builtin_avatar_id")
+	setBuiltinAppearanceMeta(meta, candidate)
 	meta["last_reroll_at"] = time.Now().Format(time.RFC3339)
 	updatedPet, ledger, err := s.repo.RerollAppearance(ctx, userID, pet.ID, map[string]any{
 		"pet_seed":    candidate.PetSeed,
@@ -453,8 +461,14 @@ func (s *Service) RerollAppearance(ctx context.Context, userID string) (*Appeara
 		"archetype":     match.Archetype,
 	})
 	if err != nil {
+		if IsInsufficientEarnedCreditsError(err) {
+			logger.Warn(ctx, "宠物更换形象积分不足", slog.String("user_id", userID), slog.String("pet_id", pet.ID))
+		} else {
+			logger.Error(ctx, "宠物更换形象失败", err, slog.String("user_id", userID), slog.String("pet_id", pet.ID))
+		}
 		return nil, err
 	}
+	logger.Info(ctx, "宠物更换内置形象完成", slog.String("user_id", userID), slog.String("pet_id", pet.ID), slog.String("builtin_avatar_id", candidate.BuiltinAvatarID))
 	result := &AppearanceRerollResult{
 		Pet:         s.profileFromPet(updatedPet),
 		CreditsCost: petAppearanceRerollCost,
@@ -580,12 +594,17 @@ func IsInsufficientEarnedCreditsError(err error) bool {
 
 func (s *Service) ensurePet(ctx context.Context, userID string, profile *repo.UserProfile) (*petdomain.UserPet, error) {
 	pet, err := s.repo.GetPetByUserID(ctx, userID)
-	if err != nil || pet != nil {
+	if err != nil {
+		logger.Error(ctx, "读取宠物档案失败", err, slog.String("user_id", userID))
+		return nil, err
+	}
+	if pet != nil {
 		return pet, err
 	}
 	match := buildProfileMatch(userID, profile)
 	candidate := match.Candidates[0]
 	meta := profileMatchMeta(match)
+	setBuiltinAppearanceMeta(meta, candidate)
 	pet = &petdomain.UserPet{
 		UserID:      userID,
 		PetSeed:     candidate.PetSeed,
@@ -601,8 +620,10 @@ func (s *Service) ensurePet(ctx context.Context, userID string, profile *repo.Us
 		Meta:        meta,
 	}
 	if err := s.repo.CreatePet(ctx, pet); err != nil {
+		logger.Error(ctx, "创建默认图片宠物失败", err, slog.String("user_id", userID))
 		return nil, err
 	}
+	logger.Info(ctx, "创建默认图片宠物完成", slog.String("user_id", userID), slog.String("builtin_avatar_id", candidate.BuiltinAvatarID))
 	return s.repo.GetPetByUserID(ctx, userID)
 }
 
@@ -611,39 +632,79 @@ func (s *Service) ensureProfileMatch(ctx context.Context, userID string, pet *pe
 		return nil, nil
 	}
 	match := buildProfileMatch(userID, profile)
-	currentVersion := intFromMeta(pet.Meta, "profile_match_version")
-	currentFingerprint := stringFromMeta(pet.Meta, "profile_fingerprint")
-	selectedID := stringFromMeta(pet.Meta, "selected_candidate_id")
-	if currentVersion >= petProfileMatchVersion && currentFingerprint == match.Fingerprint {
-		return pet, nil
+	for attempt := 0; attempt < 3; attempt++ {
+		candidate := builtinAppearanceForPet(pet)
+		customAvatar := hasCustomPetAvatar(pet.Meta)
+		avatarMatches := customAvatar && stringFromMeta(pet.Meta, "builtin_avatar_id") == "" ||
+			!customAvatar && stringFromMeta(pet.Meta, "avatar_type") == builtinAvatarType &&
+				stringFromMeta(pet.Meta, "builtin_avatar_id") == candidate.BuiltinAvatarID &&
+				stringFromMeta(pet.Meta, "selected_candidate_id") == candidate.ID
+		if intFromMeta(pet.Meta, "profile_match_version") >= petProfileMatchVersion &&
+			stringFromMeta(pet.Meta, "profile_fingerprint") == match.Fingerprint && avatarMatches {
+			return pet, nil
+		}
+		meta := mergedProfileMeta(pet.Meta, match)
+		updates := map[string]any{"meta": meta}
+		if customAvatar {
+			delete(meta, "builtin_avatar_id")
+		} else {
+			setBuiltinAppearanceMeta(meta, candidate)
+			updates["pet_seed"] = candidate.PetSeed
+			updates["color"] = candidate.Color
+			updates["shape"] = candidate.Shape
+			updates["pattern"] = candidate.Pattern
+			updates["accessory"] = candidate.Accessory
+			updates["personality"] = candidate.Personality
+			if strings.TrimSpace(pet.Name) == "" {
+				updates["name"] = candidate.Name
+			}
+		}
+		applied, err := s.repo.UpdatePetIfMetaUnchanged(ctx, userID, pet.ID, pet.Meta, updates)
+		if err != nil {
+			logger.Error(ctx, "宠物形象自动升级失败", err, slog.String("user_id", userID), slog.String("pet_id", pet.ID))
+			return nil, err
+		}
+		updated, err := s.repo.GetPetByUserID(ctx, userID)
+		if err != nil {
+			logger.Error(ctx, "读取升级后的宠物档案失败", err, slog.String("user_id", userID), slog.String("pet_id", pet.ID))
+			return nil, err
+		}
+		if updated == nil {
+			return nil, errors.New("pet profile not found")
+		}
+		if applied {
+			logger.Info(ctx, "宠物形象自动升级完成", slog.String("user_id", userID), slog.String("pet_id", pet.ID), slog.Bool("custom_avatar", customAvatar), slog.Bool("appearance_repaired", !avatarMatches))
+			return updated, nil
+		}
+		pet = updated
 	}
-	meta := mergedProfileMeta(pet.Meta, match)
-	if currentVersion == 0 {
-		meta["free_profile_rematch_used"] = false
-	}
-	updates := map[string]any{
-		"meta": meta,
-	}
-	if selectedID == "" || currentVersion == 0 {
-		candidate := match.Candidates[0]
-		updates["pet_seed"] = candidate.PetSeed
-		updates["color"] = candidate.Color
-		updates["shape"] = candidate.Shape
-		updates["pattern"] = candidate.Pattern
-		updates["accessory"] = candidate.Accessory
-		updates["personality"] = candidate.Personality
-		if strings.TrimSpace(pet.Name) == "" {
-			updates["name"] = candidate.Name
+	logger.Warn(ctx, "宠物档案并发变更，自动升级稍后重试", slog.String("user_id", userID), slog.String("pet_id", pet.ID))
+	return nil, errors.New("pet profile changed during upgrade")
+}
+
+func hasCustomPetAvatar(meta map[string]any) bool {
+	return stringFromMeta(meta, "avatar_type") == "pixel_self" && stringFromMeta(meta, "pixel_avatar_key") != ""
+}
+
+func setBuiltinAppearanceMeta(meta map[string]any, candidate AppearanceCandidate) {
+	meta["avatar_type"] = candidate.AvatarType
+	meta["builtin_avatar_id"] = candidate.BuiltinAvatarID
+	meta["selected_candidate_id"] = candidate.ID
+}
+
+func builtinAppearanceForPet(pet *petdomain.UserPet) AppearanceCandidate {
+	candidates := builtinAppearanceCandidates()
+	// Recover the user's existing choice before assigning the established default.
+	for _, id := range []string{stringFromMeta(pet.Meta, "builtin_avatar_id"),
+		strings.TrimPrefix(stringFromMeta(pet.Meta, "selected_candidate_id"), "builtin:"),
+		strings.TrimPrefix(pet.PetSeed, "builtin:")} {
+		for _, candidate := range candidates {
+			if candidate.BuiltinAvatarID == id {
+				return candidate
+			}
 		}
 	}
-	if err := s.repo.UpdatePet(ctx, pet.ID, updates); err != nil {
-		return nil, err
-	}
-	updated, err := s.repo.GetPetByUserID(ctx, userID)
-	if err != nil || updated == nil {
-		return updated, err
-	}
-	return updated, nil
+	return candidates[0]
 }
 
 func (s *Service) ensureDailyScore(ctx context.Context, userID string, pet *petdomain.UserPet, date string) (*petdomain.UserPetDailyScore, bool, error) {
@@ -1047,7 +1108,7 @@ func (s *Service) profileFromPet(pet *petdomain.UserPet) PetProfile {
 		TotalEvents:                 pet.TotalEvents,
 		Archetype:                   stringFromMeta(pet.Meta, "archetype"),
 		MatchReasons:                stringSliceFromAny(pet.Meta["match_reasons"]),
-		NeedsSelection:              selectedID == "" && len(candidates) > 0,
+		NeedsSelection:              selectedID == "" && avatarType == "" && len(candidates) > 0,
 		SelectionCandidates:         candidates,
 		FreeProfileRematchAvailable: !boolFromMeta(pet.Meta, "free_profile_rematch_used") && len(candidates) > 0,
 		GrowthUnlocks:               growthUnlocksForLevel(pet.Level),
