@@ -149,10 +149,27 @@ func (c *Client) ResolveUserAvatarURL(value string) string {
 	if raw == "" {
 		return ""
 	}
-	if raw == defaultUserAvatarKey {
+	if c.IsSystemDefaultUserAvatar(raw) {
 		return c.ResolveReferenceURL("food-images", defaultUserAvatarImageKey)
 	}
 	return c.ResolveReferenceURL("user-avatars", raw)
+}
+
+// IsSystemDefaultUserAvatar recognizes only the built-in marker or the exact
+// default image in the configured food-images bucket, never arbitrary CDN images.
+func (c *Client) IsSystemDefaultUserAvatar(value string) bool {
+	raw := strings.TrimSpace(value)
+	if raw == defaultUserAvatarKey {
+		return true
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil || parsed.Host == "" {
+		return false
+	}
+	if _, trusted := c.trustedBucketHosts("food-images")[strings.ToLower(parsed.Host)]; !trusted {
+		return false
+	}
+	return c.ResolveObjectKey("food-images", raw) == defaultUserAvatarImageKey
 }
 
 func (c *Client) ResolveReferenceURLs(bucketAlias string, values []string) []string {

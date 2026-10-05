@@ -10,6 +10,10 @@ import (
 	"food_link/backend/pkg/storage"
 )
 
+var errInvalidImageReference = &commonerrors.AppError{
+	Code: 10002, Message: "图片地址无效，请重新选择图片后重试", HTTPStatus: 400,
+}
+
 // ExtractContent extracts every human-readable string in a publish payload, including
 // nested food items. Resource IDs and fixed protocol fields are not user content.
 func ExtractContent(doc map[string]any, store *storage.Client) ([]string, []string, error) {
@@ -62,6 +66,11 @@ func ExtractContent(doc map[string]any, store *storage.Client) ([]string, []stri
 					images = append(images, "")
 					return
 				}
+				// Registration sends the system avatar from food-images. It is a
+				// fixed application asset, not a user upload in user-avatars.
+				if key == "avatar" && store.IsSystemDefaultUserAvatar(v) {
+					return
+				}
 				objectKey := store.ResolveObjectKey(alias, v)
 				if objectKey == "" || strings.Contains(objectKey, "..") {
 					images = append(images, "")
@@ -82,7 +91,7 @@ func ExtractContent(doc map[string]any, store *storage.Client) ([]string, []stri
 	walk("", doc)
 	for _, u := range images {
 		if !strings.HasPrefix(u, "https://") {
-			return nil, nil, commonerrors.ErrBadRequest
+			return nil, nil, errInvalidImageReference
 		}
 	}
 	return unique(texts), unique(images), nil

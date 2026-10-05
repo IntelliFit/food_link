@@ -48,7 +48,7 @@ func Guard(svc *service.Service, store *storage.Client, scene int) gin.HandlerFu
 			if err == service.ErrUnavailable {
 				logger.Error(c.Request.Context(), "发布内容审核服务不可用", err, slog.String("user_id", userID), slog.String("path", c.FullPath()))
 			} else {
-				logger.Warn(c.Request.Context(), "发布内容审核未通过", slog.String("user_id", userID), slog.String("path", c.FullPath()))
+				logger.Warn(c.Request.Context(), "发布内容审核未通过", slog.String("user_id", userID), slog.String("path", c.FullPath()), slog.String("reason", err.Error()))
 			}
 			response.Error(c, err)
 			c.Abort()
