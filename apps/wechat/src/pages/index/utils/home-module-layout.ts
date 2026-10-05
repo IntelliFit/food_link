@@ -26,8 +26,10 @@ export type HomeModuleLocks = Partial<Record<HomeModuleId, string>>
 const ids: HomeModuleId[] = HOME_MODULES.map(item => item.id)
 const legacyDefaultOrder: HomeModuleId[] = ['nextMeal', 'diet', 'supplements', 'rewards', 'body', 'meals', 'expiry', 'recap']
 const quickStatIds: HomeQuickStatId[] = HOME_QUICK_STATS.map(item => item.id)
-const defaultQuickStats: HomeQuickStatId[] = ['weight', 'water', 'sleep']
-export const HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v3:'
+const defaultQuickStats: HomeQuickStatId[] = ['weight', 'exercise', 'sleep']
+const legacyDefaultQuickStats: HomeQuickStatId[] = ['weight', 'water', 'sleep']
+export const HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v4:'
+const PREVIOUS_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v3:'
 const LEGACY_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v2:'
 
 export function defaultHomeModuleLayout(): HomeModuleLayout {
@@ -115,8 +117,14 @@ export function readHomeModuleLayout(): HomeModuleLayout {
     const owner = homeLayoutOwner()
     const current = Taro.getStorageSync(HOME_MODULE_LAYOUT_PREFIX + owner)
     if (current) return normalizeHomeModuleLayout(current)
-    const legacy = Taro.getStorageSync(LEGACY_HOME_MODULE_LAYOUT_PREFIX + owner)
+    const previous = Taro.getStorageSync(PREVIOUS_HOME_MODULE_LAYOUT_PREFIX + owner)
+    const legacy = previous || Taro.getStorageSync(LEGACY_HOME_MODULE_LAYOUT_PREFIX + owner)
     const migrated = normalizeHomeModuleLayout(legacy)
+    // Replace the old default once; subsequent custom choices use v4.
+    if (previous && migrated.quickStats.length === legacyDefaultQuickStats.length
+      && legacyDefaultQuickStats.every(id => migrated.quickStats.includes(id))) {
+      migrated.quickStats = [...defaultQuickStats]
+    }
     const legacyOrder = legacy && typeof legacy === 'object' && Array.isArray((legacy as { order?: unknown }).order)
       ? (legacy as { order: unknown[] }).order
       : []

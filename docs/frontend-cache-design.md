@@ -45,7 +45,7 @@
 | `food_link_dashboard_targets_v1` | 用户自定义摄入目标（卡路里、蛋白质、碳水、脂肪） | `pages/index` | `GET /api/user/dashboard-targets` / `PUT /api/user/dashboard-targets` (`getDashboardTargets` / `updateDashboardTargets`) | 服务端优先；若后端未部署独立接口（404），则 fallback 写入本地 storage，并回退到 `PUT /api/user/health-profile` 携带 `dashboard_targets`。 |
 | `home_poster_modal_visible` | 首页弹窗海报是否已展示（标记值 `'1'`） | `pages/index` | 无（纯本地标记） | 首次进入首页展示海报后写入，避免重复弹窗。 |
 | `showRecordMenuModal` | 首页记录菜单引导弹窗是否已展示 | `pages/index` | 无（纯本地标记） | 新用户首次进入首页后展示，点击后清除。 |
-| `home_module_layout_v2:<userId>` | 首页模块顺序与隐藏列表 | `pages/index` | 无（当前设备的用户偏好） | 按账号隔离，默认全部显示；饮食核心始终显示，有补剂计划或临期食物时对应提醒模块保持显示。整理面板点「完成」后保存，「取消」不保存；清除缓存会恢复默认布局。 |
+| `home_module_layout_v4:<userId>`（兼容 v3/v2） | 首页模块顺序、隐藏列表与快捷卡选择 | `pages/index` | 无（当前设备的用户偏好） | 按账号隔离；新用户及恢复默认时显示体重、运动、睡眠，喝水可自行开启。选 1–3 项一行自适应铺满，选满 4 项自动两行两列，无空格或横滑。旧 v3 的体重/喝水/睡眠默认组合首次迁移为体重/运动/睡眠，其余自定义组合保留；v4 保存后的自定义不重复调整。整理面板点「完成」后保存；清除缓存同时删除 v2/v3/v4，恢复新默认。 |
 | `home_check_in_snooze_v1:<userId>` | 用户选择「稍后再签」的日期 | `pages/index` | 无（纯本地标记） | 仅当日不再弹签到提醒，不改变签到或积分；清除缓存会重置。 |
 
 **清理影响**：清除后首页会重新从服务端拉取 dashboard、体重饮水数据、摄入目标，弹窗标记重置（可能再次弹窗）。

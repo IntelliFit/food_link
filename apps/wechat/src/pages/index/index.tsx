@@ -3225,7 +3225,7 @@ function IndexPage() {
         {/* 体重、喝水、运动与睡眠快捷卡片 */}
         <ScrollView
           className={`body-status-scroll body-status-scroll--count-${moduleLayout.quickStats.length}`}
-          scrollX={moduleLayout.quickStats.length === 4}
+          scrollX={false}
           enhanced
           showScrollbar={false}
         >
