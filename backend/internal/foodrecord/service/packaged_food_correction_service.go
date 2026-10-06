@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"math"
 	"strings"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
+	"food_link/backend/pkg/logger"
 )
 
 type SubmitPackagedFoodCorrectionInput struct {
@@ -32,6 +34,7 @@ func (s *FoodNutritionService) SubmitPackagedFoodCorrection(ctx context.Context,
 	if userID == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "用户信息缺失", HTTPStatus: 401}
 	}
+	logger.Info(ctx, "开始提交包装食品纠错", slog.String("user_id", userID), slog.String("packaged_food_id", input.PackagedFoodID))
 	item, err := s.GetPackagedFood(ctx, input.PackagedFoodID)
 	if err != nil {
 		return nil, err
@@ -84,8 +87,10 @@ func (s *FoodNutritionService) SubmitPackagedFoodCorrection(ctx context.Context,
 		RiskFlags:         riskFlags,
 	}
 	if err := s.nutritionRepo.CreatePackagedFoodCorrectionSubmission(ctx, submission); err != nil {
+		logger.Error(ctx, "保存包装食品纠错失败", err, slog.String("user_id", userID), slog.String("packaged_food_id", item.ID))
 		return nil, err
 	}
+	logger.Info(ctx, "包装食品纠错提交完成", slog.String("user_id", userID), slog.String("packaged_food_id", item.ID), slog.String("submission_id", submission.ID), slog.Int("risk_flag_count", len(riskFlags)))
 	return submission, nil
 }
 
@@ -258,7 +263,7 @@ func stringValue(value *string) string {
 
 func uniqueStrings(values []string) []string {
 	if len(values) == 0 {
-		return nil
+		return []string{}
 	}
 	seen := map[string]bool{}
 	out := make([]string, 0, len(values))
