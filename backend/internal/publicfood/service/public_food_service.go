@@ -282,6 +282,9 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		PriceCollectedAt:   input.PriceCollectedAt,
 		PortionDescription: ptrString(input.PortionDescription),
 		CampusLocationText: buildCampusLocationText(input.SchoolName, input.CampusName, input.CanteenName, input.Floor, input.WindowName),
+		ContentVersion:     1,
+		NutritionStatus:    "pending",
+		AvailabilityStatus: "available",
 	}
 	if isCampusPublicFood(item) {
 		// Campus foods must not become client-visible until the existing precise
@@ -294,8 +297,10 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		}
 	}
 	if err := s.repo.CreateItem(ctx, item); err != nil {
+		logger.Error(ctx, "创建公共餐食失败", err, slog.String("user_id", userID), slog.String("item_id", item.ID), slog.String("type", item.Type))
 		return "", err
 	}
+	logger.Info(ctx, "公共餐食保存完成", slog.String("user_id", userID), slog.String("item_id", item.ID), slog.String("type", item.Type), slog.String("status", item.Status), slog.Int("image_count", len(imagePaths)))
 	if isCampusPublicFood(item) {
 		taskID, err := s.submitCampusAnalyzeTask(ctx, userID, item, firstPath, imagePaths)
 		if err != nil {

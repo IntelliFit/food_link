@@ -89,7 +89,6 @@ func (r *ExerciseRepo) UpdateExerciseLog(ctx context.Context, userID, logID, exe
 	if len(updates) == 0 {
 		return 0, nil
 	}
-	updates["updated_at"] = time.Now()
 	result := r.db.WithContext(ctx).Model(&domain.ExerciseLog{}).Where("id = ? AND user_id = ?", logID, userID).Updates(updates)
 	return result.RowsAffected, result.Error
 }

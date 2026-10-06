@@ -468,8 +468,10 @@ func (s *ExerciseService) DeleteLog(ctx context.Context, userID, logID string) e
 }
 
 func (s *ExerciseService) UpdateLog(ctx context.Context, userID, logID, exerciseDesc, imageURL, date string, caloriesBurned *float64) error {
+	logger.Info(ctx, "开始更新运动记录", slog.String("user_id", userID), slog.String("log_id", logID))
 	log, err := s.repo.GetExerciseLogByID(ctx, userID, logID)
 	if err != nil {
+		logger.Error(ctx, "查询待更新运动记录失败", err, slog.String("user_id", userID), slog.String("log_id", logID))
 		return err
 	}
 	if log == nil {
@@ -490,11 +492,13 @@ func (s *ExerciseService) UpdateLog(ctx context.Context, userID, logID, exercise
 	}
 	rowsAffected, err := s.repo.UpdateExerciseLog(ctx, userID, logID, desc, imageURL, recordedOn, caloriesBurned)
 	if err != nil {
+		logger.Error(ctx, "更新运动记录失败", err, slog.String("user_id", userID), slog.String("log_id", logID))
 		return err
 	}
 	if rowsAffected == 0 {
 		return commonerrors.ErrNotFound
 	}
+	logger.Info(ctx, "运动记录更新完成", slog.String("user_id", userID), slog.String("log_id", logID))
 	return nil
 }
 
