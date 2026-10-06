@@ -99,6 +99,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := db.WithContext(ctx).AutoMigrate(migrationdo.AllModels()...); err != nil {
 		return fmt.Errorf("auto migrate models: %w", err)
 	}
+	if err := MigrateAnalytics(ctx, db, schema); err != nil {
+		return err
+	}
 	if err := ensurePushConstraints(ctx, db); err != nil {
 		return err
 	}

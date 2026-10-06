@@ -35,9 +35,12 @@ func main() {
 	onlyCampusMapLocations := flag.Bool("only-campus-map-locations", false, "only add school, campus, and canteen coordinates used by the food map")
 	onlySleep := flag.Bool("only-sleep-records", false, "only add manual daily sleep records")
 	onlyPushReminders := flag.Bool("only-push-reminders", false, "only migrate the three push reminder tables and constraints")
+	onlyAnalytics := flag.Bool("only-analytics", false, "only migrate admin roles and isolated analytics tables")
+	printTarget := flag.Bool("print-target", false, "print resolved database target without credentials; do not connect or migrate")
 	flag.Parse()
+	// Analytics has a scoped migration to avoid touching business tables during deployment.
 	selectedOnlyModes := 0
-	for _, selected := range []bool{*onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -64,6 +67,9 @@ func main() {
 		schema,
 	)
 
+	if *printTarget {
+		return
+	}
 	db, err := database.Open(cfg.Database)
 	if err != nil {
 		log.Fatalf("打开数据库失败: %v", err)
@@ -96,7 +102,9 @@ func main() {
 		return
 	}
 	var migrateErr error
-	if *onlyPushReminders {
+	if *onlyAnalytics {
+		migrateErr = migration.MigrateAnalytics(ctx, db, cfg.Database.Schema)
+	} else if *onlyPushReminders {
 		migrateErr = migration.MigratePushReminders(ctx, db, cfg.Database.Schema)
 	} else if *onlySleep {
 		migrateErr = migration.MigrateSleepRecords(ctx, db, cfg.Database.Schema)

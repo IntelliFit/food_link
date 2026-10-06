@@ -123,6 +123,8 @@ import (
 )
 
 type App struct {
+	analyticsCancel       context.CancelFunc
+	analyticsDone         chan struct{}
 	engine                *gin.Engine
 	db                    *gorm.DB
 	shutdownTrace         func(context.Context) error
@@ -190,6 +192,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.Use(metrics.GinMiddleware())
 	engine.Use(logger.Recovery())
 	engine.Use(developerPortalCORS(os.Getenv("DEVELOPER_CORS_ALLOWED_ORIGINS"), cfg.App.Env))
+	analyticsSvc := adminservice.NewAnalyticsService(adminrepo.NewAnalyticsRepo(db))
+	engine.Use(analyticsSvc.Middleware())
 
 	storageClient := storage.New(cfg.Storage)
 	taskQueue, err := taskqueue.New(cfg.TaskQueue)
@@ -544,6 +548,12 @@ func New(cfg *config.Config) (*App, error) {
 		contentSecurity: contentSecurity,
 	}
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campusCatalogRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, statsSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
+	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
+		analyticsCtx, cancel := context.WithCancel(context.Background())
+		app.analyticsCancel = cancel
+		app.analyticsDone = make(chan struct{})
+		go func() { defer close(app.analyticsDone); analyticsSvc.Run(analyticsCtx) }()
+	}
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
 		if cfg.Push.Enabled {
 			pushCtx, pushCancel := context.WithCancel(context.Background())
@@ -954,6 +964,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/login", adminAuthHandler.Login)
 	adminAPI.POST("/logout", adminAuthHandler.Logout)
 	adminAPI.GET("/session", adminAuthHandler.Session)
+	adminAPI.GET("/analytics", adminAuth, adminhandler.NewAnalyticsHandler(analyticsSvc).Overview)
 	adminAPI.GET("/packaged-foods", adminAuth, adminPackagedFoodHandler.List)
 	adminAPI.GET("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Get)
 	adminAPI.POST("/packaged-foods/:food_id/test-extract", adminAuth, adminPackagedFoodHandler.TestExtract)
@@ -1438,6 +1449,13 @@ func embeddedWorkerID(cfg *config.Config) string {
 }
 
 func (a *App) Close(ctx context.Context) error {
+	if a.analyticsCancel != nil {
+		a.analyticsCancel()
+		select {
+		case <-a.analyticsDone:
+		case <-ctx.Done():
+		}
+	}
 	if a.contentSecurity != nil {
 		defer func() { _ = a.contentSecurity.Close() }()
 	}

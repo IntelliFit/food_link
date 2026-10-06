@@ -8,6 +8,7 @@ const (
 )
 
 type AdminAccount struct {
+	Role         string
 	ID           string
 	Username     string
 	DisplayName  string
@@ -17,3 +18,6 @@ type AdminAccount struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
+
+const RoleAdmin = "admin"
+const RoleAnalyticsViewer = "analytics_viewer"

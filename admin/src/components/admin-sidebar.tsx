@@ -23,8 +23,10 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { useAdminRole } from '@/types/admin-session'
 
 export type AdminMenuId =
+  | 'analytics'
   | 'overview'
   | 'feedback'
   | 'benchmark'
@@ -59,7 +61,7 @@ type AdminMenuItem = {
 const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
   {
     label: '工作台',
-    items: [{ id: 'overview', label: '总览', icon: LayoutDashboard }],
+    items: [{ id: 'overview', label: '总览', icon: LayoutDashboard }, { id: 'analytics', label: '运营数据', icon: Activity }],
   },
   {
     label: '用户管理',
@@ -98,6 +100,8 @@ const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
 ]
 
 export function AdminSidebar({ activeMenu, onLogout, onMenuChange }: AdminSidebarProps) {
+  const role = useAdminRole()
+  const visibleGroups = menuGroups.map(group => ({ ...group, items: group.items.filter(menu => role === 'admin' || menu.id === 'analytics') })).filter(group => group.items.length > 0)
   return (
     <aside className='sticky top-4 flex h-[calc(100vh-2rem)] w-[256px] shrink-0 flex-col rounded-2xl border bg-card/90 p-5 shadow-lg backdrop-blur-md'>
       <div className='mb-6 flex items-start justify-between gap-3'>
@@ -109,7 +113,7 @@ export function AdminSidebar({ activeMenu, onLogout, onMenuChange }: AdminSideba
       </div>
 
       <nav className='flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pr-1'>
-        {menuGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <section key={group.label} className='space-y-2'>
             <div className='px-2 text-[11px] font-semibold tracking-wide text-muted-foreground'>{group.label}</div>
             <div className='space-y-1'>

@@ -31,8 +31,11 @@ import { PaymentTestPage } from '@/pages/payment-test-page'
 import { UserRewardPage } from '@/pages/user-reward-page'
 import { UserFoodPhotosPage } from '@/pages/user-food-photos-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
+import { AdminRoleContext, type AdminRole, type AdminSession } from '@/types/admin-session'
+import { AnalyticsPage } from '@/pages/analytics-page'
 
 const MENU_PATHS: Record<AdminMenuId, string> = {
+  analytics: '/analytics',
   overview: '/',
   feedback: '/feedback',
   benchmark: '/benchmark',
@@ -54,6 +57,7 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
 
 /** Admin 根组件：会话检查、登录与业务路由 */
 export function App() {
+  const [role, setRole] = useState<AdminRole>('analytics_viewer')
   const [authenticated, setAuthenticated] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
   const navigate = useNavigate()
@@ -66,7 +70,9 @@ export function App() {
   async function checkSession() {
     setCheckingSession(true)
     try {
-      await adminRequest<{ authenticated: boolean }>('/api/admin/session')
+      const session = await adminRequest<AdminSession>('/api/admin/session')
+      if (!session.authenticated || !['admin', 'analytics_viewer'].includes(session.account.role)) throw new Error('无效账号权限')
+      setRole(session.account.role)
       setAuthenticated(true)
     } catch {
       setAuthenticated(false)
@@ -76,10 +82,12 @@ export function App() {
   }
 
   async function login(username: string, password: string) {
-    await adminRequest<{ authenticated: boolean }>('/api/admin/login', {
+    const session = await adminRequest<AdminSession>('/api/admin/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     })
+    if (!session.authenticated || !['admin', 'analytics_viewer'].includes(session.account.role)) throw new Error('无效账号权限')
+    setRole(session.account.role)
     setAuthenticated(true)
   }
 
@@ -127,8 +135,10 @@ export function App() {
   }
 
   return (
-    <>
+    <AdminRoleContext.Provider value={role}>
       <Routes>
+        <Route path='/analytics' element={<AnalyticsPage {...pageProps} />} />
+        {role === 'admin' ? <>
         <Route path='/' element={<Navigate to='/overview' replace />} />
         <Route path='/overview' element={<OverviewPage {...pageProps} />} />
         <Route path='/feedback' element={<FeedbackPage {...pageProps} />} />
@@ -154,10 +164,11 @@ export function App() {
         <Route path='/payment-test' element={<PaymentTestPage {...pageProps} />} />
         <Route path='/user-rewards' element={<UserRewardPage {...pageProps} />} />
         <Route path='/user-food-photos' element={<UserFoodPhotosPage {...pageProps} />} />
-        <Route path='*' element={<Navigate to='/overview' replace />} />
+        </> : null}
+        <Route path='*' element={<Navigate to={role === 'admin' ? '/overview' : '/analytics'} replace />} />
       </Routes>
       <Toaster richColors closeButton position='bottom-right' />
-    </>
+    </AdminRoleContext.Provider>
   )
 }
 
