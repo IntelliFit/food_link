@@ -103,6 +103,7 @@ func syncCommunityProjection(tx *gorm.DB, item *domain.CatalogItem) error {
 	location := strings.Join(nonEmptyCatalogValues(item.OrganizationName, item.AreaName, item.CanteenName, item.Floor, item.WindowName), " · ")
 	publication := publishedCatalogItem{
 		ID: item.ID, UserID: item.ContributorUserID, ImagePath: imagePath, ImagePaths: imagePaths,
+		Items:    []map[string]any{},
 		FoodName: item.Name, Description: item.Description, MerchantName: item.CanteenName,
 		MerchantAddress: location, DetailAddress: location, Status: "published", Type: venue.Type,
 		PublishedAt: publishedAt, CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, IsCampusFood: venue.IsCampusFood,
