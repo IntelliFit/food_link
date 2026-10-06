@@ -22,7 +22,7 @@ func (r *Runner) requiresContentSecurity(task *domain.AnalysisTask) bool {
 		return false
 	}
 	switch task.TaskType {
-	case "food", "food_text", "precision_plan", "precision_item_estimate", "precision_aggregate":
+	case "food", "food_text", "precision_plan", "precision_item_estimate", "precision_aggregate", "exercise":
 		return true
 	default:
 		return false
@@ -71,6 +71,11 @@ func (r *Runner) monitorContentSecurity(ctx context.Context, task *domain.Analys
 // pass. A late callback resumes this result, not another model invocation.
 func (r *Runner) completeContentSecurity(ctx context.Context, task *domain.AnalysisTask, result map[string]any) error {
 	if !r.requiresContentSecurity(task) {
+		return nil
+	}
+	// ExerciseService checks the same input before inserting the exercise log.
+	// Its result already contains a saved record; do not add a later write gate.
+	if task.TaskType == "exercise" {
 		return nil
 	}
 	doc := map[string]any{"input": analysisSecurityInput(task), "analysis_result": result}

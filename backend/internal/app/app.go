@@ -408,6 +408,7 @@ func New(cfg *config.Config) (*App, error) {
 	exerciseSvc := healthservice.NewExerciseService(exerciseRepo, cfg)
 	exerciseSvc.ConfigureTaskPublisher(taskQueue)
 	exerciseSvc.ConfigureStorage(storageClient)
+	exerciseSvc.ConfigureContentSecurity(contentSecurity)
 	statsSvc := healthservice.NewStatsService(statsRepo, bodyMetricsSvc, cfg)
 	statsSvc.ConfigureCustomFocusTasks(analyzeTaskRepo, taskQueue)
 	communitySvc.ConfigureHealthScoreProvider(statsSvc)
@@ -755,7 +756,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/diet/recommendations/preview", authmw.RequireJWT(jwtSvc), healthHandler.PreviewMeals)
 	engine.GET("/api/exercise-calories/daily", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseCaloriesDaily)
 	engine.GET("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseLogs)
-	engine.POST("/api/exercise-logs", authmw.RequireJWT(jwtSvc), contentGuard(4), healthHandler.CreateExerciseLog)
+	// Exercise accepts both form and JSON; its service audits the bound inputs
+	// and finishes image checks alongside the analysis before saving the log.
+	engine.POST("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.CreateExerciseLog)
 	engine.POST("/api/exercise-logs/estimate-calories", authmw.RequireJWT(jwtSvc), healthHandler.EstimateExerciseCalories)
 	engine.PUT("/api/exercise-logs/:log_id", authmw.RequireJWT(jwtSvc), contentGuard(4), healthHandler.UpdateExerciseLog)
 	engine.DELETE("/api/exercise-logs/:log_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteExerciseLog)

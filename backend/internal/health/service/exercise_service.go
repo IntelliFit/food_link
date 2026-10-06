@@ -15,6 +15,7 @@ import (
 
 	"food_link/backend/internal/common/dateutil"
 	commonerrors "food_link/backend/internal/common/errors"
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	"food_link/backend/internal/health/domain"
 	membershipdomain "food_link/backend/internal/membership/domain"
 	"food_link/backend/internal/taskqueue"
@@ -50,13 +51,14 @@ type ExerciseRepo interface {
 }
 
 type ExerciseService struct {
-	repo        ExerciseRepo
-	creditGuard CreditGuard
-	rewards     InviteRewardActivator
-	cfg         *config.Config
-	client      *http.Client
-	storage     *storage.Client
-	taskQueue   taskqueue.Publisher
+	repo            ExerciseRepo
+	creditGuard     CreditGuard
+	rewards         InviteRewardActivator
+	cfg             *config.Config
+	client          *http.Client
+	storage         *storage.Client
+	taskQueue       taskqueue.Publisher
+	contentSecurity *contentsecurity.Service
 }
 
 type ExercisePrecisionDetails struct {
@@ -303,6 +305,9 @@ func (s *ExerciseService) CreateLogWithDateAndDetails(ctx context.Context, userI
 		}
 	} else {
 		task.Payload["estimation_mode"] = "standard"
+	}
+	if err := s.startExerciseContentSecurity(ctx, userID, desc, imageURL, precision.Breakdown, task.Payload); err != nil {
+		return nil, err
 	}
 	creditGroupID := uuid.New().String()
 	task.Payload["credit_group_id"] = creditGroupID
@@ -577,6 +582,12 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	estimate, err := s.estimateExerciseCalories(ctx, estimationDesc, imageURL, profileSnapshot)
 	if err != nil {
 		status = "estimate_error"
+		return nil, err
+	}
+	// The request has already been accepted. Wait inside the worker, so a new
+	// photo's async audit never forces the client to upload it again on retry.
+	if err := s.awaitExerciseContentSecurity(ctx, userID, desc, imageURL, payload); err != nil {
+		status = "content_security_error"
 		return nil, err
 	}
 	now := time.Now().UTC()

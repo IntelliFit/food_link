@@ -21,6 +21,7 @@ func Guard(svc *service.Service, store *storage.Client, scene int) gin.HandlerFu
 		// Restore the exact bytes so the existing handler still binds its own DTO.
 		body, err := io.ReadAll(io.LimitReader(c.Request.Body, (2<<20)+1))
 		if err != nil || len(body) > 2<<20 {
+			logInvalidDocument(c, "body_read_or_size")
 			response.Error(c, commonerrors.ErrBadRequest)
 			c.Abort()
 			return
@@ -28,6 +29,7 @@ func Guard(svc *service.Service, store *storage.Client, scene int) gin.HandlerFu
 		c.Request.Body = io.NopCloser(bytes.NewReader(body))
 		var doc map[string]any
 		if json.Unmarshal(body, &doc) != nil || doc == nil {
+			logInvalidDocument(c, "document_parse")
 			response.Error(c, commonerrors.ErrBadRequest)
 			c.Abort()
 			return
@@ -59,4 +61,13 @@ func Guard(svc *service.Service, store *storage.Client, scene int) gin.HandlerFu
 			logger.Info(c.Request.Context(), "发布内容审核及写入完成", slog.String("user_id", userID), slog.String("path", c.FullPath()))
 		}
 	}
+}
+
+func logInvalidDocument(c *gin.Context, reason string) {
+	logger.Warn(c.Request.Context(), "发布内容请求格式不匹配",
+		slog.String("user_id", c.GetString(authmw.ContextUserIDKey)),
+		slog.String("path", c.FullPath()),
+		slog.String("content_type", c.ContentType()),
+		slog.String("reason", reason),
+	)
 }
