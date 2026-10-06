@@ -95,7 +95,7 @@ func (s *CommunityService) checkContent(ctx context.Context, userID string, scen
 	if s.contentSecurity == nil {
 		return nil
 	}
-	err := s.contentSecurity.CheckDocument(ctx, userID, scene, doc, s.storage)
+	err := s.contentSecurity.CheckPublication(ctx, userID, scene, doc, s.storage)
 	if err != nil {
 		if err == contentsecurity.ErrUnavailable {
 			logger.Error(ctx, "圈子内容审核服务不可用", err, slog.String("user_id", userID), slog.Int("scene", scene))

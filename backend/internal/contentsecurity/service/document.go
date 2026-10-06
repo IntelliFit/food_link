@@ -149,7 +149,7 @@ func (s *Service) CheckUpdate(ctx context.Context, userID string, scene int, cur
 	for key, value := range values {
 		doc[key] = value
 	}
-	return s.CheckDocument(ctx, userID, scene, doc, store)
+	return s.CheckPublication(ctx, userID, scene, doc, store)
 }
 
 func (s *Service) CheckValue(ctx context.Context, userID string, scene int, value any, store *storage.Client) error {
@@ -161,7 +161,7 @@ func (s *Service) CheckValue(ctx context.Context, userID string, scene int, valu
 	if json.Unmarshal(raw, &doc) != nil {
 		return ErrUnavailable
 	}
-	return s.CheckDocument(ctx, userID, scene, doc, store)
+	return s.CheckPublication(ctx, userID, scene, doc, store)
 }
 
 func unique(values []string) []string {

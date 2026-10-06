@@ -781,7 +781,7 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 		for key, value := range values {
 			doc[key] = value
 		}
-		if err := s.contentSecurity.CheckDocument(ctx, userID, 4, doc, s.storage); err != nil {
+		if err := s.contentSecurity.CheckPublication(ctx, userID, 4, doc, s.storage); err != nil {
 			return nil, err
 		}
 	}

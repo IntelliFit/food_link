@@ -46,7 +46,7 @@ func Guard(svc *service.Service, store *storage.Client, scene int) gin.HandlerFu
 		}
 		userID := c.GetString(authmw.ContextUserIDKey)
 		logger.Info(c.Request.Context(), "进入发布内容审核", slog.String("user_id", userID), slog.String("path", c.FullPath()))
-		if err := svc.CheckDocument(c.Request.Context(), userID, scene, doc, store); err != nil {
+		if err := svc.CheckPublication(c.Request.Context(), userID, scene, doc, store); err != nil {
 			if err == service.ErrUnavailable {
 				logger.Error(c.Request.Context(), "发布内容审核服务不可用", err, slog.String("user_id", userID), slog.String("path", c.FullPath()))
 			} else {
