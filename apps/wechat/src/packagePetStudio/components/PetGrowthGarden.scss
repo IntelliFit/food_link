@@ -7,19 +7,62 @@
 .pet-growth-garden__level { margin-top: 24rpx; }.pet-growth-garden__level > view:first-child { display: flex; justify-content: space-between; font-size: 26rpx; color: #43583c; }.pet-growth-garden__level > text { font-size: 22rpx; color: #88785f; }
 .pet-growth-garden__section { display: flex; gap: 16rpx; justify-content: space-between; align-items: center; margin: 28rpx 0 18rpx; color: #354b37; font-size: 30rpx; font-weight: 600; }.pet-growth-garden__section > text:last-child { font-size: 21rpx; font-weight: 400; color: #8a7657; }
 .pet-growth-garden__actions { display: grid; grid-template-columns: repeat(2,1fr); gap: 18rpx; }
-.pet-growth-garden__care { padding: 22rpx 20rpx 16rpx; border: 1rpx solid #dcd3be; border-radius: 24rpx; background: #fffaf1; min-width: 0; }
-.pet-growth-garden__care.is-water { background: #f0f7f3; border-color: #cbded1; }.pet-growth-garden__care.is-exercise { background: #f0f3e4; border-color: #d2dcc0; }.pet-growth-garden__care.is-work { background: #f7f0e2; border-color: #e1d2b6; }.pet-growth-garden__care.is-rest { background: #f1eff8; border-color: #d7d0e5; }
-.pet-growth-garden__care-top { display: flex; justify-content: space-between; align-items: center; color: #657b53; font-size: 21rpx; }.pet-growth-garden__care-top > text:first-child { font-size: 42rpx; line-height: 1.1; }
-.pet-growth-garden__care-name { display: block; color: #3b5339; font-size: 31rpx; font-weight: 600; margin: 18rpx 0 9rpx; }.pet-growth-garden__care-description { display: block; min-height: 62rpx; font-size: 22rpx; color: #756c5b; line-height: 1.55; }
-.pet-growth-garden__care-button { display: flex; align-items: center; justify-content: center; min-height: 62rpx; background: #fffaf1; color: #52694a; font-size: 24rpx; padding: 12rpx; margin-top: 14rpx; border-radius: 16rpx; }.pet-growth-garden__care.is-complete .pet-growth-garden__care-button { background: #e7ecd9; color: #6e795d; }
+.pet-growth-garden__care-top { display: flex; align-items: center; gap: 12rpx; }
+.pet-growth-garden__icon-badge { display: flex; align-items: center; justify-content: center; width: 58rpx; height: 58rpx; flex-shrink: 0; border-radius: 18rpx; background: #eff3e8; color: #6a8257; }
+.pet-growth-garden__icon-badge .pet-entry-icon { width: 36rpx; height: 36rpx; }
+.pet-growth-garden__care-name { color: #3b5339; font-size: 29rpx; font-weight: 600; }
+.pet-growth-garden__coin { margin-left: auto; color: #778265; font-size: 21rpx; white-space: nowrap; }
+.pet-growth-garden__care-description { display: block; margin-top: 20rpx; min-height: 66rpx; font-size: 23rpx; color: #746e60; line-height: 1.6; }
+.pet-growth-garden__care-go { display: flex; align-items: center; justify-content: space-between; min-height: 46rpx; margin-top: 18rpx; padding-top: 16rpx; border-top: 1rpx solid #ebe7da; font-size: 25rpx; color: #526b43; font-weight: 500; }
+.pet-growth-garden__chevron { width: 11rpx; height: 11rpx; margin-right: 5rpx; border-top: 3rpx solid currentColor; border-right: 3rpx solid currentColor; transform: rotate(45deg); }
 .pet-growth-garden__spinner { width: 24rpx; height: 24rpx; border: 3rpx solid #ccd7bf; border-top-color: #617e50; border-radius: 50%; animation: journey-spin 1s linear infinite; }
 .pet-growth-garden__timer { margin-top: 20rpx; padding: 22rpx; border: 1rpx solid #d9ceb6; border-radius: 24rpx; background: #fffbf2; text-align: center; }.pet-growth-garden__timer .pet-growth-garden__section { margin-top: 0; }.pet-growth-garden__clock { display: block; font-size: 78rpx; line-height: 1.4; font-family: serif; color: #486341; font-variant-numeric: tabular-nums; }.pet-growth-garden__timer-note { font-size: 23rpx; color: #83745b; }
 .pet-growth-garden__timer-buttons,.pet-growth-garden__durations { display: flex; gap: 14rpx; margin: 20rpx 0 8rpx; }.pet-growth-garden__timer-buttons .journey-button,.pet-growth-garden__durations .journey-button { flex: 1; font-size: 25rpx; padding: 18rpx 8rpx; }
 .pet-growth-garden__loop { display: flex; justify-content: space-between; align-items: center; margin: 30rpx 0 20rpx; padding: 20rpx 12rpx; border-top: 1rpx solid #dfd5be; border-bottom: 1rpx solid #dfd5be; font-size: 22rpx; color: #6b7854; }.pet-growth-garden__loop > text:nth-child(even) { color: #b5a588; }
-.pet-growth-garden__items { display: grid; grid-template-columns: repeat(2,1fr); gap: 18rpx; }.pet-growth-garden__item { padding: 22rpx 12rpx; text-align: center; background: #fff8e7; border-color: #dac7a1; min-width: 0; }.pet-growth-garden__item > text { display: block; font-size: 27rpx; margin-top: 8rpx; }.pet-growth-garden__item > text:first-child { font-size: 44rpx; color: #a58744; }.pet-growth-garden__item > text:nth-child(n+3) { color: #8d7756; font-size: 21rpx; }
+.pet-growth-garden__items { display: grid; grid-template-columns: repeat(2,1fr); gap: 18rpx; }
+.pet-growth-garden__item-top { display: flex; align-items: center; gap: 16rpx; font-size: 28rpx; color: #4b6041; font-weight: 600; }
+.pet-growth-garden__item-top .pet-entry-icon { width: 42rpx; height: 42rpx; color: #9a824d; }
+.pet-growth-garden__item-reward { display: block; margin-top: 18rpx; color: #837659; font-size: 22rpx; }
+.pet-growth-garden__item-go { display: flex; align-items: center; justify-content: space-between; margin-top: 22rpx; font-size: 24rpx; color: #5d714b; }
+.pet-growth-garden__price { padding: 8rpx 14rpx; border-radius: 14rpx; background: #f1eddd; color: #806a3d; font-size: 22rpx; }
 .pet-growth-garden__traits { display: grid; grid-template-columns: repeat(4,1fr); gap: 6rpx; padding: 18rpx 0; margin: 16rpx 0; border-top: 1rpx solid #e1d6be; border-bottom: 1rpx solid #e1d6be; text-align: center; }.pet-growth-garden__traits text { display: block; font-size: 25rpx; color: #536845; }.pet-growth-garden__traits text:last-child { font-size: 20rpx; color: #8f7d5f; margin-top: 9rpx; }
 .pet-growth-garden__milestones { display: flex; flex-direction: column; gap: 14rpx; }.pet-growth-garden__milestone { display: flex; align-items: center; gap: 18rpx; padding: 18rpx; background: #fffaf1; border: 1rpx solid #e0d4ba; border-radius: 20rpx; }.pet-growth-garden__milestone > text { color: #8a7957; font-size: 26rpx; }.pet-growth-garden__milestone > view { flex: 1; min-width: 0; }.pet-growth-garden__milestone > view > text { display: block; color: #465c3f; font-size: 26rpx; }.pet-growth-garden__milestone > view > text:last-child { font-size: 21rpx; color: #938267; margin-top: 8rpx; }.pet-growth-garden__milestone .journey-button { padding: 12rpx 16rpx; font-size: 23rpx; }.pet-growth-garden__milestone.is-owned { border-color: #c4cba5; background: #eff2e3; }
 .pet-growth-garden__footnote { display: block; margin-top: 24rpx; color: #9a8970; font-size: 20rpx; line-height: 1.8; }
 .pet-growth-garden__care-reward { display: block; color: #60764d; font-size: 21rpx; margin-top: 8rpx; }
 .pet-growth-garden__interaction-note { display: block; margin: -4rpx 0 18rpx; color: #77694e; font-size: 22rpx; line-height: 1.6; }
 .pet-growth-garden__previous-timer { margin: 20rpx 0; padding: 18rpx; border: 1rpx solid #d8c8a8; border-radius: 20rpx; background: #fff6e2; color: #78684e; font-size: 23rpx; line-height: 1.7; }.pet-growth-garden__previous-timer .journey-button { margin-top: 12rpx; font-size: 24rpx; }
+
+// Keep whole-card controls above the page's generic button styles.
+.pet-journey-page .journey-button.pet-growth-garden__care {
+  min-width: 0;
+  padding: 24rpx 20rpx 20rpx;
+  border-radius: 26rpx;
+  background: #fffdf7;
+  border-color: #e2dfd2;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 6rpx 18rpx #65563c06;
+  &.is-water .pet-growth-garden__icon-badge { background: #eaf3ee; color: #608875; }
+  &.is-work .pet-growth-garden__icon-badge { background: #f4efdf; color: #9a8051; }
+  &.is-rest .pet-growth-garden__icon-badge { background: #f0edf4; color: #8b7a9a; }
+  &.journey-button--pressed { background: #edf2e5; border-color: #b2c29f; box-shadow: inset 0 2rpx 8rpx #536b3e0c; }
+  &[disabled] { background: #f7f7f0; box-shadow: none; }
+  &[disabled] .pet-growth-garden__care-go { color: #888d7e; }
+  &[disabled] .pet-growth-garden__icon-badge { background: #ededE4; color: #929780; }
+  &.is-complete .pet-growth-garden__coin { color: #6e805a; }
+}
+.pet-journey-page .journey-button.pet-growth-garden__item {
+  min-width: 0;
+  padding: 26rpx 22rpx;
+  border-radius: 26rpx;
+  text-align: left;
+  background: #fffdf7;
+  border-color: #e2dfd2;
+  &.journey-button--pressed { background: #edf2e5; border-color: #b2c29f; }
+  &[disabled] { background: #f2f2ea; border-color: #e3e3d9; }
+  &[disabled] .pet-growth-garden__item-top,
+  &[disabled] .pet-growth-garden__item-top .pet-entry-icon,
+  &[disabled] .pet-growth-garden__item-go { color: #858b7c; }
+  &[disabled] .pet-growth-garden__price { background: #e9e9df; color: #868777; }
+}
+.pet-journey-page .pet-growth-garden__milestone .journey-button { min-height: 88rpx; min-width: 106rpx; padding: 20rpx 16rpx; }

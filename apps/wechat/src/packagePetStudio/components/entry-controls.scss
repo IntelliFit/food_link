@@ -1,0 +1,118 @@
+// Scope the family to the studio hub; game gestures and game-board controls keep their own sizes.
+.pet-journey-page {
+  .journey-button {
+    min-height: 88rpx;
+    min-width: 88rpx;
+    border-radius: 24rpx;
+    padding: 20rpx 24rpx;
+    border-color: #e3ddcf;
+    background: #fffdf7;
+    color: #41533c;
+    font-size: 27rpx;
+    line-height: 1.45;
+    transition: background-color .12s, border-color .12s, box-shadow .12s;
+  }
+  .journey-primary {
+    background: #536c49;
+    border-color: #536c49;
+    color: #fffdf4;
+    box-shadow: 0 6rpx 14rpx #43593814;
+    font-weight: 600;
+    text-align: center;
+  }
+  .journey-secondary { background: #eeeee2; border-color: #e1e3d4; color: #556449; }
+  .journey-text {
+    display: flex;
+    align-items: center;
+    min-height: 88rpx;
+    padding: 18rpx 12rpx;
+    border: 0;
+    background: transparent;
+    color: #647557;
+    font-size: 25rpx;
+    text-align: left;
+  }
+  .journey-button.is-selected { background: #edf2e7; border-color: #9cad89; color: #47633c; }
+  .journey-button[disabled] { opacity: 1; background: #f0f0e9; border-color: #e5e5dd; color: #878b7e; box-shadow: none; }
+  .journey-button.journey-button--pressed { background-color: #e5ecdc; border-color: #a9bb99; box-shadow: inset 0 2rpx 7rpx #47583c12; }
+  .journey-primary.journey-button--pressed { background: #425a39; border-color: #425a39; color: #fffdf4; }
+  .journey-text.journey-button--pressed { background: #edf0e6; border-radius: 18rpx; }
+  .journey-button[disabled].journey-button--pressed { background: #f0f0e9; border-color: #e5e5dd; }
+
+  .journey-two-actions { grid-template-columns: 1fr 1fr; gap: 18rpx; }
+  .journey-two-actions .journey-button { display: flex; justify-content: center; align-items: center; gap: 12rpx; padding: 22rpx 8rpx; }
+  .journey-two-actions .pet-entry-icon { width: 36rpx; height: 36rpx; }
+  .journey-actions { gap: 14rpx; }
+  .journey-actions .journey-button { flex: 0 1 auto; min-width: 118rpx; padding: 20rpx 24rpx; }
+  .journey-slots .journey-button,.journey-chapter-tabs .journey-button { padding: 20rpx 10rpx; }
+  .journey-outfit text { font-size: 25rpx; }
+  .journey-outfit text:last-child { font-size: 22rpx; line-height: 1.5; }
+  .journey-outfit[disabled] > image { opacity: .5; }
+  .journey-button[disabled] text { color: #858b7c; }
+  .journey-milestone .journey-text { align-self: flex-start; padding: 18rpx 12rpx; }
+  .journey-notice .journey-button { display: flex; align-items: center; justify-content: center; width: 88rpx; height: 88rpx; padding: 0; font-size: 36rpx; }
+
+  .journey-game-card.journey-button {
+    padding: 26rpx;
+    background: #fffdf7;
+    border-color: #e2dfd2;
+    border-radius: 26rpx;
+    box-shadow: 0 6rpx 18rpx #65563c06;
+  }
+  .journey-game-card__top > .pet-entry-icon { width: 48rpx; height: 48rpx; color: #718462; }
+  .journey-game-card > .journey-game-card__go { padding-top: 16rpx; border-top: 1rpx solid #eeeadd; font-size: 25rpx; }
+  .journey-game-card.journey-button--pressed { background: #edf2e5; }
+
+  .pet-play-lobby__start.journey-button {
+    min-height: 102rpx;
+    padding: 24rpx;
+    background: #536c49;
+    border: 1rpx solid #536c49;
+    color: #fffdf4;
+    font-size: 30rpx;
+    border-radius: 26rpx;
+    box-shadow: 0 6rpx 16rpx #425d361a;
+    gap: 20rpx;
+  }
+  .pet-play-lobby__choice.journey-button { padding: 10rpx 10rpx 18rpx; border-radius: 24rpx; background: #fffdf7; border-color: #e1ded1; }
+  .pet-play-lobby__choice.journey-button.is-selected { border-color: #80986e; background: #f0f5e9; box-shadow: none; }
+  .pet-play-lobby__choice > text { font-size: 27rpx; }
+  .pet-play-lobby__choice > text:last-child { font-size: 22rpx; margin-top: 6rpx; }
+  .pet-play-lobby__start.journey-button.journey-button--pressed { background: #425a39; border-color: #425a39; }
+  .pet-play-lobby__start.journey-button[disabled] { background: #e7e9df; border-color: #e0e3d7; color: #858b7c; box-shadow: none; }
+  .pet-play-lobby__choice.journey-button.journey-button--pressed { background: #e4edda; border-color: #a5ba92; }
+
+  .journey-transport__choice.journey-button { padding: 22rpx 6rpx; border-radius: 24rpx; background: #fffdf7; border-color: #e2dfd1; }
+  .journey-transport__choice.journey-button.is-selected { background: #edf3e6; border-color: #91a77e; box-shadow: inset 0 0 0 1rpx #91a77e; }
+  .journey-transport__choice > .pet-entry-icon { display: block; width: 48rpx; height: 48rpx; margin: 0 auto 14rpx; color: #6c805d; }
+  .journey-transport__choice > text:last-child { font-size: 21rpx; line-height: 1.5; }
+  .journey-transport__choice.journey-button.journey-button--pressed { background: #e4edda; border-color: #a5ba92; }
+  .journey-transport__choice.journey-button[disabled] { background: #f0f0e9; border-color: #e5e5dd; box-shadow: none; }
+  .journey-transport__choice.journey-button[disabled] > text,
+  .journey-transport__choice.journey-button[disabled] > .pet-entry-icon { color: #888d7e; }
+
+  .journey-nav {
+    gap: 12rpx;
+    padding: 16rpx 26rpx calc(12rpx + env(safe-area-inset-bottom));
+    border-top-color: #e9e4d8;
+    background: #fffdf7fa;
+    box-shadow: 0 -8rpx 26rpx #63563e06;
+  }
+  .journey-nav .journey-button {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 8rpx;
+    min-height: 104rpx;
+    padding: 14rpx 8rpx;
+    border: 0;
+    border-radius: 24rpx;
+    color: #8a8e7e;
+    background: transparent;
+  }
+  .journey-nav .journey-button.is-selected { background: #edf2e6; color: #4c663f; }
+  .journey-nav .journey-button.journey-button--pressed { background: #e3eada; }
+  .journey-nav text { margin: 0; font-size: 23rpx; line-height: 1.35; font-weight: 500; }
+  .journey-nav .pet-entry-icon { width: 42rpx; height: 42rpx; }
+}

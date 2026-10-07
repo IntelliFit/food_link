@@ -1,3 +1,5 @@
+@use '../../components/entry-controls';
+
 .pet-journey-page { min-height: 100vh; box-sizing: border-box; background: #f7f1e5; color: #463c32; padding: 32rpx 28rpx calc(176rpx + env(safe-area-inset-bottom)); }
 .journey-heading { display: flex; justify-content: space-between; gap: 16rpx; align-items: center; margin-bottom: 24rpx; }
 .journey-eyebrow { display: block; color: #89755d; font-size: 23rpx; letter-spacing: 3rpx; margin-bottom: 12rpx; }.journey-title { display: block; font-family: serif; font-size: 40rpx; font-weight: 600; }
