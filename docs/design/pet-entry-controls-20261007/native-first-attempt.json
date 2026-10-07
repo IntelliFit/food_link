@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-07T08:02:05.066Z",
+  "records": [
+    {
+      "label": "native-connect",
+      "ok": true,
+      "result": true
+    },
+    {
+      "label": "fatal",
+      "ok": false,
+      "error": "timeout waiting for automator response"
+    }
+  ]
+}

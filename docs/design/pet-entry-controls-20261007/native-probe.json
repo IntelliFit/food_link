@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-07T08:16:05.634Z",
+  "records": [
+    {
+      "name": "connect",
+      "ok": true,
+      "result": true
+    },
+    {
+      "name": "current-page",
+      "ok": true,
+      "result": "packageExtra/pages/login/index"
+    },
+    {
+      "name": "screenshot",
+      "ok": false,
+      "error": "timeout waiting for automator response"
+    }
+  ]
+}
