@@ -1,0 +1,68 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ],
+      "garden": true
+    }
+  },
+  {
+    "name": "water-entry",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/water-record/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/water-record/index"
+      ],
+      "garden": false
+    }
+  },
+  {
+    "name": "water-native-left",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "water-return-result",
+    "ok": false,
+    "error": "Return failed {\"sdk\":\"packageExtra/pages/water-record/index\",\"stack\":[\"packagePetStudio/pages/index/index\",\"packageExtra/pages/water-record/index\"],\"garden\":false}"
+  },
+  {
+    "name": "exercise-entry",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/exercise-record/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/exercise-record/index"
+      ],
+      "garden": false
+    }
+  },
+  {
+    "name": "exercise-native-left",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "exercise-return-result",
+    "ok": false,
+    "error": "Return failed {\"sdk\":\"packageExtra/pages/exercise-record/index\",\"stack\":[\"packagePetStudio/pages/index/index\",\"packageExtra/pages/exercise-record/index\"],\"garden\":false}"
+  },
+  {
+    "name": "restore",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ],
+      "garden": true
+    }
+  }
+]

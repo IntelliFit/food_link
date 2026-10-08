@@ -1,0 +1,94 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "water-actual-tap",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/water-record/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/water-record/index"
+      ]
+    }
+  },
+  {
+    "name": "water-back",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "water-actual-growth-view",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ],
+      "garden": true,
+      "wallet": {
+        "stars": 0,
+        "receipts": 3
+      }
+    }
+  },
+  {
+    "name": "exercise-actual-tap",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/exercise-record/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/exercise-record/index"
+      ]
+    }
+  },
+  {
+    "name": "exercise-back",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "exercise-actual-growth-view",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ],
+      "garden": true,
+      "wallet": {
+        "stars": 0,
+        "receipts": 3
+      }
+    }
+  },
+  {
+    "name": "restore-growth",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  }
+]

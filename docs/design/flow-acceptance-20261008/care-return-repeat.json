@@ -1,0 +1,36 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "1-water-ready-entry",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/water-record/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/water-record/index"
+      ],
+      "view": true,
+      "loading": false,
+      "readyAfterMs": 1581
+    }
+  },
+  {
+    "name": "1-water-back-confirmed",
+    "ok": false,
+    "error": "Return view not confirmed"
+  },
+  {
+    "name": "fatal",
+    "ok": false,
+    "error": "Return view not confirmed"
+  }
+]

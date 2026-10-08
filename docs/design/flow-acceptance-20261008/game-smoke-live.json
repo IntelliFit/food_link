@@ -1,0 +1,59 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": {
+      "stars": 0,
+      "receipts": 3,
+      "pets": [
+        {
+          "xp": 12,
+          "affinity": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "only-two-games",
+    "ok": true,
+    "result": {
+      "adventure": true,
+      "merge": true,
+      "kitchen": false,
+      "explore": false
+    }
+  },
+  {
+    "name": "dash-touch-pause-resume-exit",
+    "ok": true,
+    "result": {
+      "paused": true,
+      "resumed": true,
+      "returned": true
+    }
+  },
+  {
+    "name": "merge-touch-pause-resume-exit",
+    "ok": true,
+    "result": {
+      "slide": true,
+      "paused": true,
+      "resumed": true,
+      "returned": true
+    }
+  },
+  {
+    "name": "unfinished-games-no-reward",
+    "ok": true,
+    "result": {
+      "stars": 0,
+      "receipts": 3,
+      "pets": [
+        {
+          "xp": 12,
+          "affinity": 4
+        }
+      ]
+    }
+  }
+]

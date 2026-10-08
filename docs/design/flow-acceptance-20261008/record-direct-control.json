@@ -1,0 +1,115 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "privacy-direct-open",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/privacy/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/privacy/index"
+      ]
+    }
+  },
+  {
+    "name": "privacy-back",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "privacy-delayed-check",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "water-record-direct-open",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/water-record/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/water-record/index"
+      ]
+    }
+  },
+  {
+    "name": "water-record-back",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "water-record-delayed-check",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "exercise-record-direct-open",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/exercise-record/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/exercise-record/index"
+      ]
+    }
+  },
+  {
+    "name": "exercise-record-back",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "exercise-record-delayed-check",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "restore-growth",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  }
+]

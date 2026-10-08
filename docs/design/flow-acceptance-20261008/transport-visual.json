@@ -1,0 +1,132 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "bicycle-preview",
+    "ok": true,
+    "result": {
+      "id": "journey-transport",
+      "dataset": {
+        "sid": "_Cdp"
+      },
+      "left": 14,
+      "right": 387,
+      "top": 83.66667175292969,
+      "bottom": 580.9896087646484,
+      "width": 373,
+      "height": 497.32293701171875
+    }
+  },
+  {
+    "name": "bicycle-scroll",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "bicycle-shot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "name": "bicycle-motion-samples",
+    "ok": true,
+    "result": [
+      "matrix(-0.864334, 0.502917, -0.502917, -0.864334, 0, 0)",
+      "matrix(0.999994, -0.00351858, 0.00351858, 0.999994, 0, 0)",
+      "matrix(-0.503189, -0.864176, 0.864176, -0.503189, 0, 0)",
+      "matrix(-0.964806, 0.262964, -0.262964, -0.964806, 0, 0)",
+      "matrix(-0.496086, 0.868273, -0.868273, -0.496086, 0, 0)"
+    ]
+  },
+  {
+    "name": "scooter-preview",
+    "ok": true,
+    "result": {
+      "id": "journey-transport",
+      "dataset": {
+        "sid": "_Cdp"
+      },
+      "left": 14,
+      "right": 387,
+      "top": 19.666667938232422,
+      "bottom": 516.9896049499512,
+      "width": 373,
+      "height": 497.32293701171875
+    }
+  },
+  {
+    "name": "scooter-scroll",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "scooter-shot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "name": "scooter-motion-samples",
+    "ok": true,
+    "result": [
+      "matrix(0.999982, -0.00598945, 0.00598945, 0.999982, 0, 0)",
+      "matrix(0.999998, -0.00201924, 0.00201924, 0.999998, 0, 0)",
+      "matrix(1, -2.10694e-05, 2.10694e-05, 1, 0, 0)",
+      "matrix(0.999999, -0.00159801, 0.00159801, 0.999999, 0, 0)",
+      "matrix(0.999971, -0.00763832, 0.00763832, 0.999971, 0, 0)"
+    ]
+  },
+  {
+    "name": "skateboard-preview",
+    "ok": true,
+    "result": {
+      "id": "journey-transport",
+      "dataset": {
+        "sid": "_Cdp"
+      },
+      "left": 14,
+      "right": 387,
+      "top": 19.666667938232422,
+      "bottom": 516.9896049499512,
+      "width": 373,
+      "height": 497.32293701171875
+    }
+  },
+  {
+    "name": "skateboard-scroll",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "skateboard-shot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "name": "skateboard-motion-samples",
+    "ok": true,
+    "result": [
+      "matrix(1, 0, 0, 1, -107, 0)",
+      "matrix(1, 0, 0, 1, -107, 0)",
+      "matrix(1, 0, 0, 1, -107, 0)",
+      "matrix(1, 0, 0, 1, -107, 0)",
+      "matrix(1, 0, 0, 1, -107, -107)"
+    ]
+  },
+  {
+    "name": "restore-growth",
+    "ok": true,
+    "result": {
+      "stars": 0,
+      "receipts": 3,
+      "pets": [
+        {
+          "xp": 12,
+          "affinity": 4
+        }
+      ]
+    }
+  }
+]

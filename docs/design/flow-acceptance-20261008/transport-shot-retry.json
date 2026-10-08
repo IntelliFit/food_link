@@ -1,0 +1,12 @@
+[
+  {
+    "kind": "bicycle",
+    "screenshot": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "kind": "skateboard",
+    "screenshot": false,
+    "error": "fail to capture screenshot"
+  }
+]

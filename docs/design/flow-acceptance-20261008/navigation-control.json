@@ -1,0 +1,74 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "environment",
+    "ok": true,
+    "result": {
+      "SDKVersion": "3.15.2",
+      "platform": "devtools",
+      "system": "iOS 10.0.1",
+      "toolSDKVersion": "3.15.2",
+      "automator": "0.12.1"
+    }
+  },
+  {
+    "name": "control-studio",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "control-open-shelf",
+    "ok": true,
+    "result": {
+      "sdk": "packageRecap/pages/recap/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageRecap/pages/recap/index"
+      ]
+    }
+  },
+  {
+    "name": "control-back",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "control-delayed-stack",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "restore-growth",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  }
+]

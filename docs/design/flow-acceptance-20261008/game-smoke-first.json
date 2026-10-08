@@ -1,0 +1,36 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": {
+      "stars": 0,
+      "receipts": 3,
+      "pets": [
+        {
+          "xp": 12,
+          "affinity": 4
+        }
+      ]
+    }
+  },
+  {
+    "name": "only-two-games",
+    "ok": true,
+    "result": {
+      "adventure": true,
+      "merge": true,
+      "kitchen": false,
+      "explore": false
+    }
+  },
+  {
+    "name": "dash-touch-pause-resume-exit",
+    "ok": false,
+    "error": "Growth not restored"
+  },
+  {
+    "name": "fatal",
+    "ok": false,
+    "error": "Growth not restored"
+  }
+]
