@@ -5,6 +5,7 @@ import { useRef, useState } from 'react'
 import { getAccessToken, getStatsCalendarMonth } from '../utils/api'
 import { localDay, recapPeriod, type RecapKind } from '../utils/health-recap'
 import { RecapCelebration } from './RecapCelebration'
+import { archiveRecaps, currentRecapOwner, mergeRecapEntries, readRecapArchive } from '../utils/recap-archive'
 import './RecapDelivery.scss'
 
 type Entry = { kind: RecapKind; anchor: string; start: string; end: string; id: string }
@@ -13,19 +14,8 @@ const labels = { week: '周报', month: '月报', year: '年报' }
 // Production deliveries must still respect the per-period read marker.
 const RECAP_CELEBRATION_PREVIEW = typeof __ENABLE_DEV_DEBUG_UI__ !== 'undefined' && __ENABLE_DEV_DEBUG_UI__
 const RECAP_DELIVERY_PREVIEW_STORAGE_KEY = 'dev_recap_delivery_preview_once'
-const storageKey = (owner: string) => `period-recaps-v1:${owner}`
-function currentRecapOwner(): string {
-  try {
-    return getAccessToken() ? String(Taro.getStorageSync('user_id') || '') : ''
-  } catch {
-    return ''
-  }
-}
 function readEntries(owner: string): Entry[] {
-  try {
-    const value = Taro.getStorageSync(storageKey(owner))
-    return Array.isArray(value) ? value.filter(item => item && ['week', 'month', 'year'].includes(item.kind) && /^\d{4}-\d{2}-\d{2}$/.test(item.anchor) && typeof item.id === 'string').slice(0, 60) : []
-  } catch { return [] }
+  try { return readRecapArchive(owner) } catch { return [] }
 }
 /** Store only period metadata, never health values or access tokens. */
 export function RecapDelivery({ archive = false, ink = false }: { archive?: boolean; ink?: boolean }) {
@@ -92,9 +82,9 @@ export function RecapDelivery({ archive = false, ink = false }: { archive?: bool
   })
   const remember = (entry: Entry) => {
     if (!owner || String(Taro.getStorageSync('user_id') || '') !== owner || !getAccessToken()) return
-    const saved = readEntries(owner)
-    const next = saved.some(item => item.id === entry.id) ? saved : [entry, ...saved].slice(0, 60)
-    try { Taro.setStorageSync(storageKey(owner), next) } catch { /* Still allow reading when storage is full. */ }
+    let next: Entry[]
+    try { next = archiveRecaps(owner, [entry]) }
+    catch { next = mergeRecapEntries(readEntries(owner), [entry]); Taro.showToast({ title: '报告可阅读，书架暂未保存', icon: 'none' }) }
     setEntries(next); setPending(null)
   }
   const openReader = (entry?: Entry) => {

@@ -30,6 +30,16 @@
 .recap-bookshelf__hint { position: absolute; bottom: 9%; left: 18%; right: 18%; text-align: center; padding: 15rpx; background: #f5f0e6dc; color: #8a7054; font-size: 22rpx; border-radius: 40rpx; }
 .recap-bookshelf__empty { position: absolute; top: 40%; left: 10%; right: 10%; padding: 20rpx; text-align: center; background: #f5f0e6e8; font-size: 30rpx; line-height: 1.8; }
 .recap-bookshelf__empty > text:last-child { font-size: 23rpx; }
+.recap-bookshelf__sync { position: absolute; left: 50%; top: 43%; transform: translateX(-50%); padding: 24rpx; border-radius: 50%; background: #f5f0e6d9; }
+.recap-bookshelf__sync > view { width: 44rpx; height: 44rpx; border: 4rpx solid #d4c4ab; border-top-color: #7e6b49; border-radius: 50%; animation: shelf-sync-spin .9s linear infinite; }
+.recap-bookshelf__sync.has-books { top: auto; bottom: 15%; }
+.recap-bookshelf__tools { position: absolute; bottom: 14%; left: 10%; right: 10%; display: flex; flex-direction: column; align-items: center; gap: 12rpx; text-align: center; }
+.recap-bookshelf__tools > text { padding: 10rpx 16rpx; background: #f5f0e6e8; border-radius: 12rpx; color: #71583d; font-size: 23rpx; line-height: 1.5; }
+.recap-bookshelf__tools > view { display: flex; gap: 16rpx; }
+.recap-bookshelf__tools button { min-height: 88rpx; padding: 20rpx 32rpx; border: 1rpx solid #cbb796; border-radius: 24rpx; background: #f5f0e6eb; color: #67513a; font-size: 25rpx; line-height: 1.4; }
+.recap-bookshelf__tools button::after { border: 0; }
+.recap-bookshelf__tools button.is-pressed { background: #e8dcc6; }
+@keyframes shelf-sync-spin { to { transform: rotate(360deg); } }
 .recap-book-focus { position: absolute; left: 22%; right: 22%; top: 32%; bottom: 22%; z-index: 9; border-left: 13rpx solid #ad8561; border-radius: 8rpx; background: #e4cd9d; box-shadow: 20rpx 20rpx 55rpx #30261b66; overflow: hidden; animation: shelf-book-open .85s ease both; transform-origin: left; }
 .recap-book-focus > image { width: 100%; height: 100%; opacity: .65; }
 .recap-book-focus > text { position: absolute; top: 15%; left: 6%; right: 6%; background: #f5f0e6dc; padding: 12rpx; text-align: center; font-size: 32rpx; }

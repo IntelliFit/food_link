@@ -1,46 +1,57 @@
 import { View } from '@tarojs/components'
-import Taro, { useRouter } from '@tarojs/taro'
+import Taro, { useDidHide, useDidShow, useRouter } from '@tarojs/taro'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { HealthRecap } from '../../../components/HealthRecap'
 import { RecapBookshelf, bookMarksKey, readBookMarks, type BookMarks } from '../../../components/RecapBookshelf'
 import { getAccessToken } from '../../../utils/api'
-import type { RecapKind } from '../../../utils/health-recap'
+import { archiveRecaps, currentRecapOwner, normalizeRecapEntry, readRecapArchive, recoverWeeklyRecaps } from '../../../utils/recap-archive'
+import type { JournalBook } from '../../../utils/recap-journal'
 import '../../../components/RecapDelivery.scss'
 import './index.scss'
 
-type Entry = { kind: RecapKind; anchor: string; start: string; end: string; id: string }
-const storageKey = (owner: string) => `period-recaps-v1:${owner}`
-
-function currentOwner(): string {
-  try { return getAccessToken() ? String(Taro.getStorageSync('user_id') || '') : '' } catch { return '' }
-}
-
-function readEntries(owner: string): Entry[] {
-  try {
-    const value = Taro.getStorageSync(storageKey(owner))
-    return Array.isArray(value)
-      ? value.filter(item => item && ['week', 'month', 'year'].includes(item.kind) && /^\d{4}-\d{2}-\d{2}$/.test(item.anchor) && typeof item.id === 'string').slice(0, 60)
-      : []
-  } catch { return [] }
-}
-
 export default function RecapPage() {
   const router = useRouter()
-  const owner = currentOwner()
-  const entries = useMemo(() => owner ? readEntries(owner) : [], [owner])
-  const requested = useMemo<Entry | null>(() => {
-    const { kind, anchor, start, end, id } = router.params
-    if (!['week', 'month', 'year'].includes(String(kind)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(anchor)) || !id) return null
-    return { kind: kind as RecapKind, anchor: String(anchor), start: String(start || ''), end: String(end || ''), id: String(id) }
-  }, [router.params])
-  const [selected, setSelected] = useState<Entry | null>(requested)
+  const requested = useMemo(() => normalizeRecapEntry(router.params), [router.params])
+  const [owner, setOwner] = useState(currentRecapOwner)
+  const [entries, setEntries] = useState<JournalBook[]>([])
+  const [selected, setSelected] = useState<JournalBook | null>(requested)
   const [marks, setMarks] = useState<BookMarks>(() => owner ? readBookMarks(owner) : {})
   const [closing, setClosing] = useState(false)
+  const [syncing, setSyncing] = useState(true)
+  const [shelfError, setShelfError] = useState('')
+  const [offset, setOffset] = useState(0)
+  const lastOffset = useRef(0), sequence = useRef(0), ownerRef = useRef(owner)
+  const selectedRef = useRef(selected); selectedRef.current = selected
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current) }, [])
+  useEffect(() => () => { sequence.current += 1; if (closeTimer.current) clearTimeout(closeTimer.current) }, [])
+
+  const refresh = async (range = 0, readOnly = false) => {
+    const user = currentRecapOwner(), token = getAccessToken(), serial = ++sequence.current
+    const changed = ownerRef.current !== user
+    ownerRef.current = user; setOwner(user); setShelfError(''); setSyncing(false)
+    if (changed) { setEntries([]); setSelected(null); selectedRef.current = null; setClosing(false); setOffset(0); if (closeTimer.current) clearTimeout(closeTimer.current) }
+    setMarks(user ? readBookMarks(user) : {})
+    if (!user) return
+    const current = () => sequence.current === serial && currentRecapOwner() === user && getAccessToken() === token
+    try {
+      setEntries(readRecapArchive(user))
+      if (readOnly && !changed) return
+      lastOffset.current = range; setSyncing(true)
+      const recovered = await recoverWeeklyRecaps(new Date(), range, current)
+      if (!current()) return
+      const fresh = recovered.entries.length ? archiveRecaps(user, recovered.entries, token) : readRecapArchive(user)
+      setEntries(fresh)
+      if (recovered.incomplete) setShelfError('部分往期周报暂未取回，已收藏的书仍然保留。')
+      else setOffset(range)
+    } catch {
+      if (current()) setShelfError('周报暂未取回，请重试。原有收藏不会被清空。')
+    } finally { if (current()) setSyncing(false) }
+  }
+  useDidShow(() => { void refresh(0, Boolean(selectedRef.current)) })
+  useDidHide(() => { sequence.current += 1; setSyncing(false) })
 
   const updateMark = (id: string, stamp?: string) => {
-    if (!owner || String(Taro.getStorageSync('user_id') || '') !== owner || !getAccessToken()) return
+    if (!owner || currentRecapOwner() !== owner) return
     const fresh = readBookMarks(owner)
     if (stamp && !fresh[id]?.read) return
     const next = { ...fresh, [id]: { read: true, stamp: stamp || fresh[id]?.stamp } }
@@ -49,20 +60,21 @@ export default function RecapPage() {
   }
   const returnToShelf = () => {
     if (closing) return
+    const expectedOwner = owner
     setClosing(true)
-    closeTimer.current = setTimeout(() => { setSelected(null); setClosing(false) }, 600)
+    closeTimer.current = setTimeout(() => {
+      if (currentRecapOwner() !== expectedOwner) return
+      setSelected(null); selectedRef.current = null; setClosing(false); void refresh()
+    }, 600)
   }
-  const shelfEntries = typeof __ENABLE_DEV_DEBUG_UI__ !== 'undefined' && __ENABLE_DEV_DEBUG_UI__
-    ? entries.filter(entry => entry.kind === 'week').sort((a, b) => b.start.localeCompare(a.start)).slice(0, 1)
-    : entries
 
   if (!owner) return <View className='recap-page' />
   return <View className='recap-page'>
     <View className={`recap-reader recap-reader--journal${selected ? ` recap-reader--story recap-reader--${selected.kind}` : ''}${closing ? ' is-closing' : ''}`} catchMove>
       <View className='recap-reader__close' role='button' aria-label={selected ? '合上书本' : '离开书架'} onClick={() => { if (selected) returnToShelf(); else void Taro.navigateBack() }}>{selected ? '✉' : '×'}</View>
       {selected
-        ? <HealthRecap key={selected.id} active={!closing} selection={selected} onShelf={returnToShelf} onComplete={() => updateMark(selected.id)} />
-        : <RecapBookshelf key={owner} owner={owner} entries={shelfEntries} marks={marks} onOpen={setSelected} onMark={updateMark} />}
+        ? <HealthRecap key={`${owner}:${selected.id}`} active={!closing} selection={selected} onShelf={returnToShelf} onComplete={() => updateMark(selected.id)} />
+        : <RecapBookshelf key={owner} owner={owner} entries={entries} marks={marks} syncing={syncing} error={shelfError} onRetry={() => void refresh(lastOffset.current)} onEarlier={!syncing && offset < 48 ? () => void refresh(offset + 12) : undefined} onOpen={entry => { if (currentRecapOwner() === owner) setSelected(entry) }} onMark={updateMark} />}
     </View>
   </View>
 }

@@ -1,4 +1,5 @@
 import { Text, View } from '@tarojs/components'
+import Taro from '@tarojs/taro'
 import { emptyJourney } from '../utils/recap-story'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { communityGetFeed, getAccessToken, getUserProfile, getBodyMetricsSummary, getStatsSummary, getStatsCalendarMonth, normalizeCommunityFeedItem, type BodyMetricsSummary } from '../utils/api'
@@ -10,6 +11,7 @@ import { RecapShare } from './RecapShare'
 import { RecapMusic } from './RecapMusic'
 import { RecapJournalScene } from './RecapJournalScene'
 import { journalBody, journalFeedPhotos, journalHealth, journalSwipeTarget, type JournalPhotos } from '../utils/recap-journal'
+import { archiveRecaps, currentRecapOwner, recapArchiveEntry } from '../utils/recap-archive'
 import './HealthRecap.scss'
 
 type Report = { updatedAt: string; recipient?: string; ownerId?: string; health?: ReturnType<typeof journalHealth> } & ReturnType<typeof summarizeRecap> & { start: string; end: string; body?: BodyMetricsSummary; bodyUnavailable: boolean }
@@ -68,11 +70,14 @@ export function HealthRecap({ active, selection, onShelf, onComplete }: { active
     if (inFlight.current) return
     if (!getAccessToken()) { redirectToLogin(); return }
     const token = getAccessToken()
+    const archiveOwner = currentRecapOwner()
     if (owner.current !== token) { owner.current = token; reports.current.clear(); setReport(null); setJourney(emptyJourney()); setCompleted(false) }
     inFlight.current = true
     const id = ++request.current
     setBusy(true); setError(''); setStoryPage(0)
-    const period = recapPeriod(kind, year, selection ? new Date(`${selection.anchor}T12:00:00`) : new Date())
+    const reportDate = selection ? new Date(`${selection.anchor}T12:00:00`) : new Date()
+    const recapAnchor = localDay(reportDate)
+    const period = recapPeriod(kind, year, reportDate)
     try {
       const rows: RecapDay[] = []
       for (let i = 0; i < period.months.length; i += 3) {
@@ -101,6 +106,10 @@ export function HealthRecap({ active, selection, onShelf, onComplete }: { active
         reports.current.delete(key); reports.current.set(key, next)
         if (reports.current.size > 3) reports.current.delete(reports.current.keys().next().value as string)
         setReport(next)
+        if (archiveOwner && currentRecapOwner() === archiveOwner) {
+          try { archiveRecaps(archiveOwner, [recapArchiveEntry(kind, recapAnchor)], token) }
+          catch { Taro.showToast({ title: '报告已打开，书架暂未保存', icon: 'none' }) }
+        }
       }
     } catch {
       if (request.current === id) setError('本次更新未完成，请重试。已有报告保留上次结果，缺失数据不会算成零。')
