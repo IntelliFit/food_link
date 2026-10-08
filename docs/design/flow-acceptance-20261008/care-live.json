@@ -1,0 +1,149 @@
+[
+  {
+    "name": "before",
+    "ok": true,
+    "result": {
+      "stars": 0,
+      "receipts": 0,
+      "claimed": [
+        null
+      ],
+      "sessions": 0
+    }
+  },
+  {
+    "name": "action-copy",
+    "ok": true,
+    "result": [
+      {
+        "kind": "water",
+        "text": "喝水\n+2 币\n先记录，再让伙伴一起成长\n成长 +5 · 亲密 +1\n去记录"
+      },
+      {
+        "kind": "exercise",
+        "text": "锻炼\n+2 币\n先记录，再让伙伴一起成长\n成长 +5 · 亲密 +1\n去记录"
+      },
+      {
+        "kind": "work",
+        "text": "工作\n+2 币\n陪伴专注 · 前台计时\n成长 +5 · 亲密 +1\n开始陪伴"
+      },
+      {
+        "kind": "rest",
+        "text": "休息\n+2 币\n放松片刻 · 前台计时\n成长 +5 · 亲密 +1\n开始陪伴"
+      }
+    ]
+  },
+  {
+    "name": "work-title-touch",
+    "ok": true
+  },
+  {
+    "name": "work-start",
+    "ok": true
+  },
+  {
+    "name": "work-pause",
+    "ok": true
+  },
+  {
+    "name": "leave-and-return",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "work-resume",
+    "ok": true
+  },
+  {
+    "name": "work-cancel",
+    "ok": true
+  },
+  {
+    "name": "unfinished-work-wallet",
+    "ok": true,
+    "result": {
+      "stars": 0,
+      "receipts": 0,
+      "claimed": [
+        null
+      ],
+      "sessions": 0
+    }
+  },
+  {
+    "name": "rest-start",
+    "ok": true,
+    "result": null
+  },
+  {
+    "name": "rest-progress-0",
+    "ok": true,
+    "result": {
+      "state": null,
+      "elapsed": null
+    }
+  },
+  {
+    "name": "rest-progress-1",
+    "ok": true,
+    "result": {
+      "state": null,
+      "elapsed": null
+    }
+  },
+  {
+    "name": "rest-progress-2",
+    "ok": true,
+    "result": {
+      "state": null,
+      "elapsed": null
+    }
+  },
+  {
+    "name": "rest-progress-3",
+    "ok": true,
+    "result": {
+      "state": null,
+      "elapsed": null
+    }
+  },
+  {
+    "name": "rest-progress-4",
+    "ok": true,
+    "result": {
+      "state": null,
+      "elapsed": null
+    }
+  },
+  {
+    "name": "rest-progress-5",
+    "ok": true,
+    "result": {
+      "finished": true
+    }
+  },
+  {
+    "name": "rest-progress-6",
+    "ok": true,
+    "result": {
+      "finished": true
+    }
+  },
+  {
+    "name": "after-rest",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "sessions": 0
+    }
+  },
+  {
+    "name": "native-shot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  }
+]

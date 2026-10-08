@@ -1,0 +1,30 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "open-bookshelf",
+    "ok": true,
+    "result": "packageRecap/pages/recap/index"
+  },
+  {
+    "name": "current-page",
+    "ok": true,
+    "result": "packageRecap/pages/recap/index"
+  },
+  {
+    "name": "screenshot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "name": "open-first-book",
+    "ok": true,
+    "result": {
+      "bookAvailable": true,
+      "readerAvailable": true
+    }
+  }
+]

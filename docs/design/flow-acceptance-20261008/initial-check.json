@@ -1,0 +1,133 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "current",
+    "ok": true,
+    "result": "packageRecap/pages/recap/index"
+  },
+  {
+    "name": "report-loaded",
+    "ok": true,
+    "result": {
+      "story": true,
+      "error": false,
+      "busy": false
+    }
+  },
+  {
+    "name": "reader-shot",
+    "ok": true,
+    "result": "reader.png"
+  },
+  {
+    "name": "close-book",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "shelf-books",
+    "ok": true,
+    "result": {
+      "count": 2,
+      "error": false
+    }
+  },
+  {
+    "name": "shelf-shot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "name": "studio",
+    "ok": true,
+    "result": "packagePetStudio/pages/index/index"
+  },
+  {
+    "name": "wallet-before",
+    "ok": true,
+    "result": {
+      "stars": 0,
+      "receipts": 0,
+      "sessions": 0
+    }
+  },
+  {
+    "name": "growth",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "four-actions",
+    "ok": true,
+    "result": [
+      {
+        "kind": "water",
+        "present": true,
+        "disabled": false
+      },
+      {
+        "kind": "exercise",
+        "present": true,
+        "disabled": false
+      },
+      {
+        "kind": "work",
+        "present": true,
+        "disabled": false
+      },
+      {
+        "kind": "rest",
+        "present": true,
+        "disabled": false
+      }
+    ]
+  },
+  {
+    "name": "growth-shot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "name": "work-card-title",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "timer-shot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "name": "collection",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "collection-shot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "name": "story",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "return-growth",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "wallet-after",
+    "ok": true,
+    "result": {
+      "stars": 0,
+      "receipts": 0,
+      "sessions": 0
+    }
+  }
+]

@@ -1,0 +1,139 @@
+[
+  {
+    "name": "before",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "sessions": 0
+    }
+  },
+  {
+    "name": "rest-no-duplicate",
+    "ok": true,
+    "result": {
+      "disabled": true,
+      "wallet": {
+        "stars": 2,
+        "receipts": 1,
+        "claimed": [
+          "rest"
+        ],
+        "sessions": 0
+      }
+    }
+  },
+  {
+    "name": "water-record-entry",
+    "ok": false,
+    "error": "did not return to studio"
+  },
+  {
+    "name": "exercise-record-entry",
+    "ok": false,
+    "error": "missing #care-action-exercise"
+  },
+  {
+    "name": "button-measurements",
+    "ok": true,
+    "result": [
+      {
+        "left": 14,
+        "right": 196,
+        "top": 379.66668701171875,
+        "bottom": 540.6146087646484,
+        "width": 182,
+        "height": 160.9479217529297,
+        "disabled": false,
+        "background-color": "rgb(255, 253, 247)",
+        "color": "rgb(65, 83, 60)",
+        "font-size": "14px",
+        "min-height": "47px"
+      },
+      {
+        "left": 205,
+        "right": 387,
+        "top": 379.66668701171875,
+        "bottom": 540.6146087646484,
+        "width": 182,
+        "height": 160.9479217529297,
+        "disabled": false,
+        "background-color": "rgb(255, 253, 247)",
+        "color": "rgb(65, 83, 60)",
+        "font-size": "14px",
+        "min-height": "47px"
+      },
+      {
+        "left": 14,
+        "right": 196,
+        "top": 549.6146240234375,
+        "bottom": 710.5625457763672,
+        "width": 182,
+        "height": 160.9479217529297,
+        "disabled": false,
+        "background-color": "rgb(255, 253, 247)",
+        "color": "rgb(65, 83, 60)",
+        "font-size": "14px",
+        "min-height": "47px"
+      },
+      {
+        "left": 205,
+        "right": 387,
+        "top": 549.6146240234375,
+        "bottom": 710.5625457763672,
+        "width": 182,
+        "height": 160.9479217529297,
+        "disabled": true,
+        "background-color": "rgb(247, 247, 240)",
+        "color": "rgb(135, 139, 126)",
+        "font-size": "14px",
+        "min-height": "47px"
+      }
+    ]
+  },
+  {
+    "name": "collection",
+    "ok": false,
+    "error": "missing #journey-tab-collection"
+  },
+  {
+    "name": "preview-bicycle",
+    "ok": false,
+    "error": "missing #journey-transport-bicycle"
+  },
+  {
+    "name": "preview-scooter",
+    "ok": false,
+    "error": "missing #journey-transport-scooter"
+  },
+  {
+    "name": "preview-skateboard",
+    "ok": false,
+    "error": "missing #journey-transport-skateboard"
+  },
+  {
+    "name": "preview-walk",
+    "ok": false,
+    "error": "missing #journey-transport-walk"
+  },
+  {
+    "name": "after-preview",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "sessions": 0
+    }
+  },
+  {
+    "name": "restore-growth",
+    "ok": false,
+    "error": "missing #journey-tab-map"
+  }
+]
