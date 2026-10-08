@@ -1,0 +1,38 @@
+[
+  {
+    "name": "before",
+    "result": {
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ],
+      "gardenPresent": true
+    }
+  },
+  {
+    "name": "opened",
+    "result": {
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/water-record/index"
+      ],
+      "gardenPresent": false
+    }
+  },
+  {
+    "name": "back-callback",
+    "result": "navigateBack:ok"
+  },
+  {
+    "name": "returned-0",
+    "result": {
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/water-record/index"
+      ],
+      "gardenPresent": false
+    }
+  },
+  {
+    "error": "timeout waiting for automator response"
+  }
+]

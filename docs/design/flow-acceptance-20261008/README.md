@@ -52,3 +52,5 @@
 原始运行摘要：`bookshelf-navigation.json`、`initial-check.json`、`care-live.json`、`entry-transport.json`。早先截图超时记录仍保存在原周报验收目录，本轮新增成功证据不覆盖原失败历史。
 
 后续成功运行记录为 `transport-preview.json` 与 `routes-screens.json`。本轮文档本地提交，远端推送仍遇到 GitHub 连接失败。
+
+补充返回诊断 `return-diagnosis.json`：饮水进入前页面栈只有成长页且成长卡存在；进入后栈增加饮水页，成长卡不在当前视图；显式 delta=1 返回回调为 `navigateBack:ok`，但随后页面栈短时间仍保留饮水页，进一步查询超时。因此问题还不能确定为业务导航代码缺陷，没有盲目改动健康记录页面。
