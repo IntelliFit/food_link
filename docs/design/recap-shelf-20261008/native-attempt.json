@@ -1,0 +1,22 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "open-bookshelf",
+    "ok": false,
+    "error": "timeout waiting for automator response"
+  },
+  {
+    "name": "current-page",
+    "ok": false,
+    "error": "timeout waiting for automator response"
+  },
+  {
+    "name": "screenshot",
+    "ok": false,
+    "error": "timeout waiting for automator response"
+  }
+]
