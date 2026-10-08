@@ -1,0 +1,44 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "water-growth",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/water-record/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/water-record/index"
+      ]
+    }
+  },
+  {
+    "name": "water-sdk-back",
+    "ok": true,
+    "result": {
+      "sdk": "packageExtra/pages/water-record/index",
+      "stack": [
+        "packagePetStudio/pages/index/index",
+        "packageExtra/pages/water-record/index"
+      ]
+    }
+  },
+  {
+    "name": "water-returned-view",
+    "ok": false,
+    "error": "Return not confirmed: {\"sdk\":\"packageExtra/pages/water-record/index\",\"stack\":[\"packagePetStudio/pages/index/index\",\"packageExtra/pages/water-record/index\"],\"garden\":false}"
+  },
+  {
+    "name": "fatal",
+    "ok": false,
+    "error": "Return not confirmed: {\"sdk\":\"packageExtra/pages/water-record/index\",\"stack\":[\"packagePetStudio/pages/index/index\",\"packageExtra/pages/water-record/index\"],\"garden\":false}"
+  }
+]

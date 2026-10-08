@@ -1,0 +1,972 @@
+[
+  {
+    "name": "connect",
+    "ok": true,
+    "result": {
+      "sdk": "packagePetStudio/pages/index/index",
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "growth-tab",
+    "ok": true
+  },
+  {
+    "name": "before",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "start-five-minute-work",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-0",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-1",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-2",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-3",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-4",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-5",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-6",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-7",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-8",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-9",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-10",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-11",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-12",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-13",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-14",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-15",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-16",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-17",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-18",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-19",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-20",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-21",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-22",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-23",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-24",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-25",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-26",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-27",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-28",
+    "ok": true,
+    "result": {
+      "stars": 2,
+      "receipts": 1,
+      "claimed": [
+        "rest"
+      ],
+      "interactions": 0,
+      "sessions": [
+        {
+          "kind": "work",
+          "status": "running",
+          "targetMs": 300000,
+          "elapsedMs": 0
+        }
+      ],
+      "pets": [
+        {
+          "xp": 5,
+          "affinity": 1,
+          "work": 0,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "progress-29",
+    "ok": true,
+    "result": {
+      "stars": 4,
+      "receipts": 2,
+      "claimed": [
+        "rest",
+        "work"
+      ],
+      "interactions": 0,
+      "sessions": [],
+      "pets": [
+        {
+          "xp": 10,
+          "affinity": 2,
+          "work": 1,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "after-work",
+    "ok": true,
+    "result": {
+      "stars": 4,
+      "receipts": 2,
+      "claimed": [
+        "rest",
+        "work"
+      ],
+      "interactions": 0,
+      "sessions": [],
+      "pets": [
+        {
+          "xp": 10,
+          "affinity": 2,
+          "work": 1,
+          "interactions": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "work-duplicate-disabled",
+    "ok": true,
+    "result": {
+      "disabled": true
+    }
+  },
+  {
+    "name": "exchange-snack",
+    "ok": true
+  },
+  {
+    "name": "after-snack",
+    "ok": true,
+    "result": {
+      "stars": 0,
+      "receipts": 3,
+      "claimed": [
+        "work",
+        "rest"
+      ],
+      "interactions": 1,
+      "sessions": [],
+      "pets": [
+        {
+          "xp": 12,
+          "affinity": 4,
+          "work": 1,
+          "interactions": 1
+        }
+      ]
+    }
+  },
+  {
+    "name": "insufficient-balance-disabled",
+    "ok": true,
+    "result": {
+      "snack": true,
+      "ball": true
+    }
+  },
+  {
+    "name": "screenshot",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  },
+  {
+    "name": "fatal",
+    "ok": false,
+    "error": "fail to capture screenshot"
+  }
+]

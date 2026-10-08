@@ -1,0 +1,35 @@
+[
+  {
+    "name": "persistent-wallet",
+    "result": {
+      "stars": 0,
+      "receipts": 3,
+      "claimed": [
+        "work",
+        "rest"
+      ],
+      "interactions": 1,
+      "pets": [
+        {
+          "xp": 12,
+          "affinity": 4
+        }
+      ],
+      "stack": [
+        "packagePetStudio/pages/index/index"
+      ]
+    }
+  },
+  {
+    "name": "visible-growth",
+    "result": {
+      "garden": true,
+      "workDisabled": true,
+      "snackDisabled": true
+    }
+  },
+  {
+    "name": "screenshot",
+    "ok": true
+  }
+]
