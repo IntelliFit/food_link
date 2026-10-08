@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"food_link/backend/internal/nutritionagg"
 	"strings"
 	"time"
 )
@@ -142,7 +143,7 @@ type StatsInsight struct {
 	ID              string     `gorm:"column:id"`
 	UserID          string     `gorm:"column:user_id"`
 	RangeType       string     `gorm:"column:range_type"`
-	GeneratedDate   time.Time  `gorm:"column:generated_date"`
+	GeneratedDate   time.Time  `gorm:"column:generated_date;type:date"`
 	DataFingerprint string     `gorm:"column:data_fingerprint"`
 	InsightText     string     `gorm:"column:insight_text"`
 	GenerationCount int        `gorm:"column:generation_count"`
@@ -157,7 +158,7 @@ type CustomFocusCard struct {
 	UserID          string         `gorm:"column:user_id"`
 	FocusID         string         `gorm:"column:focus_id"`
 	RangeType       string         `gorm:"column:range_type"`
-	GeneratedDate   time.Time      `gorm:"column:generated_date"`
+	GeneratedDate   time.Time      `gorm:"column:generated_date;type:date"`
 	DataFingerprint string         `gorm:"column:data_fingerprint"`
 	FocusLabel      string         `gorm:"column:focus_label"`
 	Score           int            `gorm:"column:score"`
@@ -208,6 +209,8 @@ func (StatsUserProfile) TableName() string { return "weapp_user" }
 
 // FoodRecord — minimal projection for stats aggregation (table: user_food_records)
 type FoodRecord struct {
+	EntryType     *string          `gorm:"column:entry_type"`
+	CreatedAt     *time.Time       `gorm:"column:created_at"`
 	ID            string           `gorm:"column:id"`
 	UserID        string           `gorm:"column:user_id"`
 	MealType      string           `gorm:"column:meal_type"`
@@ -237,6 +240,12 @@ type DietRecommendationScope struct {
 }
 
 type CampusDietSearchFilter struct {
+	// Internal keyset scan: exhaust a bounded place scope without an offset cap.
+	ScanCatalog           bool
+	AfterID               string
+	IncludeMenuEvidence   bool
+	MealType              string
+	DiversitySeed         string
 	AllowUnknownNutrition bool
 	ViewerID              string
 	Location              *DietLocation
@@ -259,12 +268,24 @@ type CampusDietSearchFilter struct {
 	Offset                int
 }
 
+// A retrieval cue only: names do not prove that a venue is open at breakfast.
+const BreakfastMenuNamePattern = `早餐|包子|小笼包|生煎包|馒头|烧麦|烧卖|粥|馄饨|煎饼|豆浆|面包|三明治|肠粉|汤粉|汤面|肉饼|茶叶蛋|茶鸡蛋|荷叶鸡蛋堡|香菇油菜包`
+
 type DietRecommendationSchool struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
 type DietRecommendationCandidate struct {
+	AvailableWeekdays       []string                     `json:"available_weekdays,omitempty"`
+	AvailabilityNote        string                       `json:"availability_note,omitempty"`
+	MealPeriods             []string                     `json:"meal_periods,omitempty"`
+	AvailabilityStatus      string                       `json:"availability_status,omitempty"`
+	PriceType               string                       `json:"price_type,omitempty"`
+	PriceText               string                       `json:"price_text,omitempty"`
+	RecordedMealType        string                       `json:"recorded_meal_type,omitempty"`
+	RecordEntryType         string                       `json:"record_entry_type,omitempty"`
+	Nutrients               nutritionagg.Vector          `json:"nutrients,omitempty"`
 	DistanceKM              *float64                     `json:"distance_km,omitempty"`
 	LocationLevel           string                       `json:"location_level,omitempty"`
 	MerchantName            string                       `json:"merchant_name,omitempty"`

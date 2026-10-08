@@ -8,8 +8,7 @@ import (
 	"food_link/backend/internal/health/domain"
 )
 
-const dietDecisionEngineVersion = "foodlink-diet-decision-v3"
-const dietDecisionLegacyVersion = "foodlink-diet-decision-v2.1"
+const dietDecisionEngineVersion = "foodlink-diet-decision-v2.1"
 
 const (
 	dietDecisionRoleHealth   = "health_goal"
@@ -18,23 +17,14 @@ const (
 )
 
 type DietDecisionScorecard struct {
-	Version         string               `json:"version,omitempty"`
-	MacroFit        float64              `json:"macro_fit,omitempty"`
-	NutrientLoss    float64              `json:"nutrient_plan_loss,omitempty"`
-	NutrientEffects []DietNutrientEffect `json:"nutrient_effects,omitempty"`
-	ComparedKeys    []string             `json:"compared_nutrients,omitempty"`
-	HealthFit       float64              `json:"health_fit"`
-	Adherence       float64              `json:"adherence"`
-	Confidence      float64              `json:"confidence"`
-	RiskPenalty     float64              `json:"risk_penalty"`
-	BalancedUtility float64              `json:"balanced_utility"`
+	HealthFit       float64 `json:"health_fit"`
+	Adherence       float64 `json:"adherence"`
+	Confidence      float64 `json:"confidence"`
+	RiskPenalty     float64 `json:"risk_penalty"`
+	BalancedUtility float64 `json:"balanced_utility"`
 }
 
 type dietDecisionContext struct {
-	RecentFoods     []mealFoodFrequency
-	EngineVersion   string
-	ComparisonKeys  []string
-	MissingLoss     map[string]float64
 	Basis           *DietDecisionBasis
 	Goal            string
 	MealType        string
@@ -70,13 +60,11 @@ type dietDecisionGoalWeights struct {
 
 func dietDecisionContextFromInput(input DietRecommendationInput) dietDecisionContext {
 	return dietDecisionContext{
-		EngineVersion: input.EngineVersion,
-		Basis:         input.DecisionBasis,
-		Goal:          dietRecommendationGoalContext(input),
-		MealType:      input.MealType,
-		Current:       input.Current,
-		Targets:       input.Targets,
-		Remaining:     input.MacroGaps,
+		Goal:      dietRecommendationGoalContext(input),
+		MealType:  input.MealType,
+		Current:   input.Current,
+		Targets:   input.Targets,
+		Remaining: input.MacroGaps,
 	}
 }
 
@@ -101,8 +89,6 @@ func dietDecisionContextFromCampusState(state *campusDietAgentRunState) dietDeci
 	}
 	return dietDecisionContext{
 		Basis:           state.MealContext.DecisionBasis,
-		RecentFoods:     state.PersonalContext.FoodFrequency,
-		EngineVersion:   defaultIfEmpty(state.EngineVersion, state.MealContext.EngineVersion),
 		Goal:            goal,
 		MealType:        state.MealContext.MealType,
 		Current:         current,
@@ -115,9 +101,6 @@ func dietDecisionContextFromCampusState(state *campusDietAgentRunState) dietDeci
 }
 
 func selectDietDecisionPortfolio(ctx dietDecisionContext, candidates []DietRecommendationCandidate) []dietDecisionSelection {
-	if resolvedDietEngineVersion(ctx) == dietDecisionEngineVersion {
-		return selectDietDecisionPortfolioV3(ctx, candidates)
-	}
 	evaluations := make([]dietDecisionEvaluation, 0, len(candidates))
 	for _, candidate := range normalizeDietRecommendationCandidates(candidates) {
 		evaluation := evaluateDietDecisionCandidate(ctx, candidate)
@@ -176,8 +159,7 @@ func bestDietDecisionAssignment(evaluations []dietDecisionEvaluation, roles []st
 	return best
 }
 
-// V2.1 is deliberately preserved, including its original weights and heuristics.
-func evaluateDietDecisionCandidateV21(ctx dietDecisionContext, candidate DietRecommendationCandidate) dietDecisionEvaluation {
+func evaluateDietDecisionCandidate(ctx dietDecisionContext, candidate DietRecommendationCandidate) dietDecisionEvaluation {
 	violations := dietDecisionConstraintViolations(ctx, candidate)
 	missingEvidence := make([]string, 0, 3)
 	if len(ctx.Allergies) > 0 && len(candidate.Items) == 0 {
@@ -200,7 +182,6 @@ func evaluateDietDecisionCandidateV21(ctx dietDecisionContext, candidate DietRec
 	return dietDecisionEvaluation{
 		Candidate: candidate,
 		Scores: DietDecisionScorecard{
-			Version:         dietDecisionLegacyVersion,
 			HealthFit:       roundDietNumber(health),
 			Adherence:       roundDietNumber(adherence),
 			Confidence:      roundDietNumber(confidence),
@@ -467,9 +448,6 @@ func normalizeDietDecisionToken(value string) string {
 }
 
 func dietDecisionRoleScore(role string, scores DietDecisionScorecard) float64 {
-	if scores.Version == dietDecisionEngineVersion {
-		return scores.HealthFit
-	}
 	switch role {
 	case dietDecisionRoleHealth:
 		return scores.HealthFit
@@ -538,7 +516,6 @@ func dietDecisionPresentedMeta(result *DietRecommendationResult) map[string]any 
 }
 
 func rankDietDecisionEvaluations(ctx dietDecisionContext, candidates []DietRecommendationCandidate) []dietDecisionEvaluation {
-	ctx = prepareDietDecisionComparison(ctx, candidates)
 	out := make([]dietDecisionEvaluation, 0, len(candidates))
 	for _, candidate := range normalizeDietRecommendationCandidates(candidates) {
 		evaluation := evaluateDietDecisionCandidate(ctx, candidate)
@@ -547,9 +524,6 @@ func rankDietDecisionEvaluations(ctx dietDecisionContext, candidates []DietRecom
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
-		if resolvedDietEngineVersion(ctx) == dietDecisionEngineVersion {
-			return dietDecisionBetter(out[i], out[j], out[i].Scores.Adherence, out[j].Scores.Adherence)
-		}
 		return out[i].Scores.BalancedUtility > out[j].Scores.BalancedUtility
 	})
 	return out

@@ -903,7 +903,12 @@ var dashboardMicroTargetKeys = []string{
 }
 
 func buildDashboardTargets(user *repo.User) map[string]float64 {
-	healthCondition := user.HealthCondition
+	return ResolveDashboardNutritionTargets(user.TDEE, user.HealthCondition)
+}
+
+// ResolveDashboardNutritionTargets is shared by home intake, meal decisions and
+// analysis. Saved personal targets take precedence; defaults are not clinical DRIs.
+func ResolveDashboardNutritionTargets(tdee *float64, healthCondition map[string]any) map[string]float64 {
 	if healthCondition == nil {
 		healthCondition = map[string]any{}
 	}
@@ -917,8 +922,8 @@ func buildDashboardTargets(user *repo.User) map[string]float64 {
 		if f, ok2 := v.(float64); ok2 {
 			calorieTarget = f
 		}
-	} else if user.TDEE != nil && *user.TDEE > 0 {
-		calorieTarget = *user.TDEE
+	} else if tdee != nil && *tdee > 0 {
+		calorieTarget = *tdee
 	}
 
 	defaults := GetDashboardDefaultMacroTargets()

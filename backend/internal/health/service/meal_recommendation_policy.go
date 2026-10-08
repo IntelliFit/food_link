@@ -19,8 +19,12 @@ func mealDeniesCampusAccess(question string) bool {
 }
 
 func mealRequestsCampusDining(question string) bool {
-	return !mealDeniesCampusAccess(question) && strings.Contains(question, "食堂") &&
+	return !mealDeniesCampusAccess(question) && !mealRequestsMixedDining(question) && strings.Contains(question, "食堂") &&
 		regexp.MustCompile(`推荐|想吃|吃什么|饭菜|菜品|点餐|去吃|就餐|吃饭`).MatchString(question)
+}
+
+func mealRequestsMixedDining(q string) bool {
+	return regexp.MustCompile(`(?:食堂|学校|校内).{0,20}(?:商家|外卖|校外).{0,12}(?:都|一起|同时)|(?:外卖|商家|校外).{0,20}(?:食堂|学校|校内).{0,12}(?:都|一起|同时)|(?:都|一起|同时).{0,12}(?:考虑|看看|比较).{0,20}(?:食堂|外卖)|不限场景|不限(?:学校|食堂|商家)|不只.{0,6}食堂`).MatchString(q)
 }
 
 func mealExplicitPlaceText(question string) string {
@@ -61,6 +65,10 @@ func mealExplicitScene(q string) string {
 	if mealDeniesCampusAccess(q) {
 		return "takeout"
 	}
+	// Mixed requests must be recognised BEFORE either category's keyword.
+	if mealRequestsMixedDining(q) {
+		return "any"
+	}
 	if regexp.MustCompile(`(?:不要|不点|不吃)外卖`).MatchString(q) {
 		return "any"
 	}
@@ -69,9 +77,6 @@ func mealExplicitScene(q string) string {
 	}
 	if regexp.MustCompile(`(?:想|要|去|在|只看|只吃).{0,10}食堂|校内吃|(?:清华|大学|学校|本校)食堂`).MatchString(q) {
 		return "campus"
-	}
-	if regexp.MustCompile(`(?:食堂.{0,8}(?:商家|外卖)|(?:外卖|商家).{0,8}食堂).{0,6}都可以|不限场景`).MatchString(q) {
-		return "any"
 	}
 	return ""
 }
@@ -95,11 +100,15 @@ func applyMealFoodConstraints(c *CampusDietRecommendationConstraints, q string) 
 // truncation. Exact menu facts still come from the server-owned cards.
 func mealEvidenceText(state *campusDietAgentRunState, answer string) string {
 	answer = strings.ReplaceAll(answer, `\n`, "\n")
+	answer = strings.NewReplacer("近期未摄入", "近期记录中未见", "最近未摄入", "最近记录中未见").Replace(answer)
 	segments := strings.FieldsFunc(answer, func(r rune) bool { return r == '。' || r == '；' || r == '\n' })
 	kept := []string{}
-	unsafe := regexp.MustCompile(`完美契合|不会给.{0,8}(?:肠胃|胃|消化)|胃炎|胃部|胃黏膜|易消化|促进消化|升糖指数|肌酸|即可满足.{0,8}需求|长期偏低|今天.{0,6}(?:没吃|空着)|不含花生|不含虾|均不含|均避开|(?:验证|核实|确认|过敏).{0,4}安全|一次买齐|一起解决|稳稳控制|实时外卖平台|一碗管饱|保证.{0,4}吃饱|皮薄馅大|饱腹感强`)
+	unsafe := regexp.MustCompile(`完美契合|不会给.{0,8}(?:肠胃|胃|消化)|胃炎|胃部|胃黏膜|易消化|促进消化|升糖指数|肌酸|即可满足.{0,8}需求|长期偏低|今天.{0,6}(?:没吃|空着)|不含花生|不含虾|均不含|均避开|(?:验证|核实|确认|过敏).{0,4}安全|一次买齐|一起解决|稳稳控制|实时外卖平台|一碗管饱|保证.{0,4}吃饱|能吃饱|份量扎实|皮薄馅大|饱腹感强`)
 	for _, segment := range segments {
 		segment = strings.TrimSpace(segment)
+		if regexp.MustCompile(`不含.{0,8}(?:上述|这些|忌口|过敏)|高饱腹感|避开了.{0,16}忌口`).MatchString(segment) {
+			continue // Matching recorded ingredients is not a guarantee about a kitchen's allergens or serving size.
+		}
 		if segment == "" || campusDietAgentUnsupportedClaimPattern.MatchString(segment) || unsafe.MatchString(segment) || regexp.MustCompile(`(?i:低GI|高GI)|campus_access_denied|allowed_school_ids|pending_school|系统.{0,12}(?:权限受限|无权限)|就餐权限受限`).MatchString(segment) {
 			continue
 		}

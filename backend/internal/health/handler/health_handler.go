@@ -439,6 +439,29 @@ func (h *HealthHandler) PreviewMeals(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *HealthHandler) MealRecommendationFeedback(c *gin.Context) {
+	var body service.MealRecommendationFeedbackInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"error": "请求参数无效"})
+		return
+	}
+	svc, ok := h.stats.(interface {
+		RecordMealRecommendationFeedback(context.Context, string, service.MealRecommendationFeedbackInput) error
+	})
+	if !ok {
+		c.JSON(503, gin.H{"error": "餐食反馈暂不可用"})
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "餐食推荐反馈请求进入", logger.UserID(userID))
+	if err := svc.RecordMealRecommendationFeedback(c.Request.Context(), userID, body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "餐食推荐反馈请求完成", logger.UserID(userID))
+	response.Success(c, gin.H{"saved": true})
+}
+
 func (h *HealthHandler) GenerateDietRecommendation(c *gin.Context) {
 	var body service.DietRecommendationInput
 	if err := c.ShouldBindJSON(&body); err != nil {

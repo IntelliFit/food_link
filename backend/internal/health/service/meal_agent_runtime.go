@@ -159,10 +159,11 @@ func mealRequestedOptionLimit(question string) int {
 }
 
 func mealExplicitOptionCount(question string) int {
+	question = strings.ReplaceAll(question, " ", "")
 	if regexp.MustCompile(`(?:只|就|仅)(?:要|选|推荐|给我|给|留|定)?(?:一|1)(?:个|份|餐|道)|只推荐一个|推荐一个就|(?:换|推荐|给我)(?:一|1)(?:个|份|餐)`).MatchString(strings.ReplaceAll(question, " ", "")) {
 		return 1
 	}
-	if m := regexp.MustCompile(`(?:给|选|推荐|要|留|定)(?:我)?([二两三23])(?:个|份|餐|道|种)`).FindStringSubmatch(question); len(m) > 1 {
+	if m := regexp.MustCompile(`(?:给|选|推荐|要|留|定|换)(?:我)?([二两三23])(?:个|份|餐|道|种)`).FindStringSubmatch(question); len(m) > 1 {
 		if m[1] == "三" || m[1] == "3" {
 			return 3
 		}

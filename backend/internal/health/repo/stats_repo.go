@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/internal/nutritionagg"
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -236,7 +237,7 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 	if filter.Offset < 0 {
 		filter.Offset = 0
 	}
-	if filter.Offset > 3000 {
+	if !filter.ScanCatalog && filter.Offset > 3000 {
 		filter.Offset = 3000
 	}
 
@@ -246,6 +247,13 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 			AND COALESCE(food_name, '') !~* '(餐盒|打包盒|包装盒|纸袋|塑料袋|餐具|筷子|勺子|吸管|杯盖|餐巾)'`, "published", filter.SchoolID)
 	if !filter.AllowUnknownNutrition {
 		base = base.Where("total_calories > 0")
+	}
+	if !filter.ScanCatalog && filter.MealType == "breakfast" {
+		if filter.IncludeMenuEvidence {
+			base = base.Where("(food_name ~ ? OR EXISTS (SELECT 1 FROM campus_food_catalog_items ce WHERE ce.id = public_food_library.id AND jsonb_exists(ce.meal_periods,'breakfast')))", domain.BreakfastMenuNamePattern)
+		} else {
+			base = base.Where("food_name ~ ?", domain.BreakfastMenuNamePattern)
+		}
 	}
 	if filter.ViewerID != "" {
 		base = base.Where(`NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
@@ -292,7 +300,17 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 	if err := base.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	if filter.ScanCatalog && filter.AfterID != "" {
+		base = base.Where("id > ?", filter.AfterID)
+	}
 
+	if !filter.ScanCatalog && filter.SortBy == "diverse" {
+		// Sample every window before taking more entries from a large menu. The seed
+		// is stable for this user/meal/day, not a random re-roll on every refresh.
+		base = r.db.WithContext(ctx).Table("(?) menu", base.Select(`*, ROW_NUMBER() OVER (
+			PARTITION BY COALESCE(window_id::text, NULLIF(window_name,''), canteen_id::text, NULLIF(canteen_name,''), id::text)
+			ORDER BY md5(id::text || ?), id) AS choice_rank`, filter.DiversitySeed))
+	}
 	var rows []dietRecommendationRow
 	q := base.Select(`id, COALESCE(NULLIF(food_name, ''), NULLIF(description, ''), '校园餐') AS title,
 		COALESCE(description, '') AS description, total_calories AS calories,
@@ -305,26 +323,38 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 		COALESCE(CAST(window_id AS TEXT), '') AS window_id, COALESCE(window_name, '') AS window_name,
 		COALESCE(floor, '') AS floor, COALESCE(price, 0) AS price,
 		COALESCE(price_unit, '') AS price_unit, COALESCE(image_path, '') AS image_path`)
-	switch strings.TrimSpace(filter.SortBy) {
-	case "lowest_calories":
-		q = q.Order("total_calories ASC")
-	case "highest_protein":
-		q = q.Order("total_protein DESC, total_calories ASC")
-	case "protein_density":
-		q = q.Order("(total_protein / NULLIF(total_calories, 0)) DESC, total_protein DESC")
-	case "lowest_price":
-		q = q.Order("CASE WHEN COALESCE(price, 0) > 0 THEN 0 ELSE 1 END ASC, price ASC")
-	default:
-		if filter.TargetCalories != nil && *filter.TargetCalories > 0 {
-			q = q.Order(gorm.Expr("ABS(total_calories - ?) ASC", *filter.TargetCalories))
+	if filter.ScanCatalog {
+		q = q.Order("id ASC")
+	} else {
+		switch strings.TrimSpace(filter.SortBy) {
+		case "diverse":
+			q = q.Order(clause.OrderBy{Expression: clause.Expr{SQL: "choice_rank ASC, md5(id::text || ?), id ASC", Vars: []any{filter.DiversitySeed}}})
+		case "lowest_calories":
+			q = q.Order("total_calories ASC")
+		case "highest_protein":
+			q = q.Order("total_protein DESC, total_calories ASC")
+		case "protein_density":
+			q = q.Order("(total_protein / NULLIF(total_calories, 0)) DESC, total_protein DESC")
+		case "lowest_price":
+			q = q.Order("CASE WHEN COALESCE(price, 0) > 0 THEN 0 ELSE 1 END ASC, price ASC")
+		default:
+			if filter.TargetCalories != nil && *filter.TargetCalories > 0 {
+				q = q.Order(gorm.Expr("ABS(total_calories - ?) ASC", *filter.TargetCalories))
+			}
+			q = q.Order("total_protein DESC, total_calories ASC")
 		}
-		q = q.Order("total_protein DESC, total_calories ASC")
+		q = q.Order("CASE WHEN COALESCE(image_path, '') <> '' THEN 0 ELSE 1 END ASC").Order("published_at DESC")
 	}
-	q = q.Order("CASE WHEN COALESCE(image_path, '') <> '' THEN 0 ELSE 1 END ASC").Order("published_at DESC")
 	if err := q.Offset(filter.Offset).Limit(filter.Limit).Scan(&rows).Error; err != nil {
 		return nil, 0, err
 	}
-	return rowsToDietRecommendationCandidates(rows, "public_food_library"), total, nil
+	candidates := rowsToDietRecommendationCandidates(rows, "public_food_library")
+	if filter.IncludeMenuEvidence {
+		if err := r.enrichDietMenuEvidence(ctx, candidates); err != nil {
+			return nil, 0, err
+		}
+	}
+	return candidates, total, nil
 }
 
 func (r *StatsRepo) getPublicFoodRecommendationCandidates(ctx context.Context, scope domain.DietRecommendationScope, limit int) []domain.DietRecommendationCandidate {
@@ -446,6 +476,7 @@ func rowsToDietRecommendationCandidates(rows []dietRecommendationRow, source str
 		evidence := dietRecommendationNutritionEvidence(rawItems)
 		out = append(out, domain.DietRecommendationCandidate{
 			Source:                  source,
+			Nutrients:               nutritionagg.Observe(rawItems, source == "food_record"),
 			SourceID:                row.ID,
 			Title:                   title,
 			Description:             strings.TrimSpace(row.Description),

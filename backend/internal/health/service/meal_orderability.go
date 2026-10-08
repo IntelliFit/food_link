@@ -28,6 +28,10 @@ func mealOrderingRisk(c DietRecommendationCandidate) string {
 	if c.Source == "food_record" {
 		return ""
 	}
+	if regexp.MustCompile(`饺|包子|生煎|烧麦|烧卖`).MatchString(c.Title) && !mealKnownServing(c) &&
+		!regexp.MustCompile(`(?:[0-9一二三四五六七八九十]+\s*(?:只|个)|套餐|套饭|单人餐)`).MatchString(c.Title) {
+		return "单个或整份的计价与份量未注明，不能把参考营养的一份当作实际售卖的一餐"
+	}
 	food := c.Title + " " + c.Description
 	dependencyText := strings.NewReplacer("无需另点", "", "无需另购", "", "无需另付", "", "不需要另点", "", "不需要另购", "", "不需要另付", "").Replace(food)
 	if mealRequiredOrderPattern.MatchString(dependencyText) {

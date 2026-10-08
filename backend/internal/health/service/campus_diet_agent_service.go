@@ -76,6 +76,9 @@ type CampusDietAgentResult struct {
 }
 
 type campusDietAgentMealContext struct {
+	EngineVersion   string                  `json:"engine_version,omitempty"`
+	DecisionBasis   *DietDecisionBasis      `json:"decision_basis,omitempty"`
+	Targets         DietRecommendationMacro `json:"targets"`
 	Date            string                  `json:"date"`
 	MealType        string                  `json:"meal_type"`
 	UserGoal        string                  `json:"user_goal"`
@@ -87,6 +90,15 @@ type campusDietAgentMealContext struct {
 }
 
 type campusDietAgentRunState struct {
+	PlanningCatalog        map[string][]DietRecommendationCandidate
+	CatalogCoverage        []MealCatalogCoverage
+	AllowReplayJudge       bool
+	EngineVersion          string
+	AsOf                   time.Time
+	ReadOnlyReplay         bool
+	IsHomePreview          bool
+	PreviewContextKey      string
+	PreviewMemory          []domain.MealRecommendationMemory
 	HistoryRecords         []domain.FoodRecord
 	Location               *domain.DietLocation
 	History                []domain.PetChatMessage
@@ -101,6 +113,7 @@ type campusDietAgentRunState struct {
 	Question               string
 	Intent                 string
 	School                 domain.DietRecommendationSchool
+	ExplicitSchools        []domain.DietRecommendationSchool
 	CampusID               string
 	CampusName             string
 	MealContext            campusDietAgentMealContext
@@ -161,7 +174,7 @@ var (
 	campusDietAgentCaloriePattern             = regexp.MustCompile(`(?i)(\d{2,4}(?:\.\d+)?)\s*(?:千卡|大卡|卡路里|kcal|卡)\s*(?:以内|以下|之内)?`)
 	campusDietAgentBareCaloriePattern         = regexp.MustCompile(`(\d{3,4}(?:\.\d+)?)\s*(?:以内|以下|之内)`)
 	campusDietAgentPricePattern               = regexp.MustCompile(`(?i)(?:[¥￥]\s*)?(\d{1,4}(?:\.\d+)?)\s*(?:元|块)(?:钱)?\s*(?:以内|以下|之内|左右|上下|封顶)`)
-	campusDietAgentBudgetPattern              = regexp.MustCompile(`(?:预算|最多|不超过|控制在)(?:还是|仍是|是|为|大概|约)?\s*(?:[¥￥]\s*)?(\d{1,4}(?:\.\d+)?)`)
+	campusDietAgentBudgetPattern              = regexp.MustCompile(`(?:预算|最多|不超过|控制在)\s*(?:(?:还是|仍是|只有|就只有|就|一共|总共|提高到|增加到|降低到|降到|改为|改成|调整到|是|为|大概|约)\s*)?(?:[¥￥]\s*)?(\d{1,4}(?:\.\d+)?)`)
 	campusDietAgentDigitPattern               = regexp.MustCompile(`[0-9０-９]`)
 	campusDietAgentChineseNumericClaimPattern = regexp.MustCompile(`[零一二三四五六七八九十百千万两]+\s*(?:千卡|大卡|卡路里|卡|克|元|楼)`)
 	// These claims are not evidenced by menu names or current ingredient data.
@@ -231,6 +244,13 @@ func campusDietAgentContextualQuestion(question string) bool {
 
 func campusDietAgentIntent(question string, active *DietRecommendationResult) string {
 	normalized := strings.ReplaceAll(strings.TrimSpace(question), " ", "")
+	// Confirming that a restriction was NOT removed is a review, not a request
+	// to remove it or reselect meals. A new explicit change still owns the turn.
+	if active != nil && regexp.MustCompile(`(?:确认|核对).*(?:没有|没|别|不要).*(?:取消|解除)`).MatchString(normalized) &&
+		!regexp.MustCompile(`重新推荐|重新选|换一批|换成|改成|今天不吃|现在不吃`).MatchString(normalized) &&
+		campusDietAgentExplicitPriceLimit(normalized) == nil && campusDietAgentExplicitCalorieLimit(normalized) == nil {
+		return "explain"
+	}
 	// A changed meal request owns the turn even when it also asks for location,
 	// price or an explanation. Factual lookup is only for an unchanged meal.
 	explicitChange := campusDietAgentExplicitPriceLimit(normalized) != nil || campusDietAgentExplicitCalorieLimit(normalized) != nil || regexp.MustCompile(`不吃|不要|不能有|不含|忌口|避开|想吃|换|改|重新|取消|解除|可以吃|可以了|能吃|都可以|只在|不限定`).MatchString(normalized)
@@ -472,15 +492,22 @@ func (s *StatsService) GenerateCampusDietAgentStream(ctx context.Context, userID
 	}
 	if studentClaim != nil {
 		school, campusID, campusName = studentClaim, "", ""
-		constraints.Scene = "campus"
+		if input.Location == nil && !mealRequestsMixedDining(question) {
+			constraints.Scene = "campus"
+		}
 	}
 	location := input.Location
+	mixedRequest := mealRequestsMixedDining(question) || mealRequestsNearbyOnly(question) && mealExplicitScene(question) == ""
+	if mixedRequest {
+		constraints.Scene, constraints.CanteenName = "any", ""
+	}
 	if location != nil {
-		// A current explicitly named campus wins. Otherwise current location wins over a saved campus.
+		// Only an explicit campus dining scope wins over GPS. Mentioning a
+		// school as a location does not exclude surrounding merchants.
 		explicit := placeSchool
-		if explicit != nil && !mealDeniesCampusAccess(question) {
+		if explicit != nil && constraints.Scene == "campus" && !mealDeniesCampusAccess(question) && !mixedRequest {
 			school, campusID, campusName, location = explicit, "", "", nil
-		} else if studentClaim == nil && !(constraints.Scene == "campus" && active != nil && active.ResolvedSchool != nil && !relocated) {
+		} else if constraints.Scene != "campus" || studentClaim == nil && !(active != nil && active.ResolvedSchool != nil && !relocated) {
 			school, campusID, campusName = nil, "", ""
 		}
 		if school == nil && constraints.Scene == "campus" && active != nil && !relocated {
@@ -589,6 +616,9 @@ func (s *StatsService) GenerateCampusDietAgentStream(ctx context.Context, userID
 }
 
 func (s *StatsService) runCampusDietAgent(ctx context.Context, state *campusDietAgentRunState) *CampusDietAgentResult {
+	if state.EngineVersion == "" {
+		state.EngineVersion = s.defaultDietEngineVersion()
+	}
 	if !state.Location.Valid(time.Now()) {
 		state.Location = nil
 	}
@@ -801,6 +831,7 @@ func campusDietAgentInitialMessages(state *campusDietAgentRunState) []map[string
 先读取get_meal_context：里面包含健康档案、近30天真实餐食频率、最近具体饮食和运动、本餐营养缺口。调用时用updates表达本轮用户明确增加、撤销或替换的临时条件，每项evidence逐字引用本轮原话；没有变更传空数组。不要完整重写旧条件，未提及的条件继续保留。比如“之前不吃面那条取消”是remove面，“不能有鸡蛋”是add鸡蛋，“鸡肉可以吃了，其他不变”只remove鸡肉；“换成面食”add偏好面并remove忌口面，“只在桃李园选”set食堂，“不限桃李园”clear食堂。允许吃某食物不是喜欢它。档案过敏不随临时许可解除。记录空白不等于没吃，常吃不等于喜欢。近期反复吃过的菜可降低优先级，但用户当前明确喜欢的食物优先。
 根据用户补充的训练、时间、口味、忌口、预算和场景决定下一步。可调用set_meal_preferences补充明确偏好；不允许推测或更改用户未表达的场景、半径、预算、忌口。预算不是食物偏好，“不想吃刚才那份”只拒绝该餐，不等于禁止全部拌饭；“其他不变”保留其他最新条件。以工具返回的最新constraints为准，不得把历史助手曾说的旧限制当成仍生效；已经允许鸡肉/鸡蛋/米饭后，不能再宣称这轮忌口包含它。清淡是偏好不是仅外卖。不要把刚健身完机械等同于长期增肌，也不要按运动热量等量补吃。
 理由只引用个人上下文与检索证据；不能仅凭菜名或蒸煮工艺断言少油、不油腻、没有过敏风险，更不要编造缓解疲劳等功效。不确定配方时用“可询问少油制作”，不是已确认的事实。首页建议仅为用户入口提示，以新读取的记录为准。
+份量与价格证据：price_unit为空不等于整份价；items里的默认“1份”和估算营养不能证明实际售卖份量。不得把单个煎饺/包子价格作为整餐价，不能以模型常识补齐未知单位、起订量或营业时段。标题注明早餐的条目不能直接作为午晚餐。meal_structure_supported仅证明主食搭配结构，绝不保证某人吃饱；不要说“能吃饱”“份量扎实”“饱腹感强”，只说明已查到的搭配和点单地点。
 推荐或换餐可调用search_history_meals查本人历史，search_nearby_foods查附近，search_campus_foods查指定学校。所有用户都可以查询及获得所有大学已发布餐食的推荐，不要求学生身份，不设学校白名单，不因旧对话的校园权限标志拒绝推荐。常用学校只作偏好，用户今天明确在北大或要求北大食堂时以北大为准，不改注册档案；学校是检索范围不是访问权限。不要输出内部字段、JSON标志或“校园就餐权限受限”。实际营业、进校和支付条件与查询资格不同，资料有明确限制时可简短提示，不因未知限制阻断查询。没有定位仍能查历史；用户只要附近时不拿历史凑数。综合推荐应同时查两种来源，历史最多一个。用户明确要求结合历史口味时，用实际食物名称解释沿用熟悉搭配或避免重复，不把常吃等同喜欢。不复制统计表。附近不够换关键词或用offset继续查，不能只看首个商家。缺营养的已收录餐食不能编营养值或承诺满足硬营养阈值。选一至三个互为替代的选项；用户只要一个就只选一个。完整一餐优先套餐或主食配蛋白；单菜需要检索同店配菜并compose_meal，不能虚构配菜、份量或总价。需要某天某餐具体记录或单个食品证据时，调用get_diet_records/get_diet_record_details，不用历史推荐排名代替整餐记录。
 最重要：直接回答用户这一轮的问题，识别其拒绝了什么、想保留什么、改变了什么。首页餐食是起点而不是锁定答案；新需求优先于旧候选。换口味必须重新检索，不能反复贴同三道菜。当前任务为refine或more时，即使同时问窗口、价格、理由，也必须先按最新条件检索并选餐，不能只核对旧餐。用户说不想要牛油拌饭时，不要换个同名商家的牛油拌饭。解释或比较只引用需要讨论的候选，不必重新列三份。answer用简短自然中文回答新问题，具体价格、窗口等按问句由服务端附上，其他营养数字由卡片展示；不要复制整张卡片或机械加历史统计前缀。没有满足条件的证据时解释具体缺口，不要编造新菜。用户之前只要一份时，constraints.option_count会持续保留，不要因当前未重说就回到三份。
 点单常识审查：你可以且必须用常识理解“商家/窗口是什么场景、条目是熟制主餐还是依附主餐的配料”，不能只看营养或把标价相加。有水饺、有蛋白不等于能直接买成一餐；火锅窗口的豆皮、水饺、肉片通常是待烹煮配菜，仍需锅底及可能的必选消费。加料、锅底、蘸料、按重量计价或加购项同理。serving_price_known只表示条目标价可加，不代表整餐必选费用已齐；ordering_risk非空的条目不能当完整餐，meal_structure_supported也不能替代你的点单审查。用常识判断依赖，不可用常识编费用、份量或推算锅底摄入营养。优先检索已收录的熟制面饭、馅饼、套餐等可直接点的主餐；主餐已有完整记录时直接选择，不为凑营养把多份主餐或零散火锅配菜拼成一餐。不想吃某餐不等于永远不吃火锅：用户明确想吃火锅时找已注明含锅底的完整套餐，费用不全就简短说明缺什么，不能报配菜合计为整餐总价。多选项尽量来自不同窗口/商家；不够时换窗口、关键词或offset继续查，不用同一火锅窗口凑满三份。complete_meal=true时，最终每项附ordering_check，ready_to_order和mandatory_costs_included是你对实际点单可行性与必选费用完整性的判断，任一不能确认就不要选；已吃过的历史记录仅作历史证据，不保证现在能买。
@@ -1084,7 +1115,13 @@ func (s *StatsService) executeCampusDietSearchTool(ctx context.Context, state *c
 		MaxCalories: maxCalories, MinProtein: minProtein, MaxFat: maxFat, MaxPrice: maxPrice,
 		TargetCalories: &target, SortBy: sortBy, Limit: 80, Offset: args.Offset,
 	}
-	if len(toolNames) > 0 {
+	mixedNearby := state.Location != nil && state.Constraints.Scene != "campus" && state.Constraints.Scene != "takeout"
+	if mixedNearby {
+		// Neither a saved university nor a model-selected campus search tool
+		// may silently replace the user's default mixed nearby scope.
+		filter.SchoolID, filter.CampusID, filter.CanteenName = "", "", ""
+		filter.CampusOnly, filter.MerchantOnly = false, false
+	} else if len(toolNames) > 0 {
 		switch toolNames[0] {
 		case "search_campus_foods":
 			filter.CampusOnly, filter.MerchantOnly = true, false
@@ -1119,7 +1156,8 @@ func (s *StatsService) executeCampusDietSearchTool(ctx context.Context, state *c
 	} else if state.Intent == "refine" {
 		filter.ExcludeSourceIDs = mealOriginalSourceIDs(state.ActiveSourceIDs)
 	}
-	candidates, total, err := s.repo.SearchCampusDietCandidates(ctx, filter)
+	filter.IncludeMenuEvidence = true
+	candidates, total, err := s.retrievePreviewCandidates(ctx, state, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -1127,7 +1165,7 @@ func (s *StatsService) executeCampusDietSearchTool(ctx context.Context, state *c
 	if state.Intent == "refine" && len(candidates) < campusDietAgentDefaultResultSize && len(state.ActiveSourceIDs) > 0 {
 		refillFilter := filter
 		refillFilter.ExcludeSourceIDs = nil
-		refill, refillTotal, refillErr := s.repo.SearchCampusDietCandidates(ctx, refillFilter)
+		refill, refillTotal, refillErr := s.retrievePreviewCandidates(ctx, state, refillFilter)
 		if refillErr != nil {
 			return nil, refillErr
 		}
@@ -1135,6 +1173,23 @@ func (s *StatsService) executeCampusDietSearchTool(ctx context.Context, state *c
 		total = refillTotal
 	}
 	candidates = mealHarnessRank(state, candidates)
+	// A price/protein-sorted first page can be entirely side dishes. An empty
+	// eligible page is not an empty catalog: sample other windows once before
+	// asking the user to relax anything. Keep every filter and hard constraint.
+	supplementarySearch := false
+	if len(candidates) == 0 && total > 0 && filter.SortBy != "diverse" {
+		diverseFilter := filter
+		diverseFilter.SortBy, diverseFilter.Offset = "diverse", 0
+		diverseFilter.DiversitySeed = state.UserID + ":" + state.School.ID + ":" + state.Constraints.MealType
+		more, moreTotal, searchErr := s.repo.SearchCampusDietCandidates(ctx, diverseFilter)
+		if searchErr != nil {
+			logger.Error(ctx, "餐食空结果补检索失败", searchErr, slog.String("user_id", state.UserID), slog.String("school_id", filter.SchoolID))
+			return nil, searchErr
+		}
+		candidates, total = mealHarnessRank(state, more), moreTotal
+		supplementarySearch = true
+		logger.Info(ctx, "餐食空结果已按窗口补检索", slog.String("user_id", state.UserID), slog.String("school_id", filter.SchoolID), slog.Int("returned", len(candidates)))
+	}
 	// Campus catalog density must not hide the few ordinary merchants in a
 	// mixed nearby query. Retrieve them explicitly if campus access is unknown.
 	if len(candidates) == 0 && state.Location != nil && filter.SchoolID == "" && !filter.MerchantOnly && state.Constraints.Scene != "campus" {
@@ -1147,11 +1202,26 @@ func (s *StatsService) executeCampusDietSearchTool(ctx context.Context, state *c
 		candidates = mealHarnessRank(state, merchants)
 		total = merchantTotal
 	}
-	if len(candidates) > args.Limit {
-		candidates = mealSearchPage(candidates, args.Limit, state.Constraints.CompleteMeal)
-	}
 	if state.Candidates == nil {
 		state.Candidates = map[string]DietRecommendationCandidate{}
+	}
+	// All feasible retrieved rows remain addressable. Only model context is bounded.
+	for _, candidate := range candidates {
+		state.Candidates[candidate.SourceID] = candidate
+	}
+	if len(candidates) > args.Limit {
+		decision := prepareDietDecisionComparison(dietDecisionContextFromCampusState(state), candidates)
+		pool := []groundedMeal{}
+		for _, c := range candidates {
+			e := evaluateDietDecisionCandidate(decision, c)
+			_, p := mealEvidenceIssues(c, state.MealContext.MealType)
+			pool = append(pool, groundedMeal{candidate: c, evaluation: e, score: e.Scores.HealthFit - p})
+		}
+		short := mealArbitrationShortlist(pool, args.Limit)
+		candidates = nil
+		for _, m := range short {
+			candidates = append(candidates, m.candidate)
+		}
 	}
 	state.LastSearch = mealHarnessRank(state, mergeCampusDietCandidates(candidates, state.LastSearch, campusDietAgentSearchLimit))
 	state.SearchTotal = total
@@ -1163,9 +1233,12 @@ func (s *StatsService) executeCampusDietSearchTool(ctx context.Context, state *c
 		state.Candidates[candidate.SourceID] = candidate
 	}
 	return map[string]any{
-		"school": state.School.Name, "total_matches": total,
-		"scope":    map[bool]string{true: "nearby", false: "school"}[filter.Location != nil],
-		"returned": len(candidates), "candidates": campusDietAgentToolCandidates(candidates, true, state),
+		"catalog_coverage": state.CatalogCoverage,
+		"selection_policy": "全目录筛选后提供有界候选；营养相差5分内由你结合文本最终选择，禁止跨越硬约束。",
+		"school":           state.School.Name, "total_matches": total,
+		"supplementary_window_search": supplementarySearch,
+		"scope":                       map[bool]string{true: "nearby", false: "school"}[filter.Location != nil],
+		"returned":                    len(candidates), "candidates": campusDietAgentToolCandidates(candidates, true, state),
 		"data_notes": mealHarnessNotes(state), "empty_result_hint": "没有结果时可去掉模型自行添加的营养阈值或非必要关键词；用户预算忌口仍有效。所有用户均可查询已发布的各大学餐食，不要求学生身份或就餐权限。缺地理资料不代表当地没有商家。",
 	}, nil
 }
@@ -1231,6 +1304,7 @@ func (s *StatsService) executeCampusDietDetailsTool(ctx context.Context, state *
 			location = nil
 		}
 		public, _, err := s.repo.SearchCampusDietCandidates(ctx, domain.CampusDietSearchFilter{
+			IncludeMenuEvidence:   true,
 			AllowUnknownNutrition: true,
 			ViewerID:              state.UserID, Location: location, RadiusKM: state.Constraints.RadiusKM,
 			SchoolID: state.School.ID, CampusID: state.CampusID, IncludeSourceIDs: physicalIDs, Limit: len(physicalIDs),
@@ -1279,6 +1353,14 @@ func (s *StatsService) executeCampusDietDetailsTool(ctx context.Context, state *
 
 func campusDietAgentToolCandidates(candidates []DietRecommendationCandidate, detailed bool, states ...*campusDietAgentRunState) []map[string]any {
 	out := make([]map[string]any, 0, len(candidates))
+	var decision dietDecisionContext
+	if len(states) > 0 && states[0] != nil {
+		fullPool := make([]DietRecommendationCandidate, 0, len(states[0].Candidates))
+		for _, c := range states[0].Candidates {
+			fullPool = append(fullPool, c)
+		}
+		decision = prepareDietDecisionComparison(dietDecisionContextFromCampusState(states[0]), fullPool)
+	}
 	for _, candidate := range candidates {
 		item := map[string]any{
 			"is_campus_food": candidate.IsCampusFood, "school_id": candidate.SchoolID, "school_name": candidate.SchoolName,
@@ -1291,7 +1373,9 @@ func campusDietAgentToolCandidates(candidates []DietRecommendationCandidate, det
 			"carbs": candidate.Carbs, "fat": candidate.Fat,
 			"price": candidate.Price, "price_unit": candidate.PriceUnit,
 			"canteen": candidate.CanteenName, "floor": candidate.Floor, "window": candidate.WindowName,
-			"nutrition_basis": candidate.NutritionBasis,
+			"nutrition_basis":           candidate.NutritionBasis,
+			"nutrition_source_category": candidate.NutritionSourceCategory,
+			"meal_periods":              candidate.MealPeriods, "available_weekdays": candidate.AvailableWeekdays, "availability_note": candidate.AvailabilityNote, "portion_description": candidate.PortionDescription,
 		}
 		if detailed {
 			if len(states) > 0 {
@@ -1302,6 +1386,13 @@ func campusDietAgentToolCandidates(candidates []DietRecommendationCandidate, det
 			item["weight_method"] = candidate.WeightMethod
 			item["weight_confidence"] = candidate.WeightConfidence
 			item["uncertainty_level"] = candidate.UncertaintyLevel
+		}
+		if len(states) > 0 && states[0] != nil {
+			evaluation := evaluateDietDecisionCandidate(decision, candidate)
+			item["health_fit"] = evaluation.Scores.HealthFit
+			item["nutrient_effects"] = evaluation.Scores.NutrientEffects
+			issues, penalty := mealEvidenceIssues(candidate, states[0].MealContext.MealType)
+			item["evidence_issues"], item["evidence_penalty"] = issues, penalty
 		}
 		if candidate.NutritionBasis == "unavailable" {
 			item["calories"], item["protein"], item["carbs"], item["fat"] = nil, nil, nil, nil
@@ -1314,6 +1405,7 @@ func campusDietAgentToolCandidates(candidates []DietRecommendationCandidate, det
 func campusDietAgentComparisons(candidates []DietRecommendationCandidate, mealContext campusDietAgentMealContext) []map[string]any {
 	target := campusDietAgentMealCalorieTarget(mealContext)
 	decisionContext := dietDecisionContext{
+		EngineVersion: mealContext.EngineVersion, Basis: mealContext.DecisionBasis,
 		Goal: mealContext.UserGoal, MealType: mealContext.MealType,
 		Current: mealContext.Current,
 		Targets: DietRecommendationMacro{
@@ -1325,6 +1417,7 @@ func campusDietAgentComparisons(candidates []DietRecommendationCandidate, mealCo
 		Remaining: mealContext.Remaining, Allergies: mealContext.Allergies,
 		DietPreferences: mealContext.DietPreferences,
 	}
+	decisionContext = prepareDietDecisionComparison(decisionContext, candidates)
 	lowestCalories := 0.0
 	for index, candidate := range candidates {
 		if index == 0 || candidate.Calories < lowestCalories {
@@ -1352,7 +1445,7 @@ func campusDietAgentComparisons(candidates []DietRecommendationCandidate, mealCo
 			"confidence_score":               evaluation.Scores.Confidence,
 			"risk_penalty":                   evaluation.Scores.RiskPenalty,
 			"constraint_violations":          evaluation.Violations,
-			"decision_engine_version":        dietDecisionEngineVersion,
+			"decision_engine_version":        resolvedDietEngineVersion(decisionContext),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -1508,8 +1601,78 @@ func buildCampusDietAgentResult(state *campusDietAgentRunState, final campusDiet
 	if len(selectedIDs) > campusDietAgentDefaultResultSize {
 		selectedIDs = selectedIDs[:campusDietAgentDefaultResultSize]
 	}
+	engineSelected := false
+	decisionContext := dietDecisionContextFromCampusState(state)
+	fullPool := make([]DietRecommendationCandidate, 0, len(state.Candidates))
+	for _, c := range state.Candidates {
+		fullPool = append(fullPool, c)
+	}
+	sort.Slice(fullPool, func(i, j int) bool { return fullPool[i].SourceID < fullPool[j].SourceID })
+	fullPool = mealFeasibleChoices(state, fullPool)
+	decisionContext = prepareDietDecisionComparison(decisionContext, fullPool)
+	if resolvedDietEngineVersion(decisionContext) == dietDecisionEngineVersion && campusDietAgentIsSearchIntent(state.Intent) && homeSelectedMealID(state) == "" {
+		choices := []DietRecommendationCandidate{}
+		for _, c := range fullPool {
+			if c.Source == "food_record" && (mealRequestsNearbyOnly(state.Question) || state.Constraints.Scene == "campus") {
+				continue
+			}
+			if check := reasons[c.SourceID].OrderingCheck; check != nil && (!check.ReadyToOrder || !check.MandatoryCostsIncluded) {
+				continue
+			}
+			choices = append(choices, c)
+		}
+		publicChoices := []DietRecommendationCandidate{}
+		for _, c := range choices {
+			if c.Source != "food_record" {
+				publicChoices = append(publicChoices, c)
+			}
+		}
+		if len(publicChoices) > 0 {
+			choices = publicChoices
+		}
+		decisionContext = prepareDietDecisionComparison(decisionContext, choices)
+		chosen := selectDietDecisionPortfolioV3(decisionContext, choices)
+		if agentUsed {
+			pool := []groundedMeal{}
+			for _, c := range choices {
+				e := evaluateDietDecisionCandidate(decisionContext, c)
+				pool = append(pool, groundedMeal{candidate: c, evaluation: e, score: e.Scores.HealthFit})
+			}
+			if _, err := validateMealArbitration(pool, selectedIDs, mealStateOptionLimit(state)); err == nil {
+				// The model's valid close-call selection is final. Out-of-band
+				// choices use the transparent rule fallback, never weaken safety.
+				chosen = nil
+			} else {
+				fallbackReason = "model_selection_outside_health_band"
+			}
+		}
+		if len(chosen) > 0 {
+			selectedIDs = nil
+			historyCount := 0
+			for _, choice := range chosen {
+				if choice.Eval.Candidate.Source == "food_record" {
+					historyCount++
+					if historyCount > 1 {
+						continue
+					}
+				}
+				id := choice.Eval.Candidate.SourceID
+				selectedIDs = append(selectedIDs, id)
+				reasons[id] = campusDietAgentFinalSelection{SourceID: id, Reason: choice.Reason}
+				if len(selectedIDs) == mealStateOptionLimit(state) {
+					break
+				}
+			}
+			engineSelected = true
+		}
+	}
 	candidates := candidatesForCampusDietIDs(selectedIDs, state.Candidates)
 	portfolio := selectDietDecisionPortfolio(dietDecisionContextFromCampusState(state), candidates)
+	if resolvedDietEngineVersion(decisionContext) == dietDecisionEngineVersion {
+		for i := range portfolio {
+			portfolio[i].Eval = evaluateDietDecisionCandidate(decisionContext, portfolio[i].Eval.Candidate)
+		}
+	}
 	decisionByID := make(map[string]dietDecisionSelection, len(portfolio))
 	for _, selection := range portfolio {
 		decisionByID[selection.Eval.Candidate.SourceID] = selection
@@ -1579,7 +1742,7 @@ func buildCampusDietAgentResult(state *campusDietAgentRunState, final campusDiet
 		if len(candidates) == 1 && !strings.Contains(answer, candidates[0].Title) {
 			answer = candidates[0].Title + "：" + answer
 		}
-		if campusDietAgentIsSearchIntent(state.Intent) && mealRequestsHistoryExplanation(state.Question) && len(state.PersonalContext.FoodFrequency) > 0 && !mealHasGroundedHistoryExplanation(state, answer) {
+		if !engineSelected && campusDietAgentIsSearchIntent(state.Intent) && mealRequestsHistoryExplanation(state.Question) && len(state.PersonalContext.FoodFrequency) > 0 && !mealHasGroundedHistoryExplanation(state, answer) {
 			return nil, fmt.Errorf("用户要求结合历史，本轮理由缺少真实记录依据：请在简短answer中引用personal_context.food_frequency里的一个原始食物名称，解释怎样沿用熟悉搭配或避免重复；保持有效餐食选择，不重新检索，不把常吃说成喜欢")
 		}
 	}
@@ -1642,6 +1805,14 @@ func buildCampusDietAgentResult(state *campusDietAgentRunState, final campusDiet
 		answer = mealHistoryExplanation(state) + answer
 	}
 	answer = mealConstraintConfirmation(state) + answer
+	if engineSelected {
+		// Above, explanations and exact facts have already been checked against
+		// the engine's final IDs. Keep valid conversation context and fallback
+		// disclosure instead of replacing them with a generic nutrition sentence.
+		if mealRequestsHistoryExplanation(state.Question) && !mealHasGroundedHistoryExplanation(state, answer) {
+			answer = mealHistoryExplanation(state) + answer
+		}
+	}
 	title := "这餐可以这样选"
 	if state.Intent == "more" {
 		title = "换一批选择"
@@ -1655,7 +1826,8 @@ func buildCampusDietAgentResult(state *campusDietAgentRunState, final campusDiet
 		generatedBy = "campus_agent_database_fallback"
 	}
 	recommendation := DietRecommendationResult{
-		HarnessVersion: mealHarnessVersion, SearchScope: mealHarnessScope(state), ContextSummary: mealHarnessContextSummary(state), DataNotes: mealHarnessNotes(state),
+		CatalogCoverage: state.CatalogCoverage,
+		HarnessVersion:  mealHarnessVersion, SearchScope: mealHarnessScope(state), ContextSummary: mealHarnessContextSummary(state), DataNotes: mealHarnessNotes(state),
 		Scene: "eat_out", Title: title, Summary: answer,
 		CalorieRemaining: state.MealContext.Remaining.Calories,
 		MacroGaps:        state.MealContext.Remaining, Recommendations: options,
@@ -1663,7 +1835,24 @@ func buildCampusDietAgentResult(state *campusDietAgentRunState, final campusDiet
 		CampusID: state.CampusID, CampusName: state.CampusName,
 		AIUsed: agentUsed, CandidateCount: int(state.SearchTotal), AIRerankCount: len(state.Candidates),
 		AgentConstraints:      &state.Constraints,
-		DecisionEngineVersion: dietDecisionEngineVersion,
+		DecisionEngineVersion: resolvedDietEngineVersion(decisionContext),
+		DecisionBasis:         state.MealContext.DecisionBasis,
+	}
+	if resolvedDietEngineVersion(decisionContext) == dietDecisionEngineVersion {
+		method := "rules"
+		if agentUsed && !engineSelected {
+			method = "model_validated"
+		}
+		recommendation.SelectionAudit = &MealSelectionAudit{Method: method, Fallback: fallbackReason, Eligible: len(fullPool), Shortlisted: len(state.LastSearch), HealthTolerance: mealHealthShortlistTolerance}
+		if engineSelected && agentUsed {
+			recommendation.DataNotes = append(recommendation.DataNotes, "模型候选超出营养容差，本次最终选餐已使用规则回退。")
+		}
+		for i, c := range candidates {
+			recommendation.Recommendations[i].EvidenceIssues, _ = mealEvidenceIssues(c, state.MealContext.MealType)
+		}
+	}
+	if recommendation.DecisionEngineVersion == dietDecisionEngineVersion {
+		recommendation.SelectionPolicyVersion = dietMealSelectionPolicyVersion
 	}
 	if state.School.ID == "" {
 		recommendation.ResolvedSchool = nil
@@ -1748,18 +1937,7 @@ func campusDietAgentConstraintLabel(constraints CampusDietRecommendationConstrai
 }
 
 func campusDietAgentGoalMatchScore(candidate DietRecommendationCandidate, mealContext campusDietAgentMealContext) float64 {
-	context := dietDecisionContext{
-		Goal: mealContext.UserGoal, MealType: mealContext.MealType,
-		Current: mealContext.Current,
-		Targets: DietRecommendationMacro{
-			Calories: mealContext.Current.Calories + mealContext.Remaining.Calories,
-			Protein:  mealContext.Current.Protein + mealContext.Remaining.Protein,
-			Carbs:    mealContext.Current.Carbs + mealContext.Remaining.Carbs,
-			Fat:      mealContext.Current.Fat + mealContext.Remaining.Fat,
-		},
-		Remaining: mealContext.Remaining, Allergies: mealContext.Allergies,
-		DietPreferences: mealContext.DietPreferences,
-	}
+	context := dietDecisionContextFromCampusState(&campusDietAgentRunState{MealContext: mealContext})
 	return evaluateDietDecisionCandidate(context, candidate).Scores.BalancedUtility
 }
 
@@ -1795,6 +1973,10 @@ func (s *StatsService) buildCampusDietAgentMealContext(ctx context.Context, user
 		context.DietPreferences = stringSliceFromCampusDietAny(health["diet_preference"])
 	}
 	context.UserGoal = explicitCampusDietGoal(question, context.UserGoal)
+	context.DecisionBasis = buildDietDecisionBasis(profile, records, now)
+	context.Targets = context.DecisionBasis.Targets
+	context.CalorieTarget = context.Targets.Calories
+	proteinTarget, carbsTarget, fatTarget = context.Targets.Protein, context.Targets.Carbs, context.Targets.Fat
 	context.Remaining = DietRecommendationMacro{
 		Calories: roundDietNumber(math.Max(0, context.CalorieTarget-context.Current.Calories)),
 		Protein:  roundDietNumber(math.Max(0, proteinTarget-context.Current.Protein)),

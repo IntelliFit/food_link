@@ -17,6 +17,7 @@ import (
 
 func main() {
 	configDir := flag.String("config-dir", ".", "directory containing config.yaml")
+	onlyMealMemory := flag.Bool("only-meal-recommendation-memory", false, "only migrate meal recommendation feedback")
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
 	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
 	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
@@ -43,6 +44,9 @@ func main() {
 		}
 	}
 	if selectedOnlyModes > 1 {
+		log.Fatal("--only-* 迁移模式不能同时使用")
+	}
+	if *onlyMealMemory && selectedOnlyModes > 0 {
 		log.Fatal("--only-* 迁移模式不能同时使用")
 	}
 
@@ -79,6 +83,13 @@ func main() {
 
 	if err := database.Ping(ctx, db); err != nil {
 		log.Fatalf("数据库 ping 失败: %v", err)
+	}
+	if *onlyMealMemory {
+		if err := migration.MigrateMealRecommendationMemory(ctx, db); err != nil {
+			log.Fatalf("餐食推荐反馈迁移失败: %v", err)
+		}
+		log.Printf("餐食推荐反馈迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
 	}
 	if *verifyNutritionStates {
 		report, err := migration.VerifyNutritionStates(ctx, db)

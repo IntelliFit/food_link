@@ -2060,6 +2060,7 @@ func AllModels() []any {
 		&AnalysisTaskDO{},
 		&AnalysisFeedbackSampleDO{},
 		&FoodRecordDO{},
+		&MealRecommendationMemoryDO{},
 		&FoodNutritionDO{},
 		&FoodNutritionContributionDO{},
 		&PackagedFoodDO{},

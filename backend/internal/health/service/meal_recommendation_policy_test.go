@@ -9,15 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMealPolicyLocationOrStudentIdentityDoesNotGrantAccess(t *testing.T) {
+func TestMealPolicyPublishedCampusDataDoesNotRequireStudentIdentity(t *testing.T) {
 	for _, question := range []string{"我在清华附近，晚餐吃什么", "我是清华学生，晚餐吃什么", "我能进清华大学校园"} {
 		state := newCampusDietAgentTestState("initial", nil)
 		state.Constraints = CampusDietRecommendationConstraints{}
 		state.Question = question
 		initializeMealAccess(state)
-		assert.Empty(t, mealHarnessRank(state, []DietRecommendationCandidate{campusDietAgentTestCandidate("one", "牛肉饭", 500, 30)}))
-		require.NotNil(t, state.Constraints.PendingSchool)
-		assert.Contains(t, mealHarnessEmptyResult(state, "empty").Answer, "可以在清华大学食堂吃饭吗")
+		assert.Len(t, mealHarnessRank(state, []DietRecommendationCandidate{campusDietAgentTestCandidate("one", "牛肉饭", 500, 30)}), 1)
+		assert.Nil(t, state.Constraints.PendingSchool)
 		assert.Empty(t, state.Constraints.AllowedSchoolIDs)
 	}
 }
@@ -27,7 +26,7 @@ func TestMealPolicyFoodNegationDoesNotDenyCampusAndPrefixRelease(t *testing.T) {
 	state.Question = "不吃虾，在食堂吃饭"
 	initializeMealAccess(state)
 	assert.False(t, state.Constraints.CampusAccessDenied)
-	assert.NotEmpty(t, state.Constraints.AllowedSchoolIDs)
+	assert.Empty(t, state.Constraints.AllowedSchoolIDs)
 	state.Constraints.AvoidFoods = []string{"虾", "花生"}
 	applyMealFoodConstraints(&state.Constraints, "虾今天可以吃了，但花生还是不吃，请确认限制")
 	assert.Equal(t, []string{"花生"}, state.Constraints.AvoidFoods)
@@ -35,25 +34,28 @@ func TestMealPolicyFoodNegationDoesNotDenyCampusAndPrefixRelease(t *testing.T) {
 	state.Constraints.PendingSchool = &pending
 	state.Question = "可以"
 	initializeMealAccess(state)
-	assert.Equal(t, []string{"another-school"}, state.Constraints.AllowedSchoolIDs)
+	assert.Empty(t, state.Constraints.AllowedSchoolIDs)
+	assert.Nil(t, state.Constraints.PendingSchool)
 }
 
-func TestMealPolicyConfirmationAppliesOnlyToSpecificCampus(t *testing.T) {
+func TestMealPolicyLegacyPermissionMetadataDoesNotRestrictPublicData(t *testing.T) {
 	state := newCampusDietAgentTestState("initial", nil)
 	pending := state.School
 	state.Constraints = CampusDietRecommendationConstraints{PendingSchool: &pending}
 	state.School = domain.DietRecommendationSchool{}
 	state.Question = "可以"
 	initializeMealAccess(state)
-	assert.Equal(t, []string{"school-tsinghua"}, state.Constraints.AllowedSchoolIDs)
+	assert.Empty(t, state.Constraints.AllowedSchoolIDs)
 	assert.Nil(t, state.Constraints.PendingSchool)
 	other := campusDietAgentTestCandidate("other", "牛肉饭", 500, 30)
 	other.SchoolID, other.SchoolName = "another-school", "其他大学"
-	assert.Empty(t, mealHarnessRank(state, []DietRecommendationCandidate{other}))
+	assert.Len(t, mealHarnessRank(state, []DietRecommendationCandidate{other}), 1)
 	state.Question = "不能进学校，只看校外商家"
 	initializeMealAccess(state)
 	assert.Empty(t, state.Constraints.AllowedSchoolIDs)
-	assert.True(t, state.Constraints.CampusAccessDenied)
+	assert.False(t, state.Constraints.CampusAccessDenied)
+	assert.Equal(t, "takeout", state.Constraints.Scene)
+	assert.Empty(t, mealHarnessRank(state, []DietRecommendationCandidate{other}), "用户明确只看校外仍必须遵守")
 }
 
 func TestMealPolicyNegationPartialReleaseAndNoModelScopeDrift(t *testing.T) {
@@ -211,7 +213,8 @@ func TestMealPolicyKeepingBudgetDoesNotReplaceNutritionGoal(t *testing.T) {
 
 func TestMealPolicyConfirmedCampusScopeDoesNotAskForAnotherNearbySchool(t *testing.T) {
 	state := newCampusDietAgentTestState("refine", nil)
-	state.School = domain.DietRecommendationSchool{}
+	state.RequestedDiningSchool = &domain.DietRecommendationSchool{ID: "school-tsinghua", Name: "清华大学"}
+	initializeMealAccess(state)
 	state.Constraints.Scene = "campus"
 	state.MealContextLoaded = true
 	repo := &mockStatsRepo{}

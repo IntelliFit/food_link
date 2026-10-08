@@ -10,7 +10,7 @@ import (
 )
 
 // History and catalog candidates share the selection contract, but not their
-// availability: an old meal is evidence of eating, never of a nearby seller.
+// availability: an old meal is evidence of a saved record, not verified eating or a nearby seller.
 func searchMealHistoryTool(state *campusDietAgentRunState, raw string) (map[string]any, error) {
 	if !state.MealContextLoaded {
 		return nil, fmt.Errorf("请先读取get_meal_context")
@@ -94,7 +94,7 @@ func decorateMealSource(state *campusDietAgentRunState, c DietRecommendationCand
 	for _, record := range state.HistoryRecords {
 		if record.ID == c.SourceID && record.UserID == state.UserID && record.RecordTime != nil {
 			option.HistoryDate = record.RecordTime.In(chinaTZ).Format("2006-01-02")
-			option.SourceLabel = "吃过 · " + option.HistoryDate
+			option.SourceLabel = historyMealSourceLabel(c) + " · " + option.HistoryDate
 			return
 		}
 	}
