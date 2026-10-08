@@ -1,0 +1,57 @@
+[
+  {
+    "name": "water-entry-return",
+    "ok": true,
+    "result": {
+      "opened": "packageExtra/pages/water-record/index",
+      "returned": "packageExtra/pages/water-record/index"
+    }
+  },
+  {
+    "name": "exercise-entry-return",
+    "ok": true,
+    "result": {
+      "opened": "packageExtra/pages/exercise-record/index",
+      "returned": "packageExtra/pages/exercise-record/index"
+    }
+  },
+  {
+    "name": "growth-shot",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "shelf-shot",
+    "ok": true,
+    "result": true
+  },
+  {
+    "name": "skateboard-motion",
+    "ok": true,
+    "result": [
+      {
+        "transform": "matrix(1, 0, 0, 1, 0, -107)",
+        "animation-name": "pet-transport-board",
+        "animation-duration": "1.5s",
+        "animation-play-state": "running"
+      },
+      {
+        "transform": "matrix(1, 0, 0, 1, 0, -107)",
+        "animation-name": "pet-transport-board",
+        "animation-duration": "1.5s",
+        "animation-play-state": "running"
+      },
+      {
+        "transform": "matrix(1, 0, 0, 1, 0, -107)",
+        "animation-name": "pet-transport-board",
+        "animation-duration": "1.5s",
+        "animation-play-state": "running"
+      }
+    ]
+  },
+  {
+    "name": "restore-growth",
+    "ok": true,
+    "result": "packagePetStudio/pages/index/index"
+  }
+]

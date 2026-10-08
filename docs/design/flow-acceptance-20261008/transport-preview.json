@@ -1,0 +1,91 @@
+[
+  {
+    "kind": "bicycle",
+    "tree": [
+      {
+        "className": "pet-transport-actor is-bicycle",
+        "style": "width: 144px; height: 158.4px;"
+      },
+      {
+        "className": "pet-transport-actor__plane",
+        "style": "transform: scale(1.3432835820895523);"
+      },
+      {
+        "className": "pet-transport-actor__ground",
+        "style": "top: 173.6rpx;"
+      },
+      {
+        "className": "pet-transport-actor__bike-rider"
+      }
+    ]
+  },
+  {
+    "kind": "scooter",
+    "tree": [
+      {
+        "className": "pet-transport-actor is-scooter",
+        "style": "width: 144px; height: 158.4px;"
+      },
+      {
+        "className": "pet-transport-actor__plane",
+        "style": "transform: scale(1.3432835820895523);"
+      },
+      {
+        "className": "pet-transport-actor__ground",
+        "style": "top: 183rpx;"
+      },
+      {
+        "className": "pet-transport-actor__clip"
+      },
+      {
+        "className": "pet-transport-actor__sheet"
+      }
+    ]
+  },
+  {
+    "kind": "skateboard",
+    "tree": [
+      {
+        "className": "pet-transport-actor is-skateboard",
+        "style": "width: 144px; height: 158.4px;"
+      },
+      {
+        "className": "pet-transport-actor__plane",
+        "style": "transform: scale(1.3432835820895523);"
+      },
+      {
+        "className": "pet-transport-actor__ground",
+        "style": "top: 182.8125rpx;"
+      },
+      {
+        "className": "pet-transport-actor__clip"
+      },
+      {
+        "className": "pet-transport-actor__sheet"
+      }
+    ]
+  },
+  {
+    "kind": "walk",
+    "tree": [
+      {
+        "className": "pet-transport-actor is-walk",
+        "style": "width: 144px; height: 158.4px;"
+      },
+      {
+        "className": "pet-transport-actor__plane",
+        "style": "transform: scale(1.3432835820895523);"
+      },
+      {
+        "className": "pet-transport-actor__ground",
+        "style": "top: 163rpx;"
+      },
+      {
+        "className": "pet-transport-actor__walker"
+      }
+    ]
+  },
+  {
+    "screenshot": true
+  }
+]
