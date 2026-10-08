@@ -365,6 +365,11 @@ func (s *MembershipService) reconcileMembershipFromLatestPaidOrder(ctx context.C
 		expectedPeriodStart = terms.TargetPeriodStart
 		expectedExpiresAt = terms.TargetExpiresAt
 	}
+	paidExpiresAt := expectedExpiresAt
+	expectedExpiresAt, err = s.paidExpiryWithAppliedGrants(ctx, userID, effectivePlanCode, expectedExpiresAt)
+	if err != nil {
+		return nil, err
+	}
 	expectedStatus := "expired"
 	if expectedExpiresAt.After(time.Now()) {
 		expectedStatus = "active"
@@ -375,6 +380,11 @@ func (s *MembershipService) reconcileMembershipFromLatestPaidOrder(ctx context.C
 	}
 	if membership != nil && membershipMatchesPaidTruth(membership, effectivePlanCode, expectedStatus, expectedPeriodStart, expectedExpiresAt, *paidAt, effectiveDailyCredits) {
 		return membership, nil
+	}
+	if expectedExpiresAt.After(paidExpiresAt) {
+		logger.Info(ctx, "会员赠送有效期已合并到付费权益",
+			slog.String("user_id", userID), slog.String("plan_code", effectivePlanCode),
+			slog.Time("expires_at", expectedExpiresAt))
 	}
 	return s.repo.SaveMembership(ctx, userID, map[string]any{
 		"current_plan_code":    effectivePlanCode,
