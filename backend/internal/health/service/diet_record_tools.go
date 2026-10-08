@@ -37,7 +37,16 @@ func petChatHomeIncluded(input PetChatInput) bool {
 func dietRecordQuestion(question string) bool {
 	q := strings.ReplaceAll(question, " ", "")
 	intent := strings.NewReplacer("不要推荐", "只核对", "不用推荐", "只核对", "别推荐", "只核对", "不需要推荐", "只核对", "不推荐", "只核对").Replace(q)
+	// A prospective preference is not a saved intake just because it contains
+	// 今天/这餐/吃. Keep explicit record lookup authoritative even in meal chat.
+	if strings.Contains(intent, "只核对") {
+		return true
+	}
 	if regexp.MustCompile(`推荐|吃什么|换一餐|换一份|食堂|外卖|食谱|菜谱`).MatchString(intent) {
+		return false
+	}
+	if !regexp.MustCompile(`吃了|吃过|吃的|记录|摄入|核对|读取`).MatchString(q) &&
+		regexp.MustCompile(`附近.*(?:餐|饭|菜|吃)|预算|不吃|不要吃|想吃|忌口|不能有|换一批|重新选`).MatchString(q) {
 		return false
 	}
 	return regexp.MustCompile(`(?:今天|昨天|前天|上周|[0-9]+月[0-9]+日|[0-9]{4}-[0-9]{2}-[0-9]{2}).*(?:餐|饭|吃|饮食|摄入|热量|营养|蛋白|碳水|脂肪|钠)|(?:具体|刚刚|刚才|这|那|每|某).{0,10}(?:一餐|餐次|饮食记录)|(?:这餐|那餐|这一餐|那一餐).*(?:摄入|多少|热量|蛋白|营养|吃|记录)|核对.{0,8}记录|刚才.{0,20}食物|(?:早餐|午餐|晚餐|早饭|午饭|晚饭).*(?:吃了|吃的|记录|摄入)|(?:饮食|食物|餐食|摄入).{0,8}(?:明细|记录)|读取.{0,20}(?:餐|饮食)|记录里|记录中`).MatchString(q)

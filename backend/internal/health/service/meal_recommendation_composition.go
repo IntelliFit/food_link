@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"food_link/backend/internal/nutritionagg"
 	"math"
 	"regexp"
 	"sort"
@@ -13,7 +14,13 @@ import (
 // Composition is a data-backed serving calculation, not a medical satiety claim.
 // Never invent a rice price or silently interpret a per-weight price as a meal.
 func mealKnownServing(c DietRecommendationCandidate) bool {
-	return c.Price > 0 && !regexp.MustCompile(`两|克|千克|公斤|斤|kg|/g|每|只|个|串|枚|片|粒`).MatchString(c.PriceUnit)
+	if c.PriceType == "by_weight" || c.PriceType == "range" || c.PriceType == "market" {
+		return false
+	}
+	// Absence of a unit is not evidence of a portion price. Catalog nutrition
+	// (often estimated per reference serving) must not supply the missing unit.
+	unit := strings.TrimSpace(c.PriceUnit)
+	return c.Price > 0 && regexp.MustCompile(`^(?:元\s*/\s*|每)?(?:份|碗|盘|套|套餐|餐)(?:元)?$`).MatchString(unit)
 }
 
 func mealHasStructure(c DietRecommendationCandidate) bool {
@@ -30,7 +37,8 @@ func mealHasNamedStructure(c DietRecommendationCandidate) bool {
 	// A cooked noodle bowl is a main dish even when its name does not contain
 	// 肉/蛋/豆. Known nutrition and explicit user minimums are checked separately;
 	// bare rice, dough, a pot base or hotpot dumplings do not get this exemption.
-	return staple && (protein || mealPreparedMainPattern.MatchString(c.Title))
+	staple = staple || strings.Contains(c.Title, "肉饼") || strings.Contains(c.Title, "鸡蛋堡") || strings.Contains(c.Title, "香菇油菜包")
+	return staple && (protein || mealPreparedMainPattern.MatchString(c.Title) || strings.Contains(c.Title, "香菇油菜包"))
 }
 
 func mealSamePlace(a, b DietRecommendationCandidate) bool {
@@ -59,6 +67,7 @@ func registerMealPlan(state *campusDietAgentRunState, components []DietRecommend
 	combined := components[0]
 	combined.Calories, combined.Protein, combined.Carbs, combined.Fat, combined.Price = 0, 0, 0, 0, 0
 	combined.Items = nil
+	vectors := []nutritionagg.Vector{}
 	componentState := *state
 	componentState.Constraints.MinProtein = nil    // the user's minimum applies to the whole meal, not each side
 	componentState.Constraints.RequiredStaple = "" // staple requirement applies to the composed meal, not each side
@@ -93,11 +102,13 @@ func registerMealPlan(state *campusDietAgentRunState, components []DietRecommend
 		combined.Carbs += c.Carbs
 		combined.Fat += c.Fat
 		combined.Price += c.Price
+		vectors = append(vectors, c.Nutrients)
 		combined.Items = append(combined.Items, DietRecommendationFoodItem{Name: c.Title, Amount: "1个库内记录份量", Source: c.Source, SourceID: c.SourceID})
 	}
 	for _, total := range []*float64{&combined.Calories, &combined.Protein, &combined.Carbs, &combined.Fat, &combined.Price} {
 		*total = math.Round(*total*100) / 100
 	}
+	combined.Nutrients = nutritionagg.Combine(vectors...)
 	if state.Constraints.MaxPrice != nil && combined.Price > *state.Constraints.MaxPrice {
 		return DietRecommendationCandidate{}, fmt.Errorf("整餐合计%s元，超过预算", formatCampusDietNumber(combined.Price))
 	}

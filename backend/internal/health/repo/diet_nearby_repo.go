@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"food_link/backend/internal/health/domain"
+	"gorm.io/gorm/clause"
 )
 
 // Use local planar distance (an approximation, not travel distance) over a bounded
@@ -18,7 +19,7 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 	}
 	radius := f.RadiusKM
 	if radius <= 0 {
-		radius = 3
+		radius = 5
 	}
 	if radius > 10 {
 		radius = 10
@@ -29,7 +30,7 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 	if f.Offset < 0 {
 		f.Offset = 0
 	}
-	if f.Offset > 3000 {
+	if !f.ScanCatalog && f.Offset > 3000 {
 		f.Offset = 3000
 	}
 	valid := func(prefix string) string {
@@ -47,6 +48,13 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 		Where("p.status = ?", "published")
 	if !f.AllowUnknownNutrition {
 		base = base.Where("p.total_calories > 0")
+	}
+	if !f.ScanCatalog && f.MealType == "breakfast" {
+		if f.IncludeMenuEvidence {
+			base = base.Where("(p.food_name ~ ? OR EXISTS (SELECT 1 FROM campus_food_catalog_items ce WHERE ce.id = p.id AND jsonb_exists(ce.meal_periods,'breakfast')))", domain.BreakfastMenuNamePattern)
+		} else {
+			base = base.Where("p.food_name ~ ?", domain.BreakfastMenuNamePattern)
+		}
 	}
 	if f.ViewerID != "" {
 		base = base.Where(`NOT EXISTS (SELECT 1 FROM user_blocks b WHERE
@@ -117,10 +125,19 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	if f.ScanCatalog && f.AfterID != "" {
+		q = q.Where("id > ?", f.AfterID)
+	}
 	// A dense menu from one nearby shop must not occupy the entire retrieval
 	// window. Interleave each merchant's nearest entries before paging.
-	if f.AllowUnknownNutrition && !f.CampusOnly {
-		q = r.db.WithContext(ctx).Table("(?) diversified", q.Select("nearby.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(NULLIF(merchant_name, ''), NULLIF(canteen_name, ''), school_id::text, id::text) ORDER BY distance_squared ASC, id ASC) AS merchant_rank")).Order("merchant_rank ASC")
+	if !f.ScanCatalog && f.AllowUnknownNutrition && !f.CampusOnly {
+		order := "distance_squared ASC, id ASC"
+		args := []any{}
+		if f.SortBy == "diverse" {
+			order = "md5(id::text || ?), id ASC"
+			args = append(args, f.DiversitySeed)
+		}
+		q = r.db.WithContext(ctx).Table("(?) diversified", q.Select("nearby.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(window_id::text, NULLIF(window_name, ''), NULLIF(merchant_name, ''), NULLIF(canteen_name, ''), school_id::text, id::text) ORDER BY "+order+") AS merchant_rank", args...)).Order("merchant_rank ASC")
 	}
 	var rows []struct {
 		Row             dietRecommendationRow `gorm:"embedded"`
@@ -129,15 +146,25 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 		MerchantName    string
 		Address         string
 	}
-	switch f.SortBy {
-	case "lowest_price":
-		q = q.Where("price > 0").Order("price ASC")
-	case "highest_protein":
-		q = q.Order("protein DESC")
-	case "lowest_calories":
-		q = q.Order("calories ASC")
-	case "protein_density":
-		q = q.Order("protein / NULLIF(calories, 0) DESC")
+	if f.ScanCatalog {
+		q = q.Order("id ASC")
+	} else {
+		switch f.SortBy {
+		case "diverse":
+			order := "distance_squared ASC, md5(id::text || ?), id ASC"
+			if f.AllowUnknownNutrition && !f.CampusOnly {
+				order = "merchant_rank ASC, " + order
+			}
+			q = q.Order(clause.OrderBy{Expression: clause.Expr{SQL: order, Vars: []any{f.DiversitySeed}}})
+		case "lowest_price":
+			q = q.Where("price > 0").Order("price ASC")
+		case "highest_protein":
+			q = q.Order("protein DESC")
+		case "lowest_calories":
+			q = q.Order("calories ASC")
+		case "protein_density":
+			q = q.Order("protein / NULLIF(calories, 0) DESC")
+		}
 	}
 	err := q.Order("distance_squared ASC, id ASC").Limit(f.Limit).Offset(f.Offset).Scan(&rows).Error
 	if err != nil {
@@ -150,6 +177,11 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 		item.DistanceKM, item.LocationLevel = &distanceKM, row.LocationLevel
 		item.MerchantName, item.Address = row.MerchantName, row.Address
 		items = append(items, item)
+	}
+	if f.IncludeMenuEvidence {
+		if err := r.enrichDietMenuEvidence(ctx, items); err != nil {
+			return nil, 0, err
+		}
 	}
 	return items, total, nil
 }

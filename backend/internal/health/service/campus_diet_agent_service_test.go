@@ -443,6 +443,7 @@ func campusDietAgentTestCandidate(id, title string, calories, protein float64) d
 		IsCampusFood: true, SchoolID: "school-tsinghua", SchoolName: "清华大学",
 		CanteenName: "紫荆园", Floor: "4F", WindowName: "健康轻食",
 		NutritionBasis: "library_record",
+		PriceUnit:      "元/份",
 		Items:          []domain.DietRecommendationFoodItem{{Name: title, Amount: "1份", Source: "public_food_library", SourceID: id}},
 	}
 }

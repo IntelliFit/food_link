@@ -764,6 +764,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/stats/insight/save", authmw.RequireJWT(jwtSvc), healthHandler.SaveStatsInsight)
 	engine.POST("/api/diet/recommendations", authmw.RequireJWT(jwtSvc), healthHandler.GenerateDietRecommendation)
 	engine.POST("/api/diet/recommendations/preview", authmw.RequireJWT(jwtSvc), healthHandler.PreviewMeals)
+	engine.POST("/api/diet/recommendations/feedback", authmw.RequireJWT(jwtSvc), healthHandler.MealRecommendationFeedback)
 	engine.GET("/api/exercise-calories/daily", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseCaloriesDaily)
 	engine.GET("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseLogs)
 	// Exercise accepts both form and JSON; its service audits the bound inputs

@@ -45,17 +45,28 @@ func (s *StatsService) loadMealHarnessContext(ctx context.Context, state *campus
 	if state.MealContextLoaded {
 		return nil
 	}
-	now := time.Now().In(chinaTZ)
+	if state.EngineVersion == "" {
+		state.EngineVersion = s.defaultDietEngineVersion()
+	}
+	if state.AsOf.IsZero() {
+		state.AsOf = time.Now()
+	}
+	now := mealDecisionNow(state).In(chinaTZ)
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, chinaTZ)
 	records, err := s.repo.GetFoodRecordsForDateRange(ctx, state.UserID, start.AddDate(0, 0, -29).UTC(), now.UTC())
 	if err != nil {
 		return fmt.Errorf("饮食历史暂时无法读取")
 	}
+	records = mealRecordsBefore(records, state.UserID, now, state.ReadOnlyReplay)
 	profile, err := s.repo.GetUserProfile(ctx, state.UserID)
 	if err != nil {
 		return fmt.Errorf("健康档案暂时无法读取")
 	}
-	exercise, exerciseErr := s.repo.GetExerciseLogsForDateRange(ctx, state.UserID, start.AddDate(0, 0, -6).Format("2006-01-02"), start.Format("2006-01-02"))
+	var exercise []domain.ExerciseLog
+	var exerciseErr error
+	if !state.ReadOnlyReplay {
+		exercise, exerciseErr = s.repo.GetExerciseLogsForDateRange(ctx, state.UserID, start.AddDate(0, 0, -6).Format("2006-01-02"), start.Format("2006-01-02"))
+	}
 	personal := summarizeMealHistory(records, now)
 	personal.Profile = formatStatsHealthProfile(profile, nil)
 	if exerciseErr != nil {
@@ -71,21 +82,12 @@ func (s *StatsService) loadMealHarnessContext(ctx context.Context, state *campus
 		}
 		personal.RecentExercise = append(personal.RecentExercise, map[string]any{"date": date, "activity": trimStatsRunes(log.ExerciseDesc, 160), "duration_min": log.DurationMin, "calories": log.CaloriesBurned})
 	}
-	meal := campusDietAgentMealContext{Date: start.Format("2006-01-02"), MealType: inferCampusDietMealType(state.Question, now), CalorieTarget: 2000}
-	protein, carbs, fat := 100.0, 240.0, 60.0
+	meal := campusDietAgentMealContext{EngineVersion: state.EngineVersion, Date: start.Format("2006-01-02"), MealType: inferCampusDietMealType(state.Question, now)}
 	if profile != nil {
-		if profile.TDEE != nil && *profile.TDEE > 0 {
-			meal.CalorieTarget = *profile.TDEE
-		}
 		if profile.DietGoal != nil {
 			meal.UserGoal = *profile.DietGoal
 		}
 		health := profile.HealthCondition
-		targets := mapFromAny(health["dashboard_targets"])
-		meal.CalorieTarget = positiveMapFloat(targets, []string{"calorie_target", "calories"}, meal.CalorieTarget)
-		protein = positiveMapFloat(targets, []string{"protein_target", "protein"}, protein)
-		carbs = positiveMapFloat(targets, []string{"carbs_target", "carbs"}, carbs)
-		fat = positiveMapFloat(targets, []string{"fat_target", "fat"}, fat)
 		meal.Allergies = stringSliceFromCampusDietAny(health["allergies"])
 		meal.DietPreferences = stringSliceFromCampusDietAny(health["diet_preference"])
 	}
@@ -99,6 +101,10 @@ func (s *StatsService) loadMealHarnessContext(ctx context.Context, state *campus
 		meal.Current.Fat += record.TotalFat
 	}
 	meal.UserGoal = explicitCampusDietGoal(state.Question, meal.UserGoal)
+	meal.DecisionBasis = buildDietDecisionBasis(profile, records, now)
+	meal.Targets = meal.DecisionBasis.Targets
+	meal.CalorieTarget = meal.Targets.Calories
+	protein, carbs, fat := meal.Targets.Protein, meal.Targets.Carbs, meal.Targets.Fat
 	if state.Constraints.MealType != "" {
 		meal.MealType = state.Constraints.MealType
 	}
@@ -286,8 +292,10 @@ func mealHarnessContextSummary(state *campusDietAgentRunState) []string {
 
 func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommendationCandidate) []DietRecommendationCandidate {
 	ctx := dietDecisionContextFromCampusState(state)
+	ctx = prepareDietDecisionComparison(ctx, candidates)
 	out := make([]DietRecommendationCandidate, 0, len(candidates))
 	scores := map[string]float64{}
+	evaluations := map[string]dietDecisionEvaluation{}
 	for _, candidate := range candidates {
 		candidate = normalizeMealEvidence(candidate)
 		isHistory := candidate.Source == "food_record"
@@ -295,7 +303,7 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 		if state.Location != nil && !isHistory && !campusScope {
 			radius := state.Constraints.RadiusKM
 			if radius <= 0 {
-				radius = 3
+				radius = 5
 			}
 			if candidate.DistanceKM == nil || *candidate.DistanceKM > radius {
 				continue
@@ -348,9 +356,15 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 			}
 		}
 		scores[candidate.SourceID] = score
+		evaluations[candidate.SourceID] = eval
 		out = append(out, candidate)
 	}
-	sort.SliceStable(out, func(i, j int) bool { return scores[out[i].SourceID] > scores[out[j].SourceID] })
+	sort.SliceStable(out, func(i, j int) bool {
+		if resolvedDietEngineVersion(ctx) == dietDecisionEngineVersion {
+			return dietDecisionBetter(evaluations[out[i].SourceID], evaluations[out[j].SourceID], scores[out[i].SourceID], scores[out[j].SourceID])
+		}
+		return scores[out[i].SourceID] > scores[out[j].SourceID]
+	})
 	return out
 }
 

@@ -53,12 +53,13 @@ type PushConfig struct {
 }
 
 type AppConfig struct {
-	Name               string `mapstructure:"name"`
-	Env                string `mapstructure:"env"`
-	Host               string `mapstructure:"host"`
-	Port               int    `mapstructure:"port"`
-	AdminBaseURL       string `mapstructure:"admin_base_url"`
-	AllowDebugRegister bool   `mapstructure:"allow_debug_register"`
+	DietDecisionVersion string `mapstructure:"diet_decision_version"`
+	Name                string `mapstructure:"name"`
+	Env                 string `mapstructure:"env"`
+	Host                string `mapstructure:"host"`
+	Port                int    `mapstructure:"port"`
+	AdminBaseURL        string `mapstructure:"admin_base_url"`
+	AllowDebugRegister  bool   `mapstructure:"allow_debug_register"`
 }
 
 type LogConfig struct {
@@ -1614,6 +1615,7 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("push.expo_project_id", "PUSH_EXPO_PROJECT_ID")
 	_ = v.BindEnv("push.expo_access_token", "PUSH_EXPO_ACCESS_TOKEN")
 	_ = v.BindEnv("app.port", "PORT")
+	_ = v.BindEnv("app.diet_decision_version", "FOODLINK_DIET_DECISION_VERSION")
 	_ = v.BindEnv("external.appid", "APPID")
 	_ = v.BindEnv("external.secret", "SECRET")
 	_ = v.BindEnv("wechat.mini_program.app_id", "WECHAT_MINI_PROGRAM_APP_ID", "WECHAT_MINIPROGRAM_APP_ID")

@@ -13,12 +13,15 @@ import (
 	"time"
 
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/internal/nutritionagg"
 	"food_link/backend/pkg/logger"
 
 	"log/slog"
 )
 
 type DietRecommendationInput struct {
+	EngineVersion        string                   `json:"engine_version,omitempty"`
+	DecisionBasis        *DietDecisionBasis       `json:"decision_basis,omitempty"`
 	Scene                string                   `json:"scene"`
 	Date                 string                   `json:"date"`
 	Question             string                   `json:"question,omitempty"`
@@ -60,30 +63,37 @@ type DietRecommendationMeal struct {
 }
 
 type DietRecommendationResult struct {
-	LocationHint          *domain.MealArea                     `json:"location_hint,omitempty"`
-	HarnessVersion        string                               `json:"harness_version,omitempty"`
-	SearchScope           string                               `json:"search_scope,omitempty"`
-	ContextSummary        []string                             `json:"context_summary,omitempty"`
-	DataNotes             []string                             `json:"data_notes,omitempty"`
-	NeedsClarification    bool                                 `json:"needs_clarification,omitempty"`
-	Scene                 string                               `json:"scene"`
-	Title                 string                               `json:"title"`
-	Summary               string                               `json:"summary"`
-	CalorieRemaining      float64                              `json:"calorie_remaining"`
-	MacroGaps             DietRecommendationMacro              `json:"macro_gaps"`
-	Recommendations       []DietRecommendationOption           `json:"recommendations"`
-	GeneratedBy           string                               `json:"generated_by"`
-	ResolvedSchool        *domain.DietRecommendationSchool     `json:"resolved_school,omitempty"`
-	CampusID              string                               `json:"campus_id,omitempty"`
-	CampusName            string                               `json:"campus_name,omitempty"`
-	AIUsed                bool                                 `json:"ai_used"`
-	CandidateCount        int                                  `json:"candidate_count,omitempty"`
-	AIRerankCount         int                                  `json:"ai_rerank_count,omitempty"`
-	SessionID             string                               `json:"session_id,omitempty"`
-	UserMessageID         string                               `json:"user_message_id,omitempty"`
-	AssistantMessageID    string                               `json:"assistant_message_id,omitempty"`
-	AgentConstraints      *CampusDietRecommendationConstraints `json:"agent_constraints,omitempty"`
-	DecisionEngineVersion string                               `json:"decision_engine_version,omitempty"`
+	CandidateFunnel        []MealCandidateFunnel                `json:"candidate_funnel,omitempty"`
+	SelectionAudit         *MealSelectionAudit                  `json:"selection_audit,omitempty"`
+	CandidateSnapshotHash  string                               `json:"candidate_snapshot_hash,omitempty"`
+	CatalogCoverage        []MealCatalogCoverage                `json:"catalog_coverage,omitempty"`
+	SelectionPolicyVersion string                               `json:"selection_policy_version,omitempty"`
+	RecommendationID       string                               `json:"recommendation_id,omitempty"`
+	DecisionBasis          *DietDecisionBasis                   `json:"decision_basis,omitempty"`
+	LocationHint           *domain.MealArea                     `json:"location_hint,omitempty"`
+	HarnessVersion         string                               `json:"harness_version,omitempty"`
+	SearchScope            string                               `json:"search_scope,omitempty"`
+	ContextSummary         []string                             `json:"context_summary,omitempty"`
+	DataNotes              []string                             `json:"data_notes,omitempty"`
+	NeedsClarification     bool                                 `json:"needs_clarification,omitempty"`
+	Scene                  string                               `json:"scene"`
+	Title                  string                               `json:"title"`
+	Summary                string                               `json:"summary"`
+	CalorieRemaining       float64                              `json:"calorie_remaining"`
+	MacroGaps              DietRecommendationMacro              `json:"macro_gaps"`
+	Recommendations        []DietRecommendationOption           `json:"recommendations"`
+	GeneratedBy            string                               `json:"generated_by"`
+	ResolvedSchool         *domain.DietRecommendationSchool     `json:"resolved_school,omitempty"`
+	CampusID               string                               `json:"campus_id,omitempty"`
+	CampusName             string                               `json:"campus_name,omitempty"`
+	AIUsed                 bool                                 `json:"ai_used"`
+	CandidateCount         int                                  `json:"candidate_count,omitempty"`
+	AIRerankCount          int                                  `json:"ai_rerank_count,omitempty"`
+	SessionID              string                               `json:"session_id,omitempty"`
+	UserMessageID          string                               `json:"user_message_id,omitempty"`
+	AssistantMessageID     string                               `json:"assistant_message_id,omitempty"`
+	AgentConstraints       *CampusDietRecommendationConstraints `json:"agent_constraints,omitempty"`
+	DecisionEngineVersion  string                               `json:"decision_engine_version,omitempty"`
 }
 
 type CampusDietRecommendationConstraints struct {
@@ -110,6 +120,11 @@ type CampusDietRecommendationConstraints struct {
 }
 
 type DietRecommendationOption struct {
+	RemainingDayPlan                 *MealDayPlan                  `json:"remaining_day_plan,omitempty"`
+	EvidenceIssues                   []string                      `json:"evidence_issues,omitempty"`
+	SelectionReason                  string                        `json:"selection_reason,omitempty"`
+	Nutrients                        nutritionagg.Vector           `json:"nutrients,omitempty"`
+	OptionKey                        string                        `json:"option_key,omitempty"`
 	RequiresCampusAccessConfirmation bool                          `json:"-"` // obsolete; published menus are open to everyone
 	HistoryDate                      string                        `json:"history_date,omitempty"`
 	SourceLabel                      string                        `json:"source_label,omitempty"`
@@ -748,7 +763,7 @@ func (s *StatsService) generateCampusDietRecommendationWithAI(
 		AIUsed:                true,
 		CandidateCount:        len(candidates),
 		AIRerankCount:         len(finalists),
-		DecisionEngineVersion: dietDecisionEngineVersion,
+		DecisionEngineVersion: resolvedDietEngineVersion(dietDecisionContextFromInput(input)),
 	}
 	logger.Info(ctx, "校园饮食推荐大模型重排完成",
 		logger.UserID(userID),
@@ -845,7 +860,8 @@ func campusDietRecommendationOption(candidate DietRecommendationCandidate, reaso
 		}}
 	}
 	return DietRecommendationOption{
-		Title: candidate.Title, Reason: reason, Source: candidate.Source, SourceID: candidate.SourceID,
+		Nutrients: candidate.Nutrients,
+		Title:     candidate.Title, Reason: reason, Source: candidate.Source, SourceID: candidate.SourceID,
 		Calories: candidate.Calories, Protein: candidate.Protein, Carbs: candidate.Carbs, Fat: candidate.Fat,
 		Items: items, Tips: tips, IsCampusFood: candidate.IsCampusFood,
 		SchoolID: candidate.SchoolID, SchoolName: candidate.SchoolName,
@@ -1099,7 +1115,7 @@ func fallbackDietRecommendationFromCandidates(input DietRecommendationInput, gen
 		MacroGaps:             input.MacroGaps,
 		Recommendations:       options,
 		GeneratedBy:           generatedBy,
-		DecisionEngineVersion: dietDecisionEngineVersion,
+		DecisionEngineVersion: resolvedDietEngineVersion(dietDecisionContextFromInput(input)),
 	}
 }
 

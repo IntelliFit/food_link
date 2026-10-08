@@ -240,6 +240,7 @@ type CalendarMonthSummary struct {
 }
 
 type StatsSummary struct {
+	DietDecisionBasis            *DietDecisionBasis  `json:"diet_decision_basis,omitempty"`
 	Range                        string              `json:"range"`
 	StartDate                    string              `json:"start_date"`
 	EndDate                      string              `json:"end_date"`
@@ -265,6 +266,7 @@ type StatsSummary struct {
 }
 
 type statsComputation struct {
+	DietDecisionBasis  *DietDecisionBasis
 	StatsRange         string
 	StartDate          string
 	EndDate            string
@@ -467,6 +469,7 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 	}
 
 	return &StatsSummary{
+		DietDecisionBasis:            comp.DietDecisionBasis,
 		Range:                        comp.StatsRange,
 		StartDate:                    comp.StartDate,
 		EndDate:                      comp.EndDate,
@@ -1607,6 +1610,7 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 	)
 
 	return &statsComputation{
+		DietDecisionBasis:  buildDietDecisionBasis(user, records, time.Now()),
 		StatsRange:         statsRange,
 		StartDate:          startDate,
 		EndDate:            endDate,
