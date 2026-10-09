@@ -92,6 +92,12 @@ external:
 4. 查看结构化日志中的 `provider`、`model`、上游错误状态，确认没有请求残留到旧域名。
 5. 通过后再复制到生产 namespace，并以同样顺序灰度验证。
 
-## 离线脚本
+## 营养向量旧通道兼容（2026-10-08）
+
+旧 `https://yunwu.ai/v1` 账号通道已返回只读迁移错误。运行时仅在向量已启用、地址仍为这个精确旧值、且存在完整的 `openlux_base_url=https://api.openlux.ai/v1` 和 `openlux_api_key` 配对时，使用该配对。不会将旧向量密钥转发至新域名，也不会改写自定义向量供应商地址。模型和维数保持原值，启动日志明确记录兼容切换，不记录密钥。
+
+现有 OpenLux 配对已用通用文本实测 `text-embedding-3-large` 返回 1024 维。后续维护 Apollo 时可将专用向量地址和凭据显式更新为已验证配对；本轮没有直接改写 Apollo。服务需运行新版代码才能启用兼容逻辑。
+
+## 离线脚本配置
 
 `backend/scripts/` 下的个别批处理脚本不经过服务端 Apollo 配置，而是读取当前 shell 的环境变量。需要运行这些脚本时，按脚本使用的 provider 设置对应变量，例如 `DEEPSEEK_API_KEY` + `DEEPSEEK_BASE_URL`、`DOUBAO_API_KEY` + `DOUBAO_BASE_URL`、`OFOXAI_API_KEY` + `OFOXAI_BASE_URL`、`DASHSCOPE_API_KEY` + `DASHSCOPE_BASE_URL`；同样使用 `https://maas-openapi.wanjiedata.com/api/v1` 作为 OpenAI-compatible 前缀。

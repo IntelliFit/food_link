@@ -1,6 +1,10 @@
 # food_link Go 后端
 
-本目录为微信小程序 `food_link` 的 Go 后端服务（Gin + GORM + PostgreSQL），配置见 `config.yaml` / Apollo，本地开发说明见仓库根目录 `CLAUDE.md`。
+本目录为微信小程序 `food_link` 的 Go 后端服务（Gin + GORM + PostgreSQL），实际配置为 `app-config.yaml` 或 Apollo（由 `CONFIG_SOURCE` 选择），本地开发说明见仓库根目录 `CLAUDE.md`。
+
+本地通过 `scripts/dev-process.ps1 -Action Start -Service backend -TaskId <对话ID>` 启动并复用已有进程。`npm run dev:backend` 会强制设置进程级 `FOODLINK_DISABLE_WORKERS=1`；Apollo 的 `local` cluster 也会强制将实际 worker 数量降为 0，即使云端配置非零。共享线上库不能用于本地识别任务验收；需要运行 worker 时使用独立本地 PostgreSQL 和任务数据。
+
+内存队列也会扫描数据库恢复待处理任务，修改 topic 或 consumer group 无法隔离。应用在连接数据库前拒绝“内存队列、非本地数据库、worker 大于 0”的配置组合，也拒绝本地开发 YAML 开启远程库 worker。正式/体验 Apollo 部署的 Kafka worker 保持按云端数量运行。纯配置读取和迁移命令不启动 worker。
 
 本文档重点说明 **标准食物库缺图回填**（`cmd/standard-food-image-backfill`）的数据来源、流程与落库方式。
 

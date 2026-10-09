@@ -69,6 +69,9 @@ async function main() {
     env: {
       ...process.env,
       PORT: String(port),
+      // Development must never recover or consume tasks from a shared database.
+      // This disable-only flag also overrides a nonzero Apollo worker count.
+      FOODLINK_DISABLE_WORKERS: '1',
     },
   })
 

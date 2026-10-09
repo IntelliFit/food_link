@@ -158,6 +158,10 @@ type openPlatformReconciler interface {
 }
 
 func New(cfg *config.Config) (*App, error) {
+	cfg.ApplyLocalWorkerSafety()
+	if err := cfg.ValidateWorkerIsolation(); err != nil {
+		return nil, err
+	}
 	logShutdown, err := logger.Init(context.Background(), cfg.App, cfg.Log, cfg.OTel)
 	if err != nil {
 		return nil, err
