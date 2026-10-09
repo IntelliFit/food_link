@@ -33,7 +33,7 @@ type FeedReportPageProps = {
 }
 
 type FeedReportStatus = 'pending' | 'resolved' | 'rejected'
-type FeedReportTargetType = 'food_record' | 'exercise_log' | 'circle_post'
+type FeedReportTargetType = 'food_record' | 'exercise_log' | 'circle_post' | 'supplement_intake'
 
 type FeedReportItem = {
   id: string
@@ -71,6 +71,7 @@ const reasonLabels: Record<string, string> = {
 const targetTypeLabels: Record<string, string> = {
   food_record: '饮食记录',
   exercise_log: '运动记录',
+  supplement_intake: '补剂记录',
   circle_post: '圈子动态',
 }
 
@@ -177,6 +178,7 @@ export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) 
               { value: 'circle_post', label: '圈子动态' },
               { value: 'food_record', label: '饮食记录' },
               { value: 'exercise_log', label: '运动记录' },
+              { value: 'supplement_intake', label: '补剂记录' },
             ]}
             />
             <FilterSelect label='状态' value={status} onValueChange={(value) => { setStatus(value); setPage(1) }} options={[

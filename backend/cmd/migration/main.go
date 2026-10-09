@@ -31,6 +31,7 @@ func main() {
 	onlyManualFoodSausage := flag.Bool("only-manual-food-sausage", false, "only reclassify Taiwanese grilled sausage as an independently packaged 38g food and relink historical records")
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	onlySupplements := flag.Bool("only-supplements", false, "only add supplement catalog, cabinet, intake schema, and catalog seeds")
+	onlySupplementFeed := flag.Bool("only-supplement-feed", false, "only add supplement intake feed visibility and update feed interaction target constraints")
 	onlyGrowthPerformanceIndexes := flag.Bool("only-growth-performance-indexes", false, "only create growth-sensitive feed, notification, and body-summary indexes")
 	onlyMarketingQR := flag.Bool("only-marketing-qr", false, "only add offline marketing QR attribution tables")
 	onlyCampusMapLocations := flag.Bool("only-campus-map-locations", false, "only add school, campus, and canteen coordinates used by the food map")
@@ -41,7 +42,7 @@ func main() {
 	flag.Parse()
 	// Analytics has a scoped migration to avoid touching business tables during deployment.
 	selectedOnlyModes := 0
-	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -141,6 +142,8 @@ func main() {
 		migrateErr = migration.MigrateCampusCatalogPublishing(ctx, db, cfg.Database.Schema)
 	} else if *onlySupplements {
 		migrateErr = migration.MigrateSupplements(ctx, db, cfg.Database.Schema)
+	} else if *onlySupplementFeed {
+		migrateErr = migration.MigrateSupplementFeed(ctx, db, cfg.Database.Schema)
 	} else if *onlyGrowthPerformanceIndexes {
 		migrateErr = migration.MigrateGrowthPerformanceIndexes(ctx, db, cfg.Database.Schema)
 	} else if *onlyMarketingQR {
@@ -195,6 +198,10 @@ func main() {
 	}
 	if *onlySupplements {
 		log.Printf("补剂公共库与记录结构迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlySupplementFeed {
+		log.Printf("补剂动态可见性与互动类型迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	if *onlyGrowthPerformanceIndexes {

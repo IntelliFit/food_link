@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 import { rememberMealLocation } from './meal-location'
+import { COMMUNITY_FEED_CHANGED_EVENT, HOME_INTAKE_DATA_CHANGED_EVENT } from './home-events'
 
 import { getRecentConsoleLogs } from './console-log-buffer'
 import { resolveApiBaseUrl } from './api-base-url'
@@ -4462,6 +4463,8 @@ export async function deleteSupplementIntake(intakeId: string): Promise<void> {
   if (res.statusCode !== 200) {
     throwHttpErrorWithStatus(res.statusCode, res.data, '删除补剂记录失败')
   }
+  Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+  Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
 }
 
 export async function deleteSupplement(itemId: string): Promise<void> {
@@ -7094,7 +7097,7 @@ export interface FoodNutrientLeaderboardResult {
 
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
 export type CommunityAuthorScope = 'all' | 'priority' | 'public'
-export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food' | 'circle_post'
+export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food' | 'circle_post' | 'supplement_intake'
 export type CommunityFeedContentType = 'all' | CommunityFeedTargetType
 
 export interface CommunityFeedQueryParams {
@@ -7128,6 +7131,10 @@ export type CommunityFeedRecord = FoodRecord & {
   duration_min?: number | null
   ai_reasoning?: string | null
   exercise_items?: ExerciseActivityItem[] | null
+  supplement_name?: string
+  servings?: number
+  serving_label?: string
+  supplement_components?: SupplementComponent[]
   price?: number | null
   school?: string | null
   canteen?: string | null

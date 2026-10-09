@@ -857,6 +857,9 @@ func (s *CommunityService) normalizeFeedRecord(ctx context.Context, record repo.
 		recordTime := record.RecordTime.In(chinaTZ)
 		record.RecordTime = &recordTime
 	}
+	if record.FeedType == repo.FeedTargetSupplementIntake {
+		return record
+	}
 	if record.FeedType == repo.FeedTargetExerciseLog {
 		if record.ImagePath != nil {
 			resolved := s.resolveFoodImageURL(*record.ImagePath)
@@ -1344,9 +1347,15 @@ func (s *CommunityService) HideFeedTarget(ctx context.Context, userID, targetTyp
 		return commonerrors.ErrNotFound
 	}
 	if record.UserID != userID {
+		logger.Warn(ctx, "隐藏动态权限不足", slog.String("user_id", userID), slog.String("target_type", targetType), slog.String("target_id", targetID))
 		return commonerrors.ErrForbidden
 	}
-	return s.feedRepo.HideFeedTarget(ctx, userID, targetType, targetID)
+	if err := s.feedRepo.HideFeedTarget(ctx, userID, targetType, targetID); err != nil {
+		logger.Error(ctx, "隐藏动态失败", err, slog.String("user_id", userID), slog.String("target_type", targetType), slog.String("target_id", targetID))
+		return err
+	}
+	logger.Info(ctx, "动态已隐藏", slog.String("user_id", userID), slog.String("target_type", targetType), slog.String("target_id", targetID))
+	return nil
 }
 
 func (s *CommunityService) ListComments(ctx context.Context, viewerUserID, recordID string, limit int) ([]CommentItem, error) {
@@ -2156,7 +2165,7 @@ func (s *CommunityService) MarkNotificationsRead(ctx context.Context, userID str
 
 func scoreFeedRecord(record *repo.FeedRecord, sortBy string, likeCount, commentCount int, mealType, dietGoal string, priorityAuthorIDs []string) float64 {
 	balanceScore := 0.0
-	if record.FeedType != repo.FeedTargetExerciseLog {
+	if record.FeedType != repo.FeedTargetExerciseLog && record.FeedType != repo.FeedTargetSupplementIntake {
 		balanceScore = computeMacroBalanceScore(record.TotalProtein, record.TotalCarbs, record.TotalFat) / 100.0
 	}
 	hotScore := computeFeedHotScore(likeCount, commentCount)
@@ -2183,7 +2192,7 @@ func scoreFeedRecord(record *repo.FeedRecord, sortBy string, likeCount, commentC
 		return hotScore*100.0 + freshScore*10.0 + balanceScore*8.0
 	}
 	if sortBy == "balanced" {
-		if record.FeedType == repo.FeedTargetExerciseLog {
+		if record.FeedType == repo.FeedTargetExerciseLog || record.FeedType == repo.FeedTargetSupplementIntake {
 			return hotScore*12.0 + freshScore*6.0
 		}
 		return balanceScore*100.0 + hotScore*12.0 + freshScore*6.0
@@ -2197,6 +2206,9 @@ func scoreFeedRecord(record *repo.FeedRecord, sortBy string, likeCount, commentC
 }
 
 func (s *CommunityService) buildRecommendReason(record *repo.FeedRecord, sortBy, mealType, dietGoal string, priorityAuthorIDs []string, likeCount, commentCount int) string {
+	if record.FeedType == repo.FeedTargetSupplementIntake {
+		return "补剂记录"
+	}
 	if record.FeedType == repo.FeedTargetExerciseLog {
 		if sortBy == "hot" && (likeCount > 0 || commentCount > 0) {
 			return "圈子高热度"
@@ -2287,6 +2299,8 @@ func normalizeServiceTargetType(value string) string {
 		return repo.FeedTargetExerciseLog
 	case repo.FeedTargetCirclePost:
 		return repo.FeedTargetCirclePost
+	case repo.FeedTargetSupplementIntake:
+		return repo.FeedTargetSupplementIntake
 	case "campus_food":
 		return "campus_food"
 	default:

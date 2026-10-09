@@ -13,43 +13,48 @@ import (
 )
 
 const (
-	FeedTargetFoodRecord  = "food_record"
-	FeedTargetExerciseLog = "exercise_log"
-	FeedTargetCirclePost  = "circle_post"
-	FeedTargetCampusFood  = "campus_food"
+	FeedTargetFoodRecord       = "food_record"
+	FeedTargetExerciseLog      = "exercise_log"
+	FeedTargetCirclePost       = "circle_post"
+	FeedTargetCampusFood       = "campus_food"
+	FeedTargetSupplementIntake = "supplement_intake"
 )
 
 type FeedRecord struct {
-	FeedType         string           `gorm:"column:feed_type" json:"feed_type"`
-	ID               string           `gorm:"column:id" json:"id"`
-	UserID           string           `gorm:"column:user_id" json:"user_id"`
-	MealType         string           `gorm:"column:meal_type" json:"meal_type"`
-	RecordTime       *time.Time       `gorm:"column:record_time" json:"record_time"`
-	CreatedAt        *time.Time       `gorm:"column:created_at" json:"created_at"`
-	TotalCalories    float64          `gorm:"column:total_calories" json:"total_calories"`
-	TotalProtein     float64          `gorm:"column:total_protein" json:"total_protein"`
-	TotalCarbs       float64          `gorm:"column:total_carbs" json:"total_carbs"`
-	TotalFat         float64          `gorm:"column:total_fat" json:"total_fat"`
-	Fiber            *float64         `gorm:"column:fiber" json:"fiber,omitempty"`
-	Sugar            *float64         `gorm:"column:sugar" json:"sugar,omitempty"`
-	SodiumMg         *float64         `gorm:"column:sodium_mg" json:"sodium_mg,omitempty"`
-	TotalWeightGrams *float64         `gorm:"column:total_weight_grams" json:"total_weight_grams,omitempty"`
-	ImagePath        *string          `gorm:"column:image_path" json:"image_path,omitempty"`
-	ImagePaths       []string         `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`
-	Description      *string          `gorm:"column:description" json:"description,omitempty"`
-	Title            *string          `gorm:"column:title" json:"title,omitempty"`
-	Body             *string          `gorm:"column:body" json:"body,omitempty"`
-	Items            []map[string]any `gorm:"column:items;serializer:json" json:"items"`
-	DietGoal         *string          `gorm:"column:diet_goal" json:"diet_goal,omitempty"`
-	HiddenFromFeed   bool             `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
-	EntryType        *string          `gorm:"column:entry_type" json:"entry_type,omitempty"`
-	RecipeID         *string          `gorm:"column:recipe_id" json:"recipe_id,omitempty"`
-	ExerciseType     *string          `gorm:"column:exercise_type" json:"exercise_type,omitempty"`
-	ExerciseDesc     *string          `gorm:"column:exercise_desc" json:"exercise_desc,omitempty"`
-	CaloriesBurned   *float64         `gorm:"column:calories_burned" json:"calories_burned,omitempty"`
-	DurationMin      *int             `gorm:"column:duration_min" json:"duration_min,omitempty"`
-	AIReasoning      *string          `gorm:"column:ai_reasoning" json:"ai_reasoning,omitempty"`
-	ExerciseItems    []map[string]any `gorm:"column:exercise_items;serializer:json" json:"exercise_items,omitempty"`
+	FeedType             string           `gorm:"column:feed_type" json:"feed_type"`
+	ID                   string           `gorm:"column:id" json:"id"`
+	UserID               string           `gorm:"column:user_id" json:"user_id"`
+	MealType             string           `gorm:"column:meal_type" json:"meal_type"`
+	RecordTime           *time.Time       `gorm:"column:record_time" json:"record_time"`
+	CreatedAt            *time.Time       `gorm:"column:created_at" json:"created_at"`
+	TotalCalories        float64          `gorm:"column:total_calories" json:"total_calories"`
+	TotalProtein         float64          `gorm:"column:total_protein" json:"total_protein"`
+	TotalCarbs           float64          `gorm:"column:total_carbs" json:"total_carbs"`
+	TotalFat             float64          `gorm:"column:total_fat" json:"total_fat"`
+	Fiber                *float64         `gorm:"column:fiber" json:"fiber,omitempty"`
+	Sugar                *float64         `gorm:"column:sugar" json:"sugar,omitempty"`
+	SodiumMg             *float64         `gorm:"column:sodium_mg" json:"sodium_mg,omitempty"`
+	TotalWeightGrams     *float64         `gorm:"column:total_weight_grams" json:"total_weight_grams,omitempty"`
+	ImagePath            *string          `gorm:"column:image_path" json:"image_path,omitempty"`
+	ImagePaths           []string         `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`
+	Description          *string          `gorm:"column:description" json:"description,omitempty"`
+	Title                *string          `gorm:"column:title" json:"title,omitempty"`
+	Body                 *string          `gorm:"column:body" json:"body,omitempty"`
+	Items                []map[string]any `gorm:"column:items;serializer:json" json:"items"`
+	DietGoal             *string          `gorm:"column:diet_goal" json:"diet_goal,omitempty"`
+	HiddenFromFeed       bool             `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
+	EntryType            *string          `gorm:"column:entry_type" json:"entry_type,omitempty"`
+	RecipeID             *string          `gorm:"column:recipe_id" json:"recipe_id,omitempty"`
+	ExerciseType         *string          `gorm:"column:exercise_type" json:"exercise_type,omitempty"`
+	ExerciseDesc         *string          `gorm:"column:exercise_desc" json:"exercise_desc,omitempty"`
+	CaloriesBurned       *float64         `gorm:"column:calories_burned" json:"calories_burned,omitempty"`
+	DurationMin          *int             `gorm:"column:duration_min" json:"duration_min,omitempty"`
+	AIReasoning          *string          `gorm:"column:ai_reasoning" json:"ai_reasoning,omitempty"`
+	ExerciseItems        []map[string]any `gorm:"column:exercise_items;serializer:json" json:"exercise_items,omitempty"`
+	SupplementName       string           `gorm:"column:supplement_name" json:"supplement_name,omitempty"`
+	Servings             float64          `gorm:"column:servings" json:"servings,omitempty"`
+	ServingLabel         string           `gorm:"column:serving_label" json:"serving_label,omitempty"`
+	SupplementComponents []map[string]any `gorm:"column:supplement_components;serializer:json" json:"supplement_components,omitempty"`
 	// Campus food fields (for public_food_library entries appearing in feed)
 	Price             float64 `gorm:"column:price" json:"price,omitempty"`
 	PriceUnit         string  `gorm:"column:price_unit" json:"price_unit,omitempty"`
@@ -171,6 +176,13 @@ func (r *FeedRepo) listFeedByAuthors(ctx context.Context, authorIDs []string, pu
 		}
 		rows = append(rows, circleRows...)
 	}
+	if contentType == "all" || contentType == FeedTargetSupplementIntake {
+		supplementRows, err := r.listSupplementFeedByAuthors(ctx, authorIDs, publicOnly, date, sortBy, limit, cursor)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, supplementRows...)
+	}
 	// Mix in a small number of campus highlights for the default feed
 	if contentType == "all" && sortBy != "latest" {
 		campusRows, err := r.listCampusFeed(ctx, 3)
@@ -258,6 +270,31 @@ func (r *FeedRepo) listCirclePostsByAuthors(ctx context.Context, authorIDs []str
 	return rows, err
 }
 
+func (r *FeedRepo) supplementFeedQuery(ctx context.Context) *gorm.DB {
+	// 只读取服用时的快照，不关联后来修改的瓶身标签或发布私人备注。
+	return r.db.WithContext(ctx).Table("supplement_intakes").Select("'supplement_intake' AS feed_type, id, user_id, taken_at AS record_time, created_at, supplement_name, servings, serving_label, components_snapshot AS supplement_components, hidden_from_feed")
+}
+
+func (r *FeedRepo) listSupplementFeedByAuthors(ctx context.Context, authorIDs []string, publicOnly bool, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
+	q := r.supplementFeedQuery(ctx).Where("hidden_from_feed = ?", false)
+	q = r.applyFeedAuthorScope(q, authorIDs, publicOnly)
+	if date != "" {
+		start, end, err := chinaDateWindow(date)
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where("taken_at >= ? AND taken_at < ?", start, end)
+	}
+	q = applyLatestFeedCursor(q, "created_at", FeedTargetSupplementIntake, sortBy, cursor)
+	orderColumn := "taken_at DESC, id DESC"
+	if sortBy == "latest" {
+		orderColumn = "created_at DESC, id DESC"
+	}
+	var rows []FeedRecord
+	err := q.Order(orderColumn).Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
 func (r *FeedRepo) applyFeedAuthorScope(q *gorm.DB, authorIDs []string, publicOnly bool) *gorm.DB {
 	if len(authorIDs) > 0 {
 		q = q.Where("user_id IN ?", authorIDs)
@@ -310,6 +347,17 @@ func (r *FeedRepo) GetFeedRecordByID(ctx context.Context, recordID string) (*Fee
 
 func (r *FeedRepo) GetFeedTargetByID(ctx context.Context, targetType, targetID string) (*FeedRecord, error) {
 	targetType = NormalizeTargetType(targetType)
+	if targetType == FeedTargetSupplementIntake {
+		var row FeedRecord
+		err := r.supplementFeedQuery(ctx).Where("id = ?", targetID).First(&row).Error
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		return &row, nil
+	}
 	if targetType == FeedTargetCirclePost {
 		var row FeedRecord
 		err := r.db.WithContext(ctx).Table("user_circle_posts").
@@ -376,6 +424,9 @@ func (r *FeedRepo) HideFeedTarget(ctx context.Context, userID, targetType, targe
 	}
 	if targetType == FeedTargetCirclePost {
 		tableName = "user_circle_posts"
+	}
+	if targetType == FeedTargetSupplementIntake {
+		tableName = "supplement_intakes"
 	}
 	return r.db.WithContext(ctx).Model(&FeedRecord{}).
 		Table(tableName).
@@ -882,6 +933,8 @@ func NormalizeTargetType(value string) string {
 		return FeedTargetCirclePost
 	case FeedTargetCampusFood:
 		return FeedTargetCampusFood
+	case FeedTargetSupplementIntake:
+		return FeedTargetSupplementIntake
 	default:
 		return FeedTargetFoodRecord
 	}
@@ -918,12 +971,15 @@ func applyTargetFilter(q *gorm.DB, targets []FeedTarget, includeLegacyRecordID b
 	var foodIDs []string
 	var exerciseIDs []string
 	var circleIDs []string
+	var supplementIDs []string
 	for _, target := range targets {
 		switch target.TargetType {
 		case FeedTargetExerciseLog:
 			exerciseIDs = append(exerciseIDs, target.TargetID)
 		case FeedTargetCirclePost:
 			circleIDs = append(circleIDs, target.TargetID)
+		case FeedTargetSupplementIntake:
+			supplementIDs = append(supplementIDs, target.TargetID)
 		default:
 			foodIDs = append(foodIDs, target.TargetID)
 		}
@@ -945,6 +1001,10 @@ func applyTargetFilter(q *gorm.DB, targets []FeedTarget, includeLegacyRecordID b
 	if len(circleIDs) > 0 {
 		clauses = append(clauses, "(target_type = ? AND target_id IN ?)")
 		args = append(args, FeedTargetCirclePost, circleIDs)
+	}
+	if len(supplementIDs) > 0 {
+		clauses = append(clauses, "(target_type = ? AND target_id IN ?)")
+		args = append(args, FeedTargetSupplementIntake, supplementIDs)
 	}
 	return q.Where(strings.Join(clauses, " OR "), args...)
 }
