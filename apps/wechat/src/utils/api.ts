@@ -1323,6 +1323,15 @@ export interface DietRecommendationFoodItem {
 }
 
 export interface DietRecommendationOption {
+	selection_reason?: string
+	evidence_issues?: string[]
+	remaining_day_plan?: {
+		status: string
+		method: string
+		steps: { meal_type: string; candidate: { title: string; canteen_name?: string; merchant_name?: string } }[]
+		notes: string[]
+	}
+	option_key?: string
   requires_campus_access_confirmation?: boolean
   history_date?: string
   source_label?: string
@@ -1374,6 +1383,10 @@ export interface DietRecommendationOption {
 }
 
 export interface DietRecommendationResult {
+	catalog_coverage?: { scope?: string; radius_km?: number; school?: { name: string }; total_matches: number; retrieved: number; status: string }[]
+	selection_audit?: { method: string; fallback_reason?: string; eligible_count: number; shortlisted_count: number }
+	recommendation_id?: string
+	decision_basis?: DietDecisionBasis
   harness_version?: string
   search_scope?: 'nearby' | 'school' | 'unknown' | 'history' | 'nearby_and_history'
   location_hint?: { province: string; city: string; district: string; recorded_at: string }
@@ -1472,6 +1485,7 @@ function persistDashboardTargetsLocal(data: DashboardTargets): void {
 
 /** 数据统计接口返回（周/月） */
 export interface StatsSummary {
+	diet_decision_basis?: DietDecisionBasis
   range: 'week' | 'month'
   start_date: string
   end_date: string
@@ -1648,6 +1662,8 @@ export interface SignalChip {
 export type RiskTone = 'positive' | 'neutral' | 'warning' | 'danger'
 
 export interface RiskCard {
+  score_available?: boolean
+  scoring_version?: string
   key: string
   title: string
   score: number
@@ -4452,7 +4468,9 @@ export async function recordSupplementIntake(
   if (res.statusCode !== 200) {
     throwHttpErrorWithStatus(res.statusCode, res.data, '记录补剂失败')
   }
-  return unwrapResponse<{ intake: SupplementIntake }>(res).intake
+  const intake = unwrapResponse<{ intake: SupplementIntake }>(res).intake
+  Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+  return intake
 }
 
 export async function deleteSupplementIntake(intakeId: string): Promise<void> {
@@ -4696,8 +4714,34 @@ export async function getStatsCalendarMonth(month: string): Promise<StatsCalenda
   return res.data as StatsCalendarMonth
 }
 
-export async function previewMeals(payload: { meal_type: string; location?: PetChatLocation }): Promise<DietRecommendationResult> {
-  const res = await authenticatedRequest('/api/diet/recommendations/preview', { method: 'POST', data: payload, timeout: 15000 })
+export interface DietDecisionBasis {
+  nutrient_state?: {
+    rules: Array<{ key: string; unit: string; target?: number; limit?: number; reference_type: string; source_id: string; source_url?: string; scope: string; time_window: string }>
+    current: Record<string, { value: number; unit: string; status: 'recorded' | 'estimated' | 'partial' | 'missing'; known_items: number; total_items: number }>
+    recorded_meals: number
+    as_of: string
+    limitations: string[]
+  }
+  version: string
+  date: string
+  target_source: string
+  targets: DietRecommendationMacroContext
+  current: DietRecommendationMacroContext
+  goals: string[]
+  recorded_days: number
+  food_group_priorities: string[]
+  actions: string[]
+  limitations: string[]
+  sources: Array<{ id: string; title: string; url: string; scope: string }>
+}
+
+export async function recordMealRecommendationFeedback(payload: { run_id: string; option_keys: string[]; action: 'shown' | 'skip' | 'selected' }): Promise<void> {
+  const res = await authenticatedRequest('/api/diet/recommendations/feedback', { method: 'POST', data: payload, timeout: 3000 })
+  if (res.statusCode !== 200) throw new Error('餐食反馈暂未保存')
+}
+
+export async function previewMeals(payload: { meal_type: string; location?: PetChatLocation; radius_km?: number; exclude_source_ids?: string[] }): Promise<DietRecommendationResult> {
+  const res = await authenticatedRequest('/api/diet/recommendations/preview', { method: 'POST', data: payload, timeout: 30000 })
   return res.data as DietRecommendationResult
 }
 

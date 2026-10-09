@@ -169,9 +169,20 @@
   }
 
   &__footer {
-    justify-content: center;
-    min-height: 32rpx;
+    justify-content: flex-end;
+    gap: 32rpx;
+    min-height: 64rpx;
     margin-top: 4rpx;
+  }
+
+  &__text-action {
+    display: flex;
+    align-items: center;
+    min-height: 64rpx;
+    padding: 0 10rpx;
+    color: #276d52;
+    font-size: 25rpx;
+    .iconfont { margin-left: 8rpx; font-size: 22rpx; }
   }
 
   &__dots {
@@ -282,6 +293,7 @@
   .meal-picks__skeleton { border-color: #34463a; background: #222f29; box-shadow: none; }
 
   .meal-picks__eyebrow,
+  .meal-picks__text-action,
   .meal-picks__source,
   .meal-picks__locate { color: #a4b5aa; }
 }

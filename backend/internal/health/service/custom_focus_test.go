@@ -55,10 +55,12 @@ func TestStrengthCustomFocusScoringUsesProteinEnergyAndTrainingEvidence(t *testi
 	scoring := buildCustomFocusScoringContext(comp, "力量提升")
 
 	assert.Equal(t, "strength", scoring.Category)
-	assert.Equal(t, "high", scoring.Confidence)
+	assert.Equal(t, "medium", scoring.Confidence)
+	assert.True(t, scoring.ScoreAvailable)
 	assert.Greater(t, scoring.Score, 80)
 	assert.Contains(t, strings.Join(scoring.Evidence, "|"), "g/kg")
-	assert.Contains(t, scoring.ScoreReason, "蛋白质30%")
+	assert.Contains(t, scoring.ScoreReason, "蛋白供给40%")
+	assert.Contains(t, scoring.Rubric, "未经临床验证")
 }
 
 func TestSkinCustomFocusScoringReportsMissingWaterAndDirectEvidence(t *testing.T) {
@@ -81,14 +83,17 @@ func TestSkinCustomFocusScoringReportsMissingWaterAndDirectEvidence(t *testing.T
 
 	assert.Equal(t, "skin", scoring.Category)
 	assert.Equal(t, "low", scoring.Confidence)
-	assert.Contains(t, strings.Join(scoring.MissingEvidence, "|"), "连续饮水记录")
-	assert.Contains(t, strings.Join(scoring.MissingEvidence, "|"), "皮肤照片")
+	assert.False(t, scoring.ScoreAvailable)
+	assert.Equal(t, "unmeasured_goal", scoring.ScoreKind)
+	assert.Contains(t, strings.Join(scoring.MissingEvidence, "|"), "专项评分方法")
+	assert.Contains(t, scoring.ScoreReason, "不直接加分")
 }
 
 func TestFallbackCustomFocusCardPayload(t *testing.T) {
 	comp := buildScreenshotLikeComputation()
 	payload := fallbackCustomFocusCardPayload(comp, "控尿酸")
-	assert.Greater(t, payload.Score, 0)
+	assert.Zero(t, payload.Score)
+	assert.False(t, buildCustomFocusScoringContext(comp, "控尿酸").ScoreAvailable)
 	assert.Contains(t, payload.Summary, "控尿酸")
 }
 
@@ -167,11 +172,11 @@ func TestGenerateCustomFocusCard_UnchangedDataStillConsumesCreditAfterSuccess(t 
 
 	assert.Equal(t, first.Score, second.Score)
 	assert.Equal(t, 2, guard.consumeCalls)
-	require.NotNil(t, second.PreviousScore)
-	require.NotNil(t, second.ScoreChange)
-	assert.Equal(t, first.Score, *second.PreviousScore)
-	assert.Zero(t, *second.ScoreChange)
-	assert.Contains(t, second.ChangeReason, "数据快照与上次一致")
+	require.NotNil(t, second.ScoreAvailable)
+	assert.False(t, *second.ScoreAvailable, "两天记录且没有体重/训练证据，不能虚构支持分")
+	assert.Nil(t, second.PreviousScore)
+	assert.Nil(t, second.ScoreChange)
+	assert.Contains(t, second.ChangeReason, "暂不评分")
 }
 
 func TestStartCustomFocusCardGenerationPersistsTaskBeforePublishing(t *testing.T) {
@@ -217,8 +222,8 @@ func TestStartCustomFocusCardGenerationPersistsTaskBeforePublishing(t *testing.T
 }
 
 func TestCustomFocusChangeKeepsHistoryWhenScoreDoesNotMove(t *testing.T) {
-	previous := &domain.CustomFocusCard{Score: 58, DataFingerprint: "same"}
-	scoring := customFocusScoringContext{Score: 58}
+	previous := &domain.CustomFocusCard{Score: 58, DataFingerprint: "same", Meta: map[string]any{"scoring_version": customFocusScoringVersion}}
+	scoring := customFocusScoringContext{Score: 58, ScoreAvailable: true}
 
 	previousScore, delta, reason := customFocusChange(previous, "same", scoring)
 
@@ -263,5 +268,7 @@ func TestAttachCustomRiskCards(t *testing.T) {
 	require.Len(t, idx.CustomRiskCards, 1)
 	assert.Equal(t, "custom:f1", idx.CustomRiskCards[0].Key)
 	assert.NotNil(t, idx.CustomFocusMeta)
-	assert.NotEqual(t, computeHealthIndex(comp, "week").OverallScore, idx.OverallScore)
+	assert.Equal(t, computeHealthIndex(comp, "week").OverallScore, idx.OverallScore)
+	require.NotNil(t, idx.CustomRiskCards[0].ScoreAvailable)
+	assert.False(t, *idx.CustomRiskCards[0].ScoreAvailable, "旧评分不参与新口径总分")
 }

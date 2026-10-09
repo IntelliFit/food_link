@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
 import { restoreRiskFocusKeys } from './risk-focus-preference'
+import { showDietDecisionEvidence } from '../../utils/diet-decision-evidence'
 import {
   getStatsSummary,
   generateStatsInsight,
@@ -1208,15 +1209,19 @@ function StatsPage() {
     })
     .filter((card): card is RiskCard => Boolean(card))
   const isPendingRiskCard = (card: RiskCard) => Boolean(card.is_custom && !customRiskCards.some(item => item.key === card.key))
+  const hasRiskScore = (card: RiskCard) => !isPendingRiskCard(card) && card.score_available !== false
   const hasVisibleCustomFocus = visibleRiskCards.some(card => card.is_custom)
   const focusOverallScore = overallRiskScore
   const focusProjectedScore = projectedOverallScore
   const focusOverviewCopy = scoreToFocusOverview(focusOverallScore, hasVisibleCustomFocus)
   const focusScoreHint = hasVisibleCustomFocus
-    ? '按全部核心指标与自定义 AI 指标综合计算'
-    : '按全部核心关注指标综合计算'
+    ? '仅纳入可评分的支持参考；旧专项分已停用，不代表身体变化'
+    : '基于已记录数据的应用参考，不代表身体健康评分'
   const topIssues = healthIndex?.top_issues ?? []
-  const actionList = healthIndex?.action_list ?? []
+  const actionList = Array.from(new Set([
+    ...(d.diet_decision_basis?.food_group_priorities?.length ? d.diet_decision_basis.actions : []),
+    ...(healthIndex?.action_list ?? []),
+  ]))
   const toggleSection = (key: string) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -1329,7 +1334,7 @@ function StatsPage() {
                 </View>
                 <View className='risk-overview-records'>
                   <Text className='risk-overview-record-days'>已记录 {recordedDays} 天</Text>
-                  <Text className='risk-overview-record-caption'>基于全部关注指标</Text>
+                  <Text className='risk-overview-record-caption'>基于可评分的记录</Text>
                 </View>
               </View>
               {overviewExpanded ? <View className='risk-overview-expanded'>
@@ -1367,6 +1372,10 @@ function StatsPage() {
             )
           }) : <Text className='stats-empty-copy'>暂无额外调整建议，继续记录即可。</Text>}
           {actionList.length > 2 ? <View className='stats-text-action' onClick={() => setActionsExpanded(value => !value)}><Text>{actionsExpanded ? '收起' : `展开全部 ${actionList.length} 项`}</Text><Text className='iconfont icon-right-arrow' /></View> : null}
+          {d.diet_decision_basis ? <View className='stats-decision-actions'>
+            <View className='stats-text-action' onClick={() => void showDietDecisionEvidence(d.diet_decision_basis!).catch(() => {})}><Text>查看依据</Text></View>
+            <View className='stats-text-action' onClick={() => void Taro.switchTab({ url: '/pages/index/index' })}><Text>看看下一餐</Text><Text className='iconfont icon-right-arrow' /></View>
+          </View> : null}
         </View>
         <View className='risk-section-header'>
           <Text className='risk-section-title'>我的关注</Text>
@@ -1395,7 +1404,7 @@ function StatsPage() {
               <Text className='risk-card-title'>{card.title}</Text>
               {card.is_custom ? (
                 <View className='risk-card-ai-badge-row'>
-                  <Text className='risk-card-ai-badge'>饮食支持度</Text>
+                  <Text className='risk-card-ai-badge'>{card.score_available === false ? '支持建议' : '支持参考'}</Text>
                   <Text className='risk-card-ai-confidence'>{customFocusConfidenceLabel(card.confidence)}</Text>
                   {customFocusRefreshingKey === card.key ? (
                     <Text className='iconfont icon-jiazaixiao risk-card-ai-refresh-spinner' />
@@ -1406,9 +1415,9 @@ function StatsPage() {
               ) : null}
               <Text className='risk-card-summary'>{card.brief}</Text>
               </View>
-              <View className={`risk-card-score-wrap tone-${isPendingRiskCard(card) ? 'pending' : scoreToTone(card.score)}`}>
-                <Text className='risk-card-score'>{isPendingRiskCard(card) ? '—' : card.score}</Text>
-                {!isPendingRiskCard(card) ? <Text className='risk-card-score-unit'>分</Text> : null}
+              <View className={`risk-card-score-wrap tone-${hasRiskScore(card) ? scoreToTone(card.score) : 'pending'}`}>
+                <Text className='risk-card-score'>{hasRiskScore(card) ? card.score : '—'}</Text>
+                {hasRiskScore(card) ? <Text className='risk-card-score-unit'>分</Text> : null}
               </View>
               <Text className='iconfont icon-right-arrow risk-card-chevron' />
             </View>
@@ -1510,12 +1519,12 @@ function StatsPage() {
                 <View className='risk-detail-title-row'>
                   <Text className='risk-detail-title'>{riskDetailModal.card.title}</Text>
                   {riskDetailModal.card.is_custom ? (
-                    <Text className='risk-detail-ai-badge'>饮食支持度</Text>
+                    <Text className='risk-detail-ai-badge'>{riskDetailModal.card.score_available === false ? '支持建议' : '支持参考'}</Text>
                   ) : null}
                 </View>
                 <View className='risk-detail-score-row'>
-                  <Text className='risk-detail-score'>{isPendingRiskCard(riskDetailModal.card) ? '—' : riskDetailModal.card.score}</Text>
-                  {!isPendingRiskCard(riskDetailModal.card) ? <>
+                  <Text className='risk-detail-score'>{hasRiskScore(riskDetailModal.card) ? riskDetailModal.card.score : '—'}</Text>
+                  {hasRiskScore(riskDetailModal.card) ? <>
                   <Text className='risk-detail-score-unit'>分</Text>
                   <View className={`risk-detail-badge tone-${riskDetailModal.card.tone}`}>
                     <Text className='risk-detail-badge-text'>{scoreToLabel(riskDetailModal.card.score)}</Text>
@@ -1577,7 +1586,7 @@ function StatsPage() {
                     <Text className='risk-detail-section-text'>{riskDetailModal.card.missing_evidence!.join('、')}</Text>
                   </>
                 ) : null}
-                {!isPendingRiskCard(riskDetailModal.card) ? <View className='risk-detail-delta'>
+                {hasRiskScore(riskDetailModal.card) && !riskDetailModal.card.is_custom ? <View className='risk-detail-delta'>
                   <Text className='risk-detail-delta-text'>饮食参考分预计可提升 {riskDetailModal.card.delta} 分，并非实际健康结果。</Text>
                 </View> : null}
                 {riskDetailModal.card.is_custom && riskDetailModal.card.needs_refresh ? (

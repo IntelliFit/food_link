@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Image, Swiper, SwiperItem, Text, View } from '@tarojs/components'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
-import { getAccessToken, getFoodRecordById, getPublicFoodLibraryItem, previewMeals, type DietRecommendationOption, type DietRecommendationResult } from '../../../utils/api'
+import { getAccessToken, getFoodRecordById, getPublicFoodLibraryItem, previewMeals, recordMealRecommendationFeedback, type DietRecommendationOption, type DietRecommendationResult } from '../../../utils/api'
+import { showDietDecisionEvidence } from '../../../utils/diet-decision-evidence'
 import { currentMealLocation, rememberMealLocation } from '../../../utils/meal-location'
 import { ensureWeappPrivacyAuthorized } from '../../../utils/weapp-privacy'
 import { mealSource, mealTitle } from '../../../utils/meal-presentation'
@@ -23,6 +24,10 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
   const [selected, setSelected] = useState(0)
   const [photos, setPhotos] = useState<Record<string, string>>({})
   const [failedPhotos, setFailedPhotos] = useState<Record<string, boolean>>({})
+	const [pageVisible, setPageVisible] = useState(true)
+	const [inViewport, setInViewport] = useState(false)
+	const excluded = useRef<{ scope: string; ids: string[] }>({ scope: '', ids: [] })
+	const swapping = useRef(false)
   const sequence = useRef(0)
   const visible = useRef(true)
   const owner = getAccessToken() || ''
@@ -53,7 +58,9 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
         }
       }
       if (token !== getAccessToken() || seq !== sequence.current) return
-      const data = await previewMeals({ meal_type: mealType, location })
+      const scope = `${token}:${new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10)}:${mealType}`
+      if (excluded.current.scope !== scope) excluded.current = { scope, ids: [] }
+      const data = await previewMeals({ meal_type: mealType, location, radius_km: 5, exclude_source_ids: excluded.current.ids })
       if (token !== getAccessToken() || seq !== sequence.current || !visible.current) return
       setSnapshot({ owner: token, result: data })
       setSelected(0)
@@ -83,14 +90,53 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
   }, [mealType])
 
   useEffect(() => { void load(); return () => { sequence.current += 1 } }, [load, refreshKey, owner])
-  useDidShow(() => { visible.current = true; void load() })
-  useDidHide(() => { visible.current = false; sequence.current += 1 })
+  useDidShow(() => { visible.current = true; setPageVisible(true); void load() })
+  useDidHide(() => { visible.current = false; setPageVisible(false); setInViewport(false); sequence.current += 1 })
   const options = (result?.recommendations || []).slice(0, 3)
   const option = options[selected] || options[0]
   const selectedPhoto = option && !failedPhotos[option.source_id || ''] && (option.image_path || photos[option.source_id || ''])
 
+  useEffect(() => {
+    setInViewport(false)
+    if (!pageVisible || busy || !result?.recommendation_id) return
+    const page = Taro.getCurrentInstance().page
+    if (!page) return
+    const observer = Taro.createIntersectionObserver(page, { thresholds: [0, 0.5] })
+    observer.relativeToViewport().observe('#next-meal-recommendations', entry => setInViewport((entry.intersectionRatio || 0) >= 0.5))
+    return () => observer.disconnect()
+  }, [pageVisible, busy, result?.recommendation_id])
+
+  useEffect(() => {
+    const runId = result?.recommendation_id
+    const key = option?.option_key
+    if (!pageVisible || !inViewport || busy || !runId || !key) return
+    const timer = setTimeout(() => {
+      if (owner !== getAccessToken() || !visible.current) return
+      void recordMealRecommendationFeedback({ run_id: runId, option_keys: [key], action: 'shown' }).catch(() => {})
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [pageVisible, inViewport, busy, result?.recommendation_id, option?.option_key, owner])
+
+  const adjust = (item: DietRecommendationOption) => {
+    if (result?.recommendation_id && item.option_key) void recordMealRecommendationFeedback({ run_id: result.recommendation_id, option_keys: [item.option_key], action: 'selected' }).catch(() => {})
+    onAdjust(item)
+  }
+
+  const swap = async () => {
+    if (busy || swapping.current || !options.length) return
+    swapping.current = true
+    setBusy(true)
+    const token = getAccessToken()
+    const keys = options.map(item => item.option_key).filter((key): key is string => !!key)
+    excluded.current.ids = Array.from(new Set([...excluded.current.ids, ...options.map(item => item.source_id).filter((id): id is string => !!id)])).slice(-60)
+    try {
+      if (result?.recommendation_id && keys.length) await recordMealRecommendationFeedback({ run_id: result.recommendation_id, option_keys: keys, action: 'skip' }).catch(() => {})
+      if (token === getAccessToken() && visible.current) await load()
+    } finally { swapping.current = false }
+  }
+
   return (
-    <View className='meal-picks'>
+    <View id='next-meal-recommendations' className='meal-picks'>
       <View className='meal-picks__head'>
         <View className='meal-picks__heading-copy'>
           <Text className='meal-picks__kicker'>{mealName}吃这个</Text>
@@ -122,7 +168,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
                       <Text className='meal-picks__source'>{mealSource(item).replace(/ · 直线 [\d.]+ km$/, '')}</Text>
                     </View>
                     {item.distance_km != null ? <View className='meal-picks__fit'><Text className='iconfont icon-dizhi' /><Text>直线 {item.distance_km.toFixed(1)} km</Text></View> : null}
-                    <View className='meal-picks__cta' onClick={() => onAdjust(item)}>
+                    <View className='meal-picks__cta' onClick={() => adjust(item)}>
                       <Text>聊聊这餐</Text>
                       <Text className='iconfont icon-right-arrow' />
                     </View>
@@ -135,6 +181,10 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
       ) : <View className='meal-picks__empty'><Text onClick={() => void load()}>{error || '暂时没找到合适的餐食'}</Text><View className='meal-picks__cta' onClick={() => onAdjust()}><Text>聊聊想吃什么</Text><Text className='iconfont icon-right-arrow' /></View></View>}
       {!busy && (
         <>
+          {!!option && /^foodlink-diet-decision-v[23](?:\.|$)/.test(result?.decision_engine_version || '') && <View className='meal-picks__footer'>
+            {result?.decision_basis ? <View className='meal-picks__text-action' aria-role='button' onClick={() => void showDietDecisionEvidence(result.decision_basis!, option.reason, { result, option }).catch(() => {})}><Text>为什么推荐</Text></View> : null}
+            <View className='meal-picks__text-action' aria-role='button' onClick={() => void swap()}><Text>换一组</Text><Text className='iconfont icon-right-arrow' /></View>
+          </View>}
           {!!error && !!option && <Text className='meal-picks__error'>{error}</Text>}
         </>
       )}

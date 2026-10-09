@@ -42,6 +42,8 @@ type SignalChip struct {
 
 // RiskCard 风险卡片
 type RiskCard struct {
+	ScoreAvailable  *bool    `json:"score_available,omitempty"`
+	ScoringVersion  string   `json:"scoring_version,omitempty"`
 	Key             string   `json:"key"`
 	Title           string   `json:"title"`
 	Score           int      `json:"score"`
