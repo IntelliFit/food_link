@@ -10,6 +10,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/user/service"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -380,15 +381,17 @@ func (h *UserHandler) AcknowledgeHealthDisclaimer(c *gin.Context) {
 }
 
 func (h *UserHandler) DeleteAccount(c *gin.Context) {
+	logUserAPI(c, "收到注销账号请求")
 	var input struct {
 		Confirmation string `json:"confirmation"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
-		response.Error(c, err)
+		logger.Warn(c.Request.Context(), "注销账号请求格式错误", slog.String("user_id", c.GetString(authmw.ContextUserIDKey)))
 		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "请准确输入“注销账号”以确认操作", HTTPStatus: http.StatusBadRequest})
 		return
 	}
 	if strings.TrimSpace(input.Confirmation) != "注销账号" {
+		logger.Warn(c.Request.Context(), "注销账号确认信息不匹配", slog.String("user_id", c.GetString(authmw.ContextUserIDKey)))
 		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "请准确输入“注销账号”以确认操作", HTTPStatus: http.StatusBadRequest})
 		return
 	}

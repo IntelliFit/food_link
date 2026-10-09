@@ -10,8 +10,8 @@ type ExpiryItem struct {
 	Category     string     `gorm:"column:category" json:"category"`
 	StorageType  string     `gorm:"column:storage_type" json:"storage_type"`
 	QuantityNote *string    `gorm:"column:quantity_note" json:"quantity_note"`
-	ExpireDate   time.Time  `gorm:"column:expire_date" json:"expire_date"`
-	OpenedDate   *time.Time `gorm:"column:opened_date" json:"opened_date"`
+	ExpireDate   time.Time  `gorm:"column:expire_date;type:date" json:"expire_date"`
+	OpenedDate   *time.Time `gorm:"column:opened_date;type:date" json:"opened_date"`
 	Note         *string    `gorm:"column:note" json:"note"`
 	SourceType   string     `gorm:"column:source_type" json:"source_type"`
 	Status       string     `gorm:"column:status" json:"status"` // active, consumed, discarded
