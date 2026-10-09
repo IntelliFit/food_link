@@ -58,7 +58,7 @@ func TestReviewMergeUpdatesExplicitTarget(t *testing.T) {
 	target := foodrecorddomain.FoodNutrition{
 		ID: uuid.NewString(), CanonicalName: "鸡蛋", NormalizedName: "鸡蛋", KcalPer100g: 100,
 		ImagePaths: []string{}, QualityTier: foodrecorddomain.NutritionQualityUnreviewed,
-		QualityEvidence: map[string]any{}, IsActive: true,
+		QualityEvidence: map[string]any{}, StateTags: []string{}, IsActive: true,
 	}
 	require.NoError(t, repo.db.Create(&target).Error)
 	item := pendingContribution()
@@ -77,7 +77,7 @@ func TestReviewMergeDoesNotDowngradeLegacyCuratedProvenance(t *testing.T) {
 	target := foodrecorddomain.FoodNutrition{
 		ID: uuid.NewString(), CanonicalName: "鸡蛋", NormalizedName: "鸡蛋", KcalPer100g: 100,
 		Source: "legacy_editorial", QualityTier: foodrecorddomain.NutritionQualityLegacyCurated,
-		QualityEvidence: map[string]any{"batch": "legacy"}, ImagePaths: []string{}, IsActive: true,
+		QualityEvidence: map[string]any{"batch": "legacy"}, ImagePaths: []string{}, StateTags: []string{}, IsActive: true,
 	}
 	require.NoError(t, repo.db.Create(&target).Error)
 	item := pendingContribution()
@@ -98,7 +98,7 @@ func TestReviewMergeRejectsAuthoritativeTarget(t *testing.T) {
 	target := foodrecorddomain.FoodNutrition{
 		ID: uuid.NewString(), CanonicalName: "鸡蛋", NormalizedName: "鸡蛋", KcalPer100g: 100,
 		Source: "official", QualityTier: foodrecorddomain.NutritionQualityAuthoritative,
-		QualityEvidence: map[string]any{}, ImagePaths: []string{}, IsActive: true,
+		QualityEvidence: map[string]any{}, ImagePaths: []string{}, StateTags: []string{}, IsActive: true,
 	}
 	require.NoError(t, repo.db.Create(&target).Error)
 	item := pendingContribution()

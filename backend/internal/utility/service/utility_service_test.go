@@ -53,6 +53,7 @@ func TestManualFoodService_Browse(t *testing.T) {
 	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
 		ID:             "n1",
 		CanonicalName:  "香蕉",
+		QualityTier:    fooddomain.NutritionQualityAuthoritative,
 		NormalizedName: "香蕉",
 		KcalPer100g:    89,
 		ProteinPer100g: 1.1,
@@ -91,6 +92,7 @@ func TestManualFoodService_Search(t *testing.T) {
 	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
 		ID:             "n1",
 		CanonicalName:  "苹果",
+		QualityTier:    fooddomain.NutritionQualityAuthoritative,
 		NormalizedName: "苹果",
 		KcalPer100g:    52,
 		ProteinPer100g: 0.3,

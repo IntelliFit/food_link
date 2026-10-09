@@ -88,7 +88,12 @@ INSERT INTO membership_plan_config (
   sort_order
 ) VALUES
 ('light_monthly', '轻享月卡', 19.9, 1, true, 'E2E light plan', 'light', 'monthly', 10, 29.9, 1),
-('standard_monthly', '标准月卡', 39.9, 1, true, 'E2E standard plan', 'standard', 'monthly', 30, 59.9, 2);
+('standard_monthly', '标准月卡', 39.9, 1, true, 'E2E standard plan', 'standard', 'monthly', 30, 59.9, 2)
+ON CONFLICT (code) DO UPDATE SET
+  name=EXCLUDED.name, amount=EXCLUDED.amount, duration_months=EXCLUDED.duration_months,
+  is_active=EXCLUDED.is_active, description=EXCLUDED.description, tier=EXCLUDED.tier,
+  period=EXCLUDED.period, daily_credits=EXCLUDED.daily_credits,
+  original_amount=EXCLUDED.original_amount, sort_order=EXCLUDED.sort_order;
 
 INSERT INTO user_pro_memberships (
   user_id,
