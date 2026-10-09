@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>六路模型对比 · FoodLink</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<main>
+  <header><span class="brand">FOODLINK / 模型对比</span><span class="pill">6 路 · Gemini 3.5 / 3.7 Flash / 3 Flash Preview</span></header>
+  <section class="intro"><h1>同一个问题，六份原始回答。</h1><p>问题和回答要求由你定。可只问文字，也可附同一张照片；这里不改写、不打分、不自动回退。</p></section>
+  <section class="workspace">
+    <div id="drop" class="upload">
+      <div id="empty"><span class="upload-icon" aria-hidden="true">＋</span><h2>可选：拖入一张实物照片</h2><p>原图发送，不压缩 · JPEG / PNG / WebP · 最大 8MiB</p></div>
+      <img id="preview" alt="本次比较的原图" hidden>
+      <label class="pick" for="image">选择图片</label><input id="image" type="file" accept="image/jpeg,image/png,image/webp" aria-label="上传实物照片" disabled>
+      <div id="image-info"></div>
+      <button id="clear-image" class="secondary" hidden>移除图片</button>
+    </div>
+    <div class="controls">
+      <div class="eyebrow">你来出题</div>
+      <label for="prompt">六路收到的同一句话 / 回答要求</label><textarea id="prompt" rows="5" maxlength="10000" placeholder="在这里填写你想问的问题，以及希望它们怎样回答。本工具不加系统提示词。" disabled></textarea>
+      <p class="privacy">万界方舟 3.5 Flash / 3 Flash Preview；OpenLux 3.7 Flash / 3 Flash Preview；A6 3.7 Flash / 3 Flash Preview。不使用 3.6 或 Lite。点开始后六路同时请求，谁先完成谁先显示。一次比较共 6 次供应商调用，可能计费。</p>
+      <p class="privacy">请避开人脸、银行卡和个人资料。不会写入饮食记录、上传到项目图床或扣 FoodLink 积分。</p>
+      <div class="actions"><button id="repeat" disabled>开始对比</button><button id="cancel" class="secondary" disabled>停止本次</button><button id="export" class="secondary" disabled>导出结果</button></div>
+      <p id="notice" role="status" aria-live="polite">填问题或选择图片，点击开始才发送。</p>
+      <details id="settings"><summary>调用格式与原图路径备注</summary>
+        <label for="protocol">六路统一协议</label><select id="protocol"><option value="native">Gemini 原生（默认）</option><option value="compat">OpenAI 兼容（单独对照）</option></select>
+        <label for="original-path">原图路径备注（可选，仅供你核对）</label><input id="original-path" type="text" placeholder="例如 D:\照片\晚餐.jpg">
+        <p>浏览器不会透露本地完整路径，可自行备注。OpenLux 显式使用已验证的“成功率优先”路由，两种协议均如此；万界 / A6 使用渠道默认路由。每路最多90秒，无自动重试或回退。</p>
+      </details>
+    </div>
+  </section>
+  <section id="results" class="results" aria-label="六路原始回答"></section>
+  <footer>本工具只发送你的问题和原图，不加系统提示词；中转站可能另加指令，这里无法保证或去除。显示的是网关原始结果，不经过营养库修正。返回型号和用量由渠道自报，不能证明底层模型身份。耗时是本机直调，不含手机上传、线上排队及后处理。</footer>
+</main>
+</body></html>
