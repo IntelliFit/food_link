@@ -10,6 +10,8 @@ import {
   communityUnlike,
   deleteCirclePost,
   deleteExerciseLog,
+  deleteSupplementIntake,
+  communityHideFeed,
   deleteFoodRecord,
   deletePublicFoodLibraryItem,
   showUnifiedApiError,
@@ -29,6 +31,8 @@ import { FeedActionSheet, type FeedActionSheetAction } from '../../../pages/comm
 import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
 import { ExerciseActivityCards, hasExerciseActivityCards } from '../../../pages/community/components/ExerciseActivityCards'
 import { FeedImageGrid } from '../../../pages/community/components/FeedImageGrid'
+import { SupplementFeedCard } from '../../../pages/community/components/SupplementFeedCard'
+import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
 import {
   extractManualFoodDisplayItems,
   shouldRenderManualFoodCards,
@@ -88,7 +92,7 @@ function pickRecordId(options: RouteOptions): string {
   return String(options.targetId || options.target_id || options.recordId || options.record_id || options.id || '').trim()
 }
 
-const VALID_TARGET_TYPES: CommunityFeedTargetType[] = ['food_record', 'exercise_log', 'circle_post', 'campus_food']
+const VALID_TARGET_TYPES: CommunityFeedTargetType[] = ['food_record', 'exercise_log', 'circle_post', 'campus_food', 'supplement_intake']
 
 function pickTargetType(options: RouteOptions): CommunityFeedTargetType {
   const raw = (options.targetType || options.target_type || 'food_record') as string
@@ -520,6 +524,7 @@ export function InteractionFeedDetailPage() {
 
   const handleViewDetail = useCallback((id: string) => {
     if (!id) return
+    if (targetType === 'supplement_intake') return
     if (targetType === 'exercise_log') {
       const dateText = String(feedItem?.record?.record_time || feedItem?.record?.created_at || '').slice(0, 10)
       Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}` })
@@ -558,6 +563,8 @@ export function InteractionFeedDetailPage() {
         await deleteFoodRecord(tid)
       } else if (ttype === 'exercise_log') {
         await deleteExerciseLog(tid)
+      } else if (ttype === 'supplement_intake') {
+        await deleteSupplementIntake(tid)
       } else if (ttype === 'campus_food') {
         await deletePublicFoodLibraryItem(tid)
       }
@@ -580,7 +587,8 @@ export function InteractionFeedDetailPage() {
     if (ttype === 'circle_post' || ttype === 'food_record' || ttype === 'exercise_log' || ttype === 'campus_food') {
       actions.push({ id: 'edit', label: '编辑', iconClass: 'icon-edit', color: '#10b981' })
     }
-    actions.push({ id: 'delete', label: '删除', iconClass: 'icon-shanchu', danger: true })
+    if (ttype === 'supplement_intake') actions.push({ id: 'hide', label: '从圈子隐藏', iconClass: 'icon-close' })
+    actions.push({ id: 'delete', label: ttype === 'supplement_intake' ? '删除服用记录' : '删除', iconClass: 'icon-shanchu', danger: true })
     return actions
   }, [feedItem])
 
@@ -606,6 +614,19 @@ export function InteractionFeedDetailPage() {
     }
     if (id === 'delete') {
       void handleDeleteFeedItem()
+    }
+    if (id === 'hide' && ttype === 'supplement_intake') {
+      void Taro.showModal({ title: '从圈子隐藏', content: '隐藏这条动态？补剂服用记录仍会保留。' }).then(async ({ confirm }) => {
+        if (!confirm) return
+        try {
+          await communityHideFeed(tid, ttype)
+          Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+          Taro.showToast({ title: '已隐藏', icon: 'success' })
+          Taro.navigateBack()
+        } catch (error) {
+          await showUnifiedApiError(error, '隐藏失败')
+        }
+      })
     }
   }, [feedItem, handleDeleteFeedItem])
 
@@ -654,6 +675,7 @@ export function InteractionFeedDetailPage() {
               {(() => {
                 const exercise = isExerciseFeed(feedItem)
                 const isCirclePost = isCirclePostFeed(feedItem)
+                const isSupplement = getFeedTargetType(feedItem) === 'supplement_intake'
                 const feedTime = String(feedItem.record.record_time || feedItem.record.created_at || '')
                 const exerciseTitle = feedItem.record.exercise_type || '运动打卡'
                 const exerciseDesc = feedItem.record.exercise_desc || feedItem.record.description || ''
@@ -662,11 +684,11 @@ export function InteractionFeedDetailPage() {
                 const circlePostText = circlePostTitle || circlePostBody
 	                const exerciseKcal = Number(feedItem.record.calories_burned ?? feedItem.record.total_calories ?? 0)
 	                const detailTargetKey = `${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`
-	                const isManualRecord = !exercise && !isCirclePost && shouldRenderManualFoodCards(feedItem.record)
+	                const isManualRecord = !exercise && !isCirclePost && !isSupplement && shouldRenderManualFoodCards(feedItem.record)
 	                const manualFoodItems = isManualRecord ? extractManualFoodDisplayItems(feedItem.record.items) : []
 	                const useExerciseActivityCards = exercise && hasExerciseActivityCards(feedItem.record.exercise_items)
 	                const visibleManualFoodItems = manualFoodsExpanded ? manualFoodItems : manualFoodItems.slice(0, INITIAL_VISIBLE_MANUAL_FOODS)
-                    const detailImagePaths = !isManualRecord && !useExerciseActivityCards
+                    const detailImagePaths = !isSupplement && !isManualRecord && !useExerciseActivityCards
                       ? collectFoodDisplayImageUrls(feedItem.record)
                       : []
                 return (
@@ -694,10 +716,11 @@ export function InteractionFeedDetailPage() {
                     <View className='feed-card-name-block'>
                       <Text className='user-name'>{feedItem.is_mine ? '我' : feedItem.author.nickname}</Text>
                       <Text className='post-time'>
-                        {isCirclePost ? `自定义动态 · ${formatFeedTime(feedTime)}` : exercise ? `运动打卡 · ${formatFeedTime(feedTime)}` : `${MEAL_NAMES[feedItem.record.meal_type] || feedItem.record.meal_type} · ${formatFeedTime(feedTime)}`}
+                        {isSupplement ? `补剂记录 · ${formatFeedTime(feedTime)}` : isCirclePost ? `自定义动态 · ${formatFeedTime(feedTime)}` : exercise ? `运动打卡 · ${formatFeedTime(feedTime)}` : `${MEAL_NAMES[feedItem.record.meal_type] || feedItem.record.meal_type} · ${formatFeedTime(feedTime)}`}
                       </Text>
                     </View>
-                    {!isCirclePost && (exercise ? (
+                    {isSupplement && <SupplementFeedCard record={feedItem.record} showAll />}
+                    {!isCirclePost && !isSupplement && (exercise ? (
                       <View className='feed-tags'>
                         <Text className='feed-tag'>{exerciseTitle}</Text>
                       </View>
@@ -711,7 +734,7 @@ export function InteractionFeedDetailPage() {
                         {circlePostTitle ? <Text className='feed-circle-post-title'>{circlePostTitle}</Text> : null}
                         {circlePostBody ? <Text className='feed-content feed-circle-post-body'>{circlePostBody}</Text> : null}
                       </>
-	                    ) : !useExerciseActivityCards && (exercise ? exerciseDesc : feedItem.record.description) ? (
+	                    ) : !isSupplement && !useExerciseActivityCards && (exercise ? exerciseDesc : feedItem.record.description) ? (
 	                      exercise
 	                        ? renderCollapsibleFeedText(`${detailTargetKey}-desc`, exerciseDesc)
 	                        : <Text className='feed-content'>{feedItem.record.description}</Text>
@@ -769,7 +792,7 @@ export function InteractionFeedDetailPage() {
                       )
                     })()}
 
-                    {!isCirclePost && (
+                    {!isCirclePost && !isSupplement && (
                       <View className='feed-meta'>
                         <View className='feed-calorie feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
                           <Text className='feed-calorie-num'>{(exercise ? exerciseKcal : Number(feedItem.record.total_calories || 0)).toFixed(0)}</Text>
@@ -786,7 +809,7 @@ export function InteractionFeedDetailPage() {
                     )}
 
                     {(() => {
-                      if (exercise) return null
+                      if (exercise || isSupplement) return null
                       const microRows = aggregateMicroNutrients(feedItem.record)
                       if (microRows.length === 0) return null
                       return (

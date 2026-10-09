@@ -11,6 +11,7 @@ import (
 	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	"food_link/backend/internal/nutrition"
 	"food_link/backend/internal/supplement/domain"
 	"food_link/backend/internal/supplement/repo"
@@ -24,6 +25,11 @@ var scheduleTimePattern = regexp.MustCompile(`^(?:[01]\d|2[0-3]):[0-5]\d$`)
 type SupplementService struct {
 	repo              *repo.SupplementRepo
 	labelVisionClient LabelVisionClient
+	contentSecurity   *contentsecurity.Service
+}
+
+func (s *SupplementService) ConfigureContentSecurity(checker *contentsecurity.Service) {
+	s.contentSecurity = checker
 }
 
 func NewSupplementService(repo *repo.SupplementRepo) *SupplementService {
@@ -184,6 +190,20 @@ func (s *SupplementService) Record(ctx context.Context, userID, itemID string, i
 		UserID: userID, SupplementID: item.ID, SupplementName: item.Name,
 		Servings: servings, ServingLabel: item.ServingLabel, ComponentsSnapshot: cloneComponents(item.Components),
 		TakenAt: takenAt, Source: source, Note: input.Note, IdempotencyKey: idempotencyKey,
+	}
+	if s.contentSecurity != nil {
+		// 动态只公开名称、剂量和成分快照；私人备注不发布。
+		if err := s.contentSecurity.CheckPublication(ctx, userID, 2, map[string]any{
+			"name": intake.SupplementName, "serving_label": intake.ServingLabel,
+			"components": intake.ComponentsSnapshot,
+		}, nil); err != nil {
+			if err == contentsecurity.ErrUnavailable {
+				logger.Error(ctx, "补剂动态内容审核不可用", err, slog.String("user_id", userID), slog.String("supplement_id", itemID))
+			} else {
+				logger.Warn(ctx, "补剂动态内容审核未通过", slog.String("user_id", userID), slog.String("supplement_id", itemID))
+			}
+			return nil, err
+		}
 	}
 	if err := s.repo.CreateIntake(ctx, intake); err != nil {
 		logger.Error(ctx, "记录补剂摄入失败", err, slog.String("user_id", userID), slog.String("supplement_id", itemID))

@@ -225,7 +225,7 @@ func (r *FeedReportRepo) DeleteFeedTargetContent(ctx context.Context, targetType
 	if target == nil {
 		return &commonerrors.AppError{Code: 10001, Message: "被举报内容不存在或已删除", HTTPStatus: 404}
 	}
-	if targetType != communityrepo.FeedTargetFoodRecord && targetType != communityrepo.FeedTargetExerciseLog {
+	if targetType != communityrepo.FeedTargetFoodRecord && targetType != communityrepo.FeedTargetExerciseLog && targetType != communityrepo.FeedTargetSupplementIntake {
 		return &commonerrors.AppError{Code: 10002, Message: "当前举报目标暂不支持直接删除", HTTPStatus: 400}
 	}
 	if err := r.feedRepo.HideFeedTarget(ctx, target.UserID, targetType, targetID); err != nil {
@@ -260,6 +260,10 @@ func (r *FeedReportRepo) GetTargetSnapshot(ctx context.Context, targetType, targ
 		AuthorID:  target.UserID,
 		CreatedAt: target.CreatedAt,
 		ImageURLs: target.ImagePaths,
+	}
+	if targetType == communityrepo.FeedTargetSupplementIntake {
+		snap.Title = target.SupplementName
+		snap.Description = fmt.Sprintf("本次服用：%g × %s", target.Servings, target.ServingLabel)
 	}
 	if target.Title != nil {
 		snap.Title = *target.Title

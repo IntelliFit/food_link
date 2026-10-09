@@ -76,6 +76,7 @@ type SupplementIntake struct {
 	Source             string      `gorm:"column:source" json:"source"`
 	Note               *string     `gorm:"column:note" json:"note,omitempty"`
 	IdempotencyKey     *string     `gorm:"column:idempotency_key" json:"-"`
+	HiddenFromFeed     bool        `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
 	CreatedAt          time.Time   `gorm:"column:created_at" json:"created_at"`
 }
 

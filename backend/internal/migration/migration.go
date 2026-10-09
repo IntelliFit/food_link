@@ -28,6 +28,29 @@ var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 const precisionSessionExecutionModeCheckExpression = `execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_separate'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`
 
+const feedTargetTypeCheckExpression = `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text,'campus_food'::text,'supplement_intake'::text])`
+
+// MigrateSupplementFeed updates only intake visibility and the existing feed
+// interaction constraints. Run before deploying supplement feed queries.
+func MigrateSupplementFeed(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if !tx.Migrator().HasColumn(&migrationdo.SupplementIntakeDO{}, "HiddenFromFeed") {
+			if err := tx.Migrator().AddColumn(&migrationdo.SupplementIntakeDO{}, "HiddenFromFeed"); err != nil {
+				return err
+			}
+		}
+		for _, table := range []string{"feed_likes", "feed_comments", "feed_interaction_notifications", "feed_reports"} {
+			if err := tx.Exec(dropAndAddCheck(table, table+"_target_type_check", feedTargetTypeCheckExpression)).Error; err != nil {
+				return fmt.Errorf("update %s feed target constraint: %w", table, err)
+			}
+		}
+		return nil
+	})
+}
+
 var growthPerformanceIndexes = []struct {
 	name       string
 	table      string
@@ -1093,14 +1116,14 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("user_custom_foods", "user_custom_foods_status_check", `status = ANY (ARRAY['active'::text,'deleted'::text])`),
 		dropAndAddCheck("user_custom_foods", "user_custom_foods_public_status_check", `public_status = ANY (ARRAY['private'::text,'pending'::text,'published'::text,'rejected'::text])`),
 		dropAndAddCheck("feed_interaction_notifications", "feed_interaction_notifications_type_check", `notification_type = ANY (ARRAY['like_received'::text,'comment_received'::text,'reply_received'::text,'comment_rejected'::text])`),
-		dropAndAddCheck("feed_likes", "feed_likes_target_type_check", `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text])`),
-		dropAndAddCheck("feed_comments", "feed_comments_target_type_check", `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text])`),
-		dropAndAddCheck("feed_interaction_notifications", "feed_interaction_notifications_target_type_check", `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text])`),
+		dropAndAddCheck("feed_likes", "feed_likes_target_type_check", feedTargetTypeCheckExpression),
+		dropAndAddCheck("feed_comments", "feed_comments_target_type_check", feedTargetTypeCheckExpression),
+		dropAndAddCheck("feed_interaction_notifications", "feed_interaction_notifications_target_type_check", feedTargetTypeCheckExpression),
 		dropAndAddCheck("comment_tasks", "comment_tasks_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text,'violated'::text])`),
 		dropAndAddCheck("comment_tasks", "comment_tasks_type_check", `comment_type = ANY (ARRAY['feed'::text,'public_food_library'::text])`),
 		dropAndAddCheck("feed_reports", "feed_reports_status_check", `status = ANY (ARRAY['pending'::text,'resolved'::text,'rejected'::text])`),
 		dropAndAddCheck("feed_reports", "feed_reports_reason_check", `reason = ANY (ARRAY['spam'::text,'porn'::text,'illegal'::text,'abuse'::text,'other'::text])`),
-		dropAndAddCheck("feed_reports", "feed_reports_target_type_check", `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text])`),
+		dropAndAddCheck("feed_reports", "feed_reports_target_type_check", feedTargetTypeCheckExpression),
 		dropAndAddCheck("food_expiry_items", "food_expiry_items_storage_type_check", `storage_type = ANY (ARRAY['room_temp'::text,'refrigerated'::text,'frozen'::text])`),
 		dropAndAddCheck("food_expiry_items", "food_expiry_items_source_type_check", `source_type = ANY (ARRAY['manual'::text,'ocr'::text,'ai'::text])`),
 		dropAndAddCheck("food_expiry_items", "food_expiry_items_status_check", `status = ANY (ARRAY['active'::text,'consumed'::text,'discarded'::text])`),

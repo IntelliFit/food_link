@@ -373,6 +373,7 @@ func New(cfg *config.Config) (*App, error) {
 	dashboardService := homeservice.NewDashboardService(userRepo, homeRepo, storageClient)
 	supplementRepo := supplementrepo.NewSupplementRepo(db)
 	supplementSvc := supplementservice.NewSupplementService(supplementRepo)
+	supplementSvc.ConfigureContentSecurity(contentSecurity)
 	if gemini35Client != nil {
 		supplementSvc.ConfigureLabelVisionClient(gemini35Client)
 	}

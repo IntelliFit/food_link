@@ -1013,6 +1013,7 @@ type SupplementIntakeDO struct {
 	Source             string           `gorm:"column:source;type:text;not null;default:'quick_log'"`
 	Note               *string          `gorm:"column:note;type:text"`
 	IdempotencyKey     *string          `gorm:"column:idempotency_key;type:text;uniqueIndex:idx_supplement_intakes_user_idempotency,priority:2,where:idempotency_key IS NOT NULL"`
+	HiddenFromFeed     bool             `gorm:"column:hidden_from_feed;type:boolean;not null;default:true"`
 	CreatedAt          time.Time        `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
 }
 

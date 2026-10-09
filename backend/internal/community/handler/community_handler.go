@@ -59,14 +59,17 @@ func (h *CommunityHandler) PublicFeed(c *gin.Context) {
 	params := parseFeedParams(c)
 	params.AuthorID = c.Query("author_id")
 	params.ViewerUserID = c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "进入公开动态圈", slog.String("user_id", params.ViewerUserID), slog.String("content_type", params.ContentType))
 	items, err := h.svc.PublicFeed(c.Request.Context(), params)
 	if err != nil {
+		logger.Error(c.Request.Context(), "获取公开动态失败", err, slog.String("user_id", params.ViewerUserID), slog.String("content_type", params.ContentType))
 		response.Error(c, err)
 		return
 	}
 	if items == nil {
 		items = []service.FeedItem{}
 	}
+	logger.Info(c.Request.Context(), "公开动态返回完成", slog.String("user_id", params.ViewerUserID), slog.Int("record_count", len(items)))
 	response.Success(c, gin.H{"list": items, "has_more": len(items) >= params.Limit})
 }
 
@@ -76,14 +79,17 @@ func (h *CommunityHandler) Feed(c *gin.Context) {
 	params.AuthorScope = c.Query("author_scope")
 	params.AuthorID = c.Query("author_id")
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "进入好友动态圈", slog.String("user_id", userID), slog.String("content_type", params.ContentType))
 	items, err := h.svc.FriendFeed(c.Request.Context(), userID, params)
 	if err != nil {
+		logger.Error(c.Request.Context(), "获取好友动态失败", err, slog.String("user_id", userID), slog.String("content_type", params.ContentType))
 		response.Error(c, err)
 		return
 	}
 	if items == nil {
 		items = []service.FeedItem{}
 	}
+	logger.Info(c.Request.Context(), "好友动态返回完成", slog.String("user_id", userID), slog.Int("record_count", len(items)))
 	response.Success(c, gin.H{"list": items, "has_more": len(items) >= params.Limit})
 }
 

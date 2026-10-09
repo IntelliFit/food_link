@@ -17,7 +17,7 @@ import { adminRequest } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 type FeedReportStatus = 'pending' | 'resolved' | 'rejected'
-type FeedReportTargetType = 'food_record' | 'exercise_log' | 'circle_post'
+type FeedReportTargetType = 'food_record' | 'exercise_log' | 'circle_post' | 'supplement_intake'
 
 type FeedReportItem = {
   id: string
@@ -75,6 +75,7 @@ const reasonLabels: Record<string, string> = {
 const targetTypeLabels: Record<string, string> = {
   food_record: '饮食记录',
   exercise_log: '运动记录',
+  supplement_intake: '补剂记录',
   circle_post: '圈子动态',
 }
 
@@ -510,7 +511,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
 }
 
 function canDeleteTargetContent(targetType: string) {
-  return targetType === 'circle_post' || targetType === 'food_record' || targetType === 'exercise_log'
+  return targetType === 'circle_post' || targetType === 'food_record' || targetType === 'exercise_log' || targetType === 'supplement_intake'
 }
 
 function defaultDeleteTargetResolutionNote(targetType: string) {

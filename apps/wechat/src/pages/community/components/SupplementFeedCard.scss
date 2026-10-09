@@ -1,0 +1,13 @@
+.supplement-feed-card { margin: 14rpx 0; padding: 22rpx; border: 1rpx solid #e0ede7; border-radius: 20rpx; background: #f5faf7; }
+.supplement-feed-card__head { display: flex; align-items: center; gap: 12rpx; }
+.supplement-feed-card__icon { color: #388868; font-size: 32rpx; }
+.supplement-feed-card__name { min-width: 0; flex: 1; font-size: 28rpx; font-weight: 600; color: #244e3b; word-break: break-all; }
+.supplement-feed-card__dose { display: block; margin-top: 12rpx; color: #537363; font-size: 24rpx; }
+.supplement-feed-card__components { margin-top: 16rpx; padding-top: 12rpx; border-top: 1rpx solid #e0ede7; }
+.supplement-feed-card__component { display: flex; justify-content: space-between; gap: 16rpx; margin-top: 6rpx; color: #64756c; font-size: 22rpx; }
+.supplement-feed-card__more { display: block; margin-top: 12rpx; color: #388868; font-size: 22rpx; }
+.fl-d .supplement-feed-card { background: #22362b; border-color: #3a5144; }
+.fl-d .supplement-feed-card__name { color: #d3eddd; }
+.fl-d .supplement-feed-card__dose, .fl-d .supplement-feed-card__component { color: #a8c3b3; }
+.fl-d .supplement-feed-card__components { border-color: #3a5144; }
+.fl-d .supplement-feed-card__more, .fl-d .supplement-feed-card__icon { color: #8dc7a7; }

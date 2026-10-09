@@ -26,6 +26,7 @@ import {
   deleteCirclePost,
   deleteFoodRecord,
   deleteExerciseLog,
+  deleteSupplementIntake,
   deletePublicFoodLibraryItem,
   showUnifiedApiError,
   type FriendSearchUser,
@@ -53,6 +54,7 @@ import { ExerciseActivityCards, hasExerciseActivityCards } from './components/Ex
 import { FeedReportSheet } from './components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedActionSheet'
 import { FeedImageGrid } from './components/FeedImageGrid'
+import { SupplementFeedCard } from './components/SupplementFeedCard'
 
 import { IconTrendingUp } from '../../components/iconfont'
 
@@ -110,6 +112,7 @@ const FEED_CONTENT_OPTIONS: Array<{ value: CommunityFeedContentType; label: stri
   { value: 'all', label: '全部内容' },
   { value: 'food_record', label: '饮食' },
   { value: 'exercise_log', label: '运动' },
+  { value: 'supplement_intake', label: '补剂' },
   { value: 'campus_food', label: '校园食堂' },
   { value: 'circle_post', label: '自定义' },
 ]
@@ -219,7 +222,7 @@ function readPendingCommunityNotificationTarget(): PendingCommunityNotificationT
 
     return {
       recordId,
-      targetType: parsed?.targetType === 'exercise_log' ? 'exercise_log' : 'food_record',
+      targetType: ['food_record', 'exercise_log', 'circle_post', 'campus_food', 'supplement_intake'].includes(parsed?.targetType) ? parsed.targetType : 'food_record',
       targetId: typeof parsed?.targetId === 'string' ? parsed.targetId.trim() : recordId,
       notificationType: typeof parsed?.notificationType === 'string' ? parsed.notificationType.trim() as PendingCommunityNotificationTarget['notificationType'] : '',
       commentId: typeof parsed?.commentId === 'string' ? parsed.commentId.trim() : '',
@@ -300,8 +303,8 @@ function buildFeedQueryParams(
   return {
     sort_by: sortBy,
     content_type: contentType,
-    meal_type: contentType === 'exercise_log' || contentType === 'campus_food' || mealType === 'all' ? undefined : mealType,
-    diet_goal: contentType === 'exercise_log' || contentType === 'campus_food' || dietGoal === 'all' ? undefined : dietGoal,
+    meal_type: contentType === 'exercise_log' || contentType === 'campus_food' || contentType === 'supplement_intake' || mealType === 'all' ? undefined : mealType,
+    diet_goal: contentType === 'exercise_log' || contentType === 'campus_food' || contentType === 'supplement_intake' || dietGoal === 'all' ? undefined : dietGoal,
     author_scope: authorId ? 'all' : authorScope,
     priority_author_ids: authorId ? undefined : (authorScope === 'priority' ? priorityAuthorIds : undefined),
     author_id: authorId || undefined,
@@ -1242,6 +1245,8 @@ function CommunityPage() {
         await deleteFoodRecord(targetId)
       } else if (targetType === 'exercise_log') {
         await deleteExerciseLog(targetId)
+      } else if (targetType === 'supplement_intake') {
+        await deleteSupplementIntake(targetId)
       } else if (targetType === 'campus_food') {
         await deletePublicFoodLibraryItem(targetId)
       }
@@ -1270,7 +1275,10 @@ function CommunityPage() {
     if (targetType === 'circle_post' || targetType === 'food_record' || targetType === 'exercise_log' || targetType === 'campus_food') {
       actions.push({ id: 'edit', label: '编辑', iconClass: 'icon-edit', color: '#10b981' })
     }
-    actions.push({ id: 'delete', label: '删除', iconClass: 'icon-shanchu', danger: true })
+    if (targetType === 'supplement_intake') {
+      actions.push({ id: 'hide', label: '从圈子隐藏', iconClass: 'icon-close' })
+    }
+    actions.push({ id: 'delete', label: targetType === 'supplement_intake' ? '删除服用记录' : '删除', iconClass: 'icon-shanchu', danger: true })
     return actions
   }, [feedActionSheet])
 
@@ -1334,6 +1342,9 @@ function CommunityPage() {
     if (id === 'delete') {
       void handleDeleteFeedItem(item)
     }
+    if (id === 'hide') {
+      void handleHideFeed(item)
+    }
   }
 
   const handleLike = async (item: CommunityFeedItem) => {
@@ -1383,7 +1394,7 @@ function CommunityPage() {
     if (hidingFeedIds.includes(targetKey)) return
     Taro.showModal({
       title: '删除动态',
-      content: `从圈子中删除这条动态？你的${targetType === 'exercise_log' ? '运动记录' : targetType === 'campus_food' ? '校园食堂记录' : '饮食记录'}不会被删除。`,
+      content: `从圈子中删除这条动态？你的${targetType === 'supplement_intake' ? '补剂服用记录' : targetType === 'exercise_log' ? '运动记录' : targetType === 'campus_food' ? '校园食堂记录' : '饮食记录'}不会被删除。`,
       confirmText: '删除',
       confirmColor: '#ef4444',
       success: async (res) => {
@@ -2352,6 +2363,7 @@ function CommunityPage() {
                     const exercise = isExerciseFeed(item)
                     const isCampusFood = isCampusFoodFeed(item)
                     const isCirclePost = isCirclePostFeed(item)
+                    const isSupplement = targetType === 'supplement_intake'
                     const feedTime = String(item.record.record_time || item.record.created_at || '')
                     const exerciseTitle = item.record.exercise_type || '运动打卡'
                     const exerciseDesc = item.record.exercise_desc || item.record.description || ''
@@ -2359,13 +2371,13 @@ function CommunityPage() {
                     const circlePostBody = isCirclePost ? (item.record.body || '') : ''
                     const circlePostText = circlePostTitle || circlePostBody
                     const exerciseKcal = Number(item.record.calories_burned ?? item.record.total_calories ?? 0)
-                    const isManualRecord = !exercise && !isCirclePost && shouldRenderManualFoodCards(item.record)
+                    const isManualRecord = !exercise && !isCirclePost && !isSupplement && shouldRenderManualFoodCards(item.record)
                     const manualFoodItems = isManualRecord
                       ? extractManualFoodDisplayItems(item.record.items)
                       : []
                     const useManualFoodCards = isManualRecord && manualFoodItems.length > 0
                     const useExerciseActivityCards = exercise && hasExerciseActivityCards(item.record.exercise_items)
-                    const feedImagePaths = !exercise && !isCirclePost && !useManualFoodCards
+                    const feedImagePaths = !exercise && !isCirclePost && !isSupplement && !useManualFoodCards
                       ? (item.record.image_paths?.length
                         ? item.record.image_paths
                         : item.record.image_path
@@ -2424,18 +2436,19 @@ function CommunityPage() {
                               </View>
                               <View className='feed-sub-meta-row'>
                                 <Text className='post-time'>
-                                  {isCirclePost ? `自定义动态 · ${formatFeedTime(feedTime)}` : exercise ? `运动打卡 · ${formatFeedTime(feedTime)}` : isCampusFood ? `校园食堂 · ${formatFeedTime(feedTime)}` : `${MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · ${formatFeedTime(feedTime)}`}
+                                  {isSupplement ? `补剂记录 · ${formatFeedTime(feedTime)}` : isCirclePost ? `自定义动态 · ${formatFeedTime(feedTime)}` : exercise ? `运动打卡 · ${formatFeedTime(feedTime)}` : isCampusFood ? `校园食堂 · ${formatFeedTime(feedTime)}` : `${MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · ${formatFeedTime(feedTime)}`}
                                 </Text>
                                 {exercise ? (
                                   <Text className='feed-tag-plain feed-tag-exercise'>{exerciseTitle}</Text>
                                 ) : isCampusFood ? (
                                   <Text className='feed-tag-plain feed-tag-campus'>校园食堂</Text>
-                                ) : item.record.diet_goal && item.record.diet_goal !== 'none' && !isCirclePost ? (
+                                ) : item.record.diet_goal && item.record.diet_goal !== 'none' && !isCirclePost && !isSupplement ? (
                                   <Text className='feed-tag-plain'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
                                 ) : null}
                               </View>
                             </View>
-	                            {!useManualFoodCards && !useExerciseActivityCards && (exercise ? exerciseDesc : isCirclePost ? circlePostText : item.record.description) &&
+                            {isSupplement && <SupplementFeedCard record={item.record} />}
+	                            {!isSupplement && !useManualFoodCards && !useExerciseActivityCards && (exercise ? exerciseDesc : isCirclePost ? circlePostText : item.record.description) &&
                               (item.record.image_path && !isCirclePost ? (
                                 exercise
                                   ? renderCollapsibleFeedText(`${targetKey}-desc`, exerciseDesc)
@@ -2504,7 +2517,7 @@ function CommunityPage() {
                                 </View>
                               )
                             })()}
-                            {!isCirclePost && (isCampusFood ? (
+                            {!isCirclePost && !isSupplement && (isCampusFood ? (
                               <View className='feed-meta'>
                                 {item.record.price != null ? (
                                   <View
@@ -2875,7 +2888,7 @@ function CommunityPage() {
                   </View>
                 </View>
               ) : null}
-              {feedContentType !== 'exercise_log' ? (
+              {feedContentType !== 'exercise_log' && feedContentType !== 'supplement_intake' ? (
               <View className='feed-filter-labeled-row'>
                 <Text className='feed-filter-label'>餐次</Text>
                 <View className='feed-filter-row-inner'>
@@ -2891,7 +2904,7 @@ function CommunityPage() {
                 </View>
               </View>
               ) : null}
-              {feedContentType !== 'exercise_log' ? (
+              {feedContentType !== 'exercise_log' && feedContentType !== 'supplement_intake' ? (
               <View className='feed-filter-labeled-row'>
                 <Text className='feed-filter-label'>目标</Text>
                 <View className='feed-filter-row-inner'>
