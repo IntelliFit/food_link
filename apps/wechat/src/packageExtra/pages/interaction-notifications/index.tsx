@@ -13,8 +13,11 @@ import {
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { appendBoundedUnique } from '../../../utils/list-pagination'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import { OwnCommentHistory } from '../../components/OwnCommentHistory'
 
 type NotificationTab = 'all' | 'like' | 'comment'
+type InteractionSection = 'received' | 'own-comments'
 
 const PAGE_SIZE = 20
 const MAX_NOTIFICATION_WINDOW_ITEMS = 200
@@ -90,6 +93,8 @@ function tabApiType(tab: NotificationTab): string {
 }
 
 function InteractionNotificationsPage() {
+  const [section, setSection] = React.useState<InteractionSection>('received')
+  const sectionRef = React.useRef<InteractionSection>('received')
   const [loading, setLoading] = React.useState(true)
   const [loadError, setLoadError] = React.useState(false)
   const [markingRead, setMarkingRead] = React.useState(false)
@@ -200,10 +205,10 @@ function InteractionNotificationsPage() {
           })
 
           // 标记已读不应阻塞首屏展示。即使该请求失败，消息列表仍应正常显示。
-          if ((res.unread_count || 0) > 0) {
+          if ((res.unread_count || 0) > 0 && sectionRef.current === 'received') {
             void communityMarkNotificationsRead()
               .then((readRes) => {
-                if (seq !== loadSeqRef.current) return
+                if (seq !== loadSeqRef.current || sectionRef.current !== 'received') return
                 setUnreadCount(readRes.unread_count || 0)
                 setList((prev) => prev.map((item) => ({ ...item, is_read: true })))
                 logNotificationStage('mark-read-resolved', {
@@ -254,15 +259,31 @@ function InteractionNotificationsPage() {
 
   Taro.useDidHide(() => {
     loadSeqRef.current += 1
+    loadedRef.current = false
+    setLoadingMore(false)
     clearListCommitTimer()
   })
 
   Taro.useDidShow(() => {
-    if (!loadedRef.current) {
+    if (sectionRef.current === 'received' && (!loadedRef.current || loading)) {
       offsetRef.current = 0
       loadNotifications(activeTab, 0, false)
     }
   })
+
+  const handleSectionChange = (nextSection: InteractionSection) => {
+    if (nextSection === sectionRef.current) return
+    sectionRef.current = nextSection
+    setSection(nextSection)
+    if (nextSection === 'own-comments') {
+      loadSeqRef.current += 1
+      clearListCommitTimer()
+      setLoadingMore(false)
+    } else {
+      offsetRef.current = 0
+      void loadNotifications(activeTab, 0, false)
+    }
+  }
 
   const handleTabChange = (tab: NotificationTab) => {
     if (tab === activeTab) return
@@ -272,7 +293,7 @@ function InteractionNotificationsPage() {
   }
 
   const handleMarkAllRead = async () => {
-    if (markingRead || unreadCount <= 0) return
+    if (sectionRef.current !== 'received' || markingRead || unreadCount <= 0) return
     setMarkingRead(true)
     try {
       const res = await communityMarkNotificationsRead()
@@ -287,7 +308,7 @@ function InteractionNotificationsPage() {
   }
 
   const handleLoadMore = () => {
-    if (loadingMore || !hasMore) return
+    if (sectionRef.current !== 'received' || loading || loadingMore || !hasMore) return
     loadNotifications(activeTab, offsetRef.current, true)
   }
 
@@ -316,20 +337,31 @@ function InteractionNotificationsPage() {
   }
 
   return (
-    <View className='interaction-notifications-page'>
+    <FlPageThemeRoot><View className='interaction-notifications-page'>
       <View className='notifications-header'>
         <View>
-          <Text className='notifications-title'>互动消息</Text>
-          <Text className='notifications-subtitle'>点赞、评论、回复和审核结果都会显示在这里</Text>
+          <Text className='notifications-title'>互动</Text>
+          <Text className='notifications-subtitle'>{section === 'received' ? '查看收到的点赞、评论、回复和审核结果' : '回看你发过的评论和回复'}</Text>
         </View>
-        <View
+        {section === 'received' && <View
           className={`mark-read-btn ${(markingRead || unreadCount <= 0) ? 'disabled' : ''}`}
           onClick={handleMarkAllRead}
         >
           {markingRead ? <View className='btn-spinner' /> : <Text>全部已读</Text>}
+        </View>}
+      </View>
+
+      <View className='interaction-section-tabs'>
+        <View className={`interaction-section-tab ${section === 'received' ? 'active' : ''}`} onClick={() => handleSectionChange('received')}>
+          <Text>收到的互动</Text>
+          {unreadCount > 0 ? <Text className='interaction-unread-count'>{unreadCount > 99 ? '99+' : String(unreadCount)}</Text> : null}
+        </View>
+        <View className={`interaction-section-tab ${section === 'own-comments' ? 'active' : ''}`} onClick={() => handleSectionChange('own-comments')}>
+          <Text>我的评论</Text>
         </View>
       </View>
 
+      {section === 'own-comments' ? <OwnCommentHistory /> : <>
       {/* Tab 切换 */}
       <View className='notifications-tabs'>
         <View
@@ -429,7 +461,8 @@ function InteractionNotificationsPage() {
           )}
         </ScrollView>
       )}
-    </View>
+      </>}
+    </View></FlPageThemeRoot>
   )
 }
 

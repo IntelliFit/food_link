@@ -1,11 +1,15 @@
 .interaction-notifications-page {
-  min-height: 100vh;
-  padding: 24rpx;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background: #f8fafc;
+  background: #f6f5ed;
+  color: #243d31;
 }
 
 .notifications-header {
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -13,7 +17,7 @@
   margin-bottom: 24rpx;
   padding: 28rpx;
   border-radius: 24rpx;
-  background: #fff;
+  background: #fffef9;
   box-shadow: 0 12rpx 36rpx rgb(15 23 42 / 6%);
 }
 
@@ -21,7 +25,7 @@
   display: block;
   font-size: 34rpx;
   font-weight: 700;
-  color: #0f172a;
+  color: #243d31;
 }
 
 .notifications-subtitle {
@@ -46,11 +50,12 @@
 
 .notifications-loading,
 .notifications-empty {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 520rpx;
+  min-height: 0;
   color: #64748b;
 }
 
@@ -78,6 +83,7 @@
 // ── Tab 标签栏 ──
 
 .notifications-tabs {
+  flex-shrink: 0;
   display: flex;
   background: #fff;
   border-radius: 16rpx;
@@ -137,7 +143,53 @@
 }
 
 .notifications-list {
-  height: calc(100vh - 220rpx);
+  flex: 1;
+  min-height: 0;
+  height: 0;
+}
+
+.interaction-section-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8rpx;
+  padding: 8rpx;
+  margin-bottom: 20rpx;
+  border-radius: 20rpx;
+  background: #edf1e7;
+}
+
+.interaction-section-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  min-height: 76rpx;
+  border-radius: 16rpx;
+  color: #626f65;
+  font-size: 28rpx;
+
+  &.active { background: #fffef9; color: #21543e; font-weight: 600; }
+}
+
+.interaction-unread-count {
+  padding: 2rpx 10rpx;
+  border-radius: 999rpx;
+  background: #ef4444;
+  color: #fff;
+  font-size: 22rpx;
+}
+
+.interaction-notifications-page .comment-history-scroll { height: 0; }
+
+.fl-d {
+  .interaction-notifications-page { background: #13221c; color: #e1eee7; }
+  .notifications-header, .notifications-tabs, .notification-card { background: #1c2d25; }
+  .notifications-title, .notification-title, .empty-title { color: #e1eee7; }
+  .notifications-subtitle, .notification-content, .empty-subtitle { color: #a2b6aa; }
+  .interaction-section-tabs { background: #1c2d25; }
+  .interaction-section-tab { color: #a2b6aa; }
+  .interaction-section-tab.active { background: #34473d; color: #d5e6df; }
 }
 
 .notification-card {
