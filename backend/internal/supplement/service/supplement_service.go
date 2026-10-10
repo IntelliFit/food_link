@@ -16,6 +16,7 @@ import (
 	"food_link/backend/internal/supplement/domain"
 	"food_link/backend/internal/supplement/repo"
 	"food_link/backend/pkg/logger"
+	"food_link/backend/pkg/storage"
 
 	"gorm.io/gorm"
 )
@@ -26,10 +27,14 @@ type SupplementService struct {
 	repo              *repo.SupplementRepo
 	labelVisionClient LabelVisionClient
 	contentSecurity   *contentsecurity.Service
+	storage           *storage.Client
 }
 
-func (s *SupplementService) ConfigureContentSecurity(checker *contentsecurity.Service) {
+func (s *SupplementService) ConfigureContentSecurity(checker *contentsecurity.Service, store ...*storage.Client) {
 	s.contentSecurity = checker
+	if len(store) > 0 {
+		s.storage = store[0]
+	}
 }
 
 func NewSupplementService(repo *repo.SupplementRepo) *SupplementService {
@@ -188,15 +193,19 @@ func (s *SupplementService) Record(ctx context.Context, userID, itemID string, i
 	}
 	intake := &domain.SupplementIntake{
 		UserID: userID, SupplementID: item.ID, SupplementName: item.Name,
-		Servings: servings, ServingLabel: item.ServingLabel, ComponentsSnapshot: cloneComponents(item.Components),
+		ProductSnapshot: &domain.ProductSnapshot{Brand: item.Brand, ImageURLs: append([]string{}, item.ImageURLs...), Source: "record"},
+		Servings:        servings, ServingLabel: item.ServingLabel, ComponentsSnapshot: cloneComponents(item.Components),
 		TakenAt: takenAt, Source: source, Note: input.Note, IdempotencyKey: idempotencyKey,
 	}
+	if len(intake.ProductSnapshot.ImageURLs) == 0 && item.ImageURL != nil && strings.TrimSpace(*item.ImageURL) != "" {
+		intake.ProductSnapshot.ImageURLs = []string{*item.ImageURL}
+	}
 	if s.contentSecurity != nil {
-		// 动态只公开名称、剂量和成分快照；私人备注不发布。
+		// 品牌、瓶身与标签图片和成分一同审核，私人备注不发布。
 		if err := s.contentSecurity.CheckPublication(ctx, userID, 2, map[string]any{
 			"name": intake.SupplementName, "serving_label": intake.ServingLabel,
-			"components": intake.ComponentsSnapshot,
-		}, nil); err != nil {
+			"components": intake.ComponentsSnapshot, "product": intake.ProductSnapshot,
+		}, s.storage); err != nil {
 			if err == contentsecurity.ErrUnavailable {
 				logger.Error(ctx, "补剂动态内容审核不可用", err, slog.String("user_id", userID), slog.String("supplement_id", itemID))
 			} else {

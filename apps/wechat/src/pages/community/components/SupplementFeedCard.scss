@@ -1,13 +1,35 @@
-.supplement-feed-card { margin: 14rpx 0; padding: 22rpx; border: 1rpx solid #e0ede7; border-radius: 20rpx; background: #f5faf7; }
-.supplement-feed-card__head { display: flex; align-items: center; gap: 12rpx; }
-.supplement-feed-card__icon { color: #388868; font-size: 32rpx; }
-.supplement-feed-card__name { min-width: 0; flex: 1; font-size: 28rpx; font-weight: 600; color: #244e3b; word-break: break-all; }
-.supplement-feed-card__dose { display: block; margin-top: 12rpx; color: #537363; font-size: 24rpx; }
-.supplement-feed-card__components { margin-top: 16rpx; padding-top: 12rpx; border-top: 1rpx solid #e0ede7; }
-.supplement-feed-card__component { display: flex; justify-content: space-between; gap: 16rpx; margin-top: 6rpx; color: #64756c; font-size: 22rpx; }
-.supplement-feed-card__more { display: block; margin-top: 12rpx; color: #388868; font-size: 22rpx; }
+.supplement-feed-card {
+  margin: 16rpx 0;
+  padding: 24rpx;
+  border: 1rpx solid #e0ede7;
+  border-radius: 24rpx;
+  background: #f7faf8;
+}
+.supplement-feed-card__head { display: flex; align-items: center; gap: 20rpx; }
+.supplement-feed-card__cover { position: relative; flex-shrink: 0; width: 112rpx; height: 136rpx; overflow: hidden; border-radius: 16rpx; background: #fff; }
+.supplement-feed-card__image { display: block; width: 100%; height: 100%; }
+.supplement-feed-card__image-count { position: absolute; right: 6rpx; bottom: 6rpx; padding: 2rpx 8rpx; border-radius: 8rpx; color: #fff; background: rgba(30, 64, 48, .65); font-size: 18rpx; }
+.supplement-feed-card__cover--empty { display: flex; align-items: center; justify-content: center; background: #e8f2eb; }
+.supplement-feed-card__capsule { width: 30rpx; height: 62rpx; border: 3rpx solid #69a186; border-radius: 24rpx; background: linear-gradient(to bottom, #8fbea5 50%, #f7faf8 50%); transform: rotate(35deg); }
+.supplement-feed-card__identity { flex: 1; min-width: 0; }
+.supplement-feed-card__brand { display: block; margin-bottom: 6rpx; color: #56806b; font-size: 21rpx; font-weight: 600; word-break: break-all; }
+.supplement-feed-card__name { display: block; font-size: 28rpx; line-height: 1.4; font-weight: 600; color: #244e3b; word-break: break-all; }
+.supplement-feed-card__dose { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10rpx; margin-top: 12rpx; font-size: 22rpx; }
+.supplement-feed-card__dose-label { color: #7b8f83; }
+.supplement-feed-card__dose-value { color: #2f7656; font-weight: 600; }
+.supplement-feed-card__components { margin-top: 22rpx; padding-top: 18rpx; border-top: 1rpx solid #e0ede7; }
+.supplement-feed-card__section-label { display: block; margin-bottom: 12rpx; color: #7b8f83; font-size: 20rpx; }
+.supplement-feed-card__component { display: flex; justify-content: space-between; align-items: baseline; gap: 16rpx; margin-top: 10rpx; color: #4d6759; font-size: 23rpx; }
+.supplement-feed-card__component-info { flex: 1; min-width: 0; word-break: break-all; }
+.supplement-feed-card__form { display: block; margin-top: 4rpx; color: #7b8f83; font-size: 20rpx; }
+.supplement-feed-card__amount { flex-shrink: 0; color: #2d6147; font-weight: 500; }
+.supplement-feed-card__more { display: block; margin-top: 16rpx; color: #388868; font-size: 22rpx; }
+.supplement-feed-card__labels { margin-top: 24rpx; }
+.supplement-feed-card__label-images { display: flex; gap: 12rpx; }
+.supplement-feed-card__label-image { width: 126rpx; height: 156rpx; border-radius: 12rpx; background: #fff; }
 .fl-d .supplement-feed-card { background: #22362b; border-color: #3a5144; }
+.fl-d .supplement-feed-card__cover--empty { background: #30483a; }
 .fl-d .supplement-feed-card__name { color: #d3eddd; }
-.fl-d .supplement-feed-card__dose, .fl-d .supplement-feed-card__component { color: #a8c3b3; }
+.fl-d .supplement-feed-card__component, .fl-d .supplement-feed-card__dose-label, .fl-d .supplement-feed-card__section-label, .fl-d .supplement-feed-card__form { color: #a8c3b3; }
 .fl-d .supplement-feed-card__components { border-color: #3a5144; }
-.fl-d .supplement-feed-card__more, .fl-d .supplement-feed-card__icon { color: #8dc7a7; }
+.fl-d .supplement-feed-card__brand, .fl-d .supplement-feed-card__more, .fl-d .supplement-feed-card__dose-value, .fl-d .supplement-feed-card__amount { color: #8dc7a7; }
