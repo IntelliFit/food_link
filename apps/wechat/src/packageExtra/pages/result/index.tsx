@@ -6,7 +6,9 @@ import {
   MealType,
   type Nutrients,
   type SaveFoodRecordRequest,
+  type FoodRecord,
   saveFoodRecord,
+  getFoodRecordById,
   getAccessToken,
   createUserRecipe,
   updateAnalysisTaskResult,
@@ -34,6 +36,7 @@ import {
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
 import { ANALYSIS_ENGINE_OPTIONS, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
+import { MealRecordPosterModal } from '../../../pages/index/components/MealRecordPosterModal'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { getRecommendedMealTypeWithFallback, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
@@ -594,6 +597,7 @@ function ResultPage() {
 	const recipeSaveInFlightRef = useRef(false)
   /** 当前识别会话是否已保存为饮食记录（可跳转详情，不再重复写入/发动态） */
   const [committedRecordId, setCommittedRecordId] = useState<string | null>(null)
+  const [savedShareRecord, setSavedShareRecord] = useState<FoodRecord | null>(null)
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [analysisEngine, setAnalysisEngine] = useState(() => normalizeAnalysisEngine(
     Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY),
@@ -2048,7 +2052,6 @@ function ResultPage() {
         if (devModeOn) {
           const uid = String(Taro.getStorageSync('user_id') || 'debug-local')
           const record = foodRecordFromSavePayload(payload, uid)
-          Taro.setStorageSync('recordDetail', record)
           Taro.removeStorageSync('analyzeDebugPreview')
 
           if (saveOnly) {
@@ -2059,10 +2062,10 @@ function ResultPage() {
             return
           }
 
-          Taro.showToast({ title: '调试：进入记录详情预览', icon: 'success' })
-          setTimeout(() => {
-            Taro.navigateTo({ url: extraPkgUrl('/pages/record-detail/index') })
-          }, 400)
+          setCommittedRecordId(record.id)
+          Taro.setStorageSync('analyzeTaskIsRecorded', '1')
+          Taro.setStorageSync('analyzeCommittedRecordId', record.id)
+          setSavedShareRecord(record)
           return
         }
 
@@ -2098,6 +2101,8 @@ function ResultPage() {
           }
         }
         setCommittedRecordId(saveResult.id)
+        Taro.setStorageSync('analyzeTaskIsRecorded', '1')
+        Taro.setStorageSync('analyzeCommittedRecordId', saveResult.id)
 
         if (saveOnly) {
           Taro.showToast({
@@ -2112,7 +2117,20 @@ function ResultPage() {
           title: saveResult.already_saved ? '该餐已记录，未重复发布' : `已记录到${getRecordDateLabel(recordDate)}`,
           icon: saveResult.already_saved ? 'none' : 'success',
         })
-        returnHomeAfterFoodRecord()
+        // 保存只执行一次；分享预览和样式切换都复用这条记录。
+        const previewRecord = saveResult.already_saved
+          ? await getFoodRecordById(saveResult.id).then(res => res.record).catch(() => null)
+          : {
+            ...foodRecordFromSavePayload(payload, String(Taro.getStorageSync('user_id') || '')),
+            id: saveResult.id,
+            record_time: `${recordDate}T${new Date().toTimeString().slice(0, 8)}`,
+          }
+        if (previewRecord) {
+          setSavedShareRecord(previewRecord)
+        } else {
+          Taro.showToast({ title: '已记录，可从首页打开分享', icon: 'none' })
+          returnHomeAfterFoodRecord()
+        }
       } catch (e: any) {
         await showUnifiedApiError(e, '保存失败')
       } finally {
@@ -3590,6 +3608,15 @@ function ResultPage() {
           )}
         </View>
       )}
+      <MealRecordPosterModal
+        visible={!!savedShareRecord}
+        record={savedShareRecord}
+        afterSave
+        onClose={() => {
+          setSavedShareRecord(null)
+          returnHomeAfterFoodRecord(0)
+        }}
+      />
     </View>
   )
 }

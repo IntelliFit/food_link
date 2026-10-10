@@ -13,6 +13,64 @@
   height: 1500rpx;
 }
 
+.record-share-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 100001;
+  display: flex;
+  flex-direction: column;
+  background: #fffaf2;
+  color: #344d3e;
+  padding-top: env(safe-area-inset-top);
+  box-sizing: border-box;
+
+  .record-share-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 28rpx 32rpx 20rpx;
+  }
+
+  .record-share-title { display: block; font-size: 34rpx; font-weight: 600; }
+  .record-share-subtitle { display: block; margin-top: 8rpx; font-size: 24rpx; color: #948575; }
+  .record-share-close { display: flex; align-items: center; justify-content: center; width: 72rpx; height: 72rpx; font-size: 48rpx; }
+  .record-share-styles { display: flex; gap: 16rpx; padding: 0 32rpx 20rpx; }
+  .record-share-style {
+    flex: 1;
+    padding: 20rpx;
+    border: 2rpx solid #e9e1d5;
+    border-radius: 24rpx;
+    font-size: 28rpx;
+    background: #fff;
+
+    &.active { border-color: #4b8a67; background: #edf6e9; }
+  }
+  .record-share-style-desc { display: block; margin-top: 8rpx; font-size: 22rpx; color: #8c8374; }
+  .record-share-labels {
+    display: flex;
+    justify-content: center;
+    gap: 16rpx;
+    padding: 0 32rpx 20rpx;
+    font-size: 24rpx;
+
+    > view { padding: 12rpx 24rpx; border-radius: 32rpx; background: #f0e9de; }
+    .active { background: #ffe9a9; color: #795c36; }
+  }
+  .record-share-photos { flex-shrink: 0; white-space: nowrap; height: 112rpx; padding: 0 32rpx; box-sizing: border-box; }
+  .record-share-photo { display: inline-block; width: 88rpx; height: 88rpx; margin-right: 16rpx; border: 4rpx solid transparent; border-radius: 16rpx; }
+  .record-share-photo.active { border-color: #4b8a67; }
+  .record-share-preview { flex: 1; min-height: 0; height: 0; }
+  .record-share-image { display: block; width: calc(100% - 64rpx); margin: 0 32rpx 24rpx; border-radius: 20rpx; overflow: hidden; }
+  .record-share-placeholder { min-height: 400rpx; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 24rpx; padding: 24rpx; text-align: center; font-size: 26rpx; }
+  .record-share-spinner { width: 48rpx; height: 48rpx; border: 5rpx solid #dfe8da; border-top-color: #4b8a67; border-radius: 50%; animation: record-share-spin .8s linear infinite; }
+  .record-share-footer { flex-shrink: 0; padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom)); background: #fffaf2; }
+  .record-share-submit { background: #367555; color: #fff; border-radius: 48rpx; font-size: 30rpx; }
+  .record-share-submit[disabled] { background: #d8e0d3; color: #8c9886; }
+  .record-share-skip { padding-top: 20rpx; text-align: center; font-size: 26rpx; color: #8c8374; }
+}
+
+@keyframes record-share-spin { to { transform: rotate(360deg); } }
+
 .poster-modal {
   position: fixed;
   inset: 0;
