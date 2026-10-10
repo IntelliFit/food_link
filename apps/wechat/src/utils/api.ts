@@ -564,7 +564,7 @@ export interface SaveFoodRecordRequest {
   entry_type?: FoodRecordEntryType
   /** 食谱/收藏 ID（从收藏一键记录时传入） */
   recipe_id?: string
-  /** 记录日期 YYYY-MM-DD，仅支持近 3 天内补录 */
+  /** 记录日期 YYYY-MM-DD，支持近 14 天（含今天）内补录 */
   date?: string
 }
 

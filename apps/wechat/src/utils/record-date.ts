@@ -1,6 +1,7 @@
 import Taro from '@tarojs/taro'
 
-export const RECORD_BACKFILL_WINDOW_DAYS = 3
+/** Number of selectable calendar days, including today. */
+export const RECORD_BACKFILL_WINDOW_DAYS = 14
 export const RECORD_TARGET_DATE_STORAGE_KEY = 'recordTargetDate'
 
 /** Keep the task's original date, including an expired date; never replace it with today. */
@@ -19,7 +20,7 @@ export function getRecordDateLabel(date: string): string {
 
 export function requireAllowedRecordDate(date: string): boolean {
   if (isAllowedRecordDate(date)) return true
-  void Taro.showToast({ title: date ? '请重新选择日期，仅支持近3天记录' : '请先选择记录日期', icon: 'none' })
+  void Taro.showToast({ title: date ? `请重新选择日期，仅支持近${RECORD_BACKFILL_WINDOW_DAYS}天记录` : '请先选择记录日期', icon: 'none' })
   return false
 }
 
