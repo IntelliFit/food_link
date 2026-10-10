@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/internal/nutrition"
 	"food_link/backend/internal/nutritionagg"
 	"math"
 	"strings"
@@ -86,8 +87,26 @@ func buildDietNutrientState(profile *domain.StatsUserProfile, records []domain.F
 	}
 	// Explicit saved plans override one nutrient once. They are user plans, not
 	// medically validated prescriptions or a guessed disease-specific target.
+	plans := mapFromAny(health["nutrient_targets"])
+	if _, usesDayPlan := health["nutrition_plan_name"]; usesDayPlan {
+		plans = map[string]any{}
+		targets := mapFromAny(health["dashboard_targets"])
+		keys := nutrition.MicroNutrientTargetKeyMap()
+		for _, def := range nutritionagg.Definitions {
+			if def.Key == "sugar" || def.Key == "cholesterolMg" {
+				continue
+			}
+			value := anyFloat(targets[keys[def.Key]])
+			if value > 0 {
+				kind := "target"
+				if def.Key == "sodiumMg" || def.Key == "saturatedFat" {
+					kind = "limit"
+				}
+				plans[def.Key] = map[string]any{kind: value, "unit": def.Unit}
+			}
+		}
+	}
 	for _, def := range nutritionagg.Definitions {
-		plans := mapFromAny(health["nutrient_targets"])
 		plan := mapFromAny(plans[def.Key])
 		target, limit := anyFloat(plan["target"]), anyFloat(plan["limit"])
 		if target <= 0 && limit <= 0 || strings.TrimSpace(fmt.Sprint(plan["unit"])) != def.Unit {

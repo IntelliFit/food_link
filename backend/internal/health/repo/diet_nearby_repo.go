@@ -143,6 +143,8 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 		Row             dietRecommendationRow `gorm:"embedded"`
 		DistanceSquared float64
 		LocationLevel   string
+		FoodLat         *float64
+		FoodLon         *float64
 		MerchantName    string
 		Address         string
 	}
@@ -175,6 +177,7 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 		item := rowsToDietRecommendationCandidates([]dietRecommendationRow{row.Row}, "public_food_library")[0]
 		distanceKM := math.Round(math.Sqrt(row.DistanceSquared)*100) / 100
 		item.DistanceKM, item.LocationLevel = &distanceKM, row.LocationLevel
+		item.Latitude, item.Longitude = row.FoodLat, row.FoodLon
 		item.MerchantName, item.Address = row.MerchantName, row.Address
 		items = append(items, item)
 	}

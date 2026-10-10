@@ -83,10 +83,18 @@ func v3MacroFit(ctx dietDecisionContext, c DietRecommendationCandidate) float64 
 	protein := dietDecisionMealTarget(ctx.Remaining.Protein, ctx.Targets.Protein, ratio)
 	carbs := dietDecisionMealTarget(ctx.Remaining.Carbs, ctx.Targets.Carbs, ratio)
 	fat := dietDecisionMealTarget(ctx.Remaining.Fat, ctx.Targets.Fat, ratio)
+	hasFatRange := ctx.Basis != nil && ctx.Basis.FatMax > 0
+	if hasFatRange {
+		fat = math.Max(0, ctx.Basis.FatMax-ctx.Current.Fat) * ratio
+	}
 	loss := v3IntervalLoss(c.Calories, calories, .75, 1.20) * 2
 	loss += v3IntervalLoss(c.Protein, protein, .75, 1.60)
 	loss += v3IntervalLoss(c.Carbs, carbs, .55, 1.35)
-	if fat > 0 {
+	if hasFatRange {
+		if c.Fat > fat {
+			loss += math.Min(2, (c.Fat-fat)/math.Max(1, ctx.Basis.FatMax*ratio))
+		}
+	} else if fat > 0 {
 		loss += v3IntervalLoss(c.Fat, fat, .4, 1.3)
 	} else {
 		loss += math.Min(2, c.Fat/math.Max(1, ctx.Targets.Fat*ratio))
@@ -283,7 +291,8 @@ func selectDietDecisionPortfolioV3(ctx dietDecisionContext, candidates []DietRec
 				score -= math.Min(18, float64(f.RecentCount)*6)
 			}
 		}
-		pool = append(pool, groundedMeal{candidate: e.Candidate, evaluation: e, score: score})
+		penalty := mealRecentFamilyPenalty(e.Candidate, ctx.RecentFoods)
+		pool = append(pool, groundedMeal{candidate: e.Candidate, evaluation: e, score: score - penalty, varietyPenalty: penalty, recentRepeat: mealRecentDishMatch(e.Candidate, ctx.RecentFoods)})
 	}
 	for _, meal := range selectHealthBoundedMeals(pool, len(roles)) {
 		e := meal.evaluation

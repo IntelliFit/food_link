@@ -243,12 +243,17 @@ func dietDecisionHealthFit(ctx dietDecisionContext, candidate DietRecommendation
 	calorieTarget := dietDecisionMealTarget(ctx.Remaining.Calories, ctx.Targets.Calories, ratio)
 	proteinTarget := dietDecisionMealTarget(ctx.Remaining.Protein, ctx.Targets.Protein, ratio)
 	carbTarget := dietDecisionMealTarget(ctx.Remaining.Carbs, ctx.Targets.Carbs, ratio)
-	fatTarget := dietDecisionMealTarget(ctx.Remaining.Fat, ctx.Targets.Fat, ratio)
+	fatLimit, remainingFat := ctx.Targets.Fat, ctx.Remaining.Fat
+	if ctx.Basis != nil && ctx.Basis.FatMax > 0 {
+		fatLimit = ctx.Basis.FatMax
+		remainingFat = math.Max(0, fatLimit-ctx.Current.Fat)
+	}
+	fatTarget := dietDecisionMealTarget(remainingFat, fatLimit, ratio)
 
 	calorieFit := dietDecisionIntervalFit(candidate.Calories, calorieTarget, ctx.Targets.Calories*ratio, 0.70, 1.15, 1.2)
 	proteinFit := dietDecisionIntervalFit(candidate.Protein, proteinTarget, ctx.Targets.Protein*ratio, 0.75, 1.60, 0.25)
 	carbFit := dietDecisionIntervalFit(candidate.Carbs, carbTarget, ctx.Targets.Carbs*ratio, 0.55, 1.35, 0.8)
-	fatFit := dietDecisionUpperFit(candidate.Fat, fatTarget, ctx.Targets.Fat*ratio)
+	fatFit := dietDecisionUpperFit(candidate.Fat, fatTarget, fatLimit*ratio)
 	weights := dietDecisionWeights(ctx.Goal)
 	return clampDecisionScore(
 		calorieFit*weights.Calories +

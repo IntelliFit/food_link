@@ -18,6 +18,8 @@ type DietEvidenceSource struct {
 }
 
 type DietDecisionBasis struct {
+	FatMin              float64                 `json:"fat_min,omitempty"`
+	FatMax              float64                 `json:"fat_max,omitempty"`
 	NutrientState       *DietNutrientState      `json:"nutrient_state,omitempty"`
 	Version             string                  `json:"version"`
 	Date                string                  `json:"date"`
@@ -73,6 +75,11 @@ func buildDietDecisionBasis(profile *domain.StatsUserProfile, records []domain.F
 	} else if tdee != nil && *tdee > 0 {
 		b.TargetSource = "个人消耗估算＋应用默认宏量目标"
 	}
+	if name, ok := health["nutrition_plan_name"].(string); ok && name != "" {
+		b.TargetSource = "当日饮食方案 · " + name
+	}
+	b.FatMin = anyFloat(health["nutrition_plan_fat_min"])
+	b.FatMax = anyFloat(health["nutrition_plan_fat_max"])
 	if profile != nil && profile.DietGoal != nil {
 		b.PrimaryGoal = *profile.DietGoal
 		b.Goals = append(b.Goals, *profile.DietGoal)

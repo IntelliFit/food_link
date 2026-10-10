@@ -32,7 +32,7 @@ function getMicroTargetOrDefault(intake: HomeIntakeData, key: string): string {
   if (raw && typeof raw === 'object') {
     const target = (raw as unknown as Record<string, unknown>).target
     if (typeof target === 'number' && Number.isFinite(target) && target > 0) {
-      return String(Math.round(target))
+      return String(Math.round(target * 10) / 10)
     }
   }
   const fallback = MICRO_TARGET_DEFAULTS[key]

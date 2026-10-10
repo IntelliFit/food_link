@@ -298,6 +298,8 @@ func deleteAccountOwnedData(tx *gorm.DB, userID string) error {
 		{"user_health_documents", "user_id = ?", []any{userID}},
 		{"user_mode_switch_logs", "user_id = ?", []any{userID}},
 		{"user_daily_nutrition_targets", "user_id = ?", []any{userID}},
+		{"user_nutrition_plan_defaults", "user_id = ?", []any{userID}},
+		{"user_nutrition_plans", "user_id = ?", []any{userID}},
 		{"user_feedback", "user_id = ?", []any{userID}},
 		{"user_weight_records", "user_id = ?", []any{userID}},
 		{"user_water_logs", "user_id = ?", []any{userID}},

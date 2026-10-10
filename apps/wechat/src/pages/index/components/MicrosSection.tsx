@@ -104,7 +104,7 @@ export function MicrosSection({
   const sourceDetailSupplementWidth = Math.max(0, 100 - sourceDetailFoodWidth)
 
   const statusText = useMemo(() => {
-    if (dashboardBusy) return '同步中'
+    if (dashboardBusy) return ''
     if (hasMicros) return `${micronutrients.length}项`
     if (isGuest) return '登录后'
     return '待记录'
@@ -145,7 +145,7 @@ export function MicrosSection({
       ) : hasMicros ? (
         <View className='micros-preview-grid'>
           {micronutrients.map((item) => {
-            const showTarget = item.target > 0
+            const showTarget = item.target > 0 && !['sugar', 'cholesterolMg'].includes(item.key)
             const progressPct = Math.min(100, item.progress)
             const hasSupplement = item.supplementCurrent > 0
             const foodWidth = item.current > 0 ? (item.foodCurrent / item.current) * progressPct : 0
@@ -170,7 +170,7 @@ export function MicrosSection({
                   </Text>
                   {showTarget && (
                     <Text className='micros-preview-card-target'>
-                      /{formatMicronutrientValue(item.target)}{item.unit}
+                      {['sodiumMg', 'saturatedFat'].includes(item.key) ? ' / ≤' : ' / '}{formatMicronutrientValue(item.target)}{item.unit}
                     </Text>
                   )}
                   {!showTarget && (

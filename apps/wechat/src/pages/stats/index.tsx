@@ -1119,7 +1119,7 @@ function StatsPage() {
   const chartDays = range === 'week' ? d.daily_calories.slice(-7) : d.daily_calories.slice(-14)
 
   // Calculate max calories for the chart scaling
-  const maxDailyCalories = Math.max(tdee, ...chartDays.map(i => toSafeNumber(i.calories)), 1) * 1.12
+  const maxDailyCalories = Math.max(tdee, ...chartDays.map(i => Math.max(toSafeNumber(i.calories), toSafeNumber(i.target?.snapshot.targets.calorie_target))), 1) * 1.12
   const weightTrend = bodyMetrics?.weight_entries || []
   const latestWeight = bodyMetrics?.latest_weight || null
   const previousWeight = bodyMetrics?.previous_weight || null
@@ -1750,6 +1750,7 @@ function StatsPage() {
                           <Text className='bar-calorie-text'>{item.calories > 0 ? Math.round(item.calories) : '—'}</Text>
                         ) : null}
                         <View className='bar-wrapper'>
+                          {item.target && <View className='nutrition-plan-chart-target' style={{ bottom: `${clampPercent(toSafeNumber(item.target.snapshot.targets.calorie_target) / maxDailyCalories * 100)}%` }} />}
                           <View
                             className={`bar-fill ${item.calories > tdee ? 'over' : ''}`}
                             style={{ height: `${heightPct}%` }}
@@ -1767,6 +1768,7 @@ function StatsPage() {
                 </View>
               )}
               <Text className='stats-chart-note'>{chartDays[0]?.date.slice(5)} — {chartDays[chartDays.length - 1]?.date.slice(5)} · 横线表示无摄入数据；参考消耗为估算值。</Text>
+              {d.recorded_target_totals && <Text className='stats-chart-note'>绿短线为每日饮食目标；仅有记录的 {d.recorded_days} 天：摄入 {Math.round(d.total_calories)} / 计划 {Math.round(d.recorded_target_totals.calorie_target || 0)} kcal。{chartDays.some(item => item.target?.historical_reference) ? '部分旧日期使用参考目标。' : ''}</Text>}
             </View>
           ) : null}
         </View>

@@ -93,7 +93,7 @@ export function TargetEditor({
           <View className='target-modal-title-row'>
             <Text className='target-modal-title'>基础目标设置</Text>
           </View>
-          <Text className='target-modal-desc'>这是长期基础目标，不会因为当天运动自动变化。</Text>
+          <Text className='target-modal-desc'>已选日期保持原目标；默认方案继承修改从明天生效。</Text>
         </View>
 
         <View className='target-modal-scroll'>
@@ -134,7 +134,7 @@ export function TargetEditor({
             <View className='target-form-section-heading'>
               <View>
                 <Text className='target-form-section-title'>微量元素目标</Text>
-                <Text className='target-form-section-desc'>这里只保留首页关注项，隐藏后目标设置也会同步精简。</Text>
+                <Text className='target-form-section-desc'>首页关注项可显示或隐藏；总糖和胆固醇仅记录摄入。</Text>
               </View>
               <Text className='target-form-section-count'>{visibleMicroConfigs.length}/{MICRONUTRIENT_PREFERENCE_CONFIGS.length}</Text>
             </View>
@@ -150,7 +150,7 @@ export function TargetEditor({
                       <Text>隐藏</Text>
                     </View>
                   </View>
-                  <View className='target-input-row'>
+                  {['sugar', 'cholesterolMg'].includes(config.nutrientKey) ? <Text className='target-form-section-desc'>仅记录摄入</Text> : <View className='target-input-row'>
                     <View
                       className='target-adjust-btn'
                       onClick={() => adjustValue(config.targetFormKey, -1)}
@@ -172,7 +172,7 @@ export function TargetEditor({
                     >
                       <Text className='target-adjust-btn-text'>+</Text>
                     </View>
-                  </View>
+                  </View>}
                 </View>
               ))}
             </View>

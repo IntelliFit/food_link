@@ -131,6 +131,7 @@
     display: -webkit-box;
     overflow: hidden;
     min-width: 0;
+    flex: 1;
     font-size: 24rpx;
     line-height: 33rpx;
     -webkit-line-clamp: 2;
@@ -151,6 +152,31 @@
     line-height: 25rpx;
 
     .iconfont { font-size: 22rpx; }
+  }
+
+  &__navigate {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    min-width: 62rpx;
+    min-height: 52rpx;
+    margin-left: 10rpx;
+    padding: 0 12rpx;
+    border-radius: 999rpx;
+    color: #276d52;
+    background: #e9f7ef;
+    font-size: 23rpx;
+  }
+
+  &__notice {
+    display: flex;
+    align-items: center;
+    margin: 0 10rpx 12rpx;
+    color: #92674c;
+    font-size: 21rpx;
+    line-height: 32rpx;
+    .meal-picks__text-action { flex: 0 0 auto; font-size: 23rpx; }
   }
 
   &__cta {
