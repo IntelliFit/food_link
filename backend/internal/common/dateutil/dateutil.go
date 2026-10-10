@@ -1,6 +1,7 @@
 package dateutil
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -8,7 +9,9 @@ import (
 )
 
 const ChinaDateLayout = "2006-01-02"
-const backfillRecordWindowDays = 3
+
+// The selectable calendar-day window includes today.
+const backfillRecordWindowDays = 14
 
 var chinaLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
 
@@ -50,7 +53,7 @@ func ResolveRecordedOnDate(value string, fieldName string) (string, error) {
 		return "", &commonerrors.AppError{Code: 10002, Message: "future dates are not allowed", HTTPStatus: 400}
 	}
 	if target.Before(earliest) {
-		return "", &commonerrors.AppError{Code: 10002, Message: "only records within the last 3 days are allowed", HTTPStatus: 400}
+		return "", &commonerrors.AppError{Code: 10002, Message: fmt.Sprintf("only records within the last %d days are allowed", backfillRecordWindowDays), HTTPStatus: 400}
 	}
 	return normalized, nil
 }

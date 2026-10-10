@@ -1,5 +1,5 @@
 import { Picker, Text, View } from '@tarojs/components'
-import { getRecordDateLabel, isAllowedRecordDate, listAllowedRecordDates } from '../utils/record-date'
+import { getRecordDateLabel, isAllowedRecordDate, listAllowedRecordDates, RECORD_BACKFILL_WINDOW_DAYS } from '../utils/record-date'
 import './RecordDateField.scss'
 
 export default function RecordDateField({ date, onChange, disabled = false }: {
@@ -18,7 +18,7 @@ export default function RecordDateField({ date, onChange, disabled = false }: {
       }}
     >
       <View className={`record-date-field${valid ? '' : ' record-date-field--required'}`}>
-        <Text>{valid ? `记录到 ${getRecordDateLabel(date)}` : date ? `${getRecordDateLabel(date)}已超出补录范围，请选择日期` : '请选择记录日期（仅近3天）'}</Text>
+        <Text>{valid ? `记录到 ${getRecordDateLabel(date)}` : date ? `${getRecordDateLabel(date)}已超出补录范围，请选择日期` : `请选择记录日期（仅近${RECORD_BACKFILL_WINDOW_DAYS}天）`}</Text>
         {!disabled && <Text>更改 ›</Text>}
       </View>
     </Picker>

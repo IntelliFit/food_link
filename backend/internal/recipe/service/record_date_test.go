@@ -44,7 +44,7 @@ func TestUseRecipePreservesBackfillDateAndLegacyToday(t *testing.T) {
 	require.NoError(t, db.First(&record, "id = ?", legacyID).Error)
 	assert.Equal(t, dateutil.TodayChina(), record.RecordTime.In(dateutil.ChinaLocation()).Format(dateutil.ChinaDateLayout))
 
-	for _, invalid := range []string{"invalid", now.AddDate(0, 0, -3).Format(dateutil.ChinaDateLayout), now.AddDate(0, 0, 1).Format(dateutil.ChinaDateLayout)} {
+	for _, invalid := range []string{"invalid", now.AddDate(0, 0, -14).Format(dateutil.ChinaDateLayout), now.AddDate(0, 0, 1).Format(dateutil.ChinaDateLayout)} {
 		_, err = svc.Use(ctx, recipe.UserID, recipe.ID, nil, nil, invalid)
 		require.Error(t, err)
 	}
