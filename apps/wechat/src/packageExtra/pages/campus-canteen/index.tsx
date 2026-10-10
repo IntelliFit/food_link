@@ -23,6 +23,7 @@ import {
   type SchoolCampusItem,
   type SchoolCanteenItem,
   type SchoolItem,
+  type CanteenScope,
 } from "../../../utils/api";
 import "./index.scss";
 import { extraPkgUrl } from "../../../utils/subpackage-extra";
@@ -119,6 +120,8 @@ function CampusCanteenPage() {
   const [loading, setLoading] = useState(false);
   const [list, setList] = useState<PublicFoodLibraryItem[]>([]);
   const [sortBy, setSortBy] = useState<SortBy>("hot");
+  const [canteenScope, setCanteenScope] = useState<CanteenScope>("all");
+  const campusScope = canteenScope === "campus";
   const [searchKeyword, setSearchKeyword] = useState("");
   const [appliedSearchKeyword, setAppliedSearchKeyword] = useState("");
   const [selectedSchool, setSelectedSchool] = useState<SchoolItem | null>(null);
@@ -142,17 +145,15 @@ function CampusCanteenPage() {
   const [showCanteenPicker, setShowCanteenPicker] = useState(false);
   const [showFloorPicker, setShowFloorPicker] = useState(false);
   const [showWindowPicker, setShowWindowPicker] = useState(false);
-  const [profilePending, setProfilePending] = useState(true);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [directoryExpanded, setDirectoryExpanded] = useState(false);
   const [listError, setListError] = useState(false);
   const [directoryError, setDirectoryError] = useState(false);
   const [directoryRevision, setDirectoryRevision] = useState(0);
   const schoolChosenByUser = useRef(false);
-  const searchRequestedBeforeSchool = useRef(false);
   const listRequestId = useRef(0);
   const [listScope, setListScope] = useState("");
-  const scopeKey = [selectedSchool?.id, selectedCampus?.id, selectedCanteen?.id,
+  const scopeKey = [canteenScope, campusScope ? selectedSchool?.id : "", selectedCampus?.id, selectedCanteen?.id,
     selectedWindow?.id, floorName, windowName, sortBy, appliedSearchKeyword].join("|");
   const currentScope = useRef(scopeKey);
   currentScope.current = scopeKey;
@@ -160,7 +161,7 @@ function CampusCanteenPage() {
 
   const fetchReadyCampusItems = useCallback(
     async (keyword = appliedSearchKeyword) => {
-      const directoryFilter = selectedWindow?.id
+      const directoryFilter = !campusScope ? {} : selectedWindow?.id
         ? { window_id: selectedWindow.id }
         : selectedCanteen?.id
         ? { canteen_id: selectedCanteen.id }
@@ -170,7 +171,7 @@ function CampusCanteenPage() {
             ? { school_id: selectedSchool.id }
             : {};
       const request = {
-        type: "campus" as const,
+        canteen_scope: canteenScope,
         ...directoryFilter,
         keyword: keyword || undefined,
         floor: floorName || undefined,
@@ -200,6 +201,8 @@ function CampusCanteenPage() {
     },
     [
       appliedSearchKeyword,
+      canteenScope,
+      campusScope,
       floorName,
       selectedSchool,
       selectedCampus,
@@ -216,7 +219,7 @@ function CampusCanteenPage() {
       force = false,
       keyword = appliedSearchKeyword,
     ) => {
-      if (!getAccessToken() || !selectedSchool?.id) {
+      if (!getAccessToken()) {
         listRequestId.current += 1;
         setList([]);
         setLoading(false);
@@ -235,7 +238,7 @@ function CampusCanteenPage() {
         lastRefreshTime.current = Date.now();
       } catch (e: any) {
         if (requestId !== listRequestId.current || currentScope.current !== scopeKey) return;
-        console.error("加载校园食堂失败:", e);
+        console.error("获取食堂菜品失败:", e);
         setListError(true);
         // 同范围手动刷新失败时保留旧菜品，不清空列表或改变滚动位置。
         if (!silent) {
@@ -247,13 +250,12 @@ function CampusCanteenPage() {
         }
       }
     },
-    [fetchReadyCampusItems, appliedSearchKeyword, selectedSchool?.id, scopeKey],
+    [fetchReadyCampusItems, appliedSearchKeyword, scopeKey],
   );
 
   useEffect(() => {
-    if (!loggedIn) { setProfilePending(false); return; }
+    if (!loggedIn) return;
     let cancelled = false;
-    setProfilePending(true);
     getUserProfile()
       .then((profile) => {
         if (cancelled || schoolChosenByUser.current) return;
@@ -263,8 +265,7 @@ function CampusCanteenPage() {
         setSelectedSchool({ id: preference.school_id, name: preference.school_name });
         // 校区需在真实目录中核验；不凭名称构造不存在的校区。
       })
-      .catch(() => { /* 偏好不可用时仍可主动选择学校，不默认任意高校。 */ })
-      .finally(() => { if (!cancelled) setProfilePending(false); });
+      .catch(() => { /* 偏好只预填校园筛选，不改变默认全部食堂范围。 */ });
     return () => { cancelled = true; };
   }, [loggedIn]);
 
@@ -290,7 +291,7 @@ function CampusCanteenPage() {
   useEffect(() => {
     let cancelled = false;
     const schoolId = selectedSchool?.id;
-    if (!loggedIn || !schoolId) {
+    if (!loggedIn || !campusScope || !schoolId) {
       setDirectoryCampuses([]);
       setDirectoryCanteens([]);
       setDirectoryLoading(false);
@@ -325,26 +326,21 @@ function CampusCanteenPage() {
     return () => {
       cancelled = true;
     };
-  }, [loggedIn, selectedSchool?.id, directoryRevision]);
+  }, [loggedIn, campusScope, selectedSchool?.id, directoryRevision]);
 
   useEffect(() => {
     const keyword = searchKeyword.trim();
-    if (!selectedSchool?.id || keyword === appliedSearchKeyword) return;
+    if (keyword === appliedSearchKeyword) return;
     const timer = setTimeout(() => {
       lastRefreshTime.current = 0;
       setAppliedSearchKeyword(keyword);
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchKeyword, appliedSearchKeyword, selectedSchool?.id]);
+  }, [searchKeyword, appliedSearchKeyword]);
 
   const handleSearch = (value = searchKeyword) => {
     const kw = value.trim();
     setSearchKeyword(value);
-    if (!selectedSchool?.id) {
-      searchRequestedBeforeSchool.current = true;
-      setShowSchoolPicker(true);
-      return;
-    }
     lastRefreshTime.current = 0;
     if (kw === appliedSearchKeyword) {
       void loadList(false, true, kw);
@@ -362,10 +358,10 @@ function CampusCanteenPage() {
 
   const handleLocationFeedback = async () => {
     const modalResult = await Taro.showModal({
-      title: "校区/食堂信息纠错",
+      title: "食堂地点纠错",
       content: "",
       editable: true,
-      placeholderText: "请说明学校、校区或食堂信息哪里不对，我们会尽快核实…",
+      placeholderText: "请说明食堂名称、地址或楼层哪里不对…",
       confirmText: "提交",
       cancelText: "取消",
       confirmColor: "#00bc7d",
@@ -402,14 +398,14 @@ function CampusCanteenPage() {
     }
   };
 
-  const goDetail = (itemId: string) => {
+  const goDetail = (itemId: string, campus = true) => {
     Taro.navigateTo({
-      url: `${extraPkgUrl("/pages/food-library-detail/index")}?id=${itemId}&scene=campus`,
+      url: `${extraPkgUrl("/pages/food-library-detail/index")}?id=${itemId}${campus ? "&scene=campus" : ""}`,
     });
   };
 
   const goUpload = () => {
-    Taro.navigateTo({ url: extraPkgUrl("/pages/campus-food-share/index") });
+    Taro.navigateTo({ url: extraPkgUrl(campusScope ? "/pages/campus-food-share/index" : "/pages/food-library-share/index") });
   };
 
   const goCollector = () => {
@@ -417,14 +413,17 @@ function CampusCanteenPage() {
   };
 
   const openMore = async () => {
+    const actions = [
+      { label: "补充菜品", run: goUpload },
+      ...(campusScope ? [{ label: "批量采集", run: goCollector }] : []),
+      { label: "地点纠错", run: () => void handleLocationFeedback() },
+      { label: "刷新菜品", run: () => void loadList(false, true) },
+    ];
     try {
       const { tapIndex } = await Taro.showActionSheet({
-        itemList: ["补充菜品", "批量采集", "地点纠错", ...(selectedSchool ? ["刷新菜品"] : [])],
+        itemList: actions.map((action) => action.label),
       });
-      if (tapIndex === 0) goUpload();
-      if (tapIndex === 1) goCollector();
-      if (tapIndex === 2) void handleLocationFeedback();
-      if (tapIndex === 3) void loadList(false, true);
+      actions[tapIndex]?.run();
     } catch { /* 取消更多菜单不执行操作。 */ }
   };
 
@@ -447,7 +446,7 @@ function CampusCanteenPage() {
   const quickRecord = (e: any, item: PublicFoodLibraryItem) => {
     e.stopPropagation();
     if (campusNutritionState(item).estimated) {
-      goDetail(item.id);
+      goDetail(item.id, item.type === "campus" || !!item.is_campus_food);
       return;
     }
     if (isAnalyzingItem(item)) {
@@ -470,6 +469,20 @@ function CampusCanteenPage() {
   };
 
   const selectedSchoolName = selectedSchool?.name || "选择学校";
+  const changeCanteenScope = (scope: CanteenScope) => {
+    if (scope === canteenScope) return;
+    schoolChosenByUser.current = true;
+    lastRefreshTime.current = 0;
+    setCanteenScope(scope);
+    setSelectedCampus(null);
+    setSelectedCanteen(null);
+    setSelectedWindow(null);
+    setFloorName("");
+    setWindowName("");
+    setFiltersExpanded(false);
+    setDirectoryExpanded(false);
+    // 保留搜索词，切换场所类型仍可查同一道菜；不修改个人学校档案。
+  };
   const hasActiveFilters = Boolean(
     selectedCampus ||
       selectedCanteen ||
@@ -541,7 +554,7 @@ function CampusCanteenPage() {
   const openMealMore = async (e: any, item: PublicFoodLibraryItem) => {
     e.stopPropagation();
     const nutrition = campusNutritionState(item);
-    const actions = [{ label: "查看详情", run: () => goDetail(item.id) }];
+    const actions = [{ label: "查看详情", run: () => goDetail(item.id, item.type === "campus" || !!item.is_campus_food) }];
     if (nutrition.canRecord || nutrition.estimated) {
       actions.push({
         label: nutrition.estimated ? "查看营养估算" : "记录这道菜",
@@ -564,7 +577,7 @@ function CampusCanteenPage() {
     const nutrition = campusNutritionState(item);
     const photo = item.image_path || item.image_paths?.find(Boolean);
     const location = [item.canteen_name, item.floor, item.window_name].filter(Boolean).join(" · ")
-      || item.campus_location_text || item.campus_name || "地点待补充";
+      || item.campus_location_text || item.merchant_name || item.detail_address || item.merchant_address || item.campus_name || "地点待补充";
     const nutritionText = nutrition.displayNutrition
       ? `${nutrition.estimated || nutrition.pending ? "约 " : ""}${item.total_calories.toFixed(0)} kcal`
       : nutrition.failed ? "营养待重试" : "营养待更新";
@@ -572,7 +585,7 @@ function CampusCanteenPage() {
       <View
         key={item.id}
         className='campus-meal-card'
-        onClick={() => goDetail(item.id)}
+        onClick={() => goDetail(item.id, item.type === "campus" || !!item.is_campus_food)}
       >
         <View className='campus-meal-image'>
           {photo ? (
@@ -602,7 +615,7 @@ function CampusCanteenPage() {
       <FlPageThemeRoot>
         <View className='campus-canteen-page'>
           <View className='login-tip'>
-            <Text className='login-tip-text'>登录后查看校园食堂</Text>
+            <Text className='login-tip-text'>登录后查看校园与社区食堂</Text>
             <Button
               className='login-tip-btn'
               onClick={() => Taro.switchTab({ url: "/pages/profile/index" })}
@@ -619,27 +632,34 @@ function CampusCanteenPage() {
     <FlPageThemeRoot>
       <View className='campus-canteen-page campus-canteen-page--directory'>
         <View className='campus-browse-header'>
+          <View className='canteen-scope-tabs'>
+            {([["all", "全部食堂"], ["campus", "校园"], ["community", "社区·园区"]] as const).map(([value, label]) => (
+              <Button key={value} id={`canteen-scope-${value}`} ariaLabel={`${label}${canteenScope === value ? "，已选中" : ""}`} className={`canteen-scope-tab ${canteenScope === value ? "active" : ""}`} onClick={() => changeCanteenScope(value)}>{label}</Button>
+            ))}
+          </View>
+          {campusScope && (
           <View className='campus-school-row'>
             <View className='campus-school-select' onClick={() => setShowSchoolPicker(true)}>
               <Text className='campus-school-name'>{selectedSchoolName}</Text>
               <ArrowDown className='campus-chevron' />
             </View>
-            <Button className='campus-more-button' ariaLabel={selectedSchool ? "补充食堂菜品" : "校园食堂更多操作"} onClick={() => selectedSchool ? goUpload() : void openMore()}>
+            <Button className='campus-more-button' ariaLabel={selectedSchool ? "补充食堂菜品" : "食堂更多操作"} onClick={() => selectedSchool ? goUpload() : void openMore()}>
               {selectedSchool ? <Plus /> : <Ellipsis />}
             </Button>
           </View>
+          )}
           <View className='campus-browse-search'>
             <View className='search-input-wrap'>
               <Search className='search-input-icon' />
-              <Input className='search-input' placeholder={selectedSchool ? "搜菜名、食堂" : "选学校后搜菜名"} value={searchKeyword}
+              <Input className='search-input' placeholder='搜菜名、食堂、地点' value={searchKeyword}
                 confirmType='search' onInput={(e) => setSearchKeyword(e.detail.value)} onConfirm={(e) => handleSearch(e.detail.value)}
               />
               <Button className='campus-search-submit' onClick={() => handleSearch()}>搜索</Button>
             </View>
-            <Button className='campus-area-button' onClick={openCampusPicker}>
+            {campusScope && selectedSchool && <Button className='campus-area-button' onClick={openCampusPicker}>
               <Text>{selectedCampus?.name || "校区"}</Text>
               <ArrowDown className='campus-chevron' />
-            </Button>
+            </Button>}
           </View>
           {appliedSearchKeyword && (
             <View className='search-active-row'>
@@ -658,19 +678,7 @@ function CampusCanteenPage() {
           refresherEnabled={false}
         >
           <View className='list-content'>
-            {!selectedSchool ? (
-              profilePending ? (
-                <View className='loading-state'><View className='loading-spinner-md' /></View>
-              ) : (
-                <View className='campus-school-empty'>
-                  <Text className='iconfont icon-shiwu' />
-                  <Text className='campus-empty-title'>先选学校，再找好吃的</Text>
-                  <Text className='campus-empty-hint'>查看食堂、菜品和价格</Text>
-                  <Button className='campus-primary-button' onClick={() => setShowSchoolPicker(true)}>选择学校</Button>
-                </View>
-              )
-            ) : (
-              <>
+            {campusScope && selectedSchool && (
               <View className='campus-directory-section'>
                 <View className='section-head campus-directory-head'>
                   <Text className='section-title'>食堂</Text>
@@ -734,13 +742,14 @@ function CampusCanteenPage() {
                     </View>
                 )}
               </View>
+            )}
 
               <View className='campus-results-header'>
                 <View className='campus-results-copy'>
-                  <Text className='campus-results-title'>{selectedCanteen?.name || "校园菜品"}</Text>
-                  <Text className='campus-results-location'>
+                  <Text className='campus-results-title'>{selectedCanteen?.name || (canteenScope === "community" ? "社区与园区菜品" : campusScope ? "校园菜品" : "食堂菜品")}</Text>
+                  {campusScope && selectedSchool && <Text className='campus-results-location'>
                     {[selectedSchool.name, selectedCampus?.name, floorName, windowName].filter(Boolean).join(" · ")}
-                  </Text>
+                  </Text>}
                 </View>
                 {loading && visibleList.length > 0 && <View className='campus-refresh-indicator'><View className='loading-spinner-md' /></View>}
                 <Button className='campus-more-button' ariaLabel='菜品更多操作' onClick={() => void openMore()}><Ellipsis /></Button>
@@ -749,13 +758,13 @@ function CampusCanteenPage() {
                 {([
                   ["hot", "热门"], ["high_protein", "高蛋白"], ["low_calorie", "低热量"], ["value", "性价比"],
                 ] as const).map(([value, label]) => (
-                  <View key={value} className={`campus-sort-tab ${sortBy === value ? "active" : ""}`} onClick={() => setSortBy(value)}>{label}</View>
+                  <View key={value} id={`canteen-sort-${value}`} className={`campus-sort-tab ${sortBy === value ? "active" : ""}`} onClick={() => setSortBy(value)}>{label}</View>
                 ))}
-                <View className={`campus-filter-toggle ${filtersExpanded || hasActiveFilters ? "active" : ""}`} onClick={() => setFiltersExpanded(!filtersExpanded)}>
+                {campusScope && selectedSchool && <View className={`campus-filter-toggle ${filtersExpanded || hasActiveFilters ? "active" : ""}`} onClick={() => setFiltersExpanded(!filtersExpanded)}>
                   <FilterOutlined className='campus-filter-icon' /><Text>筛选</Text>
-                </View>
+                </View>}
               </View>
-              {filtersExpanded && (
+              {campusScope && selectedSchool && filtersExpanded && (
                 <View className='campus-filter-panel'>
                   <View className='filter-row filter-row--equal'>
                     <View className='filter-chip' onClick={openCampusPicker}><Text className='filter-chip-text'>{selectedCampus?.name || "全部校区"}</Text><ArrowDown className='filter-chip-arrow' /></View>
@@ -803,8 +812,6 @@ function CampusCanteenPage() {
             ) : (
               <View className='campus-meal-grid'>{visibleList.map(renderCampusCard)}</View>
             )}
-              </>
-            )}
           </View>
         </ScrollView>
 
@@ -812,8 +819,6 @@ function CampusCanteenPage() {
           visible={showSchoolPicker}
           value={selectedSchool?.id}
           onSelect={(school) => {
-            const requestedKeyword = searchRequestedBeforeSchool.current ? searchKeyword.trim() : "";
-            searchRequestedBeforeSchool.current = false;
             schoolChosenByUser.current = true;
             setSelectedSchool(school);
             setSelectedCampus(null);
@@ -823,10 +828,8 @@ function CampusCanteenPage() {
             setFloorName("");
             setWindowName("");
             setDirectoryExpanded(false);
-            setSearchKeyword(requestedKeyword);
-            setAppliedSearchKeyword(requestedKeyword);
           }}
-          onCancel={() => { searchRequestedBeforeSchool.current = false; setShowSchoolPicker(false); }}
+          onCancel={() => setShowSchoolPicker(false)}
         />
         <CampusPicker
           visible={showCampusPicker}

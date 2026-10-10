@@ -441,9 +441,17 @@ func (s *PublicFoodService) enqueueTask(ctx context.Context, taskID, taskType st
 }
 
 func (s *PublicFoodService) List(ctx context.Context, userID string, filter repo.ListFilter) ([]domain.PublicFoodView, error) {
+	filter.CanteenScope = strings.TrimSpace(filter.CanteenScope)
+	switch filter.CanteenScope {
+	case "", "all", "campus", "community":
+	default:
+		logger.Warn(ctx, "食堂范围参数无效", slog.String("user_id", userID), slog.String("canteen_scope", filter.CanteenScope))
+		return nil, commonerrors.ErrBadRequest
+	}
 	filter.ViewerUserID = userID
 	items, err := s.repo.ListPublished(ctx, filter)
 	if err != nil {
+		logger.Error(ctx, "查询美食图谱失败", err, slog.String("user_id", userID), slog.String("canteen_scope", filter.CanteenScope))
 		return nil, err
 	}
 	items, err = s.filterVisibleItems(ctx, userID, items)

@@ -67,6 +67,8 @@ type PublicFoodItem struct {
 	SchoolLogoURL      string     `gorm:"column:school_logo_url;->" json:"school_logo_url,omitempty"`
 	AnalysisStatus     string     `gorm:"column:analysis_status;->" json:"analysis_status,omitempty"`
 	AnalysisError      string     `gorm:"column:analysis_error;->" json:"analysis_error,omitempty"`
+	// Derived from the collection source/directory, never a public-library column.
+	VenueType string `gorm:"column:venue_type;->;-:migration" json:"venue_type,omitempty"`
 }
 
 func (PublicFoodItem) TableName() string { return "public_food_library" }

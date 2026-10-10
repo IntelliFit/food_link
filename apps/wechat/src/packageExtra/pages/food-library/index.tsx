@@ -67,7 +67,15 @@ function campusLocation(item: PublicFoodLibraryItem): string {
 }
 
 function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
-  return item.type === 'campus' || !!item.is_campus_food
+  return !!item.venue_type || item.type === 'campus' || !!item.is_campus_food
+}
+
+function canteenBadge(item: PublicFoodLibraryItem): string {
+  if (item.venue_type === 'university') return '校园食堂'
+  if (item.venue_type === 'community') return '社区食堂'
+  if (item.venue_type === 'office_park') return '园区食堂'
+  if (item.venue_type === 'corporate') return '企业食堂'
+  return '食堂'
 }
 
 function foodMapTitle(item: PublicFoodLibraryItem): string {
@@ -357,10 +365,10 @@ function FoodLibraryPage() {
     if (!force && campusList.length > 0) return
     setCampusLoading(true)
     try {
-      const res = await getPublicFoodLibraryList({ type: 'campus', limit: 50 })
+      const res = await getPublicFoodLibraryList({ canteen_scope: 'all', limit: 50 })
       setCampusList(res.list || [])
     } catch (e: any) {
-      await showUnifiedApiError(e, '加载校园食堂失败')
+      await showUnifiedApiError(e, '获取食堂菜品失败')
     } finally {
       setCampusLoading(false)
     }
@@ -859,7 +867,7 @@ function FoodLibraryPage() {
             loadCampusList(true)
           }}
         >
-          校园食堂
+          食堂
         </View>
         <View
           className={`tab-item ${tabMode === 'collections' ? 'active' : ''}`}
@@ -1129,8 +1137,8 @@ function FoodLibraryPage() {
           ) : tabMode === 'campus' && displayList.length === 0 ? (
             <View className='empty-state'>
               <Text className='empty-icon iconfont icon-shiwu' />
-              <Text className='empty-text'>暂无校园食堂数据</Text>
-              <View className='empty-btn' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/campus-canteen/index') })}>去校园专区</View>
+              <Text className='empty-text'>暂未取得食堂菜品</Text>
+              <View className='empty-btn' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/campus-canteen/index') })}>浏览校园与社区食堂</View>
             </View>
           ) : tabMode === 'mine' && displayList.length === 0 ? (
             <View className='empty-state'>
@@ -1173,7 +1181,7 @@ function FoodLibraryPage() {
                       <View className='fat-loss-badge'>适合减脂</View>
                     )}
                     {campusFood && (
-                      <View className='campus-food-badge'>校园食堂</View>
+                      <View className='campus-food-badge'>{canteenBadge(item)}</View>
                     )}
                   </View>
                   <View className='food-info'>
@@ -1184,7 +1192,7 @@ function FoodLibraryPage() {
                         <Text className='merchant-name'>{item.merchant_name || item.detail_address || item.merchant_address || '地点待补充'}</Text>
                       </View>
                     )}
-                    {campusFood && <Text className='campus-food-location'>{campusLocation(item) || '校园食堂'}</Text>}
+                    {campusFood && <Text className='campus-food-location'>{campusLocation(item) || item.merchant_name || item.detail_address || item.merchant_address || '地点待补充'}</Text>}
                     <Text className='atlas-food-price'>{foodPrice(item)}</Text>
                     <Text className={`atlas-food-nutrition${nutritionAvailable ? '' : ' food-nutrition-unavailable'}`}>
                       {nutritionAvailable ? `${item.total_calories.toFixed(0)} kcal · 蛋白 ${item.total_protein.toFixed(0)}g` : '营养待补充'}

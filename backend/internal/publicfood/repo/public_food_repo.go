@@ -41,6 +41,7 @@ type ListFilter struct {
 	Limit              int
 	Offset             int
 	Type               string
+	CanteenScope       string
 	IsCampusFood       *bool
 	SchoolID           string
 	CampusID           string
@@ -181,22 +182,51 @@ func NutritionSnapshotFromResult(result map[string]any) NutritionSnapshot {
 	}
 }
 
+// Collection provenance takes precedence over legacy common/campus labels.
+// Unknown legacy canteens remain in "all", but are not guessed to be schools.
+const canteenVenueTypeSQL = `CASE
+	WHEN venue_batch.venue_type IN ('university', 'community', 'corporate', 'office_park') THEN venue_batch.venue_type
+	WHEN venue_school.location_type = 'university' THEN 'university'
+	WHEN venue_school.location_type = 'community' THEN 'community'
+	WHEN venue_school.location_type = 'company' THEN 'corporate'
+	WHEN s.location_type = 'university' THEN 'university'
+	WHEN s.location_type = 'community' THEN 'community'
+	WHEN s.location_type = 'company' THEN 'corporate'
+	ELSE '' END`
+
 func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]domain.PublicFoodItem, error) {
 	var rows []domain.PublicFoodItem
-	q := r.db.WithContext(ctx).
-		Table("public_food_library AS p").
-		Select(`p.*,
+	projection := `p.*,
 			CASE WHEN COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true
 				THEN COALESCE(p.nutrition_status, 'pending') ELSE COALESCE(rt.status, t.status, '') END AS analysis_status,
 			CASE WHEN COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true
 				THEN CASE WHEN p.nutrition_status = 'failed' THEN COALESCE(t.error_message, '') ELSE '' END ELSE COALESCE(rt.error_message, t.error_message, '') END AS analysis_error,
-			s.logo_url AS school_logo_url`).
+			s.logo_url AS school_logo_url`
+	q := r.db.WithContext(ctx).
+		Table("public_food_library AS p").
+		Select(projection).
 		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
 		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").
 		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").
 		Where("p.status = ?", "published").
 		Where(validPublishedCampusNutritionSQL("p"))
 	q = visiblePublicFoodToViewer(q, "p.user_id", f.ViewerUserID)
+	if f.CanteenScope != "" {
+		q = q.Joins("LEFT JOIN campus_food_catalog_items venue_item ON venue_item.id = p.id").
+			Joins("LEFT JOIN campus_food_collection_batches venue_batch ON venue_batch.id = venue_item.batch_id").
+			Joins("LEFT JOIN schools venue_school ON venue_school.id = p.school_id AND venue_school.status = 'active'").
+			Select(projection + ", " + canteenVenueTypeSQL + " AS venue_type")
+		switch f.CanteenScope {
+		case "all":
+			q = q.Where("(" + canteenVenueTypeSQL + ") <> '' OR p.type = 'campus' OR p.is_campus_food = true")
+		case "campus":
+			q = q.Where("("+canteenVenueTypeSQL+") = ?", "university")
+		case "community":
+			q = q.Where("("+canteenVenueTypeSQL+") IN ?", []string{"community", "corporate", "office_park"})
+		default:
+			return nil, fmt.Errorf("invalid canteen scope: %q", f.CanteenScope)
+		}
+	}
 	if f.City != "" {
 		q = q.Where("p.city = ?", f.City)
 	}
@@ -278,7 +308,7 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	// A real dish photo is more useful than a placeholder in the campus canteen
 	// feed. Keep this as the primary ordering rule for every campus sort, then
 	// apply the user-selected sort inside each image group.
-	if itemType == publicFoodTypeCampus || (itemType == "" && f.IsCampusFood != nil && *f.IsCampusFood) {
+	if f.CanteenScope != "" || itemType == publicFoodTypeCampus || (itemType == "" && f.IsCampusFood != nil && *f.IsCampusFood) {
 		q = q.Order(campusImagePriorityOrder(r.db.Dialector.Name(), "p"))
 	}
 	// Directory IDs are stable while display names may be normalized or edited
@@ -301,7 +331,7 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	}
 	switch f.SortBy {
 	case "hot":
-		if itemType == "campus" {
+		if itemType == "campus" || f.CanteenScope != "" {
 			// Avoid an index-driven scan across the full public library before the
 			// campus filters are applied. Campus rows are a small filtered set, so
 			// sorting their normalized engagement values is both stable and fast.

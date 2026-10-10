@@ -44,6 +44,9 @@
   color: var(--campus-ink);
 
   button::after { border: 0; }
+  .canteen-scope-tabs { display: flex; gap: 8rpx; padding: 8rpx 0 16rpx; }
+  .canteen-scope-tab { flex: 1; min-width: 0; margin: 0; padding: 0 8rpx; min-height: 80rpx; display: flex; align-items: center; justify-content: center; font-size: 28rpx; line-height: 40rpx; color: var(--campus-muted); background: transparent; border-radius: 18rpx; white-space: nowrap; }
+  .canteen-scope-tab.active { color: var(--campus-accent); background: var(--campus-soft); font-weight: 600; }
   .campus-browse-header {
     flex-shrink: 0;
     padding: 12rpx 24rpx 20rpx;
