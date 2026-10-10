@@ -1019,6 +1019,16 @@ type SupplementIntakeDO struct {
 
 func (SupplementIntakeDO) TableName() string { return "supplement_intakes" }
 
+// SupplementFeedRestorationDO records each restored intake once. A later author
+// hide must survive another run of the repair command.
+type SupplementFeedRestorationDO struct {
+	IntakeID   string    `gorm:"column:intake_id;type:uuid;primaryKey"`
+	RunKey     string    `gorm:"column:run_key;type:text;not null"`
+	RestoredAt time.Time `gorm:"column:restored_at;type:timestamptz;not null;default:now()"`
+}
+
+func (SupplementFeedRestorationDO) TableName() string { return "supplement_feed_restorations" }
+
 type FriendRequestDO struct {
 	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	FromUserID string     `gorm:"column:from_user_id;type:uuid;not null;index:idx_friend_requests_from_user"`
@@ -2094,6 +2104,7 @@ func AllModels() []any {
 		&SupplementCatalogItemDO{},
 		&UserSupplementDO{},
 		&SupplementIntakeDO{},
+		&SupplementFeedRestorationDO{},
 		&FriendRequestDO{},
 		&UserFriendDO{},
 		&UserBlockDO{},
