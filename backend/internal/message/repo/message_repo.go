@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // User — minimal weapp_user struct for message queries
@@ -37,6 +38,15 @@ type MessageRepo struct {
 
 func NewMessageRepo(db *gorm.DB) *MessageRepo {
 	return &MessageRepo{db: db}
+}
+
+// CreateSystemMessageOnce uses the event/recipient-derived ID in the caller's
+// transaction. State changes and inbox delivery commit together.
+func (r *MessageRepo) CreateSystemMessageOnce(ctx context.Context, msg *domain.PrivateMessage) error {
+	row := &privateMessageDO{ID: msg.ID, SenderID: domain.SystemSenderID, ReceiverID: msg.ReceiverID,
+		Content: msg.Content, ContentType: "system", ActionText: strPtrIfNonEmpty(msg.ActionText),
+		ExtraData: datatypes.JSONMap(msg.ExtraData), CreatedAt: &msg.CreatedAt}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}}, DoNothing: true}).Create(row).Error
 }
 
 // CreateMessage inserts a new private message

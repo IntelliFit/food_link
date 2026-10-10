@@ -1,0 +1,30 @@
+.meal-discovery { flex: 1; min-height: 0; display: flex; flex-direction: column; color: #243d31; background: #f6f5ed; }
+.meal-discovery-head { display: flex; align-items: center; justify-content: space-between; padding: 28px 28px 20px; }
+.meal-eyebrow { display: block; font-size: 22px; color: #626f65; margin-bottom: 10px; }
+.meal-heading { display: block; font-size: 38px; font-weight: 700; }
+.meal-mine { font-size: 24px; color: #21543e; }
+.meal-search { display: flex; align-items: center; gap: 16px; padding: 20px; margin: 0 28px 16px; border-radius: 24px; background: #fffef9; font-size: 26px; }
+.meal-search input { flex: 1; min-width: 0; font-size: 26px; }
+.meal-filter-row { display: flex; gap: 12px; padding: 0 28px 16px; }
+.meal-chip { border-radius: 28px; padding: 12px 20px; background: #eeeee5; font-size: 24px; }
+.meal-chip.is-active { color: #fff; background: #21543e; }
+.meal-discovery-scroll { flex: 1; min-height: 0; height: 0; }
+.meal-list-content { padding: 8px 28px 20px; }
+.meal-card { background: #fffef9; border: 1px solid #e3e8dc; border-radius: 28px; padding: 26px; margin-bottom: 20px; }
+.meal-card-top,.meal-card-bottom { display: flex; align-items: center; justify-content: space-between; font-size: 24px; color: #626f65; }
+.meal-capacity { color: #21543e; background: #edf1e7; padding: 8px 14px; border-radius: 20px; }
+.meal-card-title { display: block; font-size: 32px; font-weight: 600; margin: 16px 0; }
+.meal-venue { display: block; font-size: 28px; }
+.meal-address { display: block; color: #626f65; font-size: 24px; line-height: 1.6; margin-top: 6px; }
+.meal-card-tags { display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap; font-size: 22px; }
+.meal-card-tags text { background: #f3f3eb; border-radius: 8px; padding: 6px 10px; }
+.meal-card-bottom { padding-top: 18px; border-top: 1px solid #edf1e7; }
+.meal-card-action { color: #21543e; font-weight: 600; }
+.meal-publish-wrap { padding: 16px 28px calc(140px + env(safe-area-inset-bottom)); }
+.meal-publish { background: #21543e; color: #fff; border-radius: 24px; font-size: 28px; }
+.meal-more { background: #edf1e7; font-size: 26px; }
+.meal-empty { padding: 60px 20px; text-align: center; font-size: 28px; color: #626f65; }
+.meal-empty text { display: block; line-height: 1.7; }
+.meal-empty button { margin-top: 24px; background: #edf1e7; color: #21543e; font-size: 26px; }
+.meal-skeleton view { height: 220px; background: linear-gradient(90deg,#eeeee5,#fffef9,#eeeee5); background-size: 200% 100%; animation: meal-shimmer 1.5s infinite; border-radius: 28px; margin-bottom: 20px; }
+@keyframes meal-shimmer { to { background-position: -200% 0; } }

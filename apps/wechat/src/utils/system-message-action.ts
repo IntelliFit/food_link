@@ -27,6 +27,11 @@ export function isRewardSystemMessage(message: PrivateMessage): boolean {
 }
 
 export function resolveSystemMessageActionPath(message: PrivateMessage): string {
+  if (message.extra_data?.target === 'meal-meetup') {
+    const id = String(message.extra_data.meetup_id || '')
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      ? `/packageMeal/pages/detail/index?id=${encodeURIComponent(id)}` : ''
+  }
   if (isInviteRewardSystemMessage(message)) {
     return extraPkgUrl('/pages/invite-friends/index?section=rewards')
   }
