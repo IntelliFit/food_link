@@ -8,8 +8,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	authrepo "food_link/backend/internal/auth/repo"
+	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	"food_link/backend/internal/migration"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
@@ -32,6 +35,11 @@ func main() {
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	onlySupplements := flag.Bool("only-supplements", false, "only add supplement catalog, cabinet, intake schema, and catalog seeds")
 	onlySupplementFeed := flag.Bool("only-supplement-feed", false, "only add supplement intake feed visibility and update feed interaction target constraints")
+	restoreSupplementFeed := flag.Bool("restore-supplement-feed", false, "inspect or restore moderated historical supplement feed records only")
+	restoreBefore := flag.String("restore-before", "", "required RFC3339 cutoff for historical intake creation time")
+	restoreRunKey := flag.String("restore-run-key", "", "required restoration audit identifier")
+	restoreApply := flag.Bool("restore-apply", false, "apply the supplement restoration; default is read-only inspection")
+	restoreExcludeIDs := flag.String("restore-exclude-ids", "", "comma-separated author-hidden intake IDs to preserve")
 	onlyGrowthPerformanceIndexes := flag.Bool("only-growth-performance-indexes", false, "only create growth-sensitive feed, notification, and body-summary indexes")
 	onlyMarketingQR := flag.Bool("only-marketing-qr", false, "only add offline marketing QR attribution tables")
 	onlyCampusMapLocations := flag.Bool("only-campus-map-locations", false, "only add school, campus, and canteen coordinates used by the food map")
@@ -41,6 +49,9 @@ func main() {
 	printTarget := flag.Bool("print-target", false, "print resolved database target without credentials; do not connect or migrate")
 	flag.Parse()
 	// Analytics has a scoped migration to avoid touching business tables during deployment.
+	if !*restoreSupplementFeed && (*restoreBefore != "" || *restoreRunKey != "" || *restoreApply || *restoreExcludeIDs != "") {
+		log.Fatal("补剂恢复参数须与 --restore-supplement-feed 一起使用")
+	}
 	selectedOnlyModes := 0
 	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
@@ -52,6 +63,9 @@ func main() {
 	}
 	if *onlyMealMemory && selectedOnlyModes > 0 {
 		log.Fatal("--only-* 迁移模式不能同时使用")
+	}
+	if *restoreSupplementFeed && (selectedOnlyModes > 0 || *onlyMealMemory) {
+		log.Fatal("补剂恢复不能与其它迁移模式一起使用")
 	}
 
 	cfg, resolvedDir, err := loadConfig(*configDir)
@@ -90,6 +104,51 @@ func main() {
 
 	if err := database.Ping(ctx, db); err != nil {
 		log.Fatalf("数据库 ping 失败: %v", err)
+	}
+	if *restoreSupplementFeed {
+		before, err := time.Parse(time.RFC3339Nano, *restoreBefore)
+		if err != nil {
+			log.Fatal("补剂恢复截止时间须为 RFC3339")
+		}
+		var excludeIDs []string
+		if strings.TrimSpace(*restoreExcludeIDs) != "" {
+			for _, id := range strings.Split(*restoreExcludeIDs, ",") {
+				excludeIDs = append(excludeIDs, strings.TrimSpace(id))
+			}
+		}
+		var check func(context.Context, string, map[string]any) error
+		if *restoreApply {
+			checker, err := contentsecurity.New(cfg, authrepo.NewUserRepo(db))
+			if err != nil {
+				log.Fatalf("创建补剂内容审核失败: %v", err)
+			}
+			defer checker.Close()
+			// Historical intakes often repeat the same immutable label snapshot.
+			// Reuse this run's decision for identical content by the same author.
+			decisions := map[string]error{}
+			check = func(ctx context.Context, userID string, doc map[string]any) error {
+				body, err := json.Marshal(doc)
+				if err != nil {
+					return err
+				}
+				key := userID + "\x00" + string(body)
+				if decision, ok := decisions[key]; ok {
+					return decision
+				}
+				err = checker.CheckPublication(ctx, userID, 2, doc, nil)
+				decisions[key] = err
+				return err
+			}
+		}
+		report, err := migration.RestoreSupplementFeed(ctx, db, schema, migration.SupplementFeedRestoreOptions{Before: before, RunKey: *restoreRunKey, Apply: *restoreApply, ExcludeIDs: excludeIDs}, check)
+		if report != nil {
+			body, _ := json.Marshal(report)
+			fmt.Println(string(body))
+		}
+		if err != nil {
+			log.Fatalf("补剂历史动态恢复失败: %v", err)
+		}
+		return
 	}
 	if *onlyMealMemory {
 		if err := migration.MigrateMealRecommendationMemory(ctx, db); err != nil {
