@@ -265,17 +265,17 @@ function ProfilePage() {
 
   const services = [
     {
-      id: 13,
-      iconClass: 'icon-pinglun',
-      title: '我的评论',
-      desc: '查看自己发出的评论与回复',
-      path: extraPkgUrl('/pages/comment-history/index')
-    },
-    {
       id: 0,
       iconClass: 'icon-shentinianling',
       title: '健康档案',
       desc: '生理指标、日常消耗、病史与饮食偏好'
+    },
+    {
+      id: 15,
+      iconClass: 'icon-target',
+      title: '饮食方案',
+      desc: '训练日、休息日与常用营养目标',
+      path: extraPkgUrl('/pages/nutrition-plans/index')
     },
     {
       id: 2,
@@ -323,7 +323,7 @@ function ProfilePage() {
     {
       id: 9,
       iconClass: 'icon-dizhi',
-      title: '校园食堂',
+      title: '校园与社区食堂',
       desc: '查食堂菜品热量、价格和蛋白质',
       path: extraPkgUrl('/pages/campus-canteen/index')
     },
@@ -347,7 +347,7 @@ function ProfilePage() {
   const quickServices = services.filter(service => [5, 9, 0, 4].includes(service.id))
     .sort((a, b) => [5, 9, 0, 4].indexOf(a.id) - [5, 9, 0, 4].indexOf(b.id))
   const serviceGroups = [
-    { title: '记录与奖励', items: services.filter(service => [13, 2, 6, 12].includes(service.id)) },
+    { title: '记录与奖励', items: services.filter(service => [2, 6, 12].includes(service.id)) },
     { title: '帮助与邀请', items: services.filter(service => [11, 8, 10].includes(service.id)) },
   ]
 

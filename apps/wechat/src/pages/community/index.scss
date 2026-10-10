@@ -2,6 +2,22 @@
 @import '../../styles/meal-orbit-tokens.scss';
 @import './components/FeedActionSheet.scss';
 
+.community-social-tabs { display: flex; gap: 44px; padding: 18px 30px; background: #f6f5ed; flex-shrink: 0; font-size: 32px; color: #626f65; }
+.community-social-tabs text { padding: 8px 0 12px; }
+.community-social-tabs .is-active { color: #21543e; font-weight: 700; border-bottom: 5px solid #21543e; }
+.community-social-tabs .community-meal-messages { margin-left: auto; font-size: 26px; align-self: center; }
+.community-page .ranking-banner.ranking-banner--compact {
+  padding: 16rpx 20rpx;
+  gap: 10rpx;
+  .ranking-head { gap: 10rpx; }
+  .ranking-icon-wrap { width: 36rpx; height: 36rpx; border-radius: 10rpx; }
+  .ranking-title { font-size: 26rpx; line-height: 36rpx; }
+  .ranking-column-title { font-size: 24rpx; line-height: 34rpx; }
+  .ranking-mini-tabs { margin-top: 6rpx; }
+  .ranking-mini-list { margin-top: 8rpx; }
+  .ranking-column-link { margin-top: 8rpx; }
+}
+
 /* 页面根节点：高度由 JS 通过 getSystemInfoSync 设定固定像素值（避免 100vh 随键盘变化）；
    100vh 仅作兜底（JS 未就绪时）。flex 让 ScrollView 获得准确高度。 */
 // 与首页 `.home-page` 一致：绿→白渐变底；列表区透明以透出渐变
@@ -99,6 +115,48 @@ $community-border-soft: rgb(92 184 150 / 18%);
 }
 
 /* 滚动外层：flex 占满剩余空间，给 ScrollView 提供明确高度 */
+.community-interaction-toolbar {
+  position: fixed;
+  top: $tab-page-fixed-control-top;
+  left: 24rpx;
+  z-index: 20;
+  display: flex;
+}
+
+.community-interaction-entry {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-height: 64rpx;
+  padding: 0 24rpx;
+  border: 1rpx solid $community-border-soft;
+  border-radius: 999rpx;
+  background: $orbit-surface;
+  color: $orbit-forest;
+  font-size: 28rpx;
+  font-weight: 600;
+
+  .iconfont { font-size: 32rpx; }
+
+  &:active { opacity: 0.75; }
+}
+
+.community-interaction-count {
+  min-width: 32rpx;
+  padding: 2rpx 8rpx;
+  border-radius: 999rpx;
+  background: #ef4444;
+  color: #fff;
+  text-align: center;
+  font-size: 22rpx;
+}
+
+.fl-d .community-interaction-entry {
+  background: #1c2d25;
+  border-color: #34473d;
+  color: #d5e6df;
+}
+
 .community-scroll-wrap {
   flex: 1;
   min-height: 0;
@@ -313,7 +371,7 @@ $community-border-soft: rgb(92 184 150 / 18%);
 
 .friends-quick-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12rpx;
   width: 100%;
   box-sizing: border-box;

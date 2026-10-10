@@ -801,10 +801,17 @@ export interface SupplementCatalogItem {
   status: string
 }
 
+export interface SupplementProductSnapshot {
+  brand: string
+  image_urls: string[]
+  source?: 'record' | 'cabinet_match'
+}
+
 export interface SupplementIntake {
   id: string
   supplement_id: string
   supplement_name: string
+  product_snapshot?: SupplementProductSnapshot | null
   servings: number
   serving_label: string
   components: SupplementComponent[]
@@ -869,6 +876,11 @@ export interface HomeIntakeData {
 }
 
 export interface HomeNutritionTarget {
+  plan_name?: string
+  plan_id?: string
+  fat_min?: number
+  fat_max?: number
+  historical_reference?: boolean
   source?: 'manual' | 'system_initial' | 'dynamic' | 'profile' | 'default' | string
   diet_goal?: string
   base_calorie_target?: number
@@ -1338,6 +1350,8 @@ export interface DietRecommendationOption {
   meal_components?: DietRecommendationOption[]
   distance_km?: number
   location_level?: 'food' | 'canteen' | 'campus' | 'school'
+  latitude?: number
+  longitude?: number
   merchant_name?: string
   address?: string
   title: string
@@ -1485,6 +1499,8 @@ function persistDashboardTargetsLocal(data: DashboardTargets): void {
 
 /** 数据统计接口返回（周/月） */
 export interface StatsSummary {
+  recorded_target_totals?: Record<string, number>
+  target_calorie_difference?: number
 	diet_decision_basis?: DietDecisionBasis
   range: 'week' | 'month'
   start_date: string
@@ -1508,7 +1524,7 @@ export interface StatsSummary {
     /** 兼容旧字段，后端会镜像 afternoon_snack */
     snack?: number
   }
-  daily_calories: Array<{ date: string; calories: number }>
+  daily_calories: Array<{ date: string; calories: number; target?: import('./nutrition-plans').NutritionDay }>
   macro_percent: { protein: number; carbs: number; fat: number }
   analysis_summary: string
   analysis_summary_generated_date?: string | null
@@ -4715,6 +4731,8 @@ export async function getStatsCalendarMonth(month: string): Promise<StatsCalenda
 }
 
 export interface DietDecisionBasis {
+  fat_min?: number
+  fat_max?: number
   nutrient_state?: {
     rules: Array<{ key: string; unit: string; target?: number; limit?: number; reference_type: string; source_id: string; source_url?: string; scope: string; time_window: string }>
     current: Record<string, { value: number; unit: string; status: 'recorded' | 'estimated' | 'partial' | 'missing'; known_items: number; total_items: number }>
@@ -7179,6 +7197,7 @@ export type CommunityFeedRecord = FoodRecord & {
   servings?: number
   serving_label?: string
   supplement_components?: SupplementComponent[]
+  supplement_product?: SupplementProductSnapshot | null
   price?: number | null
   school?: string | null
   canteen?: string | null
@@ -8151,6 +8170,7 @@ export async function bindMarketingQRUser(code: string, visitorId: string): Prom
 }
 
 export type PublicFoodLibraryType = 'common' | 'campus' | 'merchant'
+export type CanteenScope = 'all' | 'campus' | 'community'
 
 /** 公共食物库条目 */
 export interface PublicFoodLibraryItem {
@@ -8192,6 +8212,8 @@ export interface PublicFoodLibraryItem {
   status: string
   /** 条目类型：普通公共食物库或校园食堂 */
   type: PublicFoodLibraryType
+  /** 采集来源/真实目录推导的场所类型，不以旧 common/campus 标签猜测 */
+  venue_type?: 'university' | 'community' | 'corporate' | 'office_park' | ''
   like_count: number
   comment_count: number
   avg_rating: number
@@ -8458,6 +8480,8 @@ export interface CreatePublicFoodLibraryRequest {
 
 /** 公共食物库列表查询参数 */
 export interface PublicFoodLibraryListParams {
+  /** 全部食堂、校园、社区/园区/企业；与原条目 type 独立 */
+  canteen_scope?: CanteenScope
   city?: string
   /** 搜索菜名、学校/校区/食堂、楼层/窗口及地址 */
   keyword?: string
@@ -8514,6 +8538,7 @@ export async function getPublicFoodLibraryList(
   if (params?.limit !== undefined) q.set('limit', String(params.limit))
   if (params?.offset !== undefined) q.set('offset', String(params.offset))
   if (params?.type) q.set('type', params.type)
+  if (params?.canteen_scope) q.set('canteen_scope', params.canteen_scope)
   if (params?.is_campus_food !== undefined) q.set('is_campus_food', String(params.is_campus_food))
   if (params?.school_id) q.set('school_id', params.school_id)
   if (params?.campus_id) q.set('campus_id', params.campus_id)
@@ -8530,7 +8555,13 @@ export async function getPublicFoodLibraryList(
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取列表失败')
   }
-  return response.data as { list: PublicFoodLibraryItem[] }
+  const result = response.data as { list: PublicFoodLibraryItem[]; canteen_scope?: CanteenScope }
+  // An older server ignores unknown query parameters: never show all ordinary
+  // restaurants as canteens when the matching backend has not been deployed.
+  if (params?.canteen_scope && result.canteen_scope !== params.canteen_scope) {
+    throw new Error('食堂服务尚未更新，请稍后重试')
+  }
+  return result
 }
 
 /** 获取服务端全量聚合的美食地图地点，避免热门截断并包含校园层级继承坐标。 */
