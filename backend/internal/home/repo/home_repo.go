@@ -192,18 +192,20 @@ func (r *HomeRepo) ListExerciseBurnedByDateRange(ctx context.Context, userID, st
 }
 
 func (r *HomeRepo) ListWeightRecordsByDateRange(ctx context.Context, userID, startDate, endDate string) ([]WeightRecord, error) {
-	start, _, err := chinaDateWindow(startDate)
+	_, _, err := chinaDateWindow(startDate)
 	if err != nil {
 		return nil, err
 	}
-	_, end, err := chinaDateWindow(endDate)
+	_, _, err = chinaDateWindow(endDate)
 	if err != nil {
 		return nil, err
 	}
 	var rows []WeightRecord
 	err = r.db.WithContext(ctx).Table("user_weight_records").
 		Select("weight_kg, recorded_on").
-		Where("user_id = ? AND recorded_on >= ? AND recorded_on < ?", userID, start, end).
+		// recorded_on is a SQL DATE; UTC instants truncate the inclusive final
+		// business day when the driver binds them as dates.
+		Where("user_id = ? AND recorded_on >= ? AND recorded_on <= ?", userID, startDate, endDate).
 		Order("recorded_on asc, created_at asc").
 		Find(&rows).Error
 	return rows, err

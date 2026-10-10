@@ -34,6 +34,7 @@ const extraSubpackagePages = [
   'pages/recipe-detail/index',
   'pages/health-profile/index',
   'pages/health-profile-view/index',
+  'pages/nutrition-plans/index',
   'pages/day-record/index',
   'pages/record-detail/index',
   'pages/food-library/index',
@@ -86,6 +87,7 @@ export default defineAppConfig({
   darkmode: false,
   pages: mainPages,
   subpackages: [
+    { root: 'packageMeal', name: 'meal', pages: ['pages/detail/index', 'pages/create/index', 'pages/mine/index', 'pages/room/index'] },
     { root: 'packageRecap', name: 'recap', pages: ['pages/recap/index'] },
     {
       root: 'packageExtra',

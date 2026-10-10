@@ -165,11 +165,12 @@ sms:
   ip_throttle_seconds: 30
 
 worker:
-  count: 1
+  # 本地开发默认不消费任务。启用 worker 仅限独立本地数据库。
+  count: 0
   poll_interval_seconds: 2
 
 task_queue:
-  # memory is process-local and intended for local/dev server-embedded workers.
+  # memory 仍会扫描数据库恢复任务，仅限独立本地库，不能连接共享线上库。
   # kafka uses brokers/topic/consumer_group and commits offsets only after task terminal state is persisted.
   driver: "memory"
   buffer_size: 1024

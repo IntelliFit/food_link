@@ -27,6 +27,7 @@ import (
 	"food_link/backend/internal/nutritionagg"
 	petdomain "food_link/backend/internal/pet/domain"
 	"food_link/backend/internal/taskqueue"
+	userdomain "food_link/backend/internal/user/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 
@@ -79,6 +80,15 @@ type StatsService struct {
 	cfg              *config.Config
 	client           *http.Client
 	deepSeekBaseURL  string
+	nutritionPlans   interface {
+		ResolveRange(context.Context, string, string, string) (map[string]userdomain.NutritionDay, error)
+	}
+}
+
+func (s *StatsService) ConfigureNutritionPlans(provider interface {
+	ResolveRange(context.Context, string, string, string) (map[string]userdomain.NutritionDay, error)
+}) {
+	s.nutritionPlans = provider
 }
 
 const (
@@ -221,8 +231,9 @@ func (s *StatsService) ConfigurePetChatCompanionProvider(provider PetChatCompani
 }
 
 type DailyCalories struct {
-	Date     string  `json:"date"`
-	Calories float64 `json:"calories"`
+	Date     string                   `json:"date"`
+	Calories float64                  `json:"calories"`
+	Target   *userdomain.NutritionDay `json:"target,omitempty"`
 }
 
 type CalendarDay struct {
@@ -240,6 +251,8 @@ type CalendarMonthSummary struct {
 }
 
 type StatsSummary struct {
+	RecordedTargetTotals         map[string]float64  `json:"recorded_target_totals,omitempty"`
+	TargetCalorieDifference      *float64            `json:"target_calorie_difference,omitempty"`
 	DietDecisionBasis            *DietDecisionBasis  `json:"diet_decision_basis,omitempty"`
 	Range                        string              `json:"range"`
 	StartDate                    string              `json:"start_date"`
@@ -266,30 +279,32 @@ type StatsSummary struct {
 }
 
 type statsComputation struct {
-	DietDecisionBasis  *DietDecisionBasis
-	StatsRange         string
-	StartDate          string
-	EndDate            string
-	User               *domain.StatsUserProfile
-	TDEE               int
-	StreakDays         int
-	TotalCalories      float64
-	AvgCaloriesPerDay  float64
-	CalSurplusDeficit  float64
-	TotalProtein       float64
-	TotalCarbs         float64
-	TotalFat           float64
-	ByMeal             map[string]float64
-	DailyCalories      []DailyCalories
-	RecordedDaily      []DailyCalories
-	MacroPercent       map[string]float64
-	MicronutrientDaily map[string]float64
-	ExerciseSummary    *statsExerciseSummary
-	RecordedDays       int
-	DataFingerprint    string
-	BodyMetrics        *BodyMetricsSummary
-	PetCompanion       petChatCompanion
-	DietRecords        *dietRecordToolState
+	RecordedTargetTotals    map[string]float64
+	TargetCalorieDifference *float64
+	DietDecisionBasis       *DietDecisionBasis
+	StatsRange              string
+	StartDate               string
+	EndDate                 string
+	User                    *domain.StatsUserProfile
+	TDEE                    int
+	StreakDays              int
+	TotalCalories           float64
+	AvgCaloriesPerDay       float64
+	CalSurplusDeficit       float64
+	TotalProtein            float64
+	TotalCarbs              float64
+	TotalFat                float64
+	ByMeal                  map[string]float64
+	DailyCalories           []DailyCalories
+	RecordedDaily           []DailyCalories
+	MacroPercent            map[string]float64
+	MicronutrientDaily      map[string]float64
+	ExerciseSummary         *statsExerciseSummary
+	RecordedDays            int
+	DataFingerprint         string
+	BodyMetrics             *BodyMetricsSummary
+	PetCompanion            petChatCompanion
+	DietRecords             *dietRecordToolState
 }
 
 type petChatCompanion struct {
@@ -469,6 +484,8 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 	}
 
 	return &StatsSummary{
+		RecordedTargetTotals:         comp.RecordedTargetTotals,
+		TargetCalorieDifference:      comp.TargetCalorieDifference,
 		DietDecisionBasis:            comp.DietDecisionBasis,
 		Range:                        comp.StatsRange,
 		StartDate:                    comp.StartDate,
@@ -1609,29 +1626,55 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 		statsExerciseFingerprint(exerciseSummary),
 	)
 
+	dailyList := buildDailyList(startUTC, endUTC, dailyCal)
+	var targetTotals map[string]float64
+	var targetDifference *float64
+	if s.nutritionPlans != nil {
+		days, err := s.nutritionPlans.ResolveRange(ctx, userID, startDate, endDate)
+		if err != nil {
+			return nil, err
+		}
+		targetTotals = map[string]float64{}
+		for i := range dailyList {
+			day := days[dailyList[i].Date]
+			dailyList[i].Target = &day
+			if _, recorded := dailyCal[day.Date]; recorded {
+				for k, v := range day.Snapshot.Targets {
+					targetTotals[k] += v
+				}
+			}
+		}
+		difference := round1(totalCal - targetTotals["calorie_target"])
+		targetDifference = &difference
+		encoded, _ := json.Marshal(days)
+		fingerprint := sha256.Sum256(encoded)
+		dataFingerprint += fmt.Sprintf("_%x", fingerprint)
+	}
 	return &statsComputation{
-		DietDecisionBasis:  buildDietDecisionBasis(user, records, time.Now()),
-		StatsRange:         statsRange,
-		StartDate:          startDate,
-		EndDate:            endDate,
-		User:               user,
-		TDEE:               tdee,
-		StreakDays:         streakDays,
-		TotalCalories:      totalCal,
-		AvgCaloriesPerDay:  avgCalPerDay,
-		CalSurplusDeficit:  calSurplusDeficit,
-		TotalProtein:       totalProtein,
-		TotalCarbs:         totalCarbs,
-		TotalFat:           totalFat,
-		ByMeal:             byMeal,
-		DailyCalories:      buildDailyList(startUTC, endUTC, dailyCal),
-		RecordedDaily:      buildRecordedDailyList(dailyCal),
-		MacroPercent:       macroPercent,
-		MicronutrientDaily: micronutrientDaily,
-		ExerciseSummary:    exerciseSummary,
-		RecordedDays:       recordedDays,
-		DataFingerprint:    dataFingerprint,
-		BodyMetrics:        bodyMetricsSummary,
+		RecordedTargetTotals:    targetTotals,
+		TargetCalorieDifference: targetDifference,
+		DietDecisionBasis:       buildDietDecisionBasis(user, records, time.Now()),
+		StatsRange:              statsRange,
+		StartDate:               startDate,
+		EndDate:                 endDate,
+		User:                    user,
+		TDEE:                    tdee,
+		StreakDays:              streakDays,
+		TotalCalories:           totalCal,
+		AvgCaloriesPerDay:       avgCalPerDay,
+		CalSurplusDeficit:       calSurplusDeficit,
+		TotalProtein:            totalProtein,
+		TotalCarbs:              totalCarbs,
+		TotalFat:                totalFat,
+		ByMeal:                  byMeal,
+		DailyCalories:           dailyList,
+		RecordedDaily:           buildRecordedDailyList(dailyCal),
+		MacroPercent:            macroPercent,
+		MicronutrientDaily:      micronutrientDaily,
+		ExerciseSummary:         exerciseSummary,
+		RecordedDays:            recordedDays,
+		DataFingerprint:         dataFingerprint,
+		BodyMetrics:             bodyMetricsSummary,
 	}, nil
 }
 
@@ -2210,6 +2253,34 @@ func fallbackStatsMicronutrientHint(comp *statsComputation) string {
 	return "；" + strings.Join(parts, "；") + "。"
 }
 
+func buildStatsPlanPrompt(comp *statsComputation) string {
+	if comp == nil || len(comp.RecordedTargetTotals) == 0 {
+		return ""
+	}
+	lines := []string{"\n按日期的个人饮食计划（与估算消耗分开；目标不作营养缺乏诊断阈值）："}
+	for _, daily := range comp.DailyCalories {
+		if daily.Target == nil || daily.Calories <= 0 {
+			continue
+		}
+		day := daily.Target
+		t := day.Snapshot.Targets
+		reference := ""
+		if day.HistoricalReference {
+			reference = "（历史参考）"
+		}
+		lines = append(lines, fmt.Sprintf("%s %s%s：%.0f kcal，蛋白%.1fg、碳水%.1fg、脂肪范围%.1f–%.1fg", day.Date, day.Snapshot.Name, reference, t["calorie_target"], t["protein_target"], t["carbs_target"], day.Snapshot.FatMin, day.Snapshot.FatMax))
+	}
+	if comp.RecordedDays > 0 {
+		averages := map[string]float64{}
+		for k, v := range comp.RecordedTargetTotals {
+			averages[k] = round1(v / float64(comp.RecordedDays))
+		}
+		encoded, _ := json.Marshal(averages)
+		lines = append(lines, "相同记录日的计划均值（微量不随热量同比缩放）："+string(encoded))
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
 func buildNutritionInsightPrompt(comp *statsComputation) string {
 	rangeLabel := "近一周"
 	if comp.StatsRange == "month" {
@@ -2278,6 +2349,7 @@ func buildNutritionInsightPrompt(comp *statsComputation) string {
 	}
 
 	customFocusBlock := ""
+	statsText += buildStatsPlanPrompt(comp)
 	if focuses := parseCustomHealthFocusesFromProfile(comp.User); len(focuses) > 0 {
 		labels := make([]string, 0, len(focuses))
 		for _, focus := range focuses {
@@ -2342,7 +2414,7 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 	}
 	exerciseBlock := buildPetChatExercisePromptBlock(comp)
 	historyBlock := buildPetChatHistoryPromptBlock(historyMessages)
-	customFocusBlock := buildPetChatCustomFocusPromptBlock(comp.User)
+	customFocusBlock := buildPetChatCustomFocusPromptBlock(comp.User) + buildStatsPlanPrompt(comp)
 	imageInstruction := "当前请求没有可查看的图片。不要声称看到了图片；历史助手对图片的描述不是核验依据，无法重看时不能确认标签数值。"
 	if imageCount > 0 {
 		imageInstruction = fmt.Sprintf("当前请求包含 %d 张可查看的图片，可能包含本轮新图和同一会话的历史原图，具体来源以图片顺序说明为准。你必须先认真查看图片中的食物、包装文字、营养成分、份量线索或其他可见内容，再结合用户问题和健康记录回答；看不清的细节要说明不确定，不能编造。", imageCount)

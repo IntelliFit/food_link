@@ -1,25 +1,18 @@
-import { View, Text, Image, ScrollView, Canvas, Button } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Button } from '@tarojs/components'
 import React, { useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getSharedFoodRecord,
   getAccessToken,
-  getShareQrEnvVersion,
-  getUnlimitedQRCode,
   getFriendInviteProfile,
   acceptFriendInvite,
-  getPosterCalorieCompare,
-  getMyMembership,
   getUserProfile,
   showUnifiedApiError,
   type FoodRecord,
   type Nutrients
 } from '../../../utils/api'
-import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
-import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
-import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
-import { getCurrentPosterUserProfile, getLocalPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
-import { claimSharePosterRewardQuietly } from '../../../utils/share-reward'
+import { getCurrentPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
+import { MealRecordPosterModal, type MealPosterSharePayload } from '../../../pages/index/components/MealRecordPosterModal'
 
 import { IconBreakfast, IconCollapse, IconExpand, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
@@ -188,39 +181,12 @@ function getInviteCodeFromUserId(userId: string): string {
   return raw.length >= 8 ? raw.slice(0, 8) : ''
 }
 
-type PosterCalorieCompare = {
-  mealPlanKcal: number
-  hasBaseline: boolean
-  deltaKcal: number
-  baselineKcal: number
-}
-
-/** 拉取海报胶囊数据：计划热量 + 可选「较昨」；无昨日同餐时仍返回计划用于右侧三点 */
-async function fetchPosterCalorieCompareForRecord(record: FoodRecord): Promise<PosterCalorieCompare | null> {
-  if (!getAccessToken() || !record.id) return null
-  try {
-    const data = await getPosterCalorieCompare(record.id)
-    if (!data) return null
-    return {
-      mealPlanKcal: Number.isFinite(data.meal_plan_kcal) ? data.meal_plan_kcal : 0,
-      hasBaseline: !!data.has_baseline,
-      deltaKcal: Number.isFinite(data.delta_kcal) ? data.delta_kcal : 0,
-      baselineKcal: Number.isFinite(data.baseline_kcal) ? data.baseline_kcal : 0,
-    }
-  } catch (error) {
-    console.warn('[poster] poster-calorie-compare failed', error)
-    return null
-  }
-}
-
 function RecordDetailPage() {
   const { scheme } = useAppColorScheme()
   const router = useRouter()
   const [record, setRecord] = React.useState<FoodRecord | null>(null)
-  const [posterGenerating, setPosterGenerating] = React.useState(false)
-  const [posterImageUrl, setPosterImageUrl] = React.useState<string | null>(null)
-  const [calorieCompare, setCalorieCompare] = React.useState<PosterCalorieCompare | null>(null)
-  const [isProUser, setIsProUser] = React.useState(false)
+  const [showPoster, setShowPoster] = React.useState(false)
+  const [posterShare, setPosterShare] = React.useState<MealPosterSharePayload | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [isOwner, setIsOwner] = React.useState(false)
   const [showEditModal, setShowEditModal] = React.useState(false)
@@ -231,7 +197,6 @@ function RecordDetailPage() {
   const [expandedNutrientDetails, setExpandedNutrientDetails] = React.useState<Record<string, boolean>>({})
   const [showOnboardingGuide, setShowOnboardingGuide] = React.useState(false)
   const [publicRecords, setPublicRecords] = React.useState<boolean | null>(null)
-  const sharePosterRewardClaimingRef = React.useRef(false)
 
   const offerRecordDetailOnboardingGuide = async () => {
     if (!shouldOfferOnboardingGuide(ONBOARDING_RECORD_DETAIL_GUIDE_KEY)) return
@@ -250,11 +215,6 @@ function RecordDetailPage() {
   }
 
   useEffect(() => {
-    // 加载会员状态（用于海报样式判断）
-    if (getAccessToken()) {
-      getMyMembership().then(ms => setIsProUser(ms.is_pro)).catch(() => {})
-    }
-
     const loadRecord = async () => {
       const recordId = router.params?.id
 
@@ -266,14 +226,6 @@ function RecordDetailPage() {
           const res = await getSharedFoodRecord(recordId)
           const fetchedRecord = res.record
           setRecord(fetchedRecord)
-          // 预加载海报胶囊数据（对齐首页：提前请求，生成时直接使用）
-          if (fetchedRecord.id && getAccessToken()) {
-            fetchPosterCalorieCompareForRecord(fetchedRecord)
-              .then(data => {
-                if (data) setCalorieCompare(data)
-              })
-              .catch(() => {})
-          }
           const localProfile = await getCurrentPosterUserProfile(fetchedRecord.user_id)
           if (localProfile.nickname) setOwnerNickname(localProfile.nickname)
           if (localProfile.avatar) setOwnerAvatar(localProfile.avatar)
@@ -343,17 +295,8 @@ function RecordDetailPage() {
     offerRecordDetailOnboardingGuide()
   })
 
-  // 从首页餐食卡片跳转且带 autoPoster=1 时，自动触发生成海报
-  const autoPosterTriggeredRef = React.useRef(false)
-  const handleGeneratePosterRef = React.useRef<(() => void) | null>(null)
   useEffect(() => {
-    if (record && router.params?.autoPoster === '1' && !autoPosterTriggeredRef.current) {
-      autoPosterTriggeredRef.current = true
-      const timer = setTimeout(() => {
-        handleGeneratePosterRef.current?.()
-      }, 300)
-      return () => clearTimeout(timer)
-    }
+    if (record && router.params?.autoPoster === '1') setShowPoster(true)
   }, [record, router.params?.autoPoster])
 
   const shareRecordId = record?.id || router.params?.id || ''
@@ -366,7 +309,7 @@ function RecordDetailPage() {
     return {
       title,
       path: sharePath,
-      imageUrl: posterImageUrl || record?.image_path || undefined
+      imageUrl: posterShare?.imageUrl || record?.image_path || undefined
     }
   })
 
@@ -375,7 +318,7 @@ function RecordDetailPage() {
     return {
       title,
       query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
-      imageUrl: posterImageUrl || record?.image_path || undefined
+      imageUrl: posterShare?.imageUrl || record?.image_path || undefined
     }
   })
 
@@ -401,181 +344,6 @@ function RecordDetailPage() {
       console.warn('[record-detail] 编辑后刷新记录失败', e)
     }
   }, [record?.id])
-
-  const resolvePosterOwnerProfile = useCallback(async () => {
-    const ownerUserId = String(shareOwnerId || Taro.getStorageSync('user_id') || '').trim()
-    const fallbackInviteCode = ownerUserId ? getInviteCodeFromUserId(ownerUserId) : ''
-    const currentProfile = await getCurrentPosterUserProfile(ownerUserId)
-    if (!ownerUserId) {
-      return { nickname: currentProfile.nickname, avatar: currentProfile.avatar, inviteCode: '' }
-    }
-
-    try {
-      const remoteProfile = await getFriendInviteProfile(ownerUserId)
-      const mergedProfile = mergePosterUserProfile(remoteProfile, currentProfile)
-      return {
-        nickname: mergedProfile.nickname,
-        avatar: mergedProfile.avatar,
-        inviteCode: remoteProfile.invite_code || fallbackInviteCode,
-      }
-    } catch {
-      return {
-        nickname: currentProfile.nickname,
-        avatar: currentProfile.avatar,
-        inviteCode: fallbackInviteCode,
-      }
-    }
-  }, [shareOwnerId])
-
-  const openOfficialImageMenu = useCallback(async (path: string) => {
-    if (!path) return
-    Taro.showShareImageMenu({
-      path,
-      success: () => {
-        // 分享成功后领取积分奖励（record-detail 页面特有业务）
-        if (!isOwner || !record?.id || sharePosterRewardClaimingRef.current) return
-        sharePosterRewardClaimingRef.current = true
-        claimSharePosterRewardQuietly(record.id)
-          .finally(() => { sharePosterRewardClaimingRef.current = false })
-      },
-      fail: (err: { errMsg?: string }) => {
-        if (isShowShareImageMenuCancel(err)) return
-        console.error('showShareImageMenu fail', err)
-        void showUnifiedApiError(new Error('打开微信图片菜单失败，请重试'), '打开微信图片菜单失败，请重试')
-      }
-    })
-  }, [isOwner, record?.id])
-
-
-  /** 生成海报并导出为临时图片（完全对齐首页 MealRecordPosterModal 逻辑） */
-  const handleGeneratePoster = useCallback(() => {
-    if (!record || posterGenerating) return
-    setPosterGenerating(true)
-    Taro.showLoading({ title: '生成海报中...' })
-
-    const query = Taro.createSelectorQuery()
-    query
-      .select('#recordPosterCanvas')
-      .fields({ node: true, size: true })
-      .exec(async (res) => {
-        if (!res?.[0]?.node) {
-          Taro.hideLoading()
-          setPosterGenerating(false)
-          void showUnifiedApiError(new Error('画布未就绪，请重试'), '画布未就绪，请重试')
-          return
-        }
-        const canvas = res[0].node as HTMLCanvasElement & { createImage?: () => { src: string; onload: () => void; onerror: (err?: any) => void; width: number; height: number } }
-        const dpr = 2
-        canvas.width = POSTER_WIDTH * dpr
-        canvas.height = POSTER_HEIGHT * dpr
-
-        const loadImage = async (src: string): Promise<{ width: number; height: number } | null> => {
-          if (!src || !canvas.createImage) return null
-          let localSrc: string
-          try {
-            localSrc = await resolveCanvasImageSrc(src)
-          } catch (e) {
-            console.error('resolveCanvasImageSrc fail', src, e)
-            return null
-          }
-          return new Promise<{ width: number; height: number } | null>((resolve) => {
-            const img = canvas.createImage!()
-            img.onload = () => resolve(img)
-            img.onerror = (e) => {
-              console.error('Load image fail', localSrc, e)
-              resolve(null)
-            }
-            img.src = localSrc
-          })
-        }
-
-        const resolvedProfile = await resolvePosterOwnerProfile()
-        const posterNickname = resolvedProfile.nickname
-        const posterAvatar = resolvedProfile.avatar
-        const posterInviteCode = resolvedProfile.inviteCode || ownerInviteCode
-        if (posterNickname) setOwnerNickname(posterNickname)
-        if (posterAvatar) setOwnerAvatar(posterAvatar)
-        if (posterInviteCode) setOwnerInviteCode(posterInviteCode)
-
-        const loadQRImage = async () => {
-          const scene = posterInviteCode ? `fi=${posterInviteCode}` : 'share=1'
-          try {
-            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getShareQrEnvVersion())
-            const img = await loadImage(base64)
-            if (img) return img
-          } catch (e) {
-            console.warn('QR code load failed for env=release', e)
-          }
-          return null
-        }
-
-        Promise.all([
-          loadImage(record.image_path || ''),
-          loadQRImage(),
-          loadImage(posterAvatar)
-        ]).then(([mainImg, qrImg, avatarImg]) => {
-          try {
-            const ctx = canvas.getContext('2d')
-            if (!ctx) {
-              Taro.hideLoading()
-              setPosterGenerating(false)
-              void showUnifiedApiError(new Error('画布不可用'), '画布不可用')
-              return
-            }
-
-            const dynamicHeight = computePosterHeight(
-              ctx,
-              record,
-              POSTER_WIDTH,
-              isProUser,
-              calorieCompare || undefined
-            )
-            canvas.width = POSTER_WIDTH * dpr
-            canvas.height = dynamicHeight * dpr
-            ctx.scale(dpr, dpr)
-
-            drawRecordPoster(ctx, {
-              width: POSTER_WIDTH,
-              height: dynamicHeight,
-              record,
-              calorieCompare: calorieCompare || undefined,
-              image: mainImg,
-              qrCodeImage: qrImg,
-              sharerNickname: posterNickname,
-              sharerAvatarImage: avatarImg,
-              isPro: isProUser,
-            })
-
-            // JPG + 不透明：海报本身有底色，交给微信官方图片菜单处理分享/保存。
-            Taro.canvasToTempFilePath({
-              canvas: canvas as any,
-              destWidth: POSTER_WIDTH * 2,
-              destHeight: dynamicHeight * 2,
-              fileType: 'jpg',
-              quality: 0.95,
-              success: (resp) => {
-                Taro.hideLoading()
-                setPosterGenerating(false)
-                setPosterImageUrl(resp.tempFilePath)
-                void openOfficialImageMenu(resp.tempFilePath)
-              },
-              fail: (err) => {
-                Taro.hideLoading()
-                setPosterGenerating(false)
-                void showUnifiedApiError(new Error('生成失败'), '生成失败')
-                console.error('canvasToTempFilePath fail', err)
-              }
-            })
-          } catch (e) {
-            Taro.hideLoading()
-            setPosterGenerating(false)
-            void showUnifiedApiError(e, '绘制失败')
-            console.error('drawSmartPoster error', e)
-          }
-        })
-      })
-  }, [record, posterGenerating, isProUser, ownerInviteCode, calorieCompare, openOfficialImageMenu, resolvePosterOwnerProfile])
-  handleGeneratePosterRef.current = handleGeneratePoster
 
   if (loading || !record) {
     return (
@@ -787,8 +555,8 @@ function RecordDetailPage() {
               修改记录
             </Button>
           )}
-          <Button className='poster-btn' onClick={handleGeneratePoster} disabled={posterGenerating}>
-            {posterGenerating ? '生成中...' : '生成分享卡片'}
+          <Button className='poster-btn' onClick={() => setShowPoster(true)}>
+            分享美食打卡
           </Button>
         </View>
 
@@ -918,9 +686,13 @@ function RecordDetailPage() {
       </ScrollView>
       </View>
 
-      <View className='poster-canvas-wrap'>
-        <Canvas type='2d' id='recordPosterCanvas' className='poster-canvas' style={{ width: `${POSTER_WIDTH}px`, height: `${POSTER_HEIGHT}px` }} />
-      </View>
+      <MealRecordPosterModal
+        visible={showPoster}
+        record={record}
+        allowReward={isOwner}
+        onClose={() => setShowPoster(false)}
+        onShareContextChange={setPosterShare}
+      />
 
       <MealRecordEditModal
         visible={showEditModal}
@@ -936,7 +708,6 @@ function RecordDetailPage() {
         onClose={() => setShowOnboardingGuide(false)}
       />
 
-      {/* 海报生成后直接调用微信官方图片菜单，无预览弹窗（对齐首页 MealRecordPosterModal） */}
     </View>
   )
 }

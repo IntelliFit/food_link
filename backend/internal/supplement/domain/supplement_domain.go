@@ -64,20 +64,29 @@ type UserSupplement struct {
 
 func (UserSupplement) TableName() string { return "user_supplements" }
 
+// ProductSnapshot keeps the bottle identity with an intake, independently of
+// later cabinet edits. Nil denotes a legacy intake with no captured identity.
+type ProductSnapshot struct {
+	Brand     string   `json:"brand"`
+	ImageURLs []string `json:"image_urls"`
+	Source    string   `json:"source,omitempty"`
+}
+
 type SupplementIntake struct {
-	ID                 string      `gorm:"column:id;primaryKey" json:"id"`
-	UserID             string      `gorm:"column:user_id" json:"user_id"`
-	SupplementID       string      `gorm:"column:supplement_id" json:"supplement_id"`
-	SupplementName     string      `gorm:"column:supplement_name" json:"supplement_name"`
-	Servings           float64     `gorm:"column:servings" json:"servings"`
-	ServingLabel       string      `gorm:"column:serving_label" json:"serving_label"`
-	ComponentsSnapshot []Component `gorm:"column:components_snapshot;serializer:json" json:"components"`
-	TakenAt            time.Time   `gorm:"column:taken_at" json:"taken_at"`
-	Source             string      `gorm:"column:source" json:"source"`
-	Note               *string     `gorm:"column:note" json:"note,omitempty"`
-	IdempotencyKey     *string     `gorm:"column:idempotency_key" json:"-"`
-	HiddenFromFeed     bool        `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
-	CreatedAt          time.Time   `gorm:"column:created_at" json:"created_at"`
+	ID                 string           `gorm:"column:id;primaryKey" json:"id"`
+	UserID             string           `gorm:"column:user_id" json:"user_id"`
+	SupplementID       string           `gorm:"column:supplement_id" json:"supplement_id"`
+	SupplementName     string           `gorm:"column:supplement_name" json:"supplement_name"`
+	ProductSnapshot    *ProductSnapshot `gorm:"column:product_snapshot;serializer:json" json:"product_snapshot,omitempty"`
+	Servings           float64          `gorm:"column:servings" json:"servings"`
+	ServingLabel       string           `gorm:"column:serving_label" json:"serving_label"`
+	ComponentsSnapshot []Component      `gorm:"column:components_snapshot;serializer:json" json:"components"`
+	TakenAt            time.Time        `gorm:"column:taken_at" json:"taken_at"`
+	Source             string           `gorm:"column:source" json:"source"`
+	Note               *string          `gorm:"column:note" json:"note,omitempty"`
+	IdempotencyKey     *string          `gorm:"column:idempotency_key" json:"-"`
+	HiddenFromFeed     bool             `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
+	CreatedAt          time.Time        `gorm:"column:created_at" json:"created_at"`
 }
 
 func (SupplementIntake) TableName() string { return "supplement_intakes" }

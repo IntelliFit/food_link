@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	authmw "food_link/backend/internal/auth"
@@ -157,6 +158,7 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 		Limit:        intQuery(c, "limit", 20),
 		Offset:       intQuery(c, "offset", 0),
 		Type:         c.Query("type"),
+		CanteenScope: c.Query("canteen_scope"),
 		SchoolID:     c.Query("school_id"),
 		CampusID:     c.Query("campus_id"),
 		CanteenID:    c.Query("canteen_id"),
@@ -199,6 +201,7 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 	requestAttrs := []slog.Attr{
 		slog.String("user_id", userID),
 		slog.String("food.type", filter.Type),
+		slog.String("canteen_scope", filter.CanteenScope),
 		slog.String("sort_by", filter.SortBy),
 		slog.Int("limit", filter.Limit),
 		slog.Bool("has_keyword", filter.Keyword != ""),
@@ -213,7 +216,11 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 		return
 	}
 	logger.Info(ctx, "美食图谱查询完成", append(requestAttrs, slog.Int("item_count", len(items)))...)
-	response.Success(c, gin.H{"list": items})
+	result := gin.H{"list": items}
+	if filter.CanteenScope != "" {
+		result["canteen_scope"] = strings.TrimSpace(filter.CanteenScope)
+	}
+	response.Success(c, result)
 }
 
 func (h *PublicFoodHandler) ListMapSpots(c *gin.Context) {

@@ -288,6 +288,8 @@ type DietRecommendationCandidate struct {
 	Nutrients               nutritionagg.Vector          `json:"nutrients,omitempty"`
 	DistanceKM              *float64                     `json:"distance_km,omitempty"`
 	LocationLevel           string                       `json:"location_level,omitempty"`
+	Latitude                *float64                     `json:"latitude,omitempty"`
+	Longitude               *float64                     `json:"longitude,omitempty"`
 	MerchantName            string                       `json:"merchant_name,omitempty"`
 	Address                 string                       `json:"address,omitempty"`
 	Source                  string                       `json:"source"`

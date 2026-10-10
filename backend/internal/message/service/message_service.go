@@ -11,6 +11,7 @@ import (
 	"food_link/backend/internal/message/repo"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
+	"gorm.io/gorm"
 )
 
 type MessageService struct {
@@ -36,6 +37,14 @@ func NewMessageService(msgRepo *repo.MessageRepo, storageClient ...*storage.Clie
 
 func (s *MessageService) ConfigureBlockChecker(checker BlockChecker) {
 	s.blockChecker = checker
+}
+
+func (s *MessageService) SendSystemMessageWithActionInTransaction(ctx context.Context, tx *gorm.DB, id, receiverID, content, actionText string, extraData map[string]any) error {
+	if tx == nil || id == "" || receiverID == "" || strings.TrimSpace(content) == "" {
+		return commonerrors.ErrBadRequest
+	}
+	return repo.NewMessageRepo(tx).CreateSystemMessageOnce(ctx, &domain.PrivateMessage{ID: id, ReceiverID: receiverID,
+		Content: content, ActionText: actionText, ExtraData: extraData, CreatedAt: time.Now()})
 }
 
 // SendMessage validates and creates a new private message

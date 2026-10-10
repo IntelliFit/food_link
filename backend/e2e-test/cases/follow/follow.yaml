@@ -27,7 +27,7 @@ cases:
       json:
         code: 0
         data.list: type:array
-        "data.list.length": 0
+        "data.list.#": 0
 
   - id: follow.following.empty
     name: "关注列表为空"
@@ -41,7 +41,7 @@ cases:
       json:
         code: 0
         data.list: type:array
-        "data.list.length": 0
+        "data.list.#": 0
 
   - id: follow.follow.success
     name: "关注用户成功"
@@ -115,7 +115,7 @@ cases:
       json:
         code: 0
         data.list: type:array
-        "data.list.length": 1
+        "data.list.#": 1
         "data.list.0.id": "00000000-0000-0000-0000-000000000001"
 
   - id: follow.following.has-data
@@ -130,7 +130,7 @@ cases:
       json:
         code: 0
         data.list: type:array
-        "data.list.length": 1
+        "data.list.#": 1
         "data.list.0.id": "00000000-0000-0000-0000-000000000002"
 
   - id: follow.unfollow.success

@@ -26,6 +26,32 @@ var officialHigherEducation2026Data string
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// MigrateNutritionPlans only adds the reusable library, versioned defaults and
+// nullable full snapshots to the existing day table. No user targets are seeded
+// or backfilled, and repeating the command is safe.
+func MigrateNutritionPlans(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("invalid database schema: %q", schema)
+	}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SET LOCAL search_path TO " + quoteIdent(schema)).Error; err != nil {
+			return err
+		}
+		if err := tx.AutoMigrate(&migrationdo.UserDailyNutritionTargetDO{}, &migrationdo.UserNutritionPlanDO{}, &migrationdo.UserNutritionPlanDefaultDO{}); err != nil {
+			return err
+		}
+		for _, table := range []string{"user_nutrition_plans", "user_nutrition_plan_defaults"} {
+			if err := tx.Exec(addFK(table+"_user_id_fkey", table, "user_id", "weapp_user", "id", "CASCADE")).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 const precisionSessionExecutionModeCheckExpression = `execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_separate'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`
 
 const feedTargetTypeCheckExpression = `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text,'campus_food'::text,'supplement_intake'::text])`
@@ -123,6 +149,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 		return fmt.Errorf("auto migrate models: %w", err)
 	}
 	if err := MigrateAnalytics(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := ensureMealMeetupConstraints(ctx, db); err != nil {
 		return err
 	}
 	if err := ensurePushConstraints(ctx, db); err != nil {
@@ -1191,6 +1220,8 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("open_api_payment_orders_app_id_fkey", "open_api_payment_orders", "app_id", "open_api_apps", "id", "CASCADE"),
 		addFK("open_api_payment_orders_package_code_fkey", "open_api_payment_orders", "package_code", "open_api_credit_packages", "code", "RESTRICT"),
 		addFK("user_feedback_user_id_fkey", "user_feedback", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("user_nutrition_plans_user_id_fkey", "user_nutrition_plans", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("user_nutrition_plan_defaults_user_id_fkey", "user_nutrition_plan_defaults", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_feedback_reward_ledger_id_fkey", "user_feedback", "reward_ledger_id", "user_earned_credit_ledger", "id", "SET NULL"),
 		addFK("analysis_feedback_samples_user_id_fkey", "analysis_feedback_samples", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("analysis_feedback_samples_source_task_id_fkey", "analysis_feedback_samples", "source_task_id", "analysis_tasks", "id", "SET NULL"),

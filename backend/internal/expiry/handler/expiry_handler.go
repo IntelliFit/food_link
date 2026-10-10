@@ -284,10 +284,15 @@ func parseOptionalExpiryDate(raw *string, required bool) (*time.Time, error) {
 	}
 	value := strings.TrimSpace(*raw)
 	if t, err := time.ParseInLocation("2006-01-02", value, time.FixedZone("Asia/Shanghai", 8*60*60)); err == nil {
-		return &t, nil
+		// A SQL DATE is a calendar day, not an instant. Keep midnight UTC so
+		// simple-protocol binding cannot shift it to the preceding day.
+		day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		return &day, nil
 	}
 	if t, err := time.Parse(time.RFC3339, value); err == nil {
-		return &t, nil
+		t = t.In(time.FixedZone("Asia/Shanghai", 8*60*60))
+		day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		return &day, nil
 	}
 	return nil, &commonerrors.AppError{Code: 10002, Message: "expire_date format is invalid", HTTPStatus: http.StatusBadRequest}
 }

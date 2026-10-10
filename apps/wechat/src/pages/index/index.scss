@@ -7260,3 +7260,6 @@ button.poster-share-channel--btn {
   .wellness-macro__target { color: #aec0b3 !important; }
   .home-layout-toolbar__edit { color: #aec0b3; }
 }
+/* Daily plans stay inside the original calorie/macro panel. */
+.wellness-plan-label { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; color: #6c8c78; font-size: 20rpx; margin: 10rpx 0 4rpx; > text:first-child { font-weight: 600; } }
+.wellness-plan-undo { position: fixed; z-index: 1550; left: 28rpx; right: 28rpx; bottom: calc(150rpx + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 24rpx; padding: 24rpx 30rpx; border-radius: 24rpx; background: #274b39; color: #fff; box-shadow: 0 8rpx 30rpx #17362533; font-size: 25rpx; > text:first-child { flex: 1; } button { background: transparent; padding: 4rpx; margin: 0; color: #d2edbf; font-size: 25rpx; line-height: 1.5; &::after { border: none; } } }

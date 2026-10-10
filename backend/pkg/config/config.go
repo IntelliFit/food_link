@@ -364,6 +364,8 @@ func Load(baseDir string) (*Config, error) {
 	if err := applyConfigFileOnlyValues(v, &cfg); err != nil {
 		return nil, err
 	}
+	cfg.ApplyLocalWorkerSafety()
+	v.Set("worker.count", cfg.Worker.Count)
 	logConfigSnapshot("后端配置解析完成", strings.TrimSpace(v.GetString("config_file_used")), v)
 	return &cfg, nil
 }
@@ -1303,6 +1305,15 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.NutritionEmbeddingAPIKey = strings.TrimSpace(cfg.NutritionEmbeddingAPIKey)
 	cfg.NutritionEmbeddingBaseURL = strings.TrimRight(strings.TrimSpace(cfg.NutritionEmbeddingBaseURL), "/")
 	cfg.NutritionEmbeddingModel = strings.TrimSpace(cfg.NutritionEmbeddingModel)
+	// The legacy account endpoint is now read-only. Use the already configured
+	// OpenLux endpoint/key as a pair; never forward the old embedding credential
+	// to a host named by an upstream error. Explicit non-legacy providers win.
+	if cfg.NutritionEmbeddingEnabled && cfg.NutritionEmbeddingBaseURL == "https://yunwu.ai/v1" &&
+		cfg.OpenLuxBaseURL == "https://api.openlux.ai/v1" && cfg.OpenLuxAPIKey != "" {
+		cfg.NutritionEmbeddingBaseURL = cfg.OpenLuxBaseURL
+		cfg.NutritionEmbeddingAPIKey = cfg.OpenLuxAPIKey
+		slog.Warn("旧营养向量通道已切换为配置中的 OpenLux 通道", "provider", "openlux", "model", cfg.NutritionEmbeddingModel)
+	}
 }
 
 func applyPixelAvatarProcessEnvOverrides(cfg *ExternalConfig) {

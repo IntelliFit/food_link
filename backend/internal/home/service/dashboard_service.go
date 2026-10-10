@@ -42,6 +42,11 @@ type DashboardService struct {
 	home                *homerepo.HomeRepo
 	storage             *storage.Client
 	supplementDailyData SupplementDailyProvider
+	nutritionPlans      *usersvc.NutritionPlanService
+}
+
+func (s *DashboardService) ConfigureNutritionPlans(provider *usersvc.NutritionPlanService) {
+	s.nutritionPlans = provider
 }
 
 type SupplementDailyProvider interface {
@@ -81,6 +86,27 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 	targetPlan := buildNutritionTargetPlan(user, date, exerciseBurned, nil)
 	targetPlan.CalibrationSuggestion = calibrationSuggestion
 	targets := targetPlan.Targets
+	targetResponse := targetPlan.Response()
+	if s.nutritionPlans != nil {
+		day, resolveErr := s.nutritionPlans.Resolve(ctx, userID, date)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		targets = day.Snapshot.Targets
+		targetResponse["source"] = day.Source
+		targetResponse["plan_name"] = day.Snapshot.Name
+		targetResponse["plan_id"] = day.Snapshot.PlanID
+		targetResponse["fat_min"] = day.Snapshot.FatMin
+		targetResponse["fat_max"] = day.Snapshot.FatMax
+		targetResponse["historical_reference"] = day.HistoricalReference
+		targetResponse["base_calorie_target"] = targets["calorie_target"]
+		targetResponse["suggested_calorie_target"] = targets["calorie_target"]
+		targetResponse["explanation"] = "这一天的饮食方案 · " + day.Snapshot.Name
+		targetResponse["macro_explanation"] = "脂肪按方案范围查看，无需补到上限；微量营养不随热量缩放。"
+		if day.Source != "base" {
+			targetResponse["calibration_suggestion"] = nil
+		}
+	}
 	totalCal, totalProtein, totalCarbs, totalFat := 0.0, 0.0, 0.0, 0.0
 	micros := initHomeMicronutrientTotals()
 	byMeal := map[string][]homerepo.FoodRecord{}
@@ -145,7 +171,7 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 		"expirySummary":      buildExpirySummary(expiryItems),
 		"supplementSummary":  supplementSummary,
 		"exerciseBurnedKcal": round1(float64(exerciseBurned)),
-		"nutritionTarget":    targetPlan.Response(),
+		"nutritionTarget":    targetResponse,
 	}, nil
 }
 

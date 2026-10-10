@@ -1638,12 +1638,13 @@ func buildCampusDietAgentResult(state *campusDietAgentRunState, final campusDiet
 				e := evaluateDietDecisionCandidate(decisionContext, c)
 				pool = append(pool, groundedMeal{candidate: c, evaluation: e, score: e.Scores.HealthFit})
 			}
+			pool = applyMealVarietyContext(state, pool)
 			if _, err := validateMealArbitration(pool, selectedIDs, mealStateOptionLimit(state)); err == nil {
 				// The model's valid close-call selection is final. Out-of-band
 				// choices use the transparent rule fallback, never weaken safety.
 				chosen = nil
 			} else {
-				fallbackReason = "model_selection_outside_health_band"
+				fallbackReason = "model_selection_outside_health_or_variety_policy"
 			}
 		}
 		if len(chosen) > 0 {
@@ -1845,7 +1846,7 @@ func buildCampusDietAgentResult(state *campusDietAgentRunState, final campusDiet
 		}
 		recommendation.SelectionAudit = &MealSelectionAudit{Method: method, Fallback: fallbackReason, Eligible: len(fullPool), Shortlisted: len(state.LastSearch), HealthTolerance: mealHealthShortlistTolerance}
 		if engineSelected && agentUsed {
-			recommendation.DataNotes = append(recommendation.DataNotes, "模型候选超出营养容差，本次最终选餐已使用规则回退。")
+			recommendation.DataNotes = append(recommendation.DataNotes, "模型候选超出营养容差或多样性规则，本次最终选餐已使用规则回退。")
 		}
 		for i, c := range candidates {
 			recommendation.Recommendations[i].EvidenceIssues, _ = mealEvidenceIssues(c, state.MealContext.MealType)

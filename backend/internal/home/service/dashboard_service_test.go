@@ -321,7 +321,7 @@ func TestDashboardService_CalibrationSuggestionAfter14Days(t *testing.T) {
 		id TEXT PRIMARY KEY,
 		user_id TEXT,
 		weight_kg REAL,
-		recorded_on TIMESTAMPTZ,
+		recorded_on DATE,
 		created_at TIMESTAMPTZ
 	)`).Error)
 	svc := NewDashboardService(userRepo, homeRepo)

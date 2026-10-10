@@ -38,12 +38,23 @@ const (
 var validModeSetBy = map[string]bool{"system": true, "user_manual": true, "coach_manual": true}
 
 type UserService struct {
-	users         *repo.UserRepo
-	healthDocs    *userrepo.HealthDocumentRepo
-	modeSwitchLog *userrepo.ModeSwitchLogRepo
-	storage       *storage.Client
-	blockChecker  BlockChecker
-	profileReview ProfileReviewChecker
+	users          *repo.UserRepo
+	healthDocs     *userrepo.HealthDocumentRepo
+	modeSwitchLog  *userrepo.ModeSwitchLogRepo
+	storage        *storage.Client
+	blockChecker   BlockChecker
+	profileReview  ProfileReviewChecker
+	nutritionPlans *NutritionPlanService
+}
+
+func (s *UserService) ConfigureNutritionPlans(provider *NutritionPlanService) {
+	s.nutritionPlans = provider
+}
+func (s *UserService) updateNutritionProfileFields(ctx context.Context, userID string, updates map[string]any) (*repo.User, error) {
+	if s.nutritionPlans != nil {
+		return s.nutritionPlans.UpdateProfileFields(ctx, userID, updates)
+	}
+	return s.users.UpdateFields(ctx, userID, updates)
 }
 
 type BlockChecker interface {
@@ -187,7 +198,7 @@ func (s *UserService) UpdateDashboardTargets(ctx context.Context, userID string,
 	healthCondition["dashboard_targets"] = targets
 	healthCondition["dashboard_targets_mode"] = "manual"
 	healthCondition["dashboard_targets_updated_at"] = time.Now().UTC().Format(time.RFC3339)
-	updated, err := s.users.UpdateFields(ctx, userID, map[string]any{"health_condition": datatypes.JSONMap(healthCondition)})
+	updated, err := s.updateNutritionProfileFields(ctx, userID, map[string]any{"health_condition": datatypes.JSONMap(healthCondition)})
 	if err != nil {
 		return nil, err
 	}
@@ -510,7 +521,7 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 		return nil, &commonerrors.AppError{Code: 10002, Message: "没有要更新的字段", HTTPStatus: 400}
 	}
 
-	updated, err := s.users.UpdateFields(ctx, userID, updates)
+	updated, err := s.updateNutritionProfileFields(ctx, userID, updates)
 	if err != nil {
 		return nil, err
 	}

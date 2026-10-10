@@ -146,8 +146,9 @@ func runCase(ctx context.Context, suite *Suite, cfg *config.Config, db *gorm.DB,
 		TestName: caseID,
 		BaseURL:  "http://api-contract.local",
 		Client: &http.Client{
-			Transport: httpexpect.NewBinder(engine),
-			Timeout:   20 * time.Second,
+			Transport:     httpexpect.NewBinder(engine),
+			Timeout:       20 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 		},
 		Context:  ctx,
 		Reporter: reporter,
@@ -181,7 +182,11 @@ func runCase(ctx context.Context, suite *Suite, cfg *config.Config, db *gorm.DB,
 		failures = append(failures, *authFailure)
 	}
 	if len(c.Expect.Headers) > 0 {
-		failures = append(failures, assertHeaders(caseID, resp.Raw().Header, c.Expect.Headers)...)
+		if raw := resp.Raw(); raw != nil {
+			failures = append(failures, assertHeaders(caseID, raw.Header, c.Expect.Headers)...)
+		} else {
+			failures = append(failures, caseFailure{Case: caseID, Message: "missing HTTP response; cannot assert headers"})
+		}
 	}
 	if len(c.Expect.JSON) > 0 {
 		failures = append(failures, assertJSON(caseID, body, c.Expect.JSON)...)

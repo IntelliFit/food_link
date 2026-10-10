@@ -801,10 +801,17 @@ export interface SupplementCatalogItem {
   status: string
 }
 
+export interface SupplementProductSnapshot {
+  brand: string
+  image_urls: string[]
+  source?: 'record' | 'cabinet_match'
+}
+
 export interface SupplementIntake {
   id: string
   supplement_id: string
   supplement_name: string
+  product_snapshot?: SupplementProductSnapshot | null
   servings: number
   serving_label: string
   components: SupplementComponent[]
@@ -869,6 +876,11 @@ export interface HomeIntakeData {
 }
 
 export interface HomeNutritionTarget {
+  plan_name?: string
+  plan_id?: string
+  fat_min?: number
+  fat_max?: number
+  historical_reference?: boolean
   source?: 'manual' | 'system_initial' | 'dynamic' | 'profile' | 'default' | string
   diet_goal?: string
   base_calorie_target?: number
@@ -1323,12 +1335,23 @@ export interface DietRecommendationFoodItem {
 }
 
 export interface DietRecommendationOption {
+	selection_reason?: string
+	evidence_issues?: string[]
+	remaining_day_plan?: {
+		status: string
+		method: string
+		steps: { meal_type: string; candidate: { title: string; canteen_name?: string; merchant_name?: string } }[]
+		notes: string[]
+	}
+	option_key?: string
   requires_campus_access_confirmation?: boolean
   history_date?: string
   source_label?: string
   meal_components?: DietRecommendationOption[]
   distance_km?: number
   location_level?: 'food' | 'canteen' | 'campus' | 'school'
+  latitude?: number
+  longitude?: number
   merchant_name?: string
   address?: string
   title: string
@@ -1374,6 +1397,10 @@ export interface DietRecommendationOption {
 }
 
 export interface DietRecommendationResult {
+	catalog_coverage?: { scope?: string; radius_km?: number; school?: { name: string }; total_matches: number; retrieved: number; status: string }[]
+	selection_audit?: { method: string; fallback_reason?: string; eligible_count: number; shortlisted_count: number }
+	recommendation_id?: string
+	decision_basis?: DietDecisionBasis
   harness_version?: string
   search_scope?: 'nearby' | 'school' | 'unknown' | 'history' | 'nearby_and_history'
   location_hint?: { province: string; city: string; district: string; recorded_at: string }
@@ -1472,6 +1499,9 @@ function persistDashboardTargetsLocal(data: DashboardTargets): void {
 
 /** 数据统计接口返回（周/月） */
 export interface StatsSummary {
+  recorded_target_totals?: Record<string, number>
+  target_calorie_difference?: number
+	diet_decision_basis?: DietDecisionBasis
   range: 'week' | 'month'
   start_date: string
   end_date: string
@@ -1494,7 +1524,7 @@ export interface StatsSummary {
     /** 兼容旧字段，后端会镜像 afternoon_snack */
     snack?: number
   }
-  daily_calories: Array<{ date: string; calories: number }>
+  daily_calories: Array<{ date: string; calories: number; target?: import('./nutrition-plans').NutritionDay }>
   macro_percent: { protein: number; carbs: number; fat: number }
   analysis_summary: string
   analysis_summary_generated_date?: string | null
@@ -1648,6 +1678,8 @@ export interface SignalChip {
 export type RiskTone = 'positive' | 'neutral' | 'warning' | 'danger'
 
 export interface RiskCard {
+  score_available?: boolean
+  scoring_version?: string
   key: string
   title: string
   score: number
@@ -4452,7 +4484,9 @@ export async function recordSupplementIntake(
   if (res.statusCode !== 200) {
     throwHttpErrorWithStatus(res.statusCode, res.data, '记录补剂失败')
   }
-  return unwrapResponse<{ intake: SupplementIntake }>(res).intake
+  const intake = unwrapResponse<{ intake: SupplementIntake }>(res).intake
+  Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+  return intake
 }
 
 export async function deleteSupplementIntake(intakeId: string): Promise<void> {
@@ -4696,8 +4730,36 @@ export async function getStatsCalendarMonth(month: string): Promise<StatsCalenda
   return res.data as StatsCalendarMonth
 }
 
-export async function previewMeals(payload: { meal_type: string; location?: PetChatLocation }): Promise<DietRecommendationResult> {
-  const res = await authenticatedRequest('/api/diet/recommendations/preview', { method: 'POST', data: payload, timeout: 15000 })
+export interface DietDecisionBasis {
+  fat_min?: number
+  fat_max?: number
+  nutrient_state?: {
+    rules: Array<{ key: string; unit: string; target?: number; limit?: number; reference_type: string; source_id: string; source_url?: string; scope: string; time_window: string }>
+    current: Record<string, { value: number; unit: string; status: 'recorded' | 'estimated' | 'partial' | 'missing'; known_items: number; total_items: number }>
+    recorded_meals: number
+    as_of: string
+    limitations: string[]
+  }
+  version: string
+  date: string
+  target_source: string
+  targets: DietRecommendationMacroContext
+  current: DietRecommendationMacroContext
+  goals: string[]
+  recorded_days: number
+  food_group_priorities: string[]
+  actions: string[]
+  limitations: string[]
+  sources: Array<{ id: string; title: string; url: string; scope: string }>
+}
+
+export async function recordMealRecommendationFeedback(payload: { run_id: string; option_keys: string[]; action: 'shown' | 'skip' | 'selected' }): Promise<void> {
+  const res = await authenticatedRequest('/api/diet/recommendations/feedback', { method: 'POST', data: payload, timeout: 3000 })
+  if (res.statusCode !== 200) throw new Error('餐食反馈暂未保存')
+}
+
+export async function previewMeals(payload: { meal_type: string; location?: PetChatLocation; radius_km?: number; exclude_source_ids?: string[] }): Promise<DietRecommendationResult> {
+  const res = await authenticatedRequest('/api/diet/recommendations/preview', { method: 'POST', data: payload, timeout: 30000 })
   return res.data as DietRecommendationResult
 }
 
@@ -7135,6 +7197,7 @@ export type CommunityFeedRecord = FoodRecord & {
   servings?: number
   serving_label?: string
   supplement_components?: SupplementComponent[]
+  supplement_product?: SupplementProductSnapshot | null
   price?: number | null
   school?: string | null
   canteen?: string | null
@@ -8107,6 +8170,7 @@ export async function bindMarketingQRUser(code: string, visitorId: string): Prom
 }
 
 export type PublicFoodLibraryType = 'common' | 'campus' | 'merchant'
+export type CanteenScope = 'all' | 'campus' | 'community'
 
 /** 公共食物库条目 */
 export interface PublicFoodLibraryItem {
@@ -8148,6 +8212,8 @@ export interface PublicFoodLibraryItem {
   status: string
   /** 条目类型：普通公共食物库或校园食堂 */
   type: PublicFoodLibraryType
+  /** 采集来源/真实目录推导的场所类型，不以旧 common/campus 标签猜测 */
+  venue_type?: 'university' | 'community' | 'corporate' | 'office_park' | ''
   like_count: number
   comment_count: number
   avg_rating: number
@@ -8414,6 +8480,8 @@ export interface CreatePublicFoodLibraryRequest {
 
 /** 公共食物库列表查询参数 */
 export interface PublicFoodLibraryListParams {
+  /** 全部食堂、校园、社区/园区/企业；与原条目 type 独立 */
+  canteen_scope?: CanteenScope
   city?: string
   /** 搜索菜名、学校/校区/食堂、楼层/窗口及地址 */
   keyword?: string
@@ -8470,6 +8538,7 @@ export async function getPublicFoodLibraryList(
   if (params?.limit !== undefined) q.set('limit', String(params.limit))
   if (params?.offset !== undefined) q.set('offset', String(params.offset))
   if (params?.type) q.set('type', params.type)
+  if (params?.canteen_scope) q.set('canteen_scope', params.canteen_scope)
   if (params?.is_campus_food !== undefined) q.set('is_campus_food', String(params.is_campus_food))
   if (params?.school_id) q.set('school_id', params.school_id)
   if (params?.campus_id) q.set('campus_id', params.campus_id)
@@ -8486,7 +8555,13 @@ export async function getPublicFoodLibraryList(
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取列表失败')
   }
-  return response.data as { list: PublicFoodLibraryItem[] }
+  const result = response.data as { list: PublicFoodLibraryItem[]; canteen_scope?: CanteenScope }
+  // An older server ignores unknown query parameters: never show all ordinary
+  // restaurants as canteens when the matching backend has not been deployed.
+  if (params?.canteen_scope && result.canteen_scope !== params.canteen_scope) {
+    throw new Error('食堂服务尚未更新，请稍后重试')
+  }
+  return result
 }
 
 /** 获取服务端全量聚合的美食地图地点，避免热门截断并包含校园层级继承坐标。 */

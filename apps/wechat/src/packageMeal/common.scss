@@ -1,0 +1,27 @@
+.meal-page { min-height: 100vh; background: #f6f5ed; padding: 30px 28px calc(44px + env(safe-area-inset-bottom)); box-sizing: border-box; color: #243d31; }
+.meal-page-title { display: block; font-size: 40px; font-weight: 700; margin: 12px 0 28px; }
+.meal-panel { padding: 28px; background: #fffef9; border: 1px solid #e3e8dc; border-radius: 28px; margin-bottom: 22px; }
+.meal-title { display: block; font-size: 32px; font-weight: 600; margin-bottom: 18px; }
+.meal-copy { display: block; font-size: 28px; line-height: 1.7; white-space: pre-wrap; }
+.meal-muted { display: block; font-size: 24px; line-height: 1.7; color: #626f65; }
+.meal-label { display: block; font-size: 26px; margin: 26px 0 12px; }
+.meal-field { display: block; padding: 22px; background: #f2f3eb; border-radius: 18px; font-size: 28px; box-sizing: border-box; width: 100%; }
+.meal-field-area { min-height: 160px; }
+.meal-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.meal-choice { display: flex; gap: 16px; margin: 16px 0; }
+.meal-choice text { padding: 12px 24px; border-radius: 20px; font-size: 26px; background: #edf1e7; }
+.meal-choice .selected { background: #21543e; color: #fff; }
+.meal-primary { background: #21543e; color: #fff; border-radius: 22px; font-size: 28px; margin: 18px 0; }
+.meal-secondary { background: #edf1e7; color: #21543e; border-radius: 22px; font-size: 28px; margin: 18px 0; }
+.meal-danger { background: #f6e9e1; color: #8b4433; border-radius: 22px; font-size: 26px; margin: 18px 0; }
+.meal-page button[disabled] { opacity: .55; }
+.meal-state { display: block; color: #21543e; background: #edf1e7; padding: 20px; border-radius: 18px; font-size: 28px; line-height: 1.5; margin: 20px 0; }
+.meal-avatar { width: 64px; height: 64px; border-radius: 50%; }
+.meal-members { display: flex; gap: 20px; flex-wrap: wrap; font-size: 26px; margin: 20px 0; }
+.meal-error { padding: 50px 20px; font-size: 28px; line-height: 1.7; text-align: center; }
+.meal-spinner { width: 42px; height: 42px; margin: 50px auto; border: 5px solid #dfe7d8; border-top-color: #21543e; border-radius: 50%; animation: meal-spin .8s linear infinite; }
+@keyframes meal-spin { to { transform: rotate(360deg); } }
+.meal-message { padding: 22px; border-radius: 22px; background: #fffef9; margin-bottom: 18px; word-break: break-word; }
+.meal-message-system { padding: 12px; font-size: 24px; text-align: center; color: #626f65; }
+.meal-message-report { font-size: 22px; color: #626f65; text-align: right; }
+.meal-room-scroll { height: calc(100vh - 330px); min-height: 400px; }

@@ -55,6 +55,7 @@ import { FeedReportSheet } from './components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedActionSheet'
 import { FeedImageGrid } from './components/FeedImageGrid'
 import { SupplementFeedCard } from './components/SupplementFeedCard'
+import { MealMeetupList } from './components/MealMeetupList'
 
 import { IconTrendingUp } from '../../components/iconfont'
 
@@ -379,6 +380,7 @@ function isCommunityFeedItem(value: CommunityFeedItem | CommunityFeedItem['recor
 }
 
 function CommunityPage() {
+  const [socialTab, setSocialTab] = useState<'find' | 'feed'>('find')
   const { scheme } = useAppColorScheme()
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
 
@@ -2021,7 +2023,26 @@ function CommunityPage() {
         className='community-page'
         style={pageHeight ? { height: `${pageHeight}px` } : undefined}
       >
-      <View className='community-scroll-wrap'>
+      <View className='community-social-tabs'>
+        <Text className={socialTab === 'find' ? 'is-active' : ''} onClick={() => setSocialTab('find')}>找搭子</Text>
+        <Text className={socialTab === 'feed' ? 'is-active' : ''} onClick={() => setSocialTab('feed')}>晒餐</Text>
+        <Text className='community-meal-messages' onClick={() => { if (!getAccessToken()) return redirectToLogin(); void Taro.navigateTo({ url: extraPkgUrl('/pages/private-conversations/index') }) }}>消息{unreadMessageCount > 0 ? ` · ${unreadMessageCount > 99 ? '99+' : unreadMessageCount}` : ''}</Text>
+      </View>
+      {socialTab === 'find' && <MealMeetupList />}
+      {loggedIn && socialTab === 'feed' && (
+        <View className='community-interaction-toolbar'>
+          <View className='community-interaction-entry' onClick={handleOpenNotifications}>
+            <Text className='iconfont icon-pinglun' />
+            <Text>互动</Text>
+            {unreadNotificationCount > 0 ? (
+              <Text className='community-interaction-count'>
+                {unreadNotificationCount > 99 ? '99+' : String(unreadNotificationCount)}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      )}
+      <View className='community-scroll-wrap' style={socialTab === 'find' ? { display: 'none' } : undefined}>
         <ScrollView
           id='community-main-scroll'
           className='community-scroll'
@@ -2043,7 +2064,7 @@ function CommunityPage() {
             }}
           >
             {/* 排行榜：左侧用户榜，右侧食物营养榜 */}
-            <View className='ranking-banner' onClick={(e) => e.stopPropagation()}>
+            <View className='ranking-banner ranking-banner--compact' onClick={(e) => e.stopPropagation()}>
               <View className='ranking-head'>
                 <View className='ranking-icon-wrap'>
                   <IconTrendingUp size={34} color='rgb(255 255 255 / 95%)' />
@@ -2075,7 +2096,7 @@ function CommunityPage() {
                   <View className='ranking-mini-list'>
                     {(lbPreviewLoading || (lbPreviewFetching && lbPreviewTop.length === 0)) ? (
                       <View className='ranking-mini-skeleton'><View /><View /></View>
-                    ) : lbPreviewTop.length > 0 ? lbPreviewTop.map(row => (
+                    ) : lbPreviewTop.length > 0 ? lbPreviewTop.slice(0, 1).map(row => (
                       <View className='ranking-mini-row' key={row.user_id}>
                         <Text className={`ranking-mini-rank rank-${row.rank}`}>{row.rank}</Text>
                         <View className='ranking-mini-avatar-wrap'>
@@ -2125,7 +2146,7 @@ function CommunityPage() {
                   <View className='ranking-mini-list'>
                     {(lbPreviewLoading || (lbPreviewFetching && foodRankingPreview.length === 0)) ? (
                       <View className='ranking-mini-skeleton'><View /><View /></View>
-                    ) : foodRankingPreview.length > 0 ? foodRankingPreview.map(row => (
+                    ) : foodRankingPreview.length > 0 ? foodRankingPreview.slice(0, 1).map(row => (
                       <View className='ranking-mini-row' key={row.food_id}>
                         <Text className={`ranking-mini-rank rank-${row.rank}`}>{row.rank}</Text>
                         <View className='ranking-mini-avatar-wrap'>
@@ -2149,17 +2170,6 @@ function CommunityPage() {
             {loggedIn && (
               <View className='friends-quick-bar' onClick={(e) => e.stopPropagation()}>
                 <View className='friends-quick-grid'>
-                  <View className='friends-quick-cell' onClick={handleOpenNotifications}>
-                    <Text className='friends-quick-cell-icon iconfont icon-pinglun' />
-                    <Text className='friends-quick-cell-label'>互动消息</Text>
-                    {unreadNotificationCount > 0 ? (
-                      <View className='friends-quick-cell-badge'>
-                        <Text className='friends-quick-cell-badge-text'>
-                          {unreadNotificationCount > 99 ? '99+' : String(unreadNotificationCount)}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
                   <View
                     className='friends-quick-cell'
                     onClick={() => {

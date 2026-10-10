@@ -131,6 +131,8 @@ type DietRecommendationOption struct {
 	MealComponents                   []DietRecommendationCandidate `json:"meal_components,omitempty"`
 	DistanceKM                       *float64                      `json:"distance_km,omitempty"`
 	LocationLevel                    string                        `json:"location_level,omitempty"`
+	Latitude                         *float64                      `json:"latitude,omitempty"`
+	Longitude                        *float64                      `json:"longitude,omitempty"`
 	MerchantName                     string                        `json:"merchant_name,omitempty"`
 	Address                          string                        `json:"address,omitempty"`
 	Title                            string                        `json:"title"`
@@ -861,7 +863,8 @@ func campusDietRecommendationOption(candidate DietRecommendationCandidate, reaso
 	}
 	return DietRecommendationOption{
 		Nutrients: candidate.Nutrients,
-		Title:     candidate.Title, Reason: reason, Source: candidate.Source, SourceID: candidate.SourceID,
+		Latitude:  candidate.Latitude, Longitude: candidate.Longitude, LocationLevel: candidate.LocationLevel,
+		Title: candidate.Title, Reason: reason, Source: candidate.Source, SourceID: candidate.SourceID,
 		Calories: candidate.Calories, Protein: candidate.Protein, Carbs: candidate.Carbs, Fat: candidate.Fat,
 		Items: items, Tips: tips, IsCampusFood: candidate.IsCampusFood,
 		SchoolID: candidate.SchoolID, SchoolName: candidate.SchoolName,

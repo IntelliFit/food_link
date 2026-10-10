@@ -86,12 +86,14 @@ func mealHistoryQuestion(q string) bool {
 }
 
 type groundedMeal struct {
-	plan         *MealDayPlan
-	venuePenalty float64
-	evaluation   dietDecisionEvaluation
-	candidate    DietRecommendationCandidate
-	date         string
-	score        float64
+	recentRepeat   bool
+	varietyPenalty float64
+	plan           *MealDayPlan
+	venuePenalty   float64
+	evaluation     dietDecisionEvaluation
+	candidate      DietRecommendationCandidate
+	date           string
+	score          float64
 }
 
 func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *campusDietAgentRunState) (*DietRecommendationResult, error) {
@@ -392,6 +394,7 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 			reason = patternReason
 		}
 		option := campusDietRecommendationOption(c, reason, "")
+		option.MealComponents = state.MealPlans[c.SourceID]
 		option.EvidenceIssues, _ = mealEvidenceIssues(c, state.MealContext.MealType)
 		if result.SelectionAudit != nil {
 			for _, row := range result.SelectionAudit.Rows {

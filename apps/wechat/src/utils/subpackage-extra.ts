@@ -15,6 +15,7 @@ const EXTRA_PACKAGE_ROOT_BY_PAGE: Readonly<Record<string, string>> = {
 }
 
 const KNOWN_EXTRA_PACKAGE_ROOTS = [
+  '/packageMeal',
   SUBPACKAGE_EXTRA_ROOT,
   SUBPACKAGE_ABOUT_ROOT,
   SUBPACKAGE_USER_GROUP_ROOT,
@@ -66,6 +67,8 @@ export function normalizeRedirectUrlForSubpackage(fullUrl: string): string {
   const pathPart = qIdx === -1 ? t : t.slice(0, qIdx)
   const query = qIdx === -1 ? '' : t.slice(qIdx)
   let clean = pathPart.startsWith('/') ? pathPart : `/${pathPart}`
+  // Meal pages have their own names and must retain their subpackage after login.
+  if (clean.startsWith('/packageMeal/pages/')) return `${clean}${query}`
   if (clean === '/pages/record/index') {
     return '/pages/index/index'
   }

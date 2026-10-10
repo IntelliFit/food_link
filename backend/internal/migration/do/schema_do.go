@@ -62,19 +62,42 @@ type UserDO struct {
 func (UserDO) TableName() string { return "weapp_user" }
 
 type UserDailyNutritionTargetDO struct {
-	ID            string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID        string     `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_daily_nutrition_targets_user_date,priority:1;index:idx_user_daily_nutrition_targets_user_id"`
-	TargetDate    time.Time  `gorm:"column:target_date;type:date;not null;uniqueIndex:idx_user_daily_nutrition_targets_user_date,priority:2"`
-	CalorieTarget float64    `gorm:"column:calorie_target;type:numeric;not null"`
-	ProteinTarget float64    `gorm:"column:protein_target;type:numeric;not null"`
-	CarbsTarget   float64    `gorm:"column:carbs_target;type:numeric;not null"`
-	FatTarget     float64    `gorm:"column:fat_target;type:numeric;not null"`
-	Source        string     `gorm:"column:source;type:text;not null;default:'user_manual'"`
-	CreatedAt     *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt     *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ID            string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID        string         `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_daily_nutrition_targets_user_date,priority:1;index:idx_user_daily_nutrition_targets_user_id"`
+	TargetDate    time.Time      `gorm:"column:target_date;type:date;not null;uniqueIndex:idx_user_daily_nutrition_targets_user_date,priority:2"`
+	CalorieTarget float64        `gorm:"column:calorie_target;type:numeric;not null"`
+	ProteinTarget float64        `gorm:"column:protein_target;type:numeric;not null"`
+	CarbsTarget   float64        `gorm:"column:carbs_target;type:numeric;not null"`
+	FatTarget     float64        `gorm:"column:fat_target;type:numeric;not null"`
+	Source        string         `gorm:"column:source;type:text;not null;default:'user_manual'"`
+	PlanSnapshot  map[string]any `gorm:"column:plan_snapshot;type:jsonb;serializer:json"`
+	CreatedAt     *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt     *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (UserDailyNutritionTargetDO) TableName() string { return "user_daily_nutrition_targets" }
+
+type UserNutritionPlanDO struct {
+	ID        string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID    string         `gorm:"column:user_id;type:uuid;not null;index:idx_user_nutrition_plans_owner"`
+	Revision  int            `gorm:"column:revision;type:integer;not null;default:1"`
+	Values    map[string]any `gorm:"column:values;type:jsonb;serializer:json;not null"`
+	Archived  bool           `gorm:"column:archived;type:boolean;not null;default:false"`
+	CreatedAt time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (UserNutritionPlanDO) TableName() string { return "user_nutrition_plans" }
+
+type UserNutritionPlanDefaultDO struct {
+	ID            string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID        string         `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_nutrition_plan_defaults_date,priority:1"`
+	EffectiveDate time.Time      `gorm:"column:effective_date;type:date;not null;uniqueIndex:idx_user_nutrition_plan_defaults_date,priority:2"`
+	Snapshot      map[string]any `gorm:"column:snapshot;type:jsonb;serializer:json;not null"`
+	CreatedAt     time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+}
+
+func (UserNutritionPlanDefaultDO) TableName() string { return "user_nutrition_plan_defaults" }
 
 type UserFeedbackDO struct {
 	ID                string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -1007,6 +1030,7 @@ type SupplementIntakeDO struct {
 	UserID             string           `gorm:"column:user_id;type:uuid;not null;index:idx_supplement_intakes_user_taken,priority:1;uniqueIndex:idx_supplement_intakes_user_idempotency,priority:1"`
 	SupplementID       string           `gorm:"column:supplement_id;type:uuid;not null;index:idx_supplement_intakes_supplement_id"`
 	SupplementName     string           `gorm:"column:supplement_name;type:text;not null"`
+	ProductSnapshot    map[string]any   `gorm:"column:product_snapshot;type:jsonb;serializer:json"`
 	Servings           float64          `gorm:"column:servings;type:numeric(10,3);not null"`
 	ServingLabel       string           `gorm:"column:serving_label;type:text;not null"`
 	ComponentsSnapshot []map[string]any `gorm:"column:components_snapshot;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
@@ -1084,6 +1108,73 @@ type PrivateMessageDO struct {
 }
 
 func (PrivateMessageDO) TableName() string { return "private_messages" }
+
+// Meal meetups are independent from private diet records and leaderboard data.
+type MealMeetupDO struct {
+	ID          string    `gorm:"type:uuid;primaryKey"`
+	HostUserID  string    `gorm:"type:uuid;not null;uniqueIndex:idx_meal_meetup_create_key,priority:1;index"`
+	RequestID   string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_meal_meetup_create_key,priority:2"`
+	RequestHash string    `gorm:"type:varchar(64);not null"`
+	Title       string    `gorm:"type:varchar(60);not null"`
+	Description string    `gorm:"type:text;not null"`
+	VenueName   string    `gorm:"type:varchar(120);not null"`
+	Address     string    `gorm:"type:varchar(240);not null"`
+	Latitude    *float64  `gorm:"type:double precision"`
+	Longitude   *float64  `gorm:"type:double precision"`
+	StartsAt    time.Time `gorm:"type:timestamptz;not null;index:idx_meal_meetup_discovery,priority:2"`
+	EndsAt      time.Time `gorm:"type:timestamptz;not null"`
+	Timezone    string    `gorm:"type:varchar(64);not null"`
+	MealType    string    `gorm:"type:varchar(20);not null"`
+	Budget      int       `gorm:"not null;check:meal_meetup_budget,budget >= 0 AND budget <= 2000"`
+	Payment     string    `gorm:"type:varchar(20);not null"`
+	Capacity    int       `gorm:"not null;check:meal_meetup_capacity,capacity >= 2 AND capacity <= 4"`
+	Status      string    `gorm:"type:varchar(20);not null;index:idx_meal_meetup_discovery,priority:1"`
+	CreatedAt   time.Time `gorm:"type:timestamptz;not null"`
+	UpdatedAt   time.Time `gorm:"type:timestamptz;not null"`
+}
+
+func (MealMeetupDO) TableName() string { return "meal_meetups" }
+
+type MealMeetupParticipantDO struct {
+	ID        string    `gorm:"type:uuid;primaryKey"`
+	MeetupID  string    `gorm:"type:uuid;not null;uniqueIndex:idx_meal_meetup_participant,priority:1;index:idx_meal_meetup_member_status,priority:1"`
+	UserID    string    `gorm:"type:uuid;not null;uniqueIndex:idx_meal_meetup_participant,priority:2;index"`
+	Status    string    `gorm:"type:varchar(20);not null;index:idx_meal_meetup_member_status,priority:2"`
+	Revision  int       `gorm:"not null;check:meal_meetup_revision,revision > 0"`
+	Note      string    `gorm:"type:varchar(240);not null"`
+	CreatedAt time.Time `gorm:"type:timestamptz;not null"`
+	UpdatedAt time.Time `gorm:"type:timestamptz;not null"`
+}
+
+func (MealMeetupParticipantDO) TableName() string { return "meal_meetup_participants" }
+
+type MealMeetupEventDO struct {
+	ID          string    `gorm:"type:uuid;primaryKey"`
+	MeetupID    string    `gorm:"type:uuid;not null;index:idx_meal_meetup_event_page,priority:1;uniqueIndex:idx_meal_meetup_event_request,priority:1"`
+	ActorUserID string    `gorm:"type:uuid;not null;uniqueIndex:idx_meal_meetup_event_request,priority:2"`
+	RequestID   *string   `gorm:"type:varchar(64);uniqueIndex:idx_meal_meetup_event_request,priority:3"`
+	Kind        string    `gorm:"type:varchar(30);not null"`
+	Content     string    `gorm:"type:text;not null"`
+	Hidden      bool      `gorm:"not null;default:false"`
+	CreatedAt   time.Time `gorm:"type:timestamptz;not null;index:idx_meal_meetup_event_page,priority:2"`
+}
+
+func (MealMeetupEventDO) TableName() string { return "meal_meetup_events" }
+
+type MealMeetupReportDO struct {
+	ID             string    `gorm:"type:uuid;primaryKey"`
+	MeetupID       string    `gorm:"type:uuid;not null"`
+	EventID        *string   `gorm:"type:uuid"`
+	TargetKey      string    `gorm:"type:varchar(64);not null;uniqueIndex:idx_meal_meetup_report_once,priority:1"`
+	ReporterUserID string    `gorm:"type:uuid;not null;uniqueIndex:idx_meal_meetup_report_once,priority:2"`
+	Reason         string    `gorm:"type:varchar(30);not null"`
+	Snapshot       string    `gorm:"type:text;not null"`
+	Status         string    `gorm:"type:varchar(20);not null;index"`
+	CreatedAt      time.Time `gorm:"type:timestamptz;not null"`
+	UpdatedAt      time.Time `gorm:"type:timestamptz;not null"`
+}
+
+func (MealMeetupReportDO) TableName() string { return "meal_meetup_reports" }
 
 type PrivateMessageReportDO struct {
 	ID                 string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -2056,6 +2147,8 @@ func AllModels() []any {
 		&PushDeliveryDO{},
 		&UserDO{},
 		&UserDailyNutritionTargetDO{},
+		&UserNutritionPlanDO{},
+		&UserNutritionPlanDefaultDO{},
 		&UserFeedbackDO{},
 		&AdminAccountDO{},
 		&AnalyticsActivityDO{},
@@ -2114,6 +2207,10 @@ func AllModels() []any {
 		&UserBlockDO{},
 		&UserFollowDO{},
 		&PrivateMessageDO{},
+		&MealMeetupDO{},
+		&MealMeetupParticipantDO{},
+		&MealMeetupEventDO{},
+		&MealMeetupReportDO{},
 		&PrivateMessageReportDO{},
 		&BodyWeightRecordDO{},
 		&BodyWaterLogDO{},

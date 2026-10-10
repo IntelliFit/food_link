@@ -3664,3 +3664,9 @@ $stats-blue-soft: #7aa9ce;
     .risk-overview-badge-label { color: #805a22 !important; }
   }
 }
+.stats-decision-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+.nutrition-plan-chart-target { position: absolute; z-index: 2; left: 8%; right: 8%; height: 3rpx; border-radius: 2rpx; background: #4e9673; }

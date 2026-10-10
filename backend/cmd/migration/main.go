@@ -16,11 +16,14 @@ import (
 	"food_link/backend/internal/migration"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
+	"food_link/backend/pkg/storage"
 )
 
 func main() {
 	configDir := flag.String("config-dir", ".", "directory containing config.yaml")
 	onlyMealMemory := flag.Bool("only-meal-recommendation-memory", false, "only migrate meal recommendation feedback")
+	onlyNutritionPlans := flag.Bool("only-nutrition-plans", false, "only add nutrition plan library, versioned defaults and day snapshots")
+	onlyMealMeetups := flag.Bool("only-meal-meetups", false, "only add meal meetup activities, participation, events, and reports")
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
 	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
 	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
@@ -35,6 +38,9 @@ func main() {
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	onlySupplements := flag.Bool("only-supplements", false, "only add supplement catalog, cabinet, intake schema, and catalog seeds")
 	onlySupplementFeed := flag.Bool("only-supplement-feed", false, "only add supplement intake feed visibility and update feed interaction target constraints")
+	onlySupplementProduct := flag.Bool("only-supplement-feed-product", false, "only add optional supplement bottle identity snapshots")
+	productBefore := flag.String("supplement-product-before", "", "optional RFC3339 cutoff to inspect matching legacy product metadata")
+	productApply := flag.Bool("supplement-product-apply", false, "apply moderated product metadata backfill; requires cutoff")
 	restoreSupplementFeed := flag.Bool("restore-supplement-feed", false, "inspect or restore moderated historical supplement feed records only")
 	restoreBefore := flag.String("restore-before", "", "required RFC3339 cutoff for historical intake creation time")
 	restoreRunKey := flag.String("restore-run-key", "", "required restoration audit identifier")
@@ -48,11 +54,22 @@ func main() {
 	onlyAnalytics := flag.Bool("only-analytics", false, "only migrate admin roles and isolated analytics tables")
 	printTarget := flag.Bool("print-target", false, "print resolved database target without credentials; do not connect or migrate")
 	flag.Parse()
-	// Analytics has a scoped migration to avoid touching business tables during deployment.
+	if (!*onlySupplementProduct && (*productBefore != "" || *productApply)) || (*productApply && *productBefore == "") {
+		log.Fatal("补剂产品补齐参数须与 --only-supplement-feed-product 及截止时间一起使用")
+	}
 	if !*restoreSupplementFeed && (*restoreBefore != "" || *restoreRunKey != "" || *restoreApply || *restoreExcludeIDs != "") {
 		log.Fatal("补剂恢复参数须与 --restore-supplement-feed 一起使用")
 	}
 	selectedOnlyModes := 0
+	if *onlyNutritionPlans {
+		selectedOnlyModes++
+	}
+	if *onlyMealMeetups {
+		selectedOnlyModes++
+	}
+	if *onlySupplementProduct {
+		selectedOnlyModes++
+	}
 	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
@@ -105,6 +122,43 @@ func main() {
 	if err := database.Ping(ctx, db); err != nil {
 		log.Fatalf("数据库 ping 失败: %v", err)
 	}
+	if *onlySupplementProduct {
+		var before time.Time
+		if *productBefore != "" {
+			before, err = time.Parse(time.RFC3339Nano, *productBefore)
+			if err != nil || before.IsZero() || before.After(time.Now()) {
+				log.Fatal("补剂产品补齐截止时间须为已过去的 RFC3339 时间")
+			}
+		}
+		if err := migration.MigrateSupplementFeedProduct(ctx, db, schema); err != nil {
+			log.Fatalf("补剂动态产品快照迁移失败: %v", err)
+		}
+		if before.IsZero() {
+			log.Printf("补剂动态产品快照迁移完成: schema=%s", schema)
+			return
+		}
+		var check func(context.Context, string, map[string]any) error
+		if *productApply {
+			checker, err := contentsecurity.New(cfg, authrepo.NewUserRepo(db))
+			if err != nil {
+				log.Fatalf("创建补剂产品资料审核失败: %v", err)
+			}
+			defer checker.Close()
+			store := storage.New(cfg.Storage)
+			check = func(ctx context.Context, userID string, doc map[string]any) error {
+				return checker.CheckPublication(ctx, userID, 2, doc, store)
+			}
+		}
+		report, err := migration.BackfillSupplementFeedProduct(ctx, db, schema, before, *productApply, check)
+		if report != nil {
+			body, _ := json.Marshal(report)
+			fmt.Println(string(body))
+		}
+		if err != nil {
+			log.Fatalf("补剂动态产品资料补齐失败: %v", err)
+		}
+		return
+	}
 	if *restoreSupplementFeed {
 		before, err := time.Parse(time.RFC3339Nano, *restoreBefore)
 		if err != nil {
@@ -150,11 +204,26 @@ func main() {
 		}
 		return
 	}
+	if *onlyNutritionPlans {
+		if err := migration.MigrateNutritionPlans(ctx, db, schema); err != nil {
+			log.Fatalf("饮食方案迁移失败: %v", err)
+		}
+		log.Println("饮食方案结构迁移完成")
+		return
+	}
 	if *onlyMealMemory {
+		// The mutually exclusive mode check above covers meal meetups as well.
 		if err := migration.MigrateMealRecommendationMemory(ctx, db); err != nil {
 			log.Fatalf("餐食推荐反馈迁移失败: %v", err)
 		}
 		log.Printf("餐食推荐反馈迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyMealMeetups {
+		if err := migration.MigrateMealMeetups(ctx, db, schema); err != nil {
+			log.Fatalf("约饭迁移失败: %v", err)
+		}
+		log.Printf("约饭迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	if *verifyNutritionStates {

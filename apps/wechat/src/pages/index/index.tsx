@@ -1,4 +1,6 @@
 import SleepCard from './components/SleepCard'
+import NutritionPlans from '../../components/NutritionPlans'
+import { changeNutritionDay, NUTRITION_PLANS_CHANGED, type DayChange } from '../../utils/nutrition-plans'
 import NextMealRecommendations from './components/NextMealRecommendations'
 import { Success } from '@taroify/icons'
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, ScrollView } from '@tarojs/components'
@@ -13,6 +15,7 @@ import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } fr
 import { useLocalToday } from '../../hooks/useLocalToday'
 import {
   getHomeDashboard,
+  getDashboardTargets,
   getStatsSummary,
   getStatsCalendarMonth,
   getAccessToken,
@@ -420,21 +423,11 @@ function calcCaloriesFromMacros(macros: MacroTargets): number {
   return macros.protein * 4 + macros.carbs * 4 + macros.fat * 9
 }
 
-function scaleMacrosByCalorieTarget(nextCalorie: number, baseMacros: MacroTargets): MacroTargets {
-  const baseCalories = calcCaloriesFromMacros(baseMacros)
-
-  if (baseCalories <= 0) {
-    const protein = (nextCalorie * 0.3) / 4
-    const carbs = (nextCalorie * 0.4) / 4
-    const fat = (nextCalorie * 0.3) / 9
-    return { protein, carbs, fat }
-  }
-
-  const ratio = nextCalorie / baseCalories
+function balanceMacrosByCalorieTarget(nextCalorie: number, baseMacros: MacroTargets): MacroTargets {
   return {
-    protein: baseMacros.protein * ratio,
-    carbs: baseMacros.carbs * ratio,
-    fat: baseMacros.fat * ratio
+    protein: baseMacros.protein,
+    carbs: (nextCalorie - baseMacros.protein * 4 - baseMacros.fat * 9) / 4,
+    fat: baseMacros.fat
   }
 }
 
@@ -460,7 +453,7 @@ function alignPayloadWithCalorieTarget(payload: DashboardTargets): { payload: Da
     return { payload, adjusted: false }
   }
 
-  const scaledMacros = scaleMacrosByCalorieTarget(payload.calorie_target, {
+  const scaledMacros = balanceMacrosByCalorieTarget(payload.calorie_target, {
     protein: payload.protein_target,
     carbs: payload.carbs_target,
     fat: payload.fat_target
@@ -824,7 +817,7 @@ function IndexPage() {
   const moduleOwner = React.useRef(homeLayoutOwner())
   const socialInbox = useSocialInbox()
   useDidShow(() => { setModuleLayout(readHomeModuleLayout()); setShowHomeModuleManager(false) })
-  useDidHide(() => setShowHomeModuleManager(false))
+  useDidHide(() => { setShowHomeModuleManager(false); setShowPlanPicker(false); setPlanUndo(null) })
   const [hiddenMicronutrientKeys, setHiddenMicronutrientKeys] = React.useState<HomeMicronutrientKey[]>(getStoredHiddenMicronutrientKeys)
   const initialSelectedDate = formatDateKey(new Date())
   const initialHomeSelectedDate = initialSelectedDate
@@ -850,6 +843,10 @@ function IndexPage() {
   const promptedLoginCheckInDateRef = React.useRef('')
   const petSummarySeqRef = React.useRef(0)
   const [showTargetEditor, setShowTargetEditor] = React.useState(false)
+  const [showPlanPicker, setShowPlanPicker] = React.useState(false)
+  const [planUndo, setPlanUndo] = React.useState<DayChange | null>(null)
+  const [undoBusy, setUndoBusy] = React.useState(false)
+  const [planRefresh, setPlanRefresh] = React.useState(0)
   const [savingTargets, setSavingTargets] = React.useState(false)
   const [nutritionExpanded, setNutritionExpanded] = React.useState(false)
   const [targetForm, setTargetForm] = React.useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
@@ -1021,7 +1018,7 @@ function IndexPage() {
   const [mealActionRecord, setMealActionRecord] = React.useState<FoodRecord | null>(null)
   const mealFavoriteInFlightRef = React.useRef(false)
   const [showRecordEditModal, setShowRecordEditModal] = React.useState(false)
-  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || showHomeModuleManager
+  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || showHomeModuleManager || showPlanPicker || showTargetEditor
   const [showRecordPosterModal, setShowRecordPosterModal] = React.useState(false)
   /** 同一餐次多条记录时的选择面板 */
   const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = React.useState(false)
@@ -1645,13 +1642,43 @@ function IndexPage() {
   }, [openRecordMenuFromRequest])
 
   const openTargetEditor = () => {
+    if (!getAccessToken()) { redirectToLogin(); return }
+    setShowPlanPicker(true)
+  }
+  const openBaseTargetEditor = async () => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
     }
-    targetScaleBaseMacrosRef.current = getMacroTargetsFromIntake(intakeData)
-    setTargetForm(createTargetForm(intakeData))
-    setShowTargetEditor(true)
+    const token = getAccessToken()
+    try {
+      const base = await getDashboardTargets()
+      if (token !== getAccessToken()) return
+      const form = createTargetForm(DEFAULT_INTAKE)
+      for (const key of Object.keys(form) as Array<keyof TargetFormState>) {
+        const apiKey = key.replace(/[A-Z]/g, char => `_${char.toLowerCase()}`) as keyof DashboardTargets
+        const value = base[apiKey]; if (typeof value === 'number') form[key] = String(value)
+      }
+      targetScaleBaseMacrosRef.current = { protein: base.protein_target, carbs: base.carbs_target, fat: base.fat_target }
+      setTargetForm(form); setShowPlanPicker(false); setShowTargetEditor(true)
+    } catch (e) { void showUnifiedApiError(e) }
+  }
+
+  React.useEffect(() => {
+    const changed = () => { setPlanRefresh(v => v + 1) }
+    Taro.eventCenter.on(NUTRITION_PLANS_CHANGED, changed)
+    return () => { Taro.eventCenter.off(NUTRITION_PLANS_CHANGED, changed) }
+  }, [])
+  React.useEffect(() => { setPlanUndo(null); setShowPlanPicker(false) }, [selectedDate])
+  const undoPlan = async () => {
+    if (!planUndo || undoBusy) return
+    const token = getAccessToken(); const original = planUndo
+    setUndoBusy(true)
+    try {
+      await changeNutritionDay(original.day.date, original.day.change_token, original.previous ? { restore: original.previous } : { clear: true })
+      if (token === getAccessToken()) { setPlanUndo(null); void Taro.showToast({ title: '已撤销', icon: 'success' }) }
+    } catch (e) { void showUnifiedApiError(e) }
+    finally { setUndoBusy(false) }
   }
 
   const handleToggleMicronutrientVisibility = (key: HomeMicronutrientKey) => {
@@ -1675,14 +1702,12 @@ function IndexPage() {
           return nextForm
         }
 
-        const baseMacros = targetScaleBaseMacrosRef.current
-        const scaledMacros = scaleMacrosByCalorieTarget(nextCalorie, baseMacros)
+        const baseMacros = parseMacroTargets(prev) || targetScaleBaseMacrosRef.current
+        const nextCarbs = (nextCalorie - baseMacros.protein * 4 - baseMacros.fat * 9) / 4
         return {
           ...prev,
           calorieTarget: formatTargetInput(nextCalorie),
-          proteinTarget: formatTargetInput(scaledMacros.protein),
-          carbsTarget: formatTargetInput(scaledMacros.carbs),
-          fatTarget: formatTargetInput(scaledMacros.fat)
+          carbsTarget: nextCarbs >= 0 ? formatTargetInput(nextCarbs) : ''
         }
       }
 
@@ -1711,6 +1736,7 @@ function IndexPage() {
   }
 
   const handleSaveTargets = async () => {
+    if ([targetForm.calorieTarget, targetForm.proteinTarget, targetForm.carbsTarget, targetForm.fatTarget].some(v => !v.trim())) { void Taro.showToast({ title: '请填写完整的数字目标', icon: 'none' }); return }
     const macroPayload: DashboardTargets = {
       calorie_target: Number(targetForm.calorieTarget),
       protein_target: Number(targetForm.proteinTarget),
@@ -1812,7 +1838,11 @@ function IndexPage() {
   const handleApplyCalibrationSuggestion = async (suggestion: HomeTargetCalibrationSuggestion) => {
     if (!suggestion?.suggested_kcal || suggestion.suggested_kcal <= 0) return
     const baseMacros = parseMacroTargets(targetForm) || getMacroTargetsFromIntake(intakeData)
-    const scaledMacros = scaleMacrosByCalorieTarget(suggestion.suggested_kcal, baseMacros)
+    const scaledMacros = balanceMacrosByCalorieTarget(suggestion.suggested_kcal, baseMacros)
+    if (scaledMacros.carbs < 0 || scaledMacros.carbs > 1000) {
+      void Taro.showToast({ title: '请先调整蛋白质与脂肪目标', icon: 'none' })
+      return
+    }
     const aligned = alignPayloadWithCalorieTarget({
       calorie_target: suggestion.suggested_kcal,
       protein_target: Number(formatTargetInput(scaledMacros.protein)),
@@ -2467,7 +2497,8 @@ function IndexPage() {
 
   const fatCur = normalizeDisplayNumber(intakeData.macros.fat.current)
   const fatTargetRaw = normalizeDisplayNumber(intakeData.macros.fat.target)
-  const fatRingPct = Math.min(100, calculateProgressPercent(fatCur, fatTargetRaw))
+  const fatProgressLimit = nutritionTarget?.fat_max ?? fatTargetRaw
+  const fatRingPct = Math.min(100, calculateProgressPercent(fatCur, fatProgressLimit))
 
   const nextMealType = normalizeNextMainMeal(
     petSummary?.meal_prompt?.meal_type || inferDefaultMealTypeFromLocalTime()
@@ -3068,7 +3099,7 @@ function IndexPage() {
 
         <HomeModule id='nextMeal' layout={moduleLayout} locks={moduleLocks}>
         {showNextMealGuidance && (
-          <NextMealRecommendations mealType={nextMealType} mealName={nextMealName} refreshKey={`${selectedDate}:${totalCurrent}:${proteinCur}:${carbsCur}:${fatCur}`} onAdjust={openNextMealGuidance} />
+          <NextMealRecommendations mealType={nextMealType} mealName={nextMealName} refreshKey={`${selectedDate}:${totalCurrent}:${proteinCur}:${carbsCur}:${fatCur}:${planRefresh}`} onAdjust={openNextMealGuidance} />
         )}
 
         </HomeModule>
@@ -3108,6 +3139,7 @@ function IndexPage() {
                 <View className='wellness-total-progress'>
                   <View className={`wellness-total-progress__fill${isCalorieOver ? ' is-over' : ''}`} style={{ width: `${wellnessCaloriePct}%` }} />
                 </View>
+                {nutritionTarget?.plan_name && <View className='wellness-plan-label' onClick={openTargetEditor}><Text>{nutritionTarget.plan_name}</Text><Text>{nutritionTarget.source === 'temporary_plan' ? '当天微调' : nutritionTarget.historical_reference ? '历史参考' : '切换方案'} ›</Text></View>}
                 <View className='wellness-macros'>
                   {MACRO_CONFIGS.map(({ key, label, unit, iconClass }) => {
                     const macro = intakeData.macros[key]
@@ -3115,7 +3147,9 @@ function IndexPage() {
                     const target = normalizeDisplayNumber(macro?.target)
                     const pct = key === 'protein' ? animatedMacroProteinRing : key === 'carbs' ? animatedMacroCarbsRing : animatedMacroFatRing
                     const animatedCurrent = key === 'protein' ? animatedMacroProteinNum : key === 'carbs' ? animatedMacroCarbsNum : animatedMacroFatNum
-                    const isMacroOver = current > target && target > 0
+                    const fatRange = key === 'fat' && nutritionTarget?.fat_min != null && nutritionTarget?.fat_max != null
+                    const limit = fatRange ? nutritionTarget.fat_max! : target
+                    const isMacroOver = current > limit && limit > 0
                     return (
                       <View key={key} className='wellness-macro'>
                         <View className='wellness-macro__title'>
@@ -3124,7 +3158,7 @@ function IndexPage() {
                         </View>
                         <View className='wellness-macro__numbers'>
                           <Text className={`wellness-macro__current${isMacroOver ? ' is-over' : ''}`}>{dashboardBusy || isGuest ? '--' : formatDisplayNumber(animatedCurrent)}</Text>
-                          <Text className='wellness-macro__target'> / {dashboardBusy || isGuest ? '--' : formatDisplayNumber(target)}{unit}</Text>
+                          <Text className='wellness-macro__target'> / {dashboardBusy || isGuest ? '--' : fatRange ? `${formatDisplayNumber(nutritionTarget.fat_min!)}–${formatDisplayNumber(nutritionTarget.fat_max!)}` : formatDisplayNumber(target)}{unit}</Text>
                         </View>
                         <View className='wellness-macro__track'>
                           <View className={`wellness-macro__fill${isMacroOver ? ' is-over' : ''}`} style={{ width: `${pct}%` }} />
@@ -3154,7 +3188,7 @@ function IndexPage() {
                     isGuest={isGuest}
                     supplementSummary={supplementSummary}
                     hiddenMicronutrientKeys={hiddenMicronutrientKeys}
-                    onManageMicronutrients={openTargetEditor}
+                    onManageMicronutrients={() => { void openBaseTargetEditor() }}
                   />
                 </View>
               )}
@@ -3489,6 +3523,8 @@ function IndexPage() {
       }}
       />}
       {/* 目标编辑弹窗 */}
+      {showPlanPicker && <NutritionPlans date={selectedDate} onClose={() => setShowPlanPicker(false)} onEditBase={() => { void openBaseTargetEditor() }} onApplied={change => { if (selectedDateRef.current === change.day.date) setPlanUndo(change) }} />}
+      {planUndo && planUndo.day.date === selectedDate && <View className='wellness-plan-undo'><Text>已更新为{planUndo.day.snapshot.name}</Text><Button disabled={undoBusy} onClick={() => { void undoPlan() }}>{undoBusy ? <View className='loading-spinner' /> : '撤销'}</Button><Text onClick={() => setPlanUndo(null)}>×</Text></View>}
       <TargetEditor
         visible={showTargetEditor}
         targetForm={targetForm}

@@ -14,14 +14,15 @@ func roundedMealLocation(location *domain.DietLocation) string {
 
 // This is a menu variety heuristic, not a nutrient measurement or CHEI score.
 func mealCandidateFamily(c DietRecommendationCandidate) string {
-	title := strings.ToLower(c.Title)
+	title := strings.ReplaceAll(strings.ToLower(c.Title), "鱼香", "")
 	staple := "other"
 	for _, group := range []struct {
 		key   string
 		words []string
 	}{
 		{"hotpot", []string{"火锅", "麻辣烫", "冒菜"}}, {"dumplings", []string{"水饺", "蒸饺", "馄饨", "抄手"}},
-		{"noodles", []string{"面", "米粉", "河粉", "粉丝"}}, {"rice", []string{"饭"}}, {"bread", []string{"包子", "馒头", "饼", "汉堡", "三明治"}},
+		{"bread", []string{"面包", "包子", "馒头", "饼", "汉堡", "三明治", "菜包", "肉包"}},
+		{"noodles", []string{"面", "米粉", "河粉", "粉丝"}}, {"rice", []string{"饭"}},
 	} {
 		if containsAnyText(title, group.words...) {
 			staple = group.key
@@ -34,7 +35,7 @@ func mealCandidateFamily(c DietRecommendationCandidate) string {
 		words []string
 	}{
 		{"fish", []string{"鱼", "虾"}}, {"beef", []string{"牛肉", "肥牛"}}, {"chicken", []string{"鸡肉", "鸡腿", "鸡胸", "鸡排", "宫保鸡", "黄焖鸡"}},
-		{"pork", []string{"猪肉", "排骨", "叉烧", "卤肉", "红烧肉"}}, {"soy", []string{"豆腐", "豆干", "腐竹", "豆皮"}},
+		{"pork", []string{"猪肉", "排骨", "叉烧", "卤肉", "红烧肉"}}, {"soy", []string{"豆腐", "豆干", "腐竹", "豆皮"}}, {"egg", []string{"鸡蛋", "卤蛋", "蛋炒", "蛋饼"}},
 	} {
 		if containsAnyText(title, group.words...) {
 			protein = group.key
@@ -180,7 +181,7 @@ func selectVariedPreviewMeals(eligible []groundedMeal) []groundedMeal {
 	return chosen
 }
 
-const dietMealSelectionPolicyVersion = "foodlink-meal-selection-v3.2"
+const dietMealSelectionPolicyVersion = "foodlink-meal-selection-v3.3"
 
 // This is a versioned engineering tolerance, not clinical equivalence. Anchor
 // the shortlist to a fixed maximum each round (no non-transitive pairwise epsilon).
@@ -189,36 +190,13 @@ const mealHealthShortlistTolerance = 5.0
 
 func selectHealthBoundedMeals(eligible []groundedMeal, limit int) []groundedMeal {
 	chosen := []groundedMeal{}
-	seen := map[string]bool{}
-	historyChosen := false
 	for len(chosen) < limit {
-		pool := []groundedMeal{}
-		for _, meal := range eligible {
-			if !seen[mealFingerprint(meal.candidate)] && meal.candidate.Source != "food_record" {
-				pool = append(pool, meal)
-			}
-		}
-		// A history entry never crowds out a feasible menu listing. At most one
-		// is returned if real places do not fill the requested alternatives.
-		if len(pool) == 0 && !historyChosen {
-			for _, meal := range eligible {
-				if !seen[mealFingerprint(meal.candidate)] && meal.candidate.Source == "food_record" {
-					pool = append(pool, meal)
-				}
-			}
-		}
+		pool := mealSelectionRound(eligible, chosen)
 		if len(pool) == 0 {
 			break
 		}
-		maxHealth := math.Inf(-1)
-		for _, meal := range pool {
-			maxHealth = math.Max(maxHealth, meal.evaluation.Scores.HealthFit)
-		}
 		best, bestScore := -1, math.Inf(-1)
 		for i, meal := range pool {
-			if meal.evaluation.Scores.HealthFit < maxHealth-mealHealthShortlistTolerance {
-				continue
-			}
 			score := meal.score
 			for _, prior := range chosen {
 				if family := mealCandidateFamily(meal.candidate); family != "" && family == mealCandidateFamily(prior.candidate) {
@@ -237,8 +215,6 @@ func selectHealthBoundedMeals(eligible []groundedMeal, limit int) []groundedMeal
 		}
 		meal := pool[best]
 		chosen = append(chosen, meal)
-		seen[mealFingerprint(meal.candidate)] = true
-		historyChosen = historyChosen || meal.candidate.Source == "food_record"
 	}
 	return chosen
 }

@@ -10,6 +10,7 @@ import (
 
 	"food_link/backend/internal/health/domain"
 	"food_link/backend/internal/nutritionagg"
+	userdomain "food_link/backend/internal/user/domain"
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -18,7 +19,16 @@ import (
 )
 
 type StatsRepo struct {
-	db *gorm.DB
+	db             *gorm.DB
+	nutritionPlans interface {
+		Resolve(context.Context, string, string) (userdomain.NutritionDay, error)
+	}
+}
+
+func (r *StatsRepo) ConfigureNutritionPlans(provider interface {
+	Resolve(context.Context, string, string) (userdomain.NutritionDay, error)
+}) {
+	r.nutritionPlans = provider
 }
 
 func NewStatsRepo(db *gorm.DB) *StatsRepo {
@@ -54,6 +64,25 @@ func (r *StatsRepo) GetUserProfile(ctx context.Context, userID string) (*domain.
 			return nil, nil
 		}
 		return nil, err
+	}
+	if r.nutritionPlans != nil {
+		date := time.Now().In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02")
+		day, err := r.nutritionPlans.Resolve(ctx, userID, date)
+		if err != nil {
+			return nil, err
+		}
+		if row.HealthCondition == nil {
+			row.HealthCondition = map[string]any{}
+		}
+		targets := map[string]any{}
+		for key, value := range day.Snapshot.Targets {
+			targets[key] = value
+		}
+		row.HealthCondition["dashboard_targets"] = targets
+		row.HealthCondition["nutrition_plan_name"] = day.Snapshot.Name
+		row.HealthCondition["nutrition_plan_fat_min"] = day.Snapshot.FatMin
+		row.HealthCondition["nutrition_plan_fat_max"] = day.Snapshot.FatMax
+		row.HealthCondition["nutrition_plan_style"] = day.Snapshot.Style
 	}
 	return &row, nil
 }

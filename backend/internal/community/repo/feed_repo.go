@@ -55,6 +55,7 @@ type FeedRecord struct {
 	Servings             float64          `gorm:"column:servings" json:"servings,omitempty"`
 	ServingLabel         string           `gorm:"column:serving_label" json:"serving_label,omitempty"`
 	SupplementComponents []map[string]any `gorm:"column:supplement_components;serializer:json" json:"supplement_components,omitempty"`
+	SupplementProduct    map[string]any   `gorm:"column:supplement_product;serializer:json" json:"supplement_product,omitempty"`
 	// Campus food fields (for public_food_library entries appearing in feed)
 	Price             float64 `gorm:"column:price" json:"price,omitempty"`
 	PriceUnit         string  `gorm:"column:price_unit" json:"price_unit,omitempty"`
@@ -272,7 +273,7 @@ func (r *FeedRepo) listCirclePostsByAuthors(ctx context.Context, authorIDs []str
 
 func (r *FeedRepo) supplementFeedQuery(ctx context.Context) *gorm.DB {
 	// 只读取服用时的快照，不关联后来修改的瓶身标签或发布私人备注。
-	return r.db.WithContext(ctx).Table("supplement_intakes").Select("'supplement_intake' AS feed_type, id, user_id, taken_at AS record_time, created_at, supplement_name, servings, serving_label, components_snapshot AS supplement_components, hidden_from_feed")
+	return r.db.WithContext(ctx).Table("supplement_intakes").Select("'supplement_intake' AS feed_type, id, user_id, taken_at AS record_time, created_at, supplement_name, servings, serving_label, components_snapshot AS supplement_components, product_snapshot AS supplement_product, hidden_from_feed")
 }
 
 func (r *FeedRepo) listSupplementFeedByAuthors(ctx context.Context, authorIDs []string, publicOnly bool, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {

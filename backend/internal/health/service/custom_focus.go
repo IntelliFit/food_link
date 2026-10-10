@@ -24,10 +24,11 @@ import (
 )
 
 const (
-	customFocusCreditCost = 1
-	customFocusDailyLimit = 3
-	customFocusMaxTokens  = 2048
-	customFocusTaskType   = "custom_focus"
+	customFocusCreditCost     = 1
+	customFocusDailyLimit     = 3
+	customFocusMaxTokens      = 2048
+	customFocusTaskType       = "custom_focus"
+	customFocusScoringVersion = "foodlink-focus-v2"
 )
 
 type customFocusCardPayload struct {
@@ -45,6 +46,7 @@ type CustomFocusGenerationTask struct {
 }
 
 type customFocusScoringContext struct {
+	ScoreAvailable  bool
 	Category        string
 	ScoreKind       string
 	Score           int
@@ -167,7 +169,7 @@ func (s *StatsService) attachCustomRiskCards(ctx context.Context, comp *statsCom
 		if !ok {
 			continue
 		}
-		needsRefresh := cached.DataFingerprint != comp.DataFingerprint
+		needsRefresh := cached.DataFingerprint != comp.DataFingerprint || customFocusMetaString(cached.Meta, "scoring_version") != customFocusScoringVersion
 		customCards = append(customCards, domainCustomFocusToRiskCard(cached, needsRefresh))
 	}
 	healthIndex.CustomRiskCards = customCards
@@ -191,7 +193,23 @@ func shortCustomFocusLabel(label string) string {
 func domainCustomFocusToRiskCard(card domain.CustomFocusCard, needsRefresh bool) RiskCard {
 	previousScore := customFocusMetaIntPtr(card.Meta, "previous_score")
 	scoreChange := customFocusMetaIntPtr(card.Meta, "score_change")
+	available, _ := card.Meta["score_available"].(bool)
+	version := customFocusMetaString(card.Meta, "scoring_version")
+	scoreReason := customFocusMetaString(card.Meta, "score_reason")
+	changeReason := customFocusMetaString(card.Meta, "change_reason")
+	if version != customFocusScoringVersion {
+		available = false
+		card.Brief = "评分口径已更新，旧分数不作比较"
+		scoreReason = "旧版本混合了资料完整度，新版本不再沿用该分数；更新分析后查看支持建议。"
+		changeReason = "评分口径变化，不代表身体变好或变差。"
+	}
+	if !available {
+		previousScore = nil
+		scoreChange = nil
+	}
 	return RiskCard{
+		ScoreAvailable:  &available,
+		ScoringVersion:  version,
 		Key:             customFocusKey(card.FocusID),
 		Title:           card.FocusLabel,
 		Score:           card.Score,
@@ -206,10 +224,10 @@ func domainCustomFocusToRiskCard(card domain.CustomFocusCard, needsRefresh bool)
 		FocusLabel:      card.FocusLabel,
 		ScoreKind:       customFocusMetaString(card.Meta, "score_kind"),
 		Confidence:      customFocusMetaString(card.Meta, "confidence"),
-		ScoreReason:     customFocusMetaString(card.Meta, "score_reason"),
+		ScoreReason:     scoreReason,
 		PreviousScore:   previousScore,
 		ScoreChange:     scoreChange,
-		ChangeReason:    customFocusMetaString(card.Meta, "change_reason"),
+		ChangeReason:    changeReason,
 		Evidence:        customFocusMetaStrings(card.Meta, "evidence"),
 		MissingEvidence: customFocusMetaStrings(card.Meta, "missing_evidence"),
 	}
@@ -225,10 +243,15 @@ func includeCustomFocusScoresInOverall(comp *statsComputation, healthIndex *Heal
 	}
 	projectedDelta := healthIndex.ProjectedScore - healthIndex.OverallScore
 	total := healthIndex.OverallScore * coreCount
+	count := 0
 	for _, card := range cards {
+		if card.ScoreAvailable != nil && !*card.ScoreAvailable {
+			continue
+		}
 		total += card.Score
+		count++
 	}
-	healthIndex.OverallScore = clampScore(float64(total) / float64(coreCount+len(cards)))
+	healthIndex.OverallScore = clampScore(float64(total) / float64(coreCount+count))
 	healthIndex.ProjectedScore = clampScore(float64(healthIndex.OverallScore + projectedDelta))
 	healthIndex.OverallTrendLabel = scoreToLabel(healthIndex.OverallScore)
 	healthIndex.OverviewCopy = scoreToTrendCopy(healthIndex.OverallScore)
@@ -316,8 +339,10 @@ func (s *StatsService) GenerateCustomFocusCard(ctx context.Context, userID, stat
 		payload = fallbackCustomFocusCardPayloadWithScoring(comp, focusLabel, scoring)
 	}
 	payload.Score = scoring.Score
-	if payload.ScoreReason == "" {
-		payload.ScoreReason = scoring.ScoreReason
+	payload.ScoreReason = scoring.ScoreReason
+	if !scoring.ScoreAvailable {
+		payload.Score = 0
+		payload.Brief = "缺少专项测量，暂不评分"
 	}
 
 	previousScore, scoreChange, changeReason := customFocusChange(previousCard, comp.DataFingerprint, scoring)
@@ -337,6 +362,8 @@ func (s *StatsService) GenerateCustomFocusCard(ctx context.Context, userID, stat
 		Basis:           payload.Basis,
 		Action:          payload.Action,
 		Meta: map[string]any{
+			"scoring_version":  customFocusScoringVersion,
+			"score_available":  scoring.ScoreAvailable,
 			"score_kind":       scoring.ScoreKind,
 			"confidence":       scoring.Confidence,
 			"score_reason":     payload.ScoreReason,
@@ -544,7 +571,7 @@ func buildCustomFocusCardPrompt(comp *statsComputation, focusLabel string, scori
 1. 只输出 JSON 对象，不要 Markdown，不要代码块。
 2. 字段：score(0-100整数)、brief(<=20字)、summary(<=100字)、basis(<=120字)、action(<=80字)、score_reason(<=80字)。
 3. score 必须填写系统结构化规则分 %d；不要自行改分。文案只解释证据、缺口和可行动建议。
-4. 这是“饮食与记录支持度”，不是力量、皮肤状态或疾病风险的直接测量，不要给医学诊断。
+4. 这是饮食/训练支持参考，不是力量、皮肤状态或疾病风险的直接测量，不要给医学诊断。规则说明暂不评分时，score=0仅为内部占位，文案不得称0分或虚构身体状态评分。
 5. 只解释本次证据，不推测未提供的数据变化。`,
 		focusLabel,
 		formatStatsHealthProfile(comp.User, latestWeightFromBodyMetrics(comp.BodyMetrics)),
@@ -610,10 +637,10 @@ func fallbackCustomFocusCardPayloadWithScoring(comp *statsComputation, focusLabe
 func buildCustomFocusScoringContext(comp *statsComputation, focusLabel string) customFocusScoringContext {
 	context := customFocusScoringContext{
 		Category:   "general",
-		ScoreKind:  "diet_and_record_support",
-		Score:      60,
+		ScoreKind:  "unmeasured_goal",
+		Score:      0,
 		Confidence: "low",
-		Rubric:     "以核心健康规则分、记录完整度和与目标相关的可用证据综合计算。",
+		Rubric:     "缺少经过核验的专项测量/规则时暂不评分；只解释已知记录与可行动建议，不能借用通用健康分冒充该目标分。",
 	}
 	if comp == nil {
 		context.ScoreReason = "缺少可用统计数据，当前只能提供低置信度参考。"
@@ -628,19 +655,12 @@ func buildCustomFocusScoringContext(comp *statsComputation, focusLabel string) c
 	case containsAnyText(normalizedLabel, "皮肤", "肤色", "痘", "眼袋", "黑眼圈", "皱纹", "面部", "脸部"):
 		return buildSkinFocusScoring(comp)
 	default:
-		healthIndex := computeHealthIndex(comp, comp.StatsRange)
-		if healthIndex != nil && healthIndex.OverallScore > 0 {
-			context.Score = healthIndex.OverallScore
-		}
 		context.Evidence = []string{
 			fmt.Sprintf("已记录 %d 天，日均摄入 %.0f kcal", comp.RecordedDays, comp.AvgCaloriesPerDay),
 			fmt.Sprintf("蛋白质 %.1f%%、碳水 %.1f%%、脂肪 %.1f%%", comp.MacroPercent["protein"], comp.MacroPercent["carbs"], comp.MacroPercent["fat"]),
 		}
 		context.MissingEvidence = []string{"该自定义目标的专项量表或直接测量"}
-		if comp.RecordedDays >= 5 {
-			context.Confidence = "medium"
-		}
-		context.ScoreReason = fmt.Sprintf("当前 %d 分来自核心饮食规则和记录完整度，缺少该目标的直接测量。", context.Score)
+		context.ScoreReason = "尚未建立该目标的可靠专项评分，只展示已知饮食支持线索。"
 		return context
 	}
 }
@@ -685,125 +705,48 @@ func buildStrengthFocusScoring(comp *statsComputation) customFocusScoringContext
 	}
 
 	routineKnown := comp.User != nil && statsRoutineText(comp.User.HealthCondition["routine_type"]) != ""
-	recoveryScore := 55.0
 	if routineKnown {
-		recoveryScore = 72
 		evidence = append(evidence, "已填写作息习惯")
 	} else {
 		missing = append(missing, "作息习惯")
 	}
 	missing = append(missing, "实际睡眠时长与恢复质量", "围度或力量训练成绩")
 
-	dataScore := 35.0
-	if comp.RecordedDays >= 5 {
-		dataScore += 20
-	}
-	if weight > 0 {
-		dataScore += 15
-	}
-	if comp.ExerciseSummary != nil && comp.ExerciseSummary.SessionCount > 0 {
-		dataScore += 20
-	}
-	if routineKnown {
-		dataScore += 10
-	}
-	dataScore = math.Min(100, dataScore)
-
-	score := clampScore(proteinScore*0.30 + energyScore*0.25 + trainingScore*0.25 + recoveryScore*0.10 + dataScore*0.10)
+	// A labelled support heuristic, not a direct strength measurement.
+	score := clampScore(proteinScore*0.40 + energyScore*0.30 + trainingScore*0.30)
 	confidence := "low"
 	if comp.RecordedDays >= 5 && weight > 0 && comp.ExerciseSummary != nil && comp.ExerciseSummary.SessionCount > 0 {
 		confidence = "medium"
 	}
-	if confidence == "medium" && strengthSessions >= 2 && routineKnown {
-		confidence = "high"
+	available := comp.RecordedDays >= 3 && weight > 0 && comp.TDEE > 0 && comp.ExerciseSummary != nil && comp.ExerciseSummary.SessionCount > 0
+	scoreReason := fmt.Sprintf("已记录的蛋白供给40%%、能量30%%、训练30%%合成支持参考 %d 分；不是力量成绩，资料完整度不计分。", score)
+	if !available {
+		scoreReason = "证据不足，暂不合成支持分；需至少3个记录日、体重、消耗估算与训练记录。未记录不等于表现差。"
 	}
 	return customFocusScoringContext{
+		ScoreAvailable:  available,
 		Category:        "strength",
-		ScoreKind:       "diet_and_record_support",
+		ScoreKind:       "diet_training_support",
 		Score:           score,
 		Confidence:      confidence,
-		ScoreReason:     fmt.Sprintf("力量目标支持度由蛋白质30%%、能量25%%、训练25%%、恢复10%%、数据完整度10%%加权得到 %d 分。", score),
+		ScoreReason:     scoreReason,
 		Evidence:        evidence,
 		MissingEvidence: dedupeCustomFocusStrings(missing),
-		Rubric:          "力量目标固定权重：蛋白质充足度30%，能量可用性25%，抗阻训练证据25%，作息恢复10%，数据完整度10%。",
+		Rubric:          "应用支持参考：蛋白供给40%，能量30%，训练30%；工程权重未经临床验证。资料填写与作息描述只作为证据，不计入表现。",
 	}
 }
 
 func buildSkinFocusScoring(comp *statsComputation) customFocusScoringContext {
-	days := math.Max(1, float64(comp.RecordedDays))
-	avgProtein := comp.TotalProtein / days
-	weight := customFocusCurrentWeight(comp)
-	proteinScore := clampHealthIndexFloat(30+avgProtein/80*65, 25, 95)
-	proteinEvidence := fmt.Sprintf("日均蛋白质 %.1fg", avgProtein)
-	if weight > 0 {
-		proteinPerKg := avgProtein / weight
-		proteinScore = strengthProteinAdequacyScore(proteinPerKg)
-		proteinEvidence = fmt.Sprintf("日均蛋白质 %.1fg（约 %.2fg/kg）", avgProtein, proteinPerKg)
-	}
-	energyRatio := 0.0
-	if comp.TDEE > 0 {
-		energyRatio = comp.AvgCaloriesPerDay / float64(comp.TDEE)
-	}
-	energyScore := strengthEnergyAdequacyScore(energyRatio)
-	proteinEnergyScore := (proteinScore + energyScore) / 2
-
-	micronutrientScore := 50.0
-	missing := []string{"皮肤状态、持续时间和主观变化记录"}
-	evidence := []string{
-		proteinEvidence,
-		fmt.Sprintf("日均摄入 %.0f kcal / 日常消耗估算 %d kcal（%.0f%%）", comp.AvgCaloriesPerDay, comp.TDEE, energyRatio*100),
-	}
-	if len(comp.MicronutrientDaily) > 0 {
-		microScore, _, _, _, _ := computeMicronutrientScore(comp)
-		micronutrientScore = float64(microScore)
-		evidence = append(evidence, fmt.Sprintf("日均维生素A %.0fmcg RAE、维生素C %.1fmg、铁 %.1fmg", comp.MicronutrientDaily["vitaminARaeMcg"], comp.MicronutrientDaily["vitaminCMg"], comp.MicronutrientDaily["ironMg"]))
-	} else {
-		missing = append(missing, "维生素A/C、铁等微量营养记录")
-	}
-
-	hydrationScore := 50.0
-	if body := comp.BodyMetrics; body != nil && body.WaterRecordedDays > 0 && body.WaterGoalMl > 0 {
-		waterRatio := body.AvgDailyWaterMl / float64(body.WaterGoalMl)
-		hydrationScore = clampHealthIndexFloat(waterRatio*100, 25, 100)
-		evidence = append(evidence, fmt.Sprintf("饮水记录 %d 天，日均 %.0fml / 目标 %dml", body.WaterRecordedDays, body.AvgDailyWaterMl, body.WaterGoalMl))
-	} else {
-		missing = append(missing, "连续饮水记录")
-	}
-
-	sodiumScore := 70.0
-	if sodium := comp.MicronutrientDaily["sodiumMg"]; sodium > 0 {
-		sodiumScore = clampHealthIndexFloat(95-math.Max(0, sodium-2300)/23, 20, 95)
-		evidence = append(evidence, fmt.Sprintf("日均钠约 %.0fmg", sodium))
-	} else {
-		missing = append(missing, "钠摄入记录")
-	}
-
-	directScore := 45.0
-	hasDirectEvidence := customFocusHasDirectSkinEvidence(comp.User)
-	if hasDirectEvidence {
-		directScore = 75
-		evidence = append(evidence, "健康档案中存在皮肤相关直接描述")
-	} else {
-		missing = append(missing, "皮肤照片或量表等直接证据")
-	}
-
-	score := clampScore(proteinEnergyScore*0.25 + micronutrientScore*0.30 + hydrationScore*0.20 + sodiumScore*0.10 + directScore*0.15)
-	confidence := "low"
-	if comp.RecordedDays >= 5 && len(comp.MicronutrientDaily) > 0 && comp.BodyMetrics != nil && comp.BodyMetrics.WaterRecordedDays >= 3 {
-		confidence = "medium"
-	}
-	if confidence == "medium" && hasDirectEvidence {
-		confidence = "high"
+	evidence := []string{fmt.Sprintf("本期有 %d 天饮食记录，日均已记录蛋白质 %.1fg", comp.RecordedDays, comp.TotalProtein/math.Max(1, float64(comp.RecordedDays)))}
+	if customFocusHasDirectSkinEvidence(comp.User) {
+		evidence = append(evidence, "有皮肤相关描述，但描述的存在不代表改善")
 	}
 	return customFocusScoringContext{
-		Category:        "skin",
-		ScoreKind:       "diet_and_record_support",
-		Score:           score,
-		Confidence:      confidence,
-		ScoreReason:     fmt.Sprintf("皮肤目标支持度由能量与蛋白25%%、微量营养30%%、饮水20%%、钠10%%、直接证据15%%加权得到 %d 分。", score),
-		Evidence:        evidence,
-		MissingEvidence: dedupeCustomFocusStrings(missing),
-		Rubric:          "皮肤目标固定权重：能量与蛋白25%，微量营养30%，饮水20%，钠摄入10%，皮肤直接证据15%。",
+		Category: "skin", ScoreKind: "unmeasured_goal", ScoreAvailable: false,
+		Confidence: "low", Evidence: evidence,
+		MissingEvidence: []string{"一致方法记录的皮肤变化或适用量表", "该目标经验证的专项评分方法"},
+		ScoreReason:     "饮食记录不能推导皮肤好坏；有无描述、照片或喝水记录均不直接加分，暂不评分。",
+		Rubric:          "本目标暂不评分。只根据已知饮食提供有限支持建议，不承诺美白、抗衰或治疗效果；0仅为内部兼容占位，不展示为用户分数。",
 	}
 }
 
@@ -865,8 +808,14 @@ func customFocusHasDirectSkinEvidence(user *domain.StatsUserProfile) bool {
 }
 
 func customFocusChange(previous *domain.CustomFocusCard, fingerprint string, scoring customFocusScoringContext) (*int, *int, string) {
+	if !scoring.ScoreAvailable {
+		return nil, nil, "缺少专项测量，暂不评分，也不推断身体改善。"
+	}
 	if previous == nil {
 		return nil, nil, "首次生成，暂无历史对比。"
+	}
+	if customFocusMetaString(previous.Meta, "scoring_version") != customFocusScoringVersion {
+		return nil, nil, "评分口径已更新，移除了资料完整度加分；不与旧分数直接比较。"
 	}
 	previousScore := previous.Score
 	delta := scoring.Score - previous.Score

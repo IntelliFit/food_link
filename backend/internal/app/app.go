@@ -62,6 +62,9 @@ import (
 	marketingqrhandler "food_link/backend/internal/marketingqr/handler"
 	marketingqrrepo "food_link/backend/internal/marketingqr/repo"
 	marketingqrservice "food_link/backend/internal/marketingqr/service"
+	mealmeetuphandler "food_link/backend/internal/mealmeetup/handler"
+	mealmeetuprepo "food_link/backend/internal/mealmeetup/repo"
+	mealmeetupservice "food_link/backend/internal/mealmeetup/service"
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
@@ -160,6 +163,10 @@ type openPlatformReconciler interface {
 }
 
 func New(cfg *config.Config) (*App, error) {
+	cfg.ApplyLocalWorkerSafety()
+	if err := cfg.ValidateWorkerIsolation(); err != nil {
+		return nil, err
+	}
 	logShutdown, err := logger.Init(context.Background(), cfg.App, cfg.Log, cfg.OTel)
 	if err != nil {
 		return nil, err
@@ -226,6 +233,11 @@ func New(cfg *config.Config) (*App, error) {
 	analysisTaskRepo := userrepo.NewAnalysisTaskRepo(db)
 
 	userSvc := userservice.NewUserService(userRepo, healthDocRepo, modeSwitchLogRepo, storageClient)
+	nutritionPlanSvc := userservice.NewNutritionPlanService(userrepo.NewNutritionPlanRepo(db))
+	nutritionPlansReady := nutritionPlanSvc.SchemaReady()
+	if nutritionPlansReady {
+		userSvc.ConfigureNutritionPlans(nutritionPlanSvc)
+	}
 	userSvc.ConfigureProfileReview(contentSecurity)
 	bindPhoneSvc := userservice.NewBindPhoneService(cfg, userRepo)
 	uploadSvc := userservice.NewUploadService(storageClient)
@@ -371,9 +383,12 @@ func New(cfg *config.Config) (*App, error) {
 
 	homeRepo := homerepo.NewHomeRepo(db)
 	dashboardService := homeservice.NewDashboardService(userRepo, homeRepo, storageClient)
+	if nutritionPlansReady {
+		dashboardService.ConfigureNutritionPlans(nutritionPlanSvc)
+	}
 	supplementRepo := supplementrepo.NewSupplementRepo(db)
 	supplementSvc := supplementservice.NewSupplementService(supplementRepo)
-	supplementSvc.ConfigureContentSecurity(contentSecurity)
+	supplementSvc.ConfigureContentSecurity(contentSecurity, storageClient)
 	if gemini35Client != nil {
 		supplementSvc.ConfigureLabelVisionClient(gemini35Client)
 	}
@@ -397,6 +412,8 @@ func New(cfg *config.Config) (*App, error) {
 	communitySvc.ConfigureBlockChecker(friendSvc)
 	communitySvc.ConfigureContentSecurity(contentSecurity)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
+	mealMeetupSvc := mealmeetupservice.New(mealmeetuprepo.New(db), contentSecurity, messageSvc, storageClient)
+	mealMeetupHandler := mealmeetuphandler.New(mealMeetupSvc)
 
 	// Search module DI
 	searchRepo := searchrepo.NewSearchRepo(db)
@@ -407,6 +424,9 @@ func New(cfg *config.Config) (*App, error) {
 	// Health module DI
 	exerciseRepo := healthrepo.NewExerciseRepo(db)
 	statsRepo := healthrepo.NewStatsRepo(db)
+	if nutritionPlansReady {
+		statsRepo.ConfigureNutritionPlans(nutritionPlanSvc)
+	}
 	sleepHandler := healthhandler.NewSleepHandler(healthservice.NewSleepService(healthrepo.NewSleepRepo(db)))
 	bodyMetricsSvc := healthservice.NewBodyMetricsService(bodyMetricsRepo)
 	bodyMetricsSvc.ConfigureFoodWaterProvider(frSvc)
@@ -415,6 +435,9 @@ func New(cfg *config.Config) (*App, error) {
 	exerciseSvc.ConfigureStorage(storageClient)
 	exerciseSvc.ConfigureContentSecurity(contentSecurity)
 	statsSvc := healthservice.NewStatsService(statsRepo, bodyMetricsSvc, cfg)
+	if nutritionPlansReady {
+		statsSvc.ConfigureNutritionPlans(nutritionPlanSvc)
+	}
 	statsSvc.ConfigureCustomFocusTasks(analyzeTaskRepo, taskQueue)
 	communitySvc.ConfigureHealthScoreProvider(statsSvc)
 	openPlatformSvc.ConfigureUserData(frSvc, statsSvc)
@@ -598,6 +621,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/user/upload-cover", authmw.RequireJWT(jwtSvc), userHandler.UploadCoverImage)
 	engine.GET("/api/user/dashboard-targets", authmw.RequireJWT(jwtSvc), userHandler.GetDashboardTargets)
 	engine.PUT("/api/user/dashboard-targets", authmw.RequireJWT(jwtSvc), userHandler.UpdateDashboardTargets)
+	userhandler.NewNutritionPlanHandler(nutritionPlanSvc).RegisterRoutes(engine.Group("/api/user/nutrition-plans", authmw.RequireJWT(jwtSvc)))
 	engine.GET("/api/user/health-profile", authmw.RequireJWT(jwtSvc), userHandler.GetHealthProfile)
 	engine.PUT("/api/user/health-profile", authmw.RequireJWT(jwtSvc), userHandler.UpdateHealthProfile)
 	engine.GET("/api/user/health-focuses", authmw.RequireJWT(jwtSvc), userHandler.GetHealthFocuses)
@@ -686,6 +710,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/user/:user_id/follow-stats", authmw.RequireJWT(jwtSvc), followHandler.GetFollowStats)
 
 	// Message routes
+	mealMeetupHandler.Register(engine.Group("/api/meal-meetups", authmw.OptionalJWT(jwtSvc)), engine.Group("/api/meal-meetups", authmw.RequireJWT(jwtSvc)))
 	engine.POST("/api/messages/send", authmw.RequireJWT(jwtSvc), contentGuard(4), messageHandler.Send)
 	engine.GET("/api/messages/conversation/:user_id", authmw.RequireJWT(jwtSvc), messageHandler.GetConversation)
 	engine.GET("/api/messages/conversations", authmw.RequireJWT(jwtSvc), messageHandler.GetConversations)
@@ -963,6 +988,8 @@ func New(cfg *config.Config) (*App, error) {
 	adminCampusCatalogHandler := campuscataloghandler.NewCatalogHandler(adminCampusCatalogSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
 	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
+	adminAPI.GET("/meal-meetup-reports", adminAuth, mealMeetupHandler.AdminReports)
+	adminAPI.POST("/meal-meetup-reports/:report_id/resolve", adminAuth, mealMeetupHandler.AdminResolve)
 	adminAPI.POST("/login", adminAuthHandler.Login)
 	adminAPI.POST("/logout", adminAuthHandler.Logout)
 	adminAPI.GET("/session", adminAuthHandler.Session)
