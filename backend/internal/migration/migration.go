@@ -26,6 +26,34 @@ var officialHigherEducation2026Data string
 
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
+// MigrateProductUpdates touches only product notices and receipts. No seeds or
+// historical user acknowledgements are created.
+func MigrateProductUpdates(ctx context.Context, db *gorm.DB, schema string) error {
+	if schema == "" {
+		schema = "public"
+	}
+	if !identifierPattern.MatchString(schema) {
+		return fmt.Errorf("invalid database schema: %q", schema)
+	}
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SET LOCAL search_path TO " + quoteIdent(schema)).Error; err != nil {
+			return err
+		}
+		if err := tx.AutoMigrate(&migrationdo.ProductUpdateDO{}, &migrationdo.ProductUpdateAcknowledgementDO{}); err != nil {
+			return err
+		}
+		for _, fk := range []string{
+			addFK("product_update_ack_update_fkey", "product_update_acknowledgements", "update_id", "product_updates", "id", "CASCADE"),
+			addFK("product_update_ack_user_fkey", "product_update_acknowledgements", "user_id", "weapp_user", "id", "CASCADE"),
+		} {
+			if err := tx.Exec(fk).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // MigrateNutritionPlans only adds the reusable library, versioned defaults and
 // nullable full snapshots to the existing day table. No user targets are seeded
 // or backfilled, and repeating the command is safe.
@@ -149,6 +177,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 		return fmt.Errorf("auto migrate models: %w", err)
 	}
 	if err := ensureMealMeetupConstraints(ctx, db); err != nil {
+		return err
+	}
+	if err := MigrateProductUpdates(ctx, db, schema); err != nil {
 		return err
 	}
 	if err := ensurePushConstraints(ctx, db); err != nil {

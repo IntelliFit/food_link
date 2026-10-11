@@ -513,6 +513,7 @@ function ProfilePage() {
         if (!res.confirm) return
         try {
           clearAllOnboardingGuides()
+          Taro.removeStorageSync('product_update_guest_acknowledgements_v1')
 
           // 首页相关缓存
           Taro.removeStorageSync('home_dashboard_local_cache')

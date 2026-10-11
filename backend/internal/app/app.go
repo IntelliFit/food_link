@@ -78,6 +78,9 @@ import (
 	pethandler "food_link/backend/internal/pet/handler"
 	petrepo "food_link/backend/internal/pet/repo"
 	petservice "food_link/backend/internal/pet/service"
+	productupdatehandler "food_link/backend/internal/productupdate/handler"
+	productupdaterepo "food_link/backend/internal/productupdate/repo"
+	productupdateservice "food_link/backend/internal/productupdate/service"
 	publicfoodhandler "food_link/backend/internal/publicfood/handler"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
@@ -978,6 +981,14 @@ func New(cfg *config.Config) (*App, error) {
 	adminCampusCatalogHandler := campuscataloghandler.NewCatalogHandler(adminCampusCatalogSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
 	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
+	productUpdateHandler := productupdatehandler.New(productupdateservice.New(productupdaterepo.New(db)))
+	engine.GET("/api/product-updates", productUpdateHandler.Public)
+	engine.GET("/api/product-updates/pending", authmw.RequireJWT(jwtSvc), productUpdateHandler.Pending)
+	engine.POST("/api/product-updates/:id/acknowledge", authmw.RequireJWT(jwtSvc), productUpdateHandler.Acknowledge)
+	adminAPI.GET("/product-updates", adminAuth, productUpdateHandler.AdminList)
+	adminAPI.POST("/product-updates", adminAuth, productUpdateHandler.Save)
+	adminAPI.PATCH("/product-updates/:id", adminAuth, productUpdateHandler.Save)
+	adminAPI.POST("/product-updates/:id/:action", adminAuth, productUpdateHandler.Transition)
 	adminAPI.GET("/meal-meetup-reports", adminAuth, mealMeetupHandler.AdminReports)
 	adminAPI.POST("/meal-meetup-reports/:report_id/resolve", adminAuth, mealMeetupHandler.AdminResolve)
 	adminAPI.POST("/login", adminAuthHandler.Login)

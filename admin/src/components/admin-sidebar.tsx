@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquareText,
+  Megaphone,
   Images,
   Package,
   ScanLine,
@@ -42,6 +43,7 @@ export type AdminMenuId =
   | 'user-rewards'
   | 'user-food-photos'
   | 'settings'
+  | 'product-updates'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
@@ -93,7 +95,10 @@ const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
   },
   {
     label: '系统',
-    items: [{ id: 'settings', label: '系统设置', icon: Settings, disabled: true }],
+    items: [
+      { id: 'product-updates', label: '产品更新通知', icon: Megaphone },
+      { id: 'settings', label: '系统设置', icon: Settings, disabled: true },
+    ],
   },
 ]
 

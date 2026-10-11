@@ -22,6 +22,7 @@ import (
 func main() {
 	configDir := flag.String("config-dir", ".", "directory containing config.yaml")
 	onlyMealMemory := flag.Bool("only-meal-recommendation-memory", false, "only migrate meal recommendation feedback")
+	onlyProductUpdates := flag.Bool("only-product-updates", false, "only add product update notices and acknowledgements")
 	onlyNutritionPlans := flag.Bool("only-nutrition-plans", false, "only add nutrition plan library, versioned defaults and day snapshots")
 	onlyMealMeetups := flag.Bool("only-meal-meetups", false, "only add meal meetup activities, participation, events, and reports")
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
@@ -59,6 +60,9 @@ func main() {
 		log.Fatal("补剂恢复参数须与 --restore-supplement-feed 一起使用")
 	}
 	selectedOnlyModes := 0
+	if *onlyProductUpdates {
+		selectedOnlyModes++
+	}
 	if *onlyNutritionPlans {
 		selectedOnlyModes++
 	}
@@ -197,6 +201,13 @@ func main() {
 		if err != nil {
 			log.Fatalf("补剂历史动态恢复失败: %v", err)
 		}
+		return
+	}
+	if *onlyProductUpdates {
+		if err := migration.MigrateProductUpdates(ctx, db, schema); err != nil {
+			log.Fatalf("产品通知迁移失败: %v", err)
+		}
+		log.Printf("产品通知结构迁移完成: schema=%s", schema)
 		return
 	}
 	if *onlyNutritionPlans {

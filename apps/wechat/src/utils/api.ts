@@ -5318,6 +5318,7 @@ export function saveTokens(accessToken: string, refreshToken: string, user_id: s
     Taro.setStorageSync('access_token', accessToken)
     Taro.setStorageSync('refresh_token', refreshToken)
     Taro.setStorageSync('user_id', user_id)
+    Taro.eventCenter.trigger('product_update_auth_changed')
   } catch (error) {
     console.error('保存 token 失败:', error)
   }
@@ -5333,6 +5334,7 @@ export function clearTokens() {
     Taro.removeStorageSync('access_token')
     Taro.removeStorageSync('refresh_token')
     Taro.removeStorageSync('user_id')
+    Taro.eventCenter.trigger('product_update_auth_changed')
     Taro.removeStorageSync('stats_custom_focus_pending_tasks_v1')
   } catch (error) {
     console.error('清除 token 失败:', error)
