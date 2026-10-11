@@ -22,6 +22,7 @@ import {
   isExerciseLogCreditExhausted,
 } from '../../../utils/membership'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { redirectToLogin } from '../../../utils/withAuth'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { COMMUNITY_FEED_CHANGED_EVENT, HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
@@ -341,7 +342,7 @@ export default function ExerciseRecordPage() {
 
   const handleAddImage = (): void => {
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     Taro.showActionSheet({
@@ -381,7 +382,7 @@ export default function ExerciseRecordPage() {
       return
     }
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
     const precisionEnabled = estimationMode === 'precision'
@@ -488,7 +489,7 @@ export default function ExerciseRecordPage() {
       success: async (res) => {
         if (!res.confirm) return
         if (!getAccessToken()) {
-          Taro.navigateTo({ url: '/pages/login/index' })
+          redirectToLogin()
           return
         }
         Taro.showLoading({ title: '删除中...', mask: true })

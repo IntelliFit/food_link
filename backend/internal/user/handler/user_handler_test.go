@@ -385,6 +385,8 @@ func TestDeleteAccountRejectsInvalidConfirmation(t *testing.T) {
 
 			assert.Equal(t, http.StatusBadRequest, w.Code)
 			assert.Zero(t, mockSvc.deleteAccountCalls)
+			var resp map[string]any
+			assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "must return one JSON response")
 		})
 	}
 }

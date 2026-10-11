@@ -19,7 +19,7 @@ import {
   getMembershipCreditSummary,
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
-import { withAuth } from '../../../utils/withAuth'
+import { withAuth, redirectToLogin } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
@@ -118,7 +118,7 @@ function RecordTextPage() {
     }
 
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      redirectToLogin()
       return
     }
 
