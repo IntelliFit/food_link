@@ -141,6 +141,11 @@ scripts/enrich_packaged_foods.state.json
 CURRENT_TASK.md
 DECISIONS.md
 .local-state/
+# WeChat DevTools personal preferences stay on each developer's machine.
+/apps/wechat/project.private.config.json
+# Runtime PID files are generated locally, never source inputs.
+/backend.pid
+/backend/backend.pid
 # Dedicated Xiaohongshu browser profile and resumable crawler runtime data.
 # Kept explicit even though the parent directory is already ignored.
 .local-state/xiaohongshu-chrome-profile/

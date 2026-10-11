@@ -544,14 +544,6 @@
   .pet-assistant-ride__wheel { animation-duration: 400ms; }
 }
 .pet-assistant--refined-motion .pet-assistant-transport { position: absolute; top: 0; left: -8rpx; width: 200rpx; height: 220rpx; }
-.pet-assistant--refined-motion .pet-assistant-float .pet-assistant-ride--fitted {
-  top: 0; left: 0; width: 176rpx; height: 190rpx;
-  transform: none; animation: none;
-  .pet-assistant-ride__wheel { animation: pet-assistant-wheel-spin 400ms linear infinite; }
-  .pet-assistant-ride__pedal { animation: none; }
-  .pet-assistant-ride__grip, .pet-assistant-ride__footrest { position: absolute; z-index: 4; width: 22rpx; height: 4rpx; border-radius: 4rpx; background: #626b75; }
-  .pet-assistant-ride__footrest { width: 14rpx; }
-}
 @media (prefers-reduced-motion: reduce) {
   .pet-assistant--refined-motion .has-ride-pose .pet-assistant-ride__pedal,
   .pet-assistant--refined-motion .has-ride-pose .pet-assistant-ride__wheel { animation: none !important; }

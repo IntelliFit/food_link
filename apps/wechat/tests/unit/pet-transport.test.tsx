@@ -3,7 +3,7 @@ import Taro from '@tarojs/taro'
 import type { PetProfile } from '../../src/utils/api'
 import { PetTransportActor } from '../../src/components/PetTransportActor'
 import { PetTransportPicker } from '../../src/packagePetStudio/components/PetTransportPicker'
-import { defaultPetTransport, petTransportAsset, petTransportCapabilities } from '../../src/utils/pet-transport'
+import { defaultPetTransport, petTransportCapabilities } from '../../src/utils/pet-transport'
 import { PET_TRANSPORT_CHANGED, petTransportStorageKey, readPetTransport, savePetTransport } from '../../src/utils/pet-transport-storage'
 import { ORIGINAL_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
 import { petRig } from '../../src/utils/pet-rig'
@@ -27,12 +27,14 @@ beforeEach(() => {
 test.each([['jianwen-01', 'jianwen'], ['huatuo-01', 'huatuo'], ['taiji-xiaozi-01', 'taiji'], ['xiaomai-01', 'xiaomai'], ['doudou-01', 'doudou']])('each builtin animates its own approved character source: %s', (builtin, key) => {
   const identity = { ...pet, builtin_avatar_id: builtin }
   expect(petTransportCapabilities(identity)).toEqual(['bicycle', 'scooter', 'skateboard', 'walk'])
-  expect(petTransportAsset(identity)).toBe(`/assets/pets/transport/${key}-transport-v1.png`)
+  expect(petRig(identity)?.key).toBe(key)
+  expect(defaultPetTransport(identity)).toBe('bicycle')
   const { container } = render(<PetTransportActor pet={identity} vehicle='skateboard' />)
   expect(container.querySelector('img')).toHaveAttribute('src', petRig(identity)!.src)
 })
 test('the approved original override keeps Guigui instead of the cloud template', () => {
-  expect(petTransportAsset(pet, ORIGINAL_COMPANION_SRC)).toBe('/assets/pets/transport/guigui-transport-v1.png')
+  expect(petRig(pet, ORIGINAL_COMPANION_SRC)?.key).toBe('guigui')
+  expect(petTransportCapabilities(pet, ORIGINAL_COMPANION_SRC)).toEqual(['bicycle', 'scooter', 'skateboard', 'walk'])
   expect(defaultPetTransport(pet, ORIGINAL_COMPANION_SRC)).toBe('bicycle')
 })
 test('a photo v1 atlas never unlocks borrowed transport or rewrites its identity', () => {
@@ -42,6 +44,19 @@ test('a photo v1 atlas never unlocks borrowed transport or rewrites its identity
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'walk')
   expect(container.querySelector('img')).toHaveAttribute('src', 'my-photo-atlas.png')
   expect(container.querySelector('.pet-assistant-ride')).toBeNull()
+  expect(Taro.setStorageSync).not.toHaveBeenCalled()
+})
+test('unknown and unmatched appearances never inherit builtin transport capabilities', () => {
+  expect(defaultPetTransport(photo)).toBe('walk')
+  expect(petTransportCapabilities({ ...pet, builtin_avatar_id: 'unknown-template' })).toEqual(['walk'])
+  expect(petTransportCapabilities(pet, 'another-photo.png')).toEqual(['walk'])
+  expect(defaultPetTransport(pet, 'another-photo.png')).toBe('walk')
+})
+test.each(['toString', 'constructor', '__proto__'])('an unregistered photo atlas cannot unlock transport: %s', key => {
+  const identity = { ...photo, pixel_motion_atlas_url: `/assets/pets/motions/${key}-motion-v1.png` }
+  expect(petTransportCapabilities(identity)).toEqual(['walk'])
+  expect(defaultPetTransport(identity)).toBe('walk')
+  expect(savePetTransport(identity, undefined, 'bicycle', 'a')).toBe(false)
   expect(Taro.setStorageSync).not.toHaveBeenCalled()
 })
 test('transport preferences isolate account, pet and exact appearance without touching wardrobe or wallet', () => {
