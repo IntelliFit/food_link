@@ -3,7 +3,7 @@ import Taro from '@tarojs/taro'
 import PetHomePage from '../../src/packageExtra/pages/pet-home/index'
 import { customizePetPixelAvatar, getPetSummary, selectPetAppearance, type PetProfile } from '../../src/utils/api'
 import { chooseImageWithPrivacy } from '../../src/utils/weapp-privacy'
-import { HOME_COMPANION_PREFERENCE_KEY } from '../../src/utils/pet-companion-preference'
+import { HOME_COMPANION_PREFERENCE_KEY, ORIGINAL_COMPANION_SRC, selectOriginalCompanion } from '../../src/utils/pet-companion-preference'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../src/utils/pet-events'
 
 jest.mock('../../src/utils/withAuth', () => ({ withAuth: (Component: any) => Component }))
@@ -30,7 +30,7 @@ const copy = <T,>(value: T): T => value === undefined ? value : JSON.parse(JSON.
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
 async function flush() { await act(async () => { for (let step = 0; step < 6; step += 1) await Promise.resolve() }) }
 async function mount() { const result = render(<PetHomePage />); await act(async () => { show?.(); await Promise.resolve(); await Promise.resolve() }); return result }
-function chooseTemplate(container: HTMLElement) { fireEvent.click(container.querySelector('.pet-home-candidate-grid--common .pet-home-candidate-card')!) }
+function chooseTemplate(container: HTMLElement) { fireEvent.click(container.querySelector('#pet-home-template-xiaomai-01')!) }
 function profileEvents() { return (Taro.eventCenter.trigger as jest.Mock).mock.calls.filter(([event]) => event === HOME_PET_PROFILE_CHANGED_EVENT) }
 async function switchToB() { store.set('user_id', userB); (getPetSummary as jest.Mock).mockResolvedValue({ pet: petB }); await act(async () => { show?.(); await Promise.resolve(); await Promise.resolve() }) }
 
@@ -50,6 +50,47 @@ beforeEach(() => {
   ;(Taro.showModal as jest.Mock).mockResolvedValue({ confirm: true, content: '照片伙伴' })
   ;(chooseImageWithPrivacy as jest.Mock).mockResolvedValue({ tempFilePaths: ['wxfile://owned-photo.jpg'] })
   ;(getPetSummary as jest.Mock).mockResolvedValue({ pet: petA })
+})
+
+test('restoring original Guigui is explicit, account-scoped and never updates the cloud template or nickname', async () => {
+  store.set(preferenceKey(userA), { selected: 'follow', enabledOriginal: false })
+  const { container } = await mount()
+  fireEvent.click(container.querySelector('#pet-home-original-guigui')!)
+  expect(store.get(preferenceKey(userA))).toEqual({ selected: 'original', enabledOriginal: true })
+  expect(store.get(preferenceKey(userB))).toEqual({ selected: 'jianwen', enabledOriginal: true })
+  expect(container.querySelector('#pet-home-original-guigui')).toHaveClass('active')
+  expect(container.querySelector('#pet-home-original-guigui img')).toHaveAttribute('src', ORIGINAL_COMPANION_SRC)
+  expect(screen.getByTestId('profile-avatar')).toHaveTextContent('伙伴甲')
+  expect(selectPetAppearance).not.toHaveBeenCalled()
+  expect(customizePetPixelAvatar).not.toHaveBeenCalled()
+})
+
+test('original appearance restoration refuses a stale account and a storage failure', () => {
+  store.set('user_id', userB)
+  expect(selectOriginalCompanion(userA)).toBe(false)
+  expect(Taro.setStorageSync).not.toHaveBeenCalled()
+  ;(Taro.setStorageSync as jest.Mock).mockImplementationOnce(() => { throw new Error('full') })
+  expect(selectOriginalCompanion(userB)).toBe(false)
+  expect(store.get(preferenceKey(userB))).toEqual({ selected: 'jianwen', enabledOriginal: true })
+})
+
+test('pet home exposes all four tools, trials are free and the confirmed tool survives closing and reopening', async () => {
+  const { container } = await mount()
+  const before = new Map(store)
+  fireEvent.click(container.querySelector('#pet-home-transport-toggle')!)
+  for (const tool of ['bicycle', 'scooter', 'skateboard', 'walk']) expect(container.querySelector(`#journey-transport-${tool}`)).not.toBeDisabled()
+  fireEvent.click(container.querySelector('#journey-transport-skateboard')!)
+  expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'skateboard')
+  expect(container.querySelector('#journey-transport img')).toHaveAttribute('src', ORIGINAL_COMPANION_SRC)
+  expect(store).toEqual(before)
+  fireEvent.click(container.querySelector('#journey-save-transport')!)
+  const changed = [...store.keys()].filter(key => !before.has(key))
+  expect(changed).toHaveLength(1)
+  expect(changed[0]).toMatch(/^pet_transport_v1:/)
+  for (const [key, value] of before) expect(store.get(key)).toEqual(value)
+  fireEvent.click(container.querySelector('#pet-home-transport-toggle')!)
+  fireEvent.click(container.querySelector('#pet-home-transport-toggle')!)
+  expect(container.querySelector('#journey-transport-skateboard')).toHaveClass('is-selected')
 })
 
 test('a late template response cannot change the next account preference or publish the previous pet', async () => {

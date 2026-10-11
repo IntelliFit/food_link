@@ -12,6 +12,7 @@
 // Neck anchor is measured on the original 160 x 208 full-body sheet; the face stays clear.
 .pet-actor__scarf { position: absolute; left: 34%; top: 34%; width: 34%; height: 19%; pointer-events: none; }
 .pet-actor--atlas .pet-actor__scarf { left: 40%; top: 43%; width: 23%; height: 14%; animation: none; }
+.pet-actor--rig .pet-actor__scarf { left: 34%; top: 34%; width: 34%; height: 19%; }
 .pet-actor--walk:not(.pet-actor--atlas) .pet-actor__scarf { animation: pet-actor-neck 800ms step-end infinite; }
 .pet-actor--paused .pet-actor__sheet, .pet-actor--paused .pet-actor__scarf, .pet-actor--paused .pet-avatar__body { animation-play-state: paused; }
 .pet-actor__status { position: absolute; top: 100%; left: -40%; width: 180%; color: #68594b; text-align: center; font-size: 20rpx; }

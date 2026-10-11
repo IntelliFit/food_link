@@ -17,7 +17,7 @@ export function RecapInteraction({ chapter, kind, days, favorite, collected, col
   return <View className='recap-play'>
     {chapter === 0 && <>
       <Text className='recap-play__title'>{kind === 'year' ? '年度电影 · 你是主角' : kind === 'month' ? '生活花园 · 慢慢生长' : '周末手账 · 拆开小惊喜'}</Text>
-      <View role='button' className='recap-play__action' onClick={() => setPet(!pet)}>和鬼鬼打个招呼 ✦</View>
+      <View role='button' className='recap-play__action' onClick={() => setPet(!pet)}>和伙伴打个招呼 ✦</View>
       {pet && <Text className='recap-play__reply'>这一程，我陪你慢慢看。想先看哪一章，就点上面的进度条。</Text>}
     </>}
     {chapter === 1 && <>

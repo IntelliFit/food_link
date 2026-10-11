@@ -27,7 +27,9 @@ import {
 } from '../../../utils/weapp-privacy'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../../utils/pet-events'
 import { openPetChat } from '../../../utils/pet-navigation'
-import { setHomeCompanionChoice } from '../../../utils/pet-companion-preference'
+import { getHomeCompanionPreference, getHomeCompanionSpriteOverride, HOME_COMPANION_CHANGED_EVENT, ORIGINAL_COMPANION_SRC, JIANWEN_COMPANION_SRC, selectOriginalCompanion, setHomeCompanionChoice } from '../../../utils/pet-companion-preference'
+import { getCompanionSprite } from '../../../components/PetCompanionSprite'
+import { PetTransportPicker } from '../../../packagePetStudio/components/PetTransportPicker'
 import {
   PET_DAILY_PLAY_GOAL,
   readPetDailyPlayCount,
@@ -84,6 +86,8 @@ function PetHomePage() {
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
   const [renamingPet, setRenamingPet] = useState(false)
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
+  const [companionPreference, setCompanionPreference] = useState(getHomeCompanionPreference)
+  const [transportOpen, setTransportOpen] = useState(false)
   const [homePetHidden, setHomePetHidden] = useState(getStoredHomePetHidden)
   const [dailyPlayCount, setDailyPlayCount] = useState(readPetDailyPlayCount)
   const [playReward, setPlayReward] = useState<PetPlayRewardSummary>(readPetPlayRewardSummary)
@@ -139,10 +143,17 @@ function PetHomePage() {
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
     setHomePetHidden(getStoredHomePetHidden())
+    setCompanionPreference(getHomeCompanionPreference())
     setDailyPlayCount(readPetDailyPlayCount())
     setPlayReward(readPetPlayRewardSummary())
     void loadData()
   })
+
+  useEffect(() => {
+    const sync = () => setCompanionPreference(getHomeCompanionPreference())
+    Taro.eventCenter.on(HOME_COMPANION_CHANGED_EVENT, sync)
+    return () => { Taro.eventCenter.off(HOME_COMPANION_CHANGED_EVENT, sync) }
+  }, [])
 
   useEffect(() => {
     applyThemeNavigationBar(scheme)
@@ -155,6 +166,20 @@ function PetHomePage() {
   const petEvent: PetOfflineEvent | null = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
   const selectionCandidates = petSummary?.pet ? completePetCatalog(petSummary.pet.selection_candidates) : []
   const commonCandidates = selectionCandidates.filter((candidate) => Boolean(candidate.builtin_avatar_id))
+  const companionSprite = getHomeCompanionSpriteOverride(companionPreference) || getCompanionSprite(petSummary?.pet)
+  const currentAppearanceLabel = companionSprite === ORIGINAL_COMPANION_SRC ? '鬼鬼 · 原版' : companionSprite === JIANWEN_COMPANION_SRC ? '健文伙伴' : commonCandidates.find(candidate => isCandidateActive(candidate, petSummary?.pet))?.name || (petSummary?.pet?.avatar_type === 'pixel_self' ? '照片伙伴' : '当前伙伴')
+  const nextLevelExp = petSummary?.pet?.next_level_exp ?? 0
+  const remainingExp = Math.max(0, nextLevelExp - (petSummary?.pet?.level_exp ?? 0))
+  const growthProgress = Math.min(100, Math.max(0, petSummary?.pet?.level_progress ?? 0))
+  const candidateIsDisplayed = (candidate: PetAppearanceCandidate) => companionPreference.selected === 'jianwen' ? candidate.builtin_avatar_id === 'jianwen-01' : companionPreference.selected === 'follow' && isCandidateActive(candidate, petSummary?.pet)
+  const handleSelectOriginal = () => {
+    if (!petSummary?.pet || changingProfile.current || !alive.current || !selectOriginalCompanion(account.current)) {
+      Taro.showToast({ title: '没有保存成功，请确认账号后重试', icon: 'none' })
+      return
+    }
+    setCompanionPreference(getHomeCompanionPreference())
+    Taro.showToast({ title: '已恢复原版鬼鬼', icon: 'success' })
+  }
   const matchedCandidates = selectionCandidates.filter((candidate) => !candidate.builtin_avatar_id)
   const shouldShowSelection = matchedCandidates.length > 0
     && Boolean(petSummary?.pet?.needs_selection || petSummary?.pet?.free_profile_rematch_available)
@@ -353,36 +378,27 @@ function PetHomePage() {
     <View className={`pet-home-page ${scheme === 'dark' ? 'pet-home-page--dark' : ''}`}>
       <View className='pet-home-shell'>
         <View className='pet-home-hero'>
+          <Text className='pet-home-hero-eyebrow'>我的成长伙伴</Text>
           <View className='pet-home-hero-main'>
             <View className='pet-home-hero-stage'>
+              <View className='pet-home-portrait-halo' />
+              <View className='pet-home-portrait-ground' />
               <PetIdentityAvatar
                 pet={petSummary?.pet}
-                size='large'
+                size={104}
                 mood={petSummary?.status?.mood}
                 state={petSummary?.status?.state}
                 mealState={petSummary?.status?.meal_state}
               />
-              <View className='pet-home-stage-stat pet-home-stage-stat--level'>
-                <Text className='pet-home-stage-stat-label'>等级</Text>
-                <Text className='pet-home-stage-stat-value'>Lv.{petSummary?.pet?.level || 1}</Text>
-              </View>
-              <View className='pet-home-stage-stat pet-home-stage-stat--experience'>
-                <Text className='pet-home-stage-stat-label'>经验</Text>
-                <Text className='pet-home-stage-stat-value'>{petSummary?.pet?.experience ?? 0}</Text>
-              </View>
-              <View className='pet-home-stage-stat pet-home-stage-stat--days'>
-                <Text className='pet-home-stage-stat-label'>陪伴</Text>
-                <Text className='pet-home-stage-stat-value'>{petSummary?.pet?.total_events ?? 0}天</Text>
-              </View>
             </View>
 
             <View className='pet-home-hero-copy'>
               <View className='pet-home-name-row'>
-                <View className='pet-home-name-link' onClick={openPetChat}>
+                <View className='pet-home-name-link' role='button' aria-label={`和${petSummary?.pet?.name || '伙伴'}聊聊`} onClick={openPetChat}>
                   <Text className='pet-home-name'>{petSummary?.pet?.name || '健康伙伴'}</Text>
                   <Text className='iconfont icon-right pet-home-name-arrow' />
                 </View>
-                <View className='pet-home-rename-button' onClick={handleRenamePet}>
+                <View className='pet-home-rename-button' role='button' aria-label='修改宠物名字' onClick={handleRenamePet}>
                   {renamingPet ? (
                     <View className='pet-home-rename-spinner' />
                   ) : (
@@ -390,6 +406,14 @@ function PetHomePage() {
                   )}
                   <Text className='pet-home-rename-text'>{renamingPet ? '' : '改名'}</Text>
                 </View>
+              </View>
+              <View className='pet-home-identity-row'>
+                <Text className='pet-home-level-badge'>Lv.{petSummary?.pet?.level || 1}</Text>
+                {petSummary?.pet && <Text className='pet-home-appearance-label'>{currentAppearanceLabel}</Text>}
+              </View>
+              <View className='pet-home-hero-stats'>
+                <View><Text className='pet-home-hero-stat-value'>{petSummary?.pet?.experience ?? 0}</Text><Text className='pet-home-hero-stat-label'>累计经验</Text></View>
+                <View><View className='pet-home-hero-stat-number'><Text className='pet-home-hero-stat-value'>{petSummary?.pet?.total_events ?? 0}</Text><Text className='pet-home-hero-stat-unit'>次</Text></View><Text className='pet-home-hero-stat-label'>陪伴收获</Text></View>
               </View>
               {petEvent?.can_claim ? (
                 <View className='pet-home-hero-reward' onClick={handleClaim}>
@@ -405,19 +429,25 @@ function PetHomePage() {
 
           <View className='pet-home-upgrade'>
             <View className='pet-home-upgrade-head'>
-              <Text className='pet-home-upgrade-label'>升级到 Lv.{(petSummary?.pet?.level || 1) + 1}</Text>
+              <Text className='pet-home-upgrade-label'>成长进度</Text>
               <Text className='pet-home-upgrade-value'>
-                {petSummary?.pet?.level_exp ?? 0} / {petSummary?.pet?.next_level_exp ?? 0}
+                {nextLevelExp > 0 ? `本级经验 ${petSummary?.pet?.level_exp ?? 0} / ${nextLevelExp}` : '等待成长同步'}
               </Text>
             </View>
             <View className='pet-home-upgrade-progress'>
               <View
                 className='pet-home-upgrade-progress-fill'
-                style={{ width: `${petSummary?.pet?.level_progress ?? 0}%` }}
+                style={{ width: `${growthProgress}%` }}
               />
             </View>
+            <Text className='pet-home-upgrade-hint'>{nextLevelExp > 0 ? `再获得 ${remainingExp} 经验，升至 Lv.${(petSummary?.pet?.level || 1) + 1}` : '记录饮食与运动，和伙伴一起成长'}</Text>
           </View>
         </View>
+
+        {petSummary?.pet && <View className='pet-home-card pet-home-transport'>
+          <View className='pet-home-card-head'><View><Text className='pet-home-card-title'>出行工具</Text><Text className='pet-home-action-desc'>自行车 · 滑板车 · 滑板 · 散步</Text></View><Button id='pet-home-transport-toggle' className='pet-home-transport-toggle' onClick={() => setTransportOpen(value => !value)}>{transportOpen ? '收起' : '选择工具'}</Button></View>
+          {transportOpen && <PetTransportPicker key={`${account.current}:${petSummary.pet.id}:${companionSprite || petSummary.pet.builtin_avatar_id || petSummary.pet.pixel_avatar_url}`} pet={petSummary.pet} sprite={companionSprite} account={account.current} active={!selectingCandidateId && !pixelAvatarCustomizing} canSave={() => alive.current && profileAccount() === account.current && !changingProfile.current} />}
+        </View>}
 
         <View id='pet-studio-entry' className='pet-home-card pet-home-action-item' role='button' onClick={() => Taro.navigateTo({ url: '/packagePetStudio/pages/index/index' })}>
           <View><Text className='pet-home-action-title'>温暖的宠物时光</Text><Text className='pet-home-action-desc'>衣橱试穿、动作小剧场与游戏练习</Text></View>
@@ -494,16 +524,21 @@ function PetHomePage() {
               <Text className='pet-home-card-side'>内置 · 免费</Text>
             </View>
             <View className='pet-home-candidate-grid pet-home-candidate-grid--common'>
+              <View id='pet-home-original-guigui' className={`pet-home-candidate-card ${companionPreference.selected === 'original' ? 'active' : ''}`} onClick={handleSelectOriginal}>
+                <PetActor pet={petSummary?.pet} spriteOverride={ORIGINAL_COMPANION_SRC} size={54} followAppearance={false} followLoadout={false} />
+                <Text className='pet-home-candidate-name'>鬼鬼 · 原版</Text><Text className='pet-home-candidate-action'>{companionPreference.selected === 'original' ? '当前' : '选择'}</Text>
+              </View>
               {commonCandidates.map((candidate) => (
                 <View
+                  id={`pet-home-template-${candidate.builtin_avatar_id}`}
                   key={candidate.id}
-                  className={`pet-home-candidate-card ${isCandidateActive(candidate, petSummary?.pet) ? 'active' : ''}`}
+                  className={`pet-home-candidate-card ${candidateIsDisplayed(candidate) ? 'active' : ''}`}
                   onClick={() => handleSelectCandidate(candidate)}
                 >
-                  <PetAvatar pet={candidate} size='small' motion='companion' />
+                  <PetActor pet={candidate} size={54} followAppearance={false} followLoadout={false} />
                   <Text className='pet-home-candidate-name'>{candidate.name}</Text>
                   <Text className='pet-home-candidate-action'>
-                    {selectingCandidateId === candidate.id ? '' : isCandidateActive(candidate, petSummary?.pet) ? '当前' : '选择'}
+                    {selectingCandidateId === candidate.id ? '' : candidateIsDisplayed(candidate) ? '当前' : '选择'}
                   </Text>
                   {selectingCandidateId === candidate.id ? <View className='pet-home-candidate-spinner' /> : null}
                 </View>

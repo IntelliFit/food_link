@@ -1,7 +1,6 @@
 import { Image, Slider, Text, View } from '@tarojs/components'
 import { useEffect, useRef, useState } from 'react'
-import { PetCompanionSprite } from './PetCompanionSprite'
-import { JIANWEN_COMPANION_SRC } from '../utils/pet-companion-preference'
+import { CurrentPetCompanion } from './CurrentPetCompanion'
 
 export function RecapMonths({ months, onSelect }: { months: { month: number; count: number }[]; onSelect: (value: string) => void }) {
   const [month, setMonth] = useState(1)
@@ -25,7 +24,7 @@ const WORDS = ['慢慢来', '有在坚持', '好好休息', '重新出发']
 export function RecapWishes({ value, onSelect }: { value: string; onSelect: (word: string) => void }) {
   return <View className={`recap-wishes${value ? ' has-wish' : ''}`}>
     {WORDS.map((word, index) => <View role='button' aria-label={`收下${word}`} key={word} className={`recap-wishes__orb recap-wishes__orb--${index}${value === word ? ' is-chosen' : ''}`} onClick={() => onSelect(word)}><Text>{word}</Text></View>)}
-    <View key={value} className='recap-wishes__pet'><PetCompanionSprite src={JIANWEN_COMPANION_SRC} name='鬼鬼' pose={value ? 'wave' : 'idle'} /></View>
+    <View key={value} className='recap-wishes__pet'><CurrentPetCompanion action={value ? 'wave' : 'idle'} /></View>
     <Text className='recap-wishes__hint'>{value ? `「${value}」带走啦` : '戳一个，把温柔带走'}</Text>
   </View>
 }
@@ -42,7 +41,7 @@ export function RecapDeparture({ value, active, onSelect }: { value: string; act
   const depart = () => { cancel(); setDeparted(true); onSelect(selected) }
   const start = () => { if (!active || departed || timer.current) return; setHolding(true); timer.current = setTimeout(depart, 900) }
   return <View className={`recap-departure${holding ? ' is-charging' : ''}${departed ? ' has-departed' : ''}`}>
-    <View className='recap-departure__pet'><PetCompanionSprite src={JIANWEN_COMPANION_SRC} name='鬼鬼' pose='idle' /></View>
+    <View className='recap-departure__pet'><CurrentPetCompanion active={active} /></View>
     <View className='recap-departure__routes'>{GOALS.map((goal, index) => <View role='button' key={goal} className={selected === goal ? 'is-picked' : ''} onClick={() => { cancel(); setSelected(goal); setDeparted(false) }}><Text>{['↗', '↟', '＋'][index]}</Text><Text>{goal}</Text></View>)}</View>
     <View role='button' aria-label='长按出发' className='recap-departure__launch' onTouchStart={start} onTouchEnd={cancel} onTouchCancel={cancel}><View className='recap-departure__fill' /><Text>{departed ? '约好了！' : '按住，出发'}</Text></View>
     {!departed && <View role='button' className='recap-departure__alternative' onClick={depart}>或轻点这里出发</View>}

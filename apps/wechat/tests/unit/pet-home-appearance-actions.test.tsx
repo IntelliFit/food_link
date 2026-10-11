@@ -71,8 +71,12 @@ describe('pet home appearance actions', () => {
     render(<PetHomePage />)
     act(() => didShowCallback?.())
 
-    await waitFor(() => expect(screen.getByText('经验')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('累计经验')).toBeInTheDocument())
     expect(screen.getAllByText('88')).toHaveLength(1)
+    expect(screen.getByText('本级经验 88 / 100')).toBeInTheDocument()
+    expect(screen.getByText('再获得 12 经验，升至 Lv.2')).toBeInTheDocument()
+    expect(screen.getByText('陪伴收获')).toBeInTheDocument()
+    expect(screen.queryByText('7天')).not.toBeInTheDocument()
     expect(screen.queryByText('积分')).not.toBeInTheDocument()
   })
 })

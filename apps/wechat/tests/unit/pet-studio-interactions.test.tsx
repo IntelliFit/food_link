@@ -20,6 +20,11 @@ jest.mock('../../src/components/PetActor', () => ({
   ...jest.requireActual('../../src/components/PetActor'),
   PetActor: ({ pet, scarf, active }: { pet: PetProfile; scarf?: string; active: boolean }) => <span data-testid='hub-pet' data-pet-id={pet.id} data-scarf={scarf || ''} data-active={active}>{pet.name}</span>,
 }))
+// Native canvas lifecycle is covered in pet-rig-canvas. Keep both renderers
+// isolated here so their child hooks cannot replace the page lifecycle fixture.
+jest.mock('../../src/components/PetRigActor', () => ({
+  PetRigActor: ({ rig, active }: { rig: { key: string; src: string }; active: boolean }) => <span className='pet-rig' data-character={rig.key} data-source={rig.src} data-active={active}><img className='pet-rig__source' src={rig.src} alt='' /></span>,
+}))
 
 const user = 'test-user'
 const pet = { id: 'pet', name: '小麦', builtin_avatar_id: 'jianwen-01' } as PetProfile
@@ -576,7 +581,8 @@ test('the house transport shortcut opens trial and confirms under the actual sel
   ;(Taro.setStorageSync as jest.Mock).mockClear()
   click(container, 'journey-transport-open'); click(container, 'journey-transport-skateboard')
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'skateboard')
-  expect(container.querySelector('.pet-transport-actor__sheet')).toHaveAttribute('src', '/assets/pets/transport/guigui-transport-v1.png')
+  expect(container.querySelector('.pet-rig')).toHaveAttribute('data-character', 'guigui')
+  expect(container.querySelector('.pet-rig__source')).toHaveAttribute('src', ORIGINAL_COMPANION_SRC)
   expect(Taro.setStorageSync).not.toHaveBeenCalled()
   click(container, 'journey-save-transport')
   expect(storage.get(petTransportStorageKey(user, pet.id, ORIGINAL_COMPANION_SRC))).toEqual({ version: 1, appearance: ORIGINAL_COMPANION_SRC, vehicle: 'skateboard' })

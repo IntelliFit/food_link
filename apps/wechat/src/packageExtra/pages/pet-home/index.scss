@@ -8,6 +8,18 @@
   );
 }
 
+.pet-home-candidate-card .pet-actor { margin: 0 auto; }
+.pet-home-transport-toggle { margin: 0; padding: 10rpx 22rpx; border-radius: 18rpx; background: #e5f2ec; color: #31554b; font-size: 24rpx; line-height: 1.5; }
+.pet-home-transport-toggle::after { border: 0; }
+.pet-home-transport .journey-button { box-sizing: border-box; min-height: 72rpx; margin: 0; border: 1rpx solid #cfddce; border-radius: 18rpx; background: #f3f7ee; color: #344c3c; font-size: 25rpx; line-height: 1.5; }
+.pet-home-transport .journey-button::after { border: 0; }
+.pet-home-transport .journey-button.is-selected { border-color: #526e4d; background: #e3edda; }
+.pet-home-transport .journey-button[disabled] { opacity: 0.5; }
+.pet-home-transport .journey-primary { display: flex; justify-content: center; align-items: center; width: 100%; padding: 18rpx; color: #fff; background: #526e4d; }
+.pet-home-transport .journey-section-heading { display: flex; justify-content: space-between; gap: 12rpx; margin-bottom: 16rpx; font-size: 26rpx; color: #344c3c; }
+.pet-home-transport .journey-muted { font-size: 22rpx; color: #647264; }
+.pet-home-page--dark .pet-home-transport-toggle { background: #284439; color: #e2f1e9; }
+
 .pet-home-action-spinner {
   width: 26rpx;
   height: 26rpx;
@@ -202,19 +214,27 @@
 }
 
 .pet-home-hero {
+  --pet-hero-text: #273e35;
+  --pet-hero-muted: #68776b;
+  --pet-hero-soft: #f0f3e8;
+  --pet-hero-line: #dce5d6;
   display: flex;
   flex-direction: column;
-  gap: 12rpx;
-  padding: 16rpx 22rpx 20rpx;
+  gap: 16rpx;
+  padding: 26rpx;
   border-radius: 28rpx;
   margin-bottom: 22rpx;
   box-sizing: border-box;
+  background: linear-gradient(135deg, #fffdf7, #f7f9ef);
+  border-color: #e1e7d8;
+  box-shadow: 0 10rpx 28rpx rgb(32 54 42 / 8%);
 }
 
+.pet-home-hero-eyebrow { color: var(--pet-hero-muted); font-size: 22rpx; line-height: 32rpx; letter-spacing: 2rpx; }
 .pet-home-hero-main {
   display: flex;
-  align-items: flex-start;
-  gap: 12rpx;
+  align-items: center;
+  gap: 22rpx;
   width: 100%;
   min-width: 0;
 }
@@ -222,71 +242,24 @@
 .pet-home-hero-stage {
   position: relative;
   display: flex;
-  flex: 0 0 260rpx;
-  align-items: flex-start;
+  flex: 0 0 204rpx;
+  align-items: center;
   justify-content: center;
-  width: 260rpx;
-  height: 228rpx;
+  width: 204rpx;
+  height: 240rpx;
 }
-
-.pet-home-hero-stage .pet-avatar--large {
-  width: 216rpx;
-  height: 216rpx;
-}
-
-.pet-home-stage-stat {
-  position: absolute;
-  z-index: 3;
-  display: flex;
-  align-items: baseline;
-  gap: 5rpx;
-  min-height: 40rpx;
-  padding: 5rpx 11rpx;
-  border: 1rpx solid rgb(92 184 150 / 18%);
-  border-radius: 999rpx;
-  background: rgb(250 255 252 / 94%);
-  box-shadow: 0 7rpx 18rpx rgb(47 112 87 / 10%);
-  box-sizing: border-box;
-}
-
-.pet-home-stage-stat--experience {
-  top: 18rpx;
-  right: 0;
-}
-
-.pet-home-stage-stat--level {
-  top: 4rpx;
-  left: 0;
-}
-
-.pet-home-stage-stat--days {
-  bottom: 2rpx;
-  left: 8rpx;
-}
-
-.pet-home-stage-stat-label {
-  color: #73837d;
-  font-size: 18rpx;
-  line-height: 26rpx;
-}
-
-.pet-home-stage-stat-value {
-  color: #2d8765;
-  font-size: 22rpx;
-  font-weight: 800;
-  line-height: 30rpx;
-  font-variant-numeric: tabular-nums;
-}
+.pet-home-hero-stage .pet-identity-avatar, .pet-home-hero-stage .pet-avatar { position: relative; z-index: 1; }
+.pet-home-portrait-halo { position: absolute; width: 190rpx; height: 190rpx; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #fff4d5, #e8efdc); }
+.pet-home-portrait-ground { position: absolute; bottom: 16rpx; width: 140rpx; height: 12rpx; border-radius: 50%; background: rgb(80 101 60 / 13%); }
 
 .pet-home-hero-copy {
   display: flex;
   flex: 1;
   flex-direction: column;
   justify-content: flex-start;
-  align-items: flex-end;
-  gap: 10rpx;
-  min-height: 228rpx;
-  padding-top: 4rpx;
+  align-items: flex-start;
+  gap: 16rpx;
+  min-height: 208rpx;
   box-sizing: border-box;
   min-width: 0;
 }
@@ -294,8 +267,8 @@
 .pet-home-name-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 12rpx;
+  justify-content: space-between;
+  gap: 8rpx;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -303,12 +276,13 @@
 
 .pet-home-name-link {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 8rpx;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-width: 0;
-  min-height: 78rpx;
-  padding: 8rpx 0;
+  min-height: 84rpx;
+  padding: 4rpx 0;
 
   &:active {
     opacity: 0.62;
@@ -316,15 +290,18 @@
 }
 
 .pet-home-name {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   min-width: 0;
   overflow: hidden;
-  color: #15212c;
-  font-size: 36rpx;
+  color: var(--pet-hero-text);
+  font-size: 40rpx;
   font-weight: 700;
   line-height: 48rpx;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .pet-home-name-arrow {
@@ -340,17 +317,27 @@
   align-items: center;
   justify-content: center;
   gap: 6rpx;
-  min-width: 92rpx;
-  min-height: 48rpx;
-  padding: 4rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgb(92 184 150 / 12%);
+  min-width: 84rpx;
+  min-height: 84rpx;
+  padding: 4rpx 8rpx;
+  border-radius: 16rpx;
+  background: transparent;
   box-sizing: border-box;
 
   &:active {
     opacity: 0.62;
   }
 }
+
+.pet-home-identity-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10rpx; }
+.pet-home-level-badge { flex-shrink: 0; padding: 4rpx 12rpx; border: 1rpx solid var(--pet-hero-line); border-radius: 10rpx; background: var(--pet-hero-soft); color: var(--pet-hero-text); font-size: 23rpx; font-weight: 700; line-height: 30rpx; }
+.pet-home-appearance-label { color: var(--pet-hero-muted); font-size: 22rpx; line-height: 32rpx; overflow-wrap: anywhere; }
+.pet-home-hero-stats { display: flex; gap: 28rpx; width: 100%; }
+.pet-home-hero-stats > view { display: flex; flex: 1; flex-direction: column; gap: 4rpx; min-width: 0; }
+.pet-home-hero-stats > view + view { padding-left: 20rpx; border-left: 1rpx solid var(--pet-hero-line); }
+.pet-home-hero-stat-number { display: flex; align-items: baseline; gap: 5rpx; }
+.pet-home-hero-stat-value { color: var(--pet-hero-text); font-size: 32rpx; line-height: 42rpx; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pet-home-hero-stat-label, .pet-home-hero-stat-unit { color: var(--pet-hero-muted); font-size: 21rpx; line-height: 30rpx; }
 
 .pet-home-rename-icon,
 .pet-home-rename-text {
@@ -403,9 +390,10 @@
 }
 
 .pet-home-upgrade {
-  width: 100%;
-  padding-top: 12rpx;
-  border-top: 1rpx solid rgb(92 184 150 / 12%);
+  padding: 18rpx 20rpx;
+  border: 1rpx solid var(--pet-hero-line);
+  border-radius: 18rpx;
+  background: var(--pet-hero-soft);
 }
 
 .pet-home-upgrade-head {
@@ -424,11 +412,11 @@
 }
 
 .pet-home-upgrade-label {
-  color: #2f7f62;
+  color: var(--pet-hero-text);
 }
 
 .pet-home-upgrade-value {
-  color: #66717d;
+  color: var(--pet-hero-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -437,14 +425,15 @@
   height: 14rpx;
   overflow: hidden;
   border-radius: 999rpx;
-  background: #e6ebe7;
+  background: #d8e3d4;
 }
 
 .pet-home-upgrade-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #5cb896 0%, #8bcfaf 100%);
+  background: linear-gradient(90deg, #547657, #81a66b);
 }
+.pet-home-upgrade-hint { display: block; margin-top: 10rpx; color: var(--pet-hero-muted); font-size: 22rpx; line-height: 32rpx; }
 
 .pet-home-card {
   border-radius: 24rpx;
@@ -615,6 +604,36 @@
   color: #7a8696;
 }
 
+// This standalone entry sits directly over the page scene, rather than inside
+// another card. Give it its own opaque surface so both lines stay readable.
+.pet-home-page #pet-studio-entry {
+  background: #eff7f2;
+  border-color: #cee3d8;
+
+  .pet-home-action-title {
+    color: #25453c;
+  }
+
+  .pet-home-action-desc,
+  .pet-home-action-arrow {
+    color: #516b63;
+  }
+}
+
+.pet-home-page--dark #pet-studio-entry {
+  background: #23352f;
+  border-color: #466054;
+
+  .pet-home-action-title {
+    color: #e9f4ee;
+  }
+
+  .pet-home-action-desc,
+  .pet-home-action-arrow {
+    color: #bcd2c7;
+  }
+}
+
 .pet-home-action-side {
   display: flex;
   align-items: center;
@@ -760,10 +779,13 @@
   }
 
   .pet-home-hero {
-    background:
-      radial-gradient(circle at 18% 18%, rgb(92 184 150 / 18%) 0%, transparent 38%),
-      linear-gradient(145deg, rgb(24 33 31 / 92%) 0%, rgb(18 27 25 / 92%) 100%);
+    --pet-hero-text: #f0f4e7;
+    --pet-hero-muted: #bac7b8;
+    --pet-hero-soft: #25382e;
+    --pet-hero-line: #425646;
+    background: linear-gradient(135deg, #20332b, #18281f);
   }
+  .pet-home-portrait-halo { background: radial-gradient(circle at 40% 30%, #44593c, #293e31); }
 
   .pet-home-shadow {
     background: rgb(0 0 0 / 30%);
@@ -809,34 +831,20 @@
     background: rgb(255 255 255 / 7%);
   }
 
-  .pet-home-stage-stat {
-    border-color: rgb(112 196 149 / 18%);
-    background: rgb(27 39 35 / 94%);
-    box-shadow: 0 8rpx 20rpx rgb(0 0 0 / 24%);
-  }
-
-  .pet-home-stage-stat-label {
-    color: rgb(214 226 220 / 58%);
-  }
-
-  .pet-home-stage-stat-value {
-    color: #6ee7b7;
-  }
-
   .pet-home-upgrade-progress {
     background: rgb(255 255 255 / 10%);
   }
 
   .pet-home-upgrade {
-    border-top-color: rgb(112 196 149 / 16%);
+    border-color: var(--pet-hero-line);
   }
 
   .pet-home-upgrade-label {
-    color: #6ee7b7;
+    color: var(--pet-hero-text);
   }
 
   .pet-home-upgrade-value {
-    color: rgb(226 236 231 / 76%);
+    color: var(--pet-hero-muted);
   }
 
   .pet-home-name-arrow {
@@ -844,7 +852,7 @@
   }
 
   .pet-home-rename-button {
-    background: rgb(92 184 150 / 16%);
+    background: transparent;
   }
 
   .pet-home-rename-icon,

@@ -7,6 +7,7 @@ import { PetActor, petActionCapabilities } from '../../src/components/PetActor'
 import { PET_MOTION_ACTIONS, petMotionAtlas } from '../../src/utils/pet-motion'
 import { completePetCatalog } from '../../src/utils/pet-catalog'
 import { ORIGINAL_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
+import { PET_RIGS } from '../../src/utils/pet-rig'
 
 beforeEach(() => { jest.clearAllMocks(); (Taro.getStorageSync as jest.Mock).mockReturnValue('') })
 
@@ -79,4 +80,15 @@ test('an unavailable photo atlas retains the same idle character and a replaceme
   expect(container.querySelector('.pet-avatar__image')).toHaveAttribute('src', 'idle.png')
   rerender(<PetActor pet={{ ...pet, pixel_motion_atlas_url: 'new-atlas.png' }} followAppearance={false} action='wave' />)
   expect(container.querySelector('.pet-motion-atlas__sheet')).toHaveAttribute('src', 'new-atlas.png')
+})
+test('original pose changes retain one face/outfit source and never change actor proportions', () => {
+  const { container, rerender } = render(<PetActor spriteOverride={ORIGINAL_COMPANION_SRC} followAppearance={false} action='idle' size={96} />)
+  const originalSize = (container.querySelector('.pet-actor') as HTMLElement).style.cssText
+  for (const action of PET_MOTION_ACTIONS.filter(a => a !== 'idle')) {
+    rerender(<PetActor spriteOverride={ORIGINAL_COMPANION_SRC} followAppearance={false} action={action} size={96} coasting />)
+    expect((container.querySelector('.pet-actor') as HTMLElement).style.cssText).toBe(originalSize)
+    expect(container.querySelector('.pet-rig__source')).toHaveAttribute('src', PET_RIGS.guigui.src)
+    if (action === 'ride') expect(container.querySelector('.pet-rig')).toHaveClass('is-paused')
+    else expect(container.querySelector('.pet-rig')).not.toHaveClass('is-paused')
+  }
 })

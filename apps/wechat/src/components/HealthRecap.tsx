@@ -4,9 +4,8 @@ import { emptyJourney } from '../utils/recap-story'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { communityGetFeed, getAccessToken, getUserProfile, getBodyMetricsSummary, getStatsSummary, getStatsCalendarMonth, normalizeCommunityFeedItem, type BodyMetricsSummary } from '../utils/api'
 import { localDay, recapPeriod, summarizeRecap, type RecapDay, type RecapKind } from '../utils/health-recap'
-import { JIANWEN_COMPANION_SRC } from '../utils/pet-companion-preference'
 import { redirectToLogin } from '../utils/withAuth'
-import { PetCompanionSprite } from './PetCompanionSprite'
+import { CurrentPetCompanion } from './CurrentPetCompanion'
 import { RecapShare } from './RecapShare'
 import { RecapMusic } from './RecapMusic'
 import { RecapJournalScene } from './RecapJournalScene'
@@ -157,7 +156,7 @@ export function HealthRecap({ active, selection, onShelf, onComplete }: { active
       {!selection && <View className='health-recap__tabs'>
         {(['week', 'month', 'year'] as const).map(value => <View key={value} role='button' className={kind === value ? 'is-selected' : ''} onClick={() => selectReport(value, year)}>{value === 'week' ? '上周' : value === 'month' ? '上月' : '去年'}</View>)}
       </View>}
-      <View className='health-recap__opening-pet'><PetCompanionSprite src={JIANWEN_COMPANION_SRC} name='鬼鬼' pose='wave' /></View>
+      <View className='health-recap__opening-pet'><CurrentPetCompanion action='wave' active={active} /></View>
       {busy ? <View className='health-recap__skeleton'><View /><View /><View /></View> : <View id='health-recap-generate' role='button' className='health-recap__button' onClick={load}>{error ? '重新打开' : '开始这段旅程'}</View>}
       {error && <Text className='health-recap__error'>{error}</Text>}
       <Text className='health-recap__note'>报告只使用当前账号已有记录；没有记录的日子会留白。</Text>

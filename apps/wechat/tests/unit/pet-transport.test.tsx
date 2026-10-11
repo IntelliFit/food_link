@@ -6,6 +6,13 @@ import { PetTransportPicker } from '../../src/packagePetStudio/components/PetTra
 import { defaultPetTransport, petTransportAsset, petTransportCapabilities } from '../../src/utils/pet-transport'
 import { PET_TRANSPORT_CHANGED, petTransportStorageKey, readPetTransport, savePetTransport } from '../../src/utils/pet-transport-storage'
 import { ORIGINAL_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
+import { petRig } from '../../src/utils/pet-rig'
+
+// These tests exercise identity/storage/failure behavior; the native canvas clock has a separate suite.
+jest.mock('../../src/components/PetRigActor', () => ({ PetRigActor: ({ rig, vehicle, action, active, onUnavailable }: any) => {
+  const React = require('react')
+  return React.createElement('div', { className: `pet-rig${active ? '' : ' is-paused'}`, 'data-source': rig.src, 'data-motion': vehicle || action }, React.createElement('img', { className: 'pet-rig__source', src: rig.src, onError: onUnavailable }))
+} }))
 
 const pet = { id: 'p', name: '鬼鬼', builtin_avatar_id: 'jianwen-01' } as PetProfile
 const photo = { id: 'photo', name: '我的照片伙伴', pixel_avatar_url: 'my-photo.png', pixel_motion_version: 1, pixel_motion_atlas_url: 'my-photo-atlas.png' } as PetProfile
@@ -17,12 +24,12 @@ beforeEach(() => {
   ;(Taro.setStorageSync as jest.Mock).mockImplementation((key, value) => storage.set(key, value))
 })
 
-test.each([['jianwen-01', 'jianwen'], ['huatuo-01', 'huatuo'], ['taiji-xiaozi-01', 'taiji'], ['xiaomai-01', 'xiaomai'], ['doudou-01', 'doudou']])('each builtin uses its own transport sheet: %s', (builtin, key) => {
+test.each([['jianwen-01', 'jianwen'], ['huatuo-01', 'huatuo'], ['taiji-xiaozi-01', 'taiji'], ['xiaomai-01', 'xiaomai'], ['doudou-01', 'doudou']])('each builtin animates its own approved character source: %s', (builtin, key) => {
   const identity = { ...pet, builtin_avatar_id: builtin }
   expect(petTransportCapabilities(identity)).toEqual(['bicycle', 'scooter', 'skateboard', 'walk'])
   expect(petTransportAsset(identity)).toBe(`/assets/pets/transport/${key}-transport-v1.png`)
   const { container } = render(<PetTransportActor pet={identity} vehicle='skateboard' />)
-  expect(container.querySelector('img')).toHaveAttribute('src', `/assets/pets/transport/${key}-transport-v1.png`)
+  expect(container.querySelector('img')).toHaveAttribute('src', petRig(identity)!.src)
 })
 test('the approved original override keeps Guigui instead of the cloud template', () => {
   expect(petTransportAsset(pet, ORIGINAL_COMPANION_SRC)).toBe('/assets/pets/transport/guigui-transport-v1.png')
@@ -106,10 +113,10 @@ test('a failed tool image falls back to the same character; a new identity can l
   const { container, rerender } = render(<PetTransportActor pet={pet} sprite={ORIGINAL_COMPANION_SRC} vehicle='skateboard' />)
   fireEvent.error(container.querySelector('img')!)
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'walk')
-  expect(container.querySelector('img')).toHaveAttribute('src', '/assets/pets/motions/guigui-motion-v1.png')
+  expect(container.querySelector('img')).toHaveAttribute('src', ORIGINAL_COMPANION_SRC)
   rerender(<PetTransportActor pet={pet} vehicle='scooter' active={false} />)
   expect(container.querySelector('.pet-transport-actor')).toHaveClass('is-paused', 'is-scooter')
-  expect(container.querySelector('img')).toHaveAttribute('src', '/assets/pets/transport/jianwen-transport-v1.png')
+  expect(container.querySelector('img')).toHaveAttribute('src', petRig(pet)!.src)
 })
 test('a failed seated pose removes the bicycle and preserves the same original character', () => {
   const { container } = render(<PetTransportActor pet={pet} sprite={ORIGINAL_COMPANION_SRC} vehicle='bicycle' />)
@@ -124,17 +131,18 @@ test('walking keeps the exact original wardrobe without following a different co
   storage.set(`pet_loadout_v2:a:p:${encodeURIComponent(ORIGINAL_COMPANION_SRC)}`, { version: 2, appearance: ORIGINAL_COMPANION_SRC, scarf: 'cozy-scarf' })
   const { container } = render(<PetTransportActor pet={pet} sprite={ORIGINAL_COMPANION_SRC} vehicle='walk' />)
   expect(container.querySelector('.pet-actor__scarf')).toHaveAttribute('src', '/assets/pets/clothing/cozy-scarf.png')
-  expect(container.querySelector('.pet-motion-atlas__sheet')).toHaveAttribute('src', '/assets/pets/motions/guigui-motion-v1.png')
+  expect(container.querySelector('.pet-rig')).toHaveAttribute('data-source', ORIGINAL_COMPANION_SRC)
 })
-test.each([375, 390, 430])('the %spx viewport scales the whole ride while retaining character proportions', width => {
+test.each([375, 390, 430])('the %spx viewport uses explicit canvas dimensions without inherited transforms', width => {
   ;(Taro.getSystemInfoSync as jest.Mock).mockReturnValueOnce({ windowWidth: width })
   const { container } = render(<PetTransportActor pet={pet} sprite={ORIGINAL_COMPANION_SRC} vehicle='bicycle' size={144} active={false} />)
   const plane = container.querySelector('.pet-transport-actor__plane') as HTMLElement
-  const scale = Number(plane.style.transform.match(/scale\(([^)]+)\)/)![1])
-  expect(200 * width / 750 * scale).toBeCloseTo(144)
-  expect(container.querySelector('.pet-motion-atlas')).toHaveClass('pet-motion-atlas--ride', 'is-coasting')
-  expect(container.querySelector('.pet-actor')).toHaveClass('pet-actor--paused')
-  expect(container.querySelector('.pet-motion-atlas__sheet')).toHaveAttribute('src', '/assets/pets/motions/guigui-motion-v1.png')
+  expect(plane.style.transform).toBe('')
+  expect(parseFloat(plane.style.width)).toBe(144)
+  expect(parseFloat(plane.style.height)).toBeCloseTo(144 * 1.1)
+  expect(container.querySelector('.pet-rig')).toHaveAttribute('data-motion', 'bicycle')
+  expect(container.querySelector('.pet-rig')).toHaveClass('is-paused')
+  expect(container.querySelector('.pet-rig__source')).toHaveAttribute('src', ORIGINAL_COMPANION_SRC)
 })
 test('a failed trial cannot be confirmed; changing tool or retrying creates a fresh preview', () => {
   const { container } = render(<PetTransportPicker pet={pet} sprite={ORIGINAL_COMPANION_SRC} account='a' active canSave={() => true} />)
@@ -146,5 +154,5 @@ test('a failed trial cannot be confirmed; changing tool or retrying creates a fr
   fireEvent.click(container.querySelector('#journey-transport-skateboard')!)
   expect(screen.getByText('确认出行工具')).not.toBeDisabled()
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'skateboard')
-  expect(container.querySelector('.pet-transport-actor__sheet')).toHaveAttribute('src', '/assets/pets/transport/guigui-transport-v1.png')
+  expect(container.querySelector('.pet-rig__source')).toHaveAttribute('src', ORIGINAL_COMPANION_SRC)
 })

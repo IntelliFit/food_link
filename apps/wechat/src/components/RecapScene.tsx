@@ -2,8 +2,7 @@ import { Image, Text, Textarea, View } from '@tarojs/components'
 import { useEffect, useRef, useState } from 'react'
 import type { RecapDay, RecapKind } from '../utils/health-recap'
 import { emptyJourney, personalOpening, recordGuessChoices, shortDate, storyMemories, type RecapJourney } from '../utils/recap-story'
-import { JIANWEN_COMPANION_SRC } from '../utils/pet-companion-preference'
-import { PetCompanionSprite } from './PetCompanionSprite'
+import { CurrentPetCompanion } from './CurrentPetCompanion'
 import { RecapDeparture, RecapMonths, RecapWishes } from './RecapPlay'
 import './RecapScene.scss'
 
@@ -49,7 +48,7 @@ export function RecapScene({ recipient, chapter, kind, days, recorded, longest, 
     if (walkTimer.current) clearTimeout(walkTimer.current)
     walkTimer.current = setTimeout(() => setWalking(false), 1500)
   }
-  const guide = chapter === 0 ? annual ? '点票券，开启旅程' : '点信封，开启回忆' : chapter === 1 ? annual ? '点一个季节，回去看看' : '点餐盘，收集回忆' : chapter === 2 ? selected ? '已夹进纪念册' : '点足迹，鬼鬼陪你走' : chapter === 3 ? '选一个词，送给自己' : '选好下一步，我们就出发'
+  const guide = chapter === 0 ? annual ? '点票券，开启旅程' : '点信封，开启回忆' : chapter === 1 ? annual ? '点一个季节，回去看看' : '点餐盘，收集回忆' : chapter === 2 ? selected ? '已夹进纪念册' : '点足迹，伙伴陪你走' : chapter === 3 ? '选一个词，送给自己' : '选好下一步，我们就出发'
   return <View className={`recap-stage recap-stage--${chapter} recap-stage--${kind}${active ? ' is-current' : ''}${journey.opened && chapter === 0 ? ' is-opened' : ''}`}>
     <Image className='recap-stage__background' src={`/assets/recap/${image}.jpg`} mode='aspectFill' />
     {chapter === 0 && !annual && <View role='button' aria-label={journey.opened ? '已拆开的生活来信' : '打开桌上的信封'} className={`recap-envelope${journey.opened ? ' is-open' : ''}`} onClick={() => { if (!journey.opened) update({ opened: true }) }}>
@@ -75,7 +74,7 @@ export function RecapScene({ recipient, chapter, kind, days, recorded, longest, 
     </>}
     {((chapter === 1 && annual) || (chapter === 2 && !annual)) && <>
       <View className='recap-stage__path'>{memories.map((memory, index) => { const point = annual ? SEASONS[index] : STONES[index]; return <View role='button' aria-label={`查看${memory.label}${annual ? '季' : ''}记录`} key={`${memory.id}:${motion}`} className={`recap-stage__step${motion ? ' is-visited' : ''}${memory.count ? ' is-recorded' : ''}${journey.memory === memory.id ? ' is-picked' : ''}`} style={{ left: `${point.x}%`, top: `${point.y}%`, animationDelay: `${index * 65}ms` }} onClick={() => selectMemory(memory.id)}><Text>{memory.label}</Text><Text>{annual ? `${memory.count}天` : memory.count ? '有记录' : '留白'}</Text></View> })}
-        {!annual && <View className={`recap-stage__walking-pet${walking ? ' is-walking' : ''}`} style={{ left: `${STONES[selected ? memories.indexOf(selected) : 0].x - 13}%`, top: `${STONES[selected ? memories.indexOf(selected) : 0].y - 10}%` }}><PetCompanionSprite src={JIANWEN_COMPANION_SRC} name='鬼鬼' pose={walking ? 'idle' : 'wave'} /></View>}
+        {!annual && <View className={`recap-stage__walking-pet${walking ? ' is-walking' : ''}`} style={{ left: `${STONES[selected ? memories.indexOf(selected) : 0].x - 13}%`, top: `${STONES[selected ? memories.indexOf(selected) : 0].y - 10}%` }}><CurrentPetCompanion action={walking ? 'walk' : 'wave'} active={active} /></View>}
       </View>
       {selected && <View className='recap-stage__memory'><Text>{annual ? `${selected.label}季 · ${selected.count} 天记录` : kind === 'week' ? `${shortDate(selected.id)} · ${selected.count ? '这一天，你留下了一份记录' : '留白也是生活的一部分'}` : `${selected.label} · ${selected.count} 天饮食记录`}</Text></View>}
     </>}
@@ -102,6 +101,6 @@ export function RecapScene({ recipient, chapter, kind, days, recorded, longest, 
       {reveal === null ? <View role='button' className='recap-stage__primary' onClick={() => setReveal(0)}>给未来的我留言</View> : <><Textarea className='recap-stage__letter-input' maxlength={100} value={journey.letter} onInput={event => update({ letter: event.detail.value })} placeholder='下一阶段，我想对自己说…' /><Text className='recap-stage__small'>寄语与选择仅保留在本次阅读中。</Text></>}
       {completed && <View role='button' className='recap-stage__primary recap-stage__share' onClick={onShare}>导出纪念海报 · 二维码分享</View>}<View className='recap-stage__end-actions'>{completed && <View role='button' onClick={next}>回看旅程</View>}<View role='button' onClick={() => { if (!busy) refresh?.() }}>{busy ? '…' : '更新数据'}</View></View>
     </View>}
-    {chapter > 0 && chapter < 3 && !(chapter === 2 && annual) && !(chapter === 1 && !annual) && !(chapter === 0 && journey.opened) && <View className={`recap-stage__guide${chapter === 0 ? ' recap-stage__guide--cover' : ''}`}>{chapter !== 0 && !(chapter === 2 && !annual) && <View className='recap-stage__guide-pet'><PetCompanionSprite src={JIANWEN_COMPANION_SRC} name='鬼鬼' pose={active ? 'blink' : 'idle'} /></View>}<Text>{guide}</Text></View>}
+    {chapter > 0 && chapter < 3 && !(chapter === 2 && annual) && !(chapter === 1 && !annual) && !(chapter === 0 && journey.opened) && <View className={`recap-stage__guide${chapter === 0 ? ' recap-stage__guide--cover' : ''}`}>{chapter !== 0 && !(chapter === 2 && !annual) && <View className='recap-stage__guide-pet'><CurrentPetCompanion action='blink' active={active} /></View>}<Text>{guide}</Text></View>}
   </View>
 }

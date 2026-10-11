@@ -20,6 +20,7 @@ export function PetTransportPicker({ pet, sprite, account, active, canSave }: {
   const [notice, setNotice] = useState('')
   const [unavailable, setUnavailable] = useState(false)
   const [trial, setTrial] = useState(0)
+  const [paused, setPaused] = useState(false)
   const selected = PET_TRANSPORTS.find(item => item.id === preview)!
   const confirm = () => {
     if (unavailable) { setNotice('这套动作暂不可用，请换个工具再试'); return }
@@ -27,10 +28,10 @@ export function PetTransportPicker({ pet, sprite, account, active, canSave }: {
     setSaved(preview); setNotice(`已选择${selected.name}，下次首页出行时使用`)
   }
   return <View className='journey-transport' id='journey-transport'>
-    <View className='journey-section-heading'><Text>出行工具</Text><Text className='journey-muted'>免费试骑 · 随时切换</Text></View>
+    <View className='journey-section-heading'><Text>出行工具</Text><Button id='journey-motion-toggle' className='journey-button journey-transport__motion-toggle' disabled={!active} onClick={() => setPaused(value => !value)} aria-label={paused ? '继续试骑动作' : '暂停试骑动作'}>{paused ? '继续动作' : '暂停动作'}</Button></View>
     <View className='journey-transport__stage'>
       <View className='journey-transport__sun' />
-      <View className='journey-transport__actor'><PetTransportActor key={`${pet.id}:${sprite}:${preview}:${trial}`} pet={pet} sprite={sprite} vehicle={preview} size={144} active={active} showGround onUnavailable={() => { setUnavailable(true); setNotice('这套动作暂不可用，已保留原形象。点工具重试，或先选散步。') }} /></View>
+      <View className='journey-transport__actor'><PetTransportActor key={`${pet.id}:${sprite}:${preview}:${trial}`} pet={pet} sprite={sprite} vehicle={preview} size={144} active={active && !paused} showGround onUnavailable={() => { setUnavailable(true); setNotice('这套动作暂不可用，已保留原形象。点工具重试，或先选散步。') }} /></View>
       <View className='journey-transport__caption'><Text>{pet.name} · {selected.name}</Text><Text>{selected.description}</Text></View>
     </View>
     <View className='journey-transport__choices'>{PET_TRANSPORTS.map(item => {

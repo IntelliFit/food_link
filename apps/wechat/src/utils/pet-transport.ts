@@ -3,8 +3,8 @@ import { petMotionAtlas } from './pet-motion'
 
 export type PetTransportId = 'walk' | 'bicycle' | 'scooter' | 'skateboard'
 export const PET_TRANSPORTS: { id: PetTransportId; name: string; description: string; mark: string }[] = [
-  { id: 'bicycle', name: '自行车', description: '坐稳握把，轻松滑行', mark: '◉—◉' },
-  { id: 'scooter', name: '滑板车', description: '双手握把，站姿出发', mark: '┐◉' },
+  { id: 'bicycle', name: '自行车', description: '双脚交替踩踏，坐稳握把', mark: '◉—◉' },
+  { id: 'scooter', name: '滑板车', description: '单脚支撑，蹬地收脚再滑行', mark: '┐◉' },
   { id: 'skateboard', name: '滑板', description: '蹬地、收脚，平衡滑行', mark: '⌒' },
   { id: 'walk', name: '散步', description: '用自己的步伐慢慢走', mark: '↝' },
 ]

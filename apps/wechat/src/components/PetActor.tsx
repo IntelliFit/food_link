@@ -8,6 +8,8 @@ import { getHomeCompanionPreference, getHomeCompanionSpriteOverride, HOME_COMPAN
 import { PET_LOADOUT_CHANGED, readPetLoadout } from '../utils/pet-loadout'
 import { PET_MOTION_ACTIONS, petMotionAtlas, type PetMotionAction } from '../utils/pet-motion'
 import { PetMotionAtlas } from './PetMotionAtlas'
+import { PetRigActor } from './PetRigActor'
+import { petRig } from '../utils/pet-rig'
 import './PetActor.scss'
 
 export type PetAction = PetMotionAction
@@ -41,16 +43,18 @@ export function PetActor({ pet, size = 96, action = 'idle', active = true, follo
   }, [])
   const sprite = spriteOverride || (followAppearance ? getHomeCompanionSpriteOverride(getHomeCompanionPreference()) : undefined) || getCompanionSprite(pet || undefined)
   const atlas = petMotionAtlas(pet, sprite)
+  const rig = petRig(pet, sprite)
   const capabilities = petActionCapabilities(pet, sprite)
   const supported = capabilities.includes(action)
   const pose = (active || holdPoseWhenPaused) && supported ? action : 'idle'
   const loadout = followLoadout && pet?.id ? readPetLoadout(pet.id, sprite || pet.builtin_avatar_id || pet.pixel_avatar_url || '') : null
   const clothing = scarf === undefined ? loadout?.scarf : scarf
   const useAtlas = Boolean(atlas && atlas !== failedAtlas && atlas !== unavailableAtlas && pose !== 'idle')
-  const width = useAtlas ? size : sprite ? size * 160 / 208 : size
+  const useRig = Boolean(rig && useAtlas)
+  const width = useRig || !useAtlas ? sprite ? size * 160 / 208 : size : size
   const customFrame = pose === 'blink' ? pet?.pixel_avatar_blink_url : pose === 'jump' ? pet?.pixel_avatar_jump_url : undefined
-  return <View className={`pet-actor pet-actor--${sprite === JIANWEN_COMPANION_SRC ? 'jianwen' : sprite ? 'original' : 'custom'} pet-actor--${pose}${useAtlas ? ' pet-actor--atlas' : ''}${active ? '' : ' pet-actor--paused'}`} style={{ width: `${width}px`, height: `${size}px` }} role='img' aria-label={`${pet?.name || '伙伴'}，${supported ? action : '原有形象'}`}>
-    {useAtlas ? <PetMotionAtlas key={atlas} src={atlas!} action={pose} active={active} coasting={coasting} onError={() => { setFailedAtlas(atlas!); onMotionUnavailable?.() }} /> : sprite ? <View className='pet-actor__frame'><Image className='pet-actor__sheet' src={sprite} mode='scaleToFill' /></View> : customFrame ? <Image className='pet-actor__custom' src={customFrame} mode='aspectFit' /> : <PetAvatar pet={pet} size={size} motion='static' active={active} />}
+  return <View className={`pet-actor pet-actor--${sprite === JIANWEN_COMPANION_SRC ? 'jianwen' : sprite ? 'original' : 'custom'} pet-actor--${pose}${useAtlas ? ' pet-actor--atlas' : ''}${useRig ? ' pet-actor--rig' : ''}${active ? '' : ' pet-actor--paused'}`} style={{ width: `${width}px`, height: `${size}px` }} role='img' aria-label={`${pet?.name || '伙伴'}，${supported ? action : '原有形象'}`}>
+    {useRig ? <PetRigActor rig={rig!} action={pose} active={active && !(coasting && pose === 'ride')} onUnavailable={() => { setFailedAtlas(atlas!); onMotionUnavailable?.() }} /> : useAtlas ? <PetMotionAtlas key={atlas} src={atlas!} action={pose} active={active} coasting={coasting} onError={() => { setFailedAtlas(atlas!); onMotionUnavailable?.() }} /> : sprite ? <View className='pet-actor__frame'><Image className='pet-actor__sheet' src={sprite} mode='scaleToFill' /></View> : customFrame ? <Image className='pet-actor__custom' src={customFrame} mode='aspectFit' /> : <PetAvatar pet={pet} size={size} motion='static' active={active} />}
     {sprite === ORIGINAL_COMPANION_SRC && clothing && pose !== 'ride' && pose !== 'jump' && <Image className='pet-actor__scarf' src={clothing === 'cozy-scarf' ? '/assets/pets/clothing/cozy-scarf.png' : '/assets/pets/clothing/explorer-scarf.png'} mode='aspectFit' />}
     {showStatus && !supported && <Text className='pet-actor__status'>这套形象暂未提供此动作</Text>}
     {showStatus && atlas === failedAtlas && <Text className='pet-actor__status'>动作图片暂不可用，保留原有形象</Text>}

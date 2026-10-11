@@ -37,6 +37,17 @@ export function setHomeCompanionChoice(selected: HomeCompanionChoice): boolean {
   } catch { return false }
 }
 
+/** Explicitly selecting the approved original enables it only for this account. */
+export function selectOriginalCompanion(expectedAccount: string): boolean {
+  try {
+    const key = preferenceKey()
+    if (!expectedAccount || key !== `${HOME_COMPANION_PREFERENCE_KEY}:${expectedAccount}`) return false
+    Taro.setStorageSync(key, { enabledOriginal: true, selected: 'original' })
+    try { Taro.eventCenter.trigger(HOME_COMPANION_CHANGED_EVENT) } catch { /* Selection was already saved. */ }
+    return true
+  } catch { return false }
+}
+
 export function getHomeCompanionSpriteOverride(preference: HomeCompanionPreference): string | undefined {
   if (preference.selected === 'original' && preference.enabledOriginal) return ORIGINAL_COMPANION_SRC
   if (preference.selected === 'jianwen') return JIANWEN_COMPANION_SRC

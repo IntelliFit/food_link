@@ -1,0 +1,6 @@
+.pet-rig { position: relative; width: 100%; height: 100%; }
+.pet-rig__canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; }
+.pet-rig.is-ready .pet-rig__canvas { opacity: 1; }
+.pet-rig__fallback { position: absolute; left: 12%; top: 4%; width: 76%; height: 90%; overflow: hidden; }
+.pet-rig__source { display: block; width: 100%; height: 100%; max-width: none; }
+.pet-rig.is-ready .pet-rig__fallback { visibility: hidden; }
