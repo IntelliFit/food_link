@@ -197,49 +197,53 @@ func (s *StatsService) shouldUseCampusDietAgent(ctx context.Context, userID stri
 	}
 	var history []domain.PetChatMessage
 	if strings.TrimSpace(input.SessionID) != "" && !input.NewSession {
-		history, _ = s.repo.GetPetChatSessionMessages(ctx, userID, input.SessionID, 16)
-	}
-	active, _ := activeCampusDietRecommendation(history)
-	if campusDietAgentExplicitTopicSwitch(question) {
-		return false
-	}
-	if mealHistoryQuestion(question) || (active != nil && active.GeneratedBy == hybridMealVersion && regexp.MustCompile(`核对|来源|日期|份量|换一份`).MatchString(question)) {
-		return true
-	}
-	if active != nil {
-		if school, _ := s.repo.ResolveDietRecommendationSchool(ctx, question); school != nil {
-			return true
+		var err error
+		history, err = s.repo.GetPetChatSessionMessages(ctx, userID, input.SessionID, 16)
+		if err != nil {
+			logger.Warn(ctx, "读取伙伴选餐上下文失败，按本轮问题分流", logger.UserID(userID), slog.String("session_id", input.SessionID), logger.Err(err))
 		}
 	}
-	if active != nil {
-		return true
-	}
-	if input.EntryContext != nil && input.EntryContext.Source == "home_next_meal" {
-		return true
-	}
-	if !campusDietAgentFoodQuestion(question) {
-		return false
-	}
-	school, _, _ := s.resolveDietRecommendationSchool(ctx, userID, DietRecommendationInput{
-		Question: question, SessionID: input.SessionID,
-	})
-	return school != nil || input.Location != nil || input.EntryContext != nil || regexp.MustCompile(`吃什么|推荐.*(?:菜|餐|食物)|附近.*(?:吃|餐|饭|菜|食堂)|外卖`).MatchString(question)
+	active, _ := activeCampusDietRecommendation(history)
+	// The home entry supplies context for the first turn, not a permanent task.
+	homeMealStart := len(history) == 0 && (input.NewSession || strings.TrimSpace(input.SessionID) == "") && input.EntryContext != nil && input.EntryContext.Source == "home_next_meal"
+	useAgent := !campusDietAgentExplicitTopicSwitch(question) && (campusDietAgentFoodQuestion(question) || mealHistoryQuestion(question) ||
+		((active != nil || homeMealStart) && campusDietAgentContextualQuestion(question)))
+	logger.Info(ctx, "伙伴对话意图分流", logger.UserID(userID),
+		slog.Bool("use_meal_agent", useAgent), slog.Bool("has_active_meal", active != nil), slog.Bool("home_meal_start", homeMealStart))
+	return useAgent
 }
 
 func campusDietAgentExplicitTopicSwitch(question string) bool {
 	normalized := strings.ReplaceAll(strings.TrimSpace(question), " ", "")
+	// Negating the meal task is different from rejecting one ingredient.
+	if regexp.MustCompile(`(?:不一定|不要|不用|不需要|不想|别|停止|先不)(?:再|要|是|只|仅|给我|帮我|总是|一直|都|每次){0,6}(?:推荐|建议|聊|谈|选|考虑)?(?:饮食|餐食|食物|吃的|吃什么|饭菜|菜)(?:了|给我|这些|建议|推荐|方面)?(?:$|[，。？！!?；;])|换个话题|(?:其他|别的)(?:的|方面的|通用|生活|健康){0,3}建议`).MatchString(normalized) {
+		return true
+	}
+	if regexp.MustCompile(`洗澡|洗浴|泡澡|洗脸|冷热交替|睡觉|拉伸|热身|心情|情绪`).MatchString(normalized) && !campusDietAgentFoodQuestion(normalized) {
+		return true
+	}
 	return regexp.MustCompile(`训练计划|运动计划|训练怎么|训练建议|怎么练|跑步计划|睡眠|作息|喝水|补剂|体检|体重趋势`).MatchString(normalized) &&
 		!regexp.MustCompile(`吃|菜|餐|食堂|饮食|热量|蛋白|碳水|脂肪`).MatchString(normalized)
 }
 
 func campusDietAgentFoodQuestion(question string) bool {
 	normalized := strings.ReplaceAll(strings.TrimSpace(question), " ", "")
-	return regexp.MustCompile(`吃什么|推荐.*(?:菜|餐|食物)|食堂|校园餐|减脂餐|增肌餐|\d+卡|热量|卡路里|蛋白|碳水|脂肪|菜品|外卖|附近.*(?:吃|餐|饭|菜)`).MatchString(normalized)
+	return regexp.MustCompile(`吃(?:点)?什么|吃啥|点什么|想吃|想点|(?:推荐|找|选|搭配|安排|换)[^，。？！!?；;]{0,20}(?:餐|饭|菜|食物|吃的|外卖)|(?:早|午|晚)(?:餐|饭)[^，。？！!?；;]{0,20}(?:推荐|选|搭配)|(?:附近|周边)[^，。？！!?；;]{0,20}(?:吃|餐|饭|菜|食堂|外卖)|(?:食堂|外卖)[^，。？！!?；;]{0,12}(?:吃|推荐|选|有什么|有哪些)|(?:这顿|这餐|这一餐)[^，。？！!?；;]{0,15}(?:吃什么|吃啥|选|推荐|搭配)`).MatchString(normalized)
 }
 
 func campusDietAgentContextualQuestion(question string) bool {
 	normalized := strings.ReplaceAll(strings.TrimSpace(question), " ", "")
-	return campusDietAgentFoodQuestion(normalized) || campusDietAgentHasNewSearchConstraints(normalized) || regexp.MustCompile(`这(?:几|三|五|\d+)个|这些|刚才|前面|上面|你推荐的|还有|其他|换一批|再来|解释|为什么|各自|分别|哪里|在哪|刚.*(?:训练|健身|跑)|不要|不吃|想吃|预算|元|块|清淡|便宜|我在|附近|可以|能进去|不方便|在外地|出差`).MatchString(normalized)
+	if campusDietAgentExplicitTopicSwitch(normalized) {
+		return false
+	}
+	// Require a meal reference or a bounded, elliptical follow-up. A previous
+	// meal, a bare "可以", or "其他建议" is not evidence of a meal request.
+	return campusDietAgentFoodQuestion(normalized) ||
+		regexp.MustCompile(`这道菜|这份(?:饭|餐)|这些菜|这(?:几|[一二两三四五六七八九十0-9０-９]+)个(?:菜|餐|选项)|你推荐(?:的(?:菜|餐|饭|饮食)|这些)|这个(?:套餐|组合)|这(?:餐|顿)|那(?:餐|顿)|(?:其他|别的|更多)(?:的)?选择|刚才那几个[^，。？！!?；;]{0,10}(?:哪个|更适合|减脂)|(?:这些|它们)[^，。？！!?；;]{0,12}(?:太贵|价格|热量|蛋白|碳水|脂肪|营养)`).MatchString(normalized) ||
+		regexp.MustCompile(`^(?:那|再|请|麻烦|帮我)?(?:换(?:一份|一餐|一道|一个|一批|几个|几份|几道|两份|三种)(?:选择|推荐)?|再来(?:一批|一份|几个|一组)|还有(?:什么|别的|其他)?(?:选择|推荐)?(?:吗)?|更多(?:选择|推荐)?|其他的?|别的)(?:吧|吗|呢|呀|啊)?[?？。!！]*$`).MatchString(normalized) ||
+		regexp.MustCompile(`^(?:这些|这几个|这几道|这份|它|各自|分别)?(?:在哪(?:里|个食堂)?|哪里|位置(?:在哪)?|几楼|楼层|窗口|档口|怎么去|多少钱|价格(?:是多少)?|热量(?:是多少)?|多少卡|蛋白(?:质)?(?:多少)?|碳水(?:多少)?|脂肪(?:多少)?|营养(?:怎么样)?|份量|分量|来源|核对来源|为什么(?:这么推荐|推荐这些|适合我)?)(?:呢|吗|啊)?[?？。!！]*$`).MatchString(normalized) ||
+		regexp.MustCompile(`^(?:我|那|今天|现在|这次)?(?:刚(?:刚)?(?:训练|健身|跑步)(?:结束|完|了)|减脂|减肥|增肌|高蛋白|低脂|清淡|少油|便宜|实惠)(?:一点|一些|点|的|呢|吧|啊)?[?？。!！]*$|^(?:那|我|我的|这餐|今天)?预算[^，。？！!?；;]{1,18}[?？。!！]*$|^[^，。？！!?；;]{0,8}\d+(?:\.\d+)?(?:元|块|千卡|大卡|卡路里|kcal|卡)(?:以内|以下|左右|最好)?[?？。!！]*$`).MatchString(normalized) ||
+		regexp.MustCompile(`(?:不吃|不要|不想吃|避开|换成|改成)(?:鸡|牛|猪|羊|鸭|鱼|虾|蟹|蛋|奶|豆|花生|海鲜|香菜|葱|蒜|面|米饭|辣|油|糖|盐|汤|粥|饼|包子)|^(?:我|本人)?(?:现在|目前|今天|这次)?在[^，。？！!?；;]{1,20}(?:大学|学院|学校|食堂|餐厅|社区|大厦|园|北京|上海|深圳)[?？。!！]*$`).MatchString(normalized)
 }
 
 func campusDietAgentIntent(question string, active *DietRecommendationResult) string {
@@ -406,7 +410,15 @@ func activeCampusDietRecommendation(messages []domain.PetChatMessage) (*DietReco
 	var latest *DietRecommendationResult
 	allIDs := make([]string, 0, 12)
 	seen := map[string]bool{}
+	mealTurn := true // a truncated history may start with an assistant meal
 	for _, message := range messages {
+		if message.Role == "user" {
+			mealTurn = campusDietAgentContextualQuestion(message.Content) || mealHistoryQuestion(message.Content)
+		}
+		if !mealTurn || (message.Role == "assistant" && message.MessageType != "diet_recommendation") {
+			latest, allIDs, seen = nil, nil, map[string]bool{}
+			continue
+		}
 		if message.MessageType != "diet_recommendation" || len(message.Meta) == 0 {
 			continue
 		}
