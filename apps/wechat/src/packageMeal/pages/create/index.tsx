@@ -42,13 +42,17 @@ function MealCreate() {
     } catch (e) { void showUnifiedApiError(e) }
     finally { submitLock.current = false; setBusy(false) }
   }
-  return <View className='meal-page'><Text className='meal-page-title'>发起一顿饭</Text><Text className='meal-muted'>约定好时间、地点，等身边的饭搭子加入。</Text>
+  return <View className='meal-page'><Text className='meal-page-title'>发起一顿饭</Text><Text className='meal-muted meal-intro'>约定好时间、地点，等身边的饭搭子加入。</Text>
     <View className='meal-panel'>
-      <Text className='meal-label'>这顿饭怎么约</Text><Input className='meal-field' value={title} maxlength={60} placeholder='如：下课一起去二食堂吃晚饭' onInput={(e) => setTitle(e.detail.value)} />
-      <Text className='meal-label'>时间 · 北京时间</Text><View className='meal-row'><Picker mode='date' value={date} start={chinaDate()} onChange={(e) => setDate(e.detail.value)}><View className='meal-field'>{date} ›</View></Picker><Picker mode='time' value={time} onChange={(e) => setTime(e.detail.value)}><View className='meal-field'>{time} ›</View></Picker></View><Text className='meal-muted'>默认时长90分钟，开始后停止报名。</Text>
-      <Text className='meal-label'>公共餐厅或食堂</Text><Button className='meal-secondary' onClick={chooseVenue}>搜索并选择地点</Button><Input className='meal-field' value={venue.name} maxlength={120} placeholder='餐厅或食堂名称，也可手动填写' onInput={(e) => setVenue({ name: e.detail.value, address: venue.address })} /><Input className='meal-field' value={venue.address} maxlength={240} placeholder='详细地址；手动填写不参与附近筛选' onInput={(e) => setVenue({ name: venue.name, address: e.detail.value })} />
+      <Text className='meal-label'>这顿饭怎么约</Text><Input className='meal-field meal-input' value={title} maxlength={60} placeholder='如：下课一起去二食堂吃晚饭' onInput={(e) => setTitle(e.detail.value)} />
+      <Text className='meal-label'>时间 · 北京时间</Text><View className='meal-row'><Picker className='meal-picker' mode='date' value={date} start={chinaDate()} onChange={(e) => setDate(e.detail.value)}><View className='meal-field meal-picker-field'>{date} ›</View></Picker><Picker className='meal-picker' mode='time' value={time} onChange={(e) => setTime(e.detail.value)}><View className='meal-field meal-picker-field'>{time} ›</View></Picker></View><Text className='meal-muted meal-field-hint'>默认时长90分钟，开始后停止报名。</Text>
+      <Text className='meal-label'>公共餐厅或食堂</Text><Button className='meal-secondary' onClick={chooseVenue}>搜索并选择地点</Button>
+      <View className='meal-field-stack'>
+        <Input className='meal-field meal-input' value={venue.name} maxlength={120} placeholder='餐厅或食堂名称' onInput={(e) => setVenue({ name: e.detail.value, address: venue.address })} />
+        <Input className='meal-field meal-input' value={venue.address} maxlength={240} placeholder='详细地址' onInput={(e) => setVenue({ name: venue.name, address: e.detail.value })} />
+      </View><Text className='meal-muted meal-field-hint'>也可手动填写；手填地点不参与附近筛选。</Text>
       <Text className='meal-label'>总人数（含你）</Text><View className='meal-choice'>{[2, 3, 4].map((n) => <Text className={capacity === n ? 'selected' : ''} key={n} onClick={() => setCapacity(n)}>{n}人</Text>)}</View>
-      <Text className='meal-label'>人均预算上限（元，0表示协商）</Text><Input className='meal-field' type='number' value={budget} maxlength={4} onInput={(e) => setBudget(e.detail.value)} />
+      <Text className='meal-label'>人均预算上限（元）</Text><Input className='meal-field meal-input' type='number' value={budget} maxlength={4} onInput={(e) => setBudget(e.detail.value)} /><Text className='meal-muted meal-field-hint'>填 0 表示与饭搭子协商。</Text>
       <View className='meal-choice'><Text className={payment === 'aa' ? 'selected' : ''} onClick={() => setPayment('aa')}>AA</Text><Text className={payment === 'separate' ? 'selected' : ''} onClick={() => setPayment('separate')}>各自付款</Text></View>
       <Text className='meal-label'>补充说明（可选）</Text><Textarea className='meal-field meal-field-area' value={description} maxlength={500} placeholder='口味、集合位置、校园通行要求等' onInput={(e) => setDescription(e.detail.value)} />
     </View>

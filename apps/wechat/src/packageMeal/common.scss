@@ -6,7 +6,14 @@
 .meal-muted { display: block; font-size: 24px; line-height: 1.7; color: #626f65; }
 .meal-label { display: block; font-size: 26px; margin: 26px 0 12px; }
 .meal-field { display: block; padding: 22px; background: #f2f3eb; border-radius: 18px; font-size: 28px; box-sizing: border-box; width: 100%; }
-.meal-field-area { min-height: 160px; }
+// Native WeChat inputs need their own height; vertical padding clips the text viewport.
+.meal-input { height: 88px; min-height: 88px; padding: 0 22px; line-height: normal; color: #243d31; }
+.meal-field-area { height: 200px; min-height: 200px; padding: 20px 22px; line-height: 1.6; color: #243d31; }
+.meal-field-stack { display: flex; flex-direction: column; gap: 16px; }
+.meal-intro { margin-bottom: 24px; }
+.meal-field-hint { margin-top: 12px; }
+.meal-picker { flex: 1; min-width: 0; }
+.meal-picker-field { display: flex; align-items: center; min-height: 88px; padding: 0 22px; }
 .meal-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .meal-choice { display: flex; gap: 16px; margin: 16px 0; }
 .meal-choice text { padding: 12px 24px; border-radius: 20px; font-size: 26px; background: #edf1e7; }

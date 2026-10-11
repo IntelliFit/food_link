@@ -519,6 +519,7 @@ function ProfilePage() {
           Taro.removeStorageSync('body_metrics_storage')
           Taro.removeStorageSync('food_link_dashboard_targets_v1')
           Taro.removeStorageSync('home_poster_modal_visible')
+          Taro.removeStorageSync('home_nutrition_target_visible')
           Taro.removeStorageSync('showRecordMenuModal')
           Taro.removeStorageSync('home_pet_companion_collapsed_v1')
           Taro.removeStorageSync('home_pet_companion_float_position_v1')

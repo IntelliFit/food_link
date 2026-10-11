@@ -1019,6 +1019,14 @@ function IndexPage() {
   const mealFavoriteInFlightRef = React.useRef(false)
   const [showRecordEditModal, setShowRecordEditModal] = React.useState(false)
   const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || showHomeModuleManager || showPlanPicker || showTargetEditor
+  React.useEffect(() => {
+    // 自定义底栏层级独立于页面；目标弹窗打开时沿用底栏的显隐协议。
+    try {
+      if (showPlanPicker || showTargetEditor) Taro.setStorageSync('home_nutrition_target_visible', '1')
+      else Taro.removeStorageSync('home_nutrition_target_visible')
+    } catch (_) {}
+    return () => { try { Taro.removeStorageSync('home_nutrition_target_visible') } catch (_) {} }
+  }, [showPlanPicker, showTargetEditor])
   const [showRecordPosterModal, setShowRecordPosterModal] = React.useState(false)
   /** 同一餐次多条记录时的选择面板 */
   const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = React.useState(false)
@@ -3139,7 +3147,6 @@ function IndexPage() {
                 <View className='wellness-total-progress'>
                   <View className={`wellness-total-progress__fill${isCalorieOver ? ' is-over' : ''}`} style={{ width: `${wellnessCaloriePct}%` }} />
                 </View>
-                {nutritionTarget?.plan_name && <View className='wellness-plan-label' onClick={openTargetEditor}><Text>{nutritionTarget.plan_name}</Text><Text>{nutritionTarget.source === 'temporary_plan' ? '当天微调' : nutritionTarget.historical_reference ? '历史参考' : '切换方案'} ›</Text></View>}
                 <View className='wellness-macros'>
                   {MACRO_CONFIGS.map(({ key, label, unit, iconClass }) => {
                     const macro = intakeData.macros[key]

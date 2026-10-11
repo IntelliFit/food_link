@@ -55,7 +55,7 @@ function MealRoom() {
       <ScrollView className='meal-room-scroll' scrollY scrollIntoView={events.length ? `event-${events[events.length - 1].id}` : undefined}>
         {events.map((event) => <View id={`event-${event.id}`} key={event.id} className={event.kind === 'text' ? 'meal-message' : 'meal-message-system'}>{event.kind === 'text' && <Text className='meal-muted'>{event.actor.nickname || '饭搭子'} · {mealWhen(event.created_at)}</Text>}<Text className='meal-copy'>{event.content}</Text>{event.kind === 'text' && <Text className='meal-message-report' onClick={() => { void report(event.id) }}>举报</Text>}</View>)}
       </ScrollView>
-      {['active', 'full', 'started'].includes(row.status) ? <><Input className='meal-field' disabled={busy} value={content} maxlength={500} placeholder='聊聊集合位置、口味或到达时间' onInput={(e) => setContent(e.detail.value)} /><Button className='meal-primary' disabled={busy || !content.trim()} onClick={() => { void send() }}>发送留言</Button></> : <Text className='meal-state'>约饭已结束或取消，保留历史留言。</Text>}
+      {['active', 'full', 'started'].includes(row.status) ? <><Input className='meal-field meal-input' disabled={busy} value={content} maxlength={500} placeholder='聊聊集合位置、口味或到达时间' onInput={(e) => setContent(e.detail.value)} /><Button className='meal-primary' disabled={busy || !content.trim()} onClick={() => { void send() }}>发送留言</Button></> : <Text className='meal-state'>约饭已结束或取消，保留历史留言。</Text>}
     </>}
   </View>
 }

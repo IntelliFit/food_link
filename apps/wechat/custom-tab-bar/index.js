@@ -324,11 +324,12 @@ Component({
           const communityCommentOpen = readStorageFlag('community_comment_bar_visible')
           const communityFilterDrawerOpen = readStorageFlag('community_filter_drawer_visible')
           const homePosterModalOpen = readStorageFlag('home_poster_modal_visible')
+          const homeNutritionTargetOpen = readStorageFlag('home_nutrition_target_visible')
           const statsRiskDetailOpen = readStorageFlag('stats_risk_detail_visible')
 
           const shouldHide =
             (currentPath === '/pages/community/index' && (communityCommentOpen || communityFilterDrawerOpen)) ||
-            (currentPath === '/pages/index/index' && homePosterModalOpen) ||
+            (currentPath === '/pages/index/index' && (homePosterModalOpen || homeNutritionTargetOpen)) ||
             (currentPath === '/pages/stats/index' && statsRiskDetailOpen)
 
           if (shouldHide !== this.data.hidden) {
