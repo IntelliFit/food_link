@@ -158,6 +158,20 @@
   font-weight: 600;
 }
 
+.recipe-edit-page .action-bar button {
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
+}
+
+.recipe-edit-page .action-bar button::after {
+  border: 0;
+}
+
+.recipe-edit-page .action-bar button[disabled] {
+  opacity: 0.6;
+}
+
 .loading-mask {
   position: fixed;
   inset: 0;
@@ -188,6 +202,7 @@
 }
 
 .empty-title {
+  display: block;
   font-size: 32rpx;
   font-weight: 600;
   color: #111827;
@@ -195,6 +210,7 @@
 }
 
 .empty-desc {
+  display: block;
   font-size: 26rpx;
   color: #6b7280;
   margin-top: 12rpx;

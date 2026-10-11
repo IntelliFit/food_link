@@ -21,6 +21,8 @@ type mockRecipeService struct {
 	createInput  *service.CreateInput
 	updateInput  *service.UpdateInput
 	updateRecipe *domain.Recipe
+	getRecipe    *domain.Recipe
+	getCalls     int
 }
 
 func (m *mockRecipeService) Create(ctx context.Context, userID string, input service.CreateInput) (string, error) {
@@ -41,7 +43,8 @@ func (m *mockRecipeService) Count(ctx context.Context, userID string, isFavorite
 }
 
 func (m *mockRecipeService) Get(ctx context.Context, userID, recipeID string) (*domain.Recipe, error) {
-	return nil, nil
+	m.getCalls++
+	return m.getRecipe, nil
 }
 
 func (m *mockRecipeService) GetForViewer(ctx context.Context, viewerUserID, recipeID string) (*domain.Recipe, error) {
@@ -73,7 +76,30 @@ func setupRecipeRouter(h *RecipeHandler) *gin.Engine {
 	})
 	r.POST("/api/recipes", h.Create)
 	r.PUT("/api/recipes/:recipe_id", h.Update)
+	r.GET("/api/recipes/:recipe_id", h.Get)
 	return r
+}
+
+func TestGetRecipeRejectsMalformedIDBeforeService(t *testing.T) {
+	mockSvc := &mockRecipeService{}
+	r := setupRecipeRouter(NewRecipeHandler(mockSvc))
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/recipes/not-a-uuid", nil)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Zero(t, mockSvc.getCalls)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+}
+
+func TestGetRecipeKeepsValidViewerLookup(t *testing.T) {
+	id := "00000000-0000-4000-8000-000000000000"
+	mockSvc := &mockRecipeService{getRecipe: &domain.Recipe{ID: id, UserID: "test-user-id", RecipeName: "午餐"}}
+	r := setupRecipeRouter(NewRecipeHandler(mockSvc))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/recipes/"+id, nil))
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 1, mockSvc.getCalls)
 }
 
 func packagedRecipeRequestBody() map[string]any {

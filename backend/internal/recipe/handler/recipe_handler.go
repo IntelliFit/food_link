@@ -3,15 +3,18 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"strconv"
 
 	authmw "food_link/backend/internal/auth"
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/recipe/domain"
 	"food_link/backend/internal/recipe/service"
 	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type RecipeService interface {
@@ -107,7 +110,12 @@ func (h *RecipeHandler) Count(c *gin.Context) {
 }
 
 func (h *RecipeHandler) Get(c *gin.Context) {
-	recipe, err := h.svc.GetForViewer(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("recipe_id"))
+	recipeID := c.Param("recipe_id")
+	if _, err := uuid.Parse(recipeID); err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "食谱链接无效，请从收藏列表重新打开", HTTPStatus: http.StatusBadRequest})
+		return
+	}
+	recipe, err := h.svc.GetForViewer(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), recipeID)
 	if err != nil {
 		response.Error(c, err)
 		return

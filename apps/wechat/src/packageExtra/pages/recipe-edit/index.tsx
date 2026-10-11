@@ -1,8 +1,8 @@
 import { View, Text, Input, Textarea, Button } from '@tarojs/components'
-import { useState, useEffect } from 'react'
-import Taro from '@tarojs/taro'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import Taro, { useRouter } from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
-import { showUnifiedApiError } from '../../../utils/api'
+import { getUserRecipe, updateUserRecipe, deleteUserRecipe, showUnifiedApiError, type UserRecipe } from '../../../utils/api'
 import { formatMacroNutrient } from '../../../utils/number-format'
 
 import './index.scss'
@@ -17,100 +17,87 @@ const MEAL_TYPES = [
 ]
 
 function RecipeEditPage() {
-  const [loading, setLoading] = useState(false)
-  const [recipeId, setRecipeId] = useState<string | null>(null)
+  const recipeId = String(useRouter().params?.id || '').trim()
+  const [loading, setLoading] = useState(Boolean(recipeId))
+  const [recipe, setRecipe] = useState<UserRecipe | null>(null)
+  const [busy, setBusy] = useState(false)
+  const operationPending = useRef(false)
+  const returnTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [mealType, setMealType] = useState('lunch')
-  const [tags, setTags] = useState<string[]>([])
-  
-  // 营养摘要（从传入数据读取）
-  const [totalCalories, setTotalCalories] = useState(0)
-  const [totalProtein, setTotalProtein] = useState(0)
-  const [totalCarbs, setTotalCarbs] = useState(0)
-  const [totalFat, setTotalFat] = useState(0)
 
-  useEffect(() => {
-    // 从路由参数或缓存获取数据
-    const params = Taro.getCurrentInstance().router?.params
-    const id = params?.id
-    
-    if (id) {
-      setRecipeId(id)
-      // 这里可以调用 API 加载食谱详情
-      loadRecipeDetail(id)
-    } else {
-      // 新建食谱，提示用户从识别结果页保存
-      Taro.showToast({
-        title: '请从识别结果页保存',
-        icon: 'none',
-        duration: 2000
-      })
-      setTimeout(() => {
-        Taro.navigateBack()
-      }, 2000)
-    }
-  }, [])
-
-  const loadRecipeDetail = async (id: string) => {
+  const loadRecipeDetail = useCallback(async () => {
+    if (!recipeId) return
     setLoading(true)
     try {
-      // TODO: 调用 API 加载食谱详情
-      // const detail = await getRecipeDetail(id)
-      // setName(detail.name)
-      // setDescription(detail.description)
-      // ...
-      console.log('Load recipe:', id)
+      const detail = await getUserRecipe(recipeId)
+      setRecipe(detail)
+      setName(detail.recipe_name || '')
+      setDescription(detail.description || '')
+      setMealType(detail.meal_type || 'lunch')
     } catch (e) {
       await showUnifiedApiError(e, '加载失败')
     } finally {
       setLoading(false)
     }
+  }, [recipeId])
+
+  useEffect(() => {
+    void loadRecipeDetail()
+    return () => {
+      if (returnTimer.current) clearTimeout(returnTimer.current)
+    }
+  }, [loadRecipeDetail])
+
+  const returnAfterSuccess = (title: string) => {
+    Taro.showToast({ title, icon: 'success' })
+    returnTimer.current = setTimeout(() => {
+      Taro.navigateBack({
+        fail: () => { operationPending.current = false; setBusy(false) }
+      })
+    }, 1500)
   }
 
   const handleSave = async () => {
+    if (!recipe || operationPending.current) return
     if (!name.trim()) {
       Taro.showToast({ title: '请输入食谱名称', icon: 'none' })
       return
     }
 
-    setLoading(true)
+    operationPending.current = true
+    setBusy(true)
     try {
-      // TODO: 调用 API 保存食谱
-      // await saveRecipe({ id: recipeId, name, description, mealType, tags })
-      Taro.showToast({ title: '保存成功', icon: 'success' })
-      setTimeout(() => {
-        Taro.navigateBack()
-      }, 1500)
+      await updateUserRecipe(recipeId, { recipe_name: name.trim(), description: description.trim(), meal_type: mealType })
+      returnAfterSuccess('保存成功')
     } catch (e) {
+      operationPending.current = false
+      setBusy(false)
       await showUnifiedApiError(e, '保存失败')
-    } finally {
-      setLoading(false)
     }
   }
 
   const handleDelete = async () => {
-    if (!recipeId) return
-
-    const res = await Taro.showModal({
-      title: '确认删除',
-      content: '删除后无法恢复，确定要删除这个食谱吗？'
-    })
-
-    if (!res.confirm) return
-
-    setLoading(true)
+    if (!recipe || operationPending.current) return
+    operationPending.current = true
+    setBusy(true)
     try {
-      // TODO: 调用 API 删除食谱
-      // await deleteRecipe(recipeId)
-      Taro.showToast({ title: '删除成功', icon: 'success' })
-      setTimeout(() => {
-        Taro.navigateBack()
-      }, 1500)
+      const res = await Taro.showModal({
+        title: '确认删除',
+        content: '删除后无法恢复，确定要删除这个食谱吗？'
+      })
+      if (!res.confirm) {
+        operationPending.current = false
+        setBusy(false)
+        return
+      }
+      await deleteUserRecipe(recipeId)
+      returnAfterSuccess('删除成功')
     } catch (e) {
+      operationPending.current = false
+      setBusy(false)
       await showUnifiedApiError(e, '删除失败')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -124,13 +111,14 @@ function RecipeEditPage() {
     )
   }
 
-  if (!recipeId) {
+  if (!recipe) {
     return (
       <View className='recipe-edit-page'>
         <View className='empty-card'>
           <Text className='empty-icon'>📝</Text>
           <Text className='empty-title'>无法编辑食谱</Text>
-          <Text className='empty-desc'>请从识别结果页保存食谱后再编辑</Text>
+          <Text className='empty-desc'>{recipeId ? '食谱详情未读取，请重试' : '请从识别结果页保存食谱后再编辑'}</Text>
+          {recipeId ? <Button onClick={loadRecipeDetail}>重试</Button> : null}
         </View>
       </View>
     )
@@ -147,6 +135,7 @@ function RecipeEditPage() {
             className='input'
             placeholder='请输入食谱名称'
             value={name}
+            disabled={busy}
             onInput={(e) => setName(e.detail.value)}
           />
         </View>
@@ -157,6 +146,7 @@ function RecipeEditPage() {
             className='textarea'
             placeholder='请输入食谱描述（可选）'
             value={description}
+            disabled={busy}
             onInput={(e) => setDescription(e.detail.value)}
           />
         </View>
@@ -168,7 +158,7 @@ function RecipeEditPage() {
               <View
                 key={meal.id}
                 className={`option ${mealType === meal.id ? 'active' : ''}`}
-                onClick={() => setMealType(meal.id)}
+                onClick={() => !busy && setMealType(meal.id)}
               >
                 <Text className='option-text'>{meal.name}</Text>
               </View>
@@ -181,19 +171,19 @@ function RecipeEditPage() {
         <Text className='section-title'>营养摘要</Text>
         <View className='summary'>
           <View className='summary-item'>
-            <Text className='summary-value'>{formatMacroNutrient(totalCalories)}</Text>
+            <Text className='summary-value'>{formatMacroNutrient(recipe.total_calories)}</Text>
             <Text className='summary-label'>热量 (kcal)</Text>
           </View>
           <View className='summary-item'>
-            <Text className='summary-value'>{formatMacroNutrient(totalProtein)}</Text>
+            <Text className='summary-value'>{formatMacroNutrient(recipe.total_protein)}</Text>
             <Text className='summary-label'>蛋白质 (g)</Text>
           </View>
           <View className='summary-item'>
-            <Text className='summary-value'>{formatMacroNutrient(totalCarbs)}</Text>
+            <Text className='summary-value'>{formatMacroNutrient(recipe.total_carbs)}</Text>
             <Text className='summary-label'>碳水 (g)</Text>
           </View>
           <View className='summary-item'>
-            <Text className='summary-value'>{formatMacroNutrient(totalFat)}</Text>
+            <Text className='summary-value'>{formatMacroNutrient(recipe.total_fat)}</Text>
             <Text className='summary-label'>脂肪 (g)</Text>
           </View>
         </View>
@@ -201,13 +191,13 @@ function RecipeEditPage() {
 
       <View className='action-bar'>
         {recipeId && (
-          <View className='danger-btn' onClick={handleDelete}>
+          <Button className='danger-btn' disabled={busy} onClick={handleDelete}>
             <Text className='danger-btn-text'>删除食谱</Text>
-          </View>
+          </Button>
         )}
-        <View className='primary-btn' onClick={handleSave}>
+        <Button className='primary-btn' disabled={busy} loading={busy} onClick={handleSave}>
           <Text className='primary-btn-text'>保存</Text>
-        </View>
+        </Button>
       </View>
     </View>
   )

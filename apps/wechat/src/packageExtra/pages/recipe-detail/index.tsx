@@ -1,6 +1,6 @@
 import { View, Text, Image, ScrollView, Button } from '@tarojs/components'
 import { useState, useEffect } from 'react'
-import Taro, { useRouter } from '@tarojs/taro'
+import Taro, { useRouter, useDidShow } from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
 import {
   getUserRecipe,
@@ -47,8 +47,11 @@ function RecipeDetailPage() {
       setTimeout(() => Taro.navigateBack(), 1500)
       return
     }
-    loadRecipe()
   }, [recipeId])
+
+  useDidShow(() => {
+    if (recipeId) void loadRecipe()
+  })
 
   const loadRecipe = async () => {
     setLoading(true)
