@@ -2676,7 +2676,7 @@ function IndexPage() {
       }
     }
     if (analyzeReminder.kind === 'auto_recorded') {
-      return { text: '这份餐食已经帮你记好啦，点我查看', tone: 'recorded' as const }
+      return { text: '这份餐食已经帮你记好啦，点我分享打卡', tone: 'recorded' as const }
     }
     if (analyzeReminder.kind === 'recognizing') {
       return { text: '我还在认真识别，完成后马上告诉你', tone: 'recognizing' as const }
@@ -2689,7 +2689,13 @@ function IndexPage() {
       openPetChat()
       return
     }
-    if (analyzeReminder.kind === 'waiting_record' || analyzeReminder.kind === 'auto_recorded') {
+    if (analyzeReminder.kind === 'auto_recorded') {
+      void openAnalyzeTaskFromReminder(analyzeReminder.taskId).finally(() => {
+        setTimeout(() => void refreshAnalyzeReminder(), 600)
+      })
+      return
+    }
+    if (analyzeReminder.kind === 'waiting_record') {
       void acknowledgeAnalyzeTaskReminders().catch(() => undefined)
       Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
       return

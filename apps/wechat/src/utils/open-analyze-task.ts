@@ -7,6 +7,25 @@ import { getTaskRecordTargetDate } from './record-date'
 
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 
+/** 已保存的餐食直接使用记录生成打卡图，不再经过确认和保存。 */
+export async function openRecordedMealPoster(recordId: string, replace = false): Promise<void> {
+  const id = String(recordId || '').trim()
+  if (!id) return
+  const url = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(id)}&autoPoster=1&from_auto_record=1`
+  try {
+    if (replace) await Taro.redirectTo({ url })
+    else await Taro.navigateTo({ url })
+  } catch (error) {
+    console.warn('打开已记录餐食打卡图失败:', error)
+    Taro.showToast({ title: '餐食已记录，可从饮食记录中分享', icon: 'none' })
+    try {
+      await Taro.switchTab({ url: '/pages/index/index' })
+    } catch (navigationError) {
+      console.warn('返回饮食记录失败:', navigationError)
+    }
+  }
+}
+
 const normalizeMealType = (value: unknown): MealType => {
   const normalized = String(value || '').trim()
   if (normalized === 'snack') return 'afternoon_snack'
@@ -98,6 +117,11 @@ export async function openAnalyzeTaskFromReminder(taskId: string): Promise<void>
       Taro.navigateTo({
         url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${encodeURIComponent(task.id)}&task_type=${encodeURIComponent(sourceType)}&execution_mode=${encodeURIComponent(mode)}`,
       })
+      return
+    }
+    if (task.status === 'done' && task.is_recorded && task.record_id) {
+      await openRecordedMealPoster(task.record_id)
+      void markAnalyzeHistorySeen().catch(() => undefined)
       return
     }
     if (task.status !== 'done' || !task.result) {
