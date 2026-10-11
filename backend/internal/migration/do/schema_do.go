@@ -2140,8 +2140,31 @@ type SleepRecordDO struct {
 
 func (SleepRecordDO) TableName() string { return "user_sleep_records" }
 
+type ProductUpdateDO struct {
+	ID          string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Title       string     `gorm:"column:title;type:varchar(32);not null"`
+	Content     string     `gorm:"column:content;type:varchar(1200);not null"`
+	MinVersion  string     `gorm:"column:min_version;type:varchar(24);not null"`
+	Status      string     `gorm:"column:status;type:text;not null;default:'draft';index:idx_product_updates_status;check:product_update_status_valid,status IN ('draft','published','withdrawn')"`
+	CreatedBy   string     `gorm:"column:created_by;type:text;not null"`
+	CreatedAt   time.Time  `gorm:"column:created_at;type:timestamptz;not null;autoCreateTime"`
+	PublishedAt *time.Time `gorm:"column:published_at;type:timestamptz"`
+}
+
+func (ProductUpdateDO) TableName() string { return "product_updates" }
+
+type ProductUpdateAcknowledgementDO struct {
+	UpdateID       string    `gorm:"column:update_id;type:uuid;primaryKey"`
+	UserID         string    `gorm:"column:user_id;type:uuid;primaryKey;index:idx_product_update_ack_user"`
+	AcknowledgedAt time.Time `gorm:"column:acknowledged_at;type:timestamptz;not null;autoCreateTime"`
+}
+
+func (ProductUpdateAcknowledgementDO) TableName() string { return "product_update_acknowledgements" }
+
 func AllModels() []any {
 	return []any{
+		&ProductUpdateDO{},
+		&ProductUpdateAcknowledgementDO{},
 		&PushPreferencesDO{},
 		&PushDeviceDO{},
 		&PushDeliveryDO{},

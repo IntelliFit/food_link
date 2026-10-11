@@ -27,7 +27,7 @@ const ACTION_ITEMS = [
   },
   {
     id: 'poster',
-    label: '生成分享海报',
+    label: '分享打卡',
     iconClass: 'icon-share',
     color: '#3b82f6',
     iconModifier: 'action-sheet-icon--share',

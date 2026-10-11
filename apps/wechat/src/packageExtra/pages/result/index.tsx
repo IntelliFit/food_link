@@ -1875,7 +1875,7 @@ function ResultPage() {
     })
   }
 
-  /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
+  /** 保存记录：saveOnly=true 仅保存，false 保存后预览打卡图 */
   const openSnackContribution = (item: NutritionItem) => {
     const unit = nutrientPer100FromItem(item)
     const sourceTaskId = String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim()
@@ -2155,27 +2155,31 @@ function ResultPage() {
     }
   }
 
-  /** 已保存后跳转记录详情（不重复写入、不重复发动态） */
-  const handleViewCommittedResult = useCallback(() => {
+  /** 已保存的结果直接打开打卡图，复用真实记录，不重复写入。 */
+  const handleShareCommittedResult = useCallback(async () => {
+    if (saving) return
     try {
-      // 优先使用 analyze-history 列表传入的 record_id，其次使用当前会话保存后设置的 id
-      const rid = Taro.getStorageSync('analyzeCommittedRecordId') || committedRecordId
+      const rid = committedRecordId && committedRecordId !== 'history'
+        ? committedRecordId
+        : Taro.getStorageSync('analyzeCommittedRecordId')
       if (!rid || rid === 'history') {
         Taro.showToast({ title: '未找到已保存记录', icon: 'none' })
         return
       }
-      Taro.navigateTo({
-        url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(String(rid))}`
-      })
-    } catch {
-      Taro.showToast({ title: '无法打开记录', icon: 'none' })
+      setSaving(true)
+      const { record } = await getFoodRecordById(String(rid))
+      setSavedShareRecord(record)
+    } catch (error) {
+      await showUnifiedApiError(error, '打开打卡图失败')
+    } finally {
+      setSaving(false)
     }
-  }, [committedRecordId])
+  }, [committedRecordId, saving])
 
   /** 点击保存按钮：分析入口已选过餐次，直接按既有餐次保存 */
   const handleConfirmAndShare = () => {
     if (isAnalyzeSessionCommitted() || committedRecordId) {
-      handleViewCommittedResult()
+      void handleShareCommittedResult()
       return
     }
     saveRecord(false, getSavedSelectableMealType(defaultMealType))
@@ -3204,7 +3208,7 @@ function ResultPage() {
               ) : (
                 <Text className='btn-text'>
                   {isAnalyzeSessionCommitted() || committedRecordId
-                    ? '查看结果'
+                    ? '分享打卡'
                     : pendingPackagedChoiceCount > 0
                       ? '选规格'
                     : '记录'}

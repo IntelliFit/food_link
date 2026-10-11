@@ -3,6 +3,7 @@ import React, { useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getSharedFoodRecord,
+  getFoodRecordById,
   getAccessToken,
   getFriendInviteProfile,
   acceptFriendInvite,
@@ -222,8 +223,10 @@ function RecordDetailPage() {
       if (recordId) {
         try {
           setLoading(true)
-          // 统一使用公开分享接口加载记录（无需登录，任何人可访问）
-          const res = await getSharedFoodRecord(recordId)
+          // 自动记录后的本人入口使用鉴权接口，关闭公开记录也能生成自己的打卡图。
+          const res = router.params?.from_auto_record === '1'
+            ? await getFoodRecordById(recordId)
+            : await getSharedFoodRecord(recordId)
           const fetchedRecord = res.record
           setRecord(fetchedRecord)
           const localProfile = await getCurrentPosterUserProfile(fetchedRecord.user_id)
@@ -274,7 +277,7 @@ function RecordDetailPage() {
     }
 
     loadRecord()
-  }, [router.params?.id])
+  }, [router.params?.id, router.params?.from_auto_record])
 
   // 通过 localStorage 控制记录详情页引导：仅保存流程首次进入、未看过引导且公开饮食记录时展示
   const shouldOfferRecordDetailGuide = useCallback(() => {
@@ -332,7 +335,9 @@ function RecordDetailPage() {
   const handleEditSuccess = useCallback(async () => {
     if (!record?.id) return
     try {
-      const res = await getSharedFoodRecord(record.id)
+      const res = router.params?.from_auto_record === '1'
+        ? await getFoodRecordById(record.id)
+        : await getSharedFoodRecord(record.id)
       setRecord(res.record)
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
@@ -343,7 +348,7 @@ function RecordDetailPage() {
     } catch (e: any) {
       console.warn('[record-detail] 编辑后刷新记录失败', e)
     }
-  }, [record?.id])
+  }, [record?.id, router.params?.from_auto_record])
 
   if (loading || !record) {
     return (
@@ -690,7 +695,11 @@ function RecordDetailPage() {
         visible={showPoster}
         record={record}
         allowReward={isOwner}
-        onClose={() => setShowPoster(false)}
+        afterSave={router.params?.from_auto_record === '1'}
+        onClose={() => {
+          setShowPoster(false)
+          if (router.params?.from_auto_record === '1') Taro.switchTab({ url: '/pages/index/index' })
+        }}
         onShareContextChange={setPosterShare}
       />
 

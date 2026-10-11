@@ -12,6 +12,7 @@ import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
 import { PrivacyAuthorizationModal } from './components/PrivacyAuthorizationModal'
 import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
 import { parseMarketingCodeFromLaunchOptions } from './utils/marketing-qr'
+import { ProductUpdatePrompt, PRODUCT_UPDATE_AUTH_EVENT } from './utils/product-updates'
 
 import './app.scss'
 
@@ -155,6 +156,10 @@ function App({ children }: PropsWithChildren<any>) {
   })
 
   useEffect(() => {
+    const productUpdates = new ProductUpdatePrompt()
+    const checkProductUpdates = () => productUpdates.check()
+    Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, checkProductUpdates)
+    productUpdates.check()
     const getCurrentRoute = () => {
       try {
         const pages = Taro.getCurrentPages()
@@ -164,6 +169,7 @@ function App({ children }: PropsWithChildren<any>) {
       }
     }
     const onShow = (options: any) => {
+      productUpdates.show()
       console.log('[app] onAppShow, options:', options)
       if (!handleMarketingScene(options)) {
         handleInviteScene(options)
@@ -171,6 +177,7 @@ function App({ children }: PropsWithChildren<any>) {
       }
     }
     const onHide = () => {
+      productUpdates.hide()
       flushRecentRequestTraces()
       flushRecentConsoleLogs()
     }
@@ -200,6 +207,8 @@ function App({ children }: PropsWithChildren<any>) {
     taroAppEvents.onUnhandledRejection?.(onUnhandledRejection)
     taroAppEvents.onMemoryWarning?.(onMemoryWarning)
     return () => {
+      productUpdates.dispose()
+      Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, checkProductUpdates)
       Taro.offAppShow(onShow)
       Taro.offAppHide(onHide)
       taroAppEvents.offError?.(onGlobalError)

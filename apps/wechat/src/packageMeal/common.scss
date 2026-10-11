@@ -32,3 +32,11 @@
 .meal-message-system { padding: 12px; font-size: 24px; text-align: center; color: #626f65; }
 .meal-message-report { font-size: 22px; color: #626f65; text-align: right; }
 .meal-room-scroll { height: calc(100vh - 330px); min-height: 400px; }
+.meal-invite-card { border-top: 8px solid #21543e; }
+.meal-invite-eyebrow { display: block; margin-bottom: 24px; color: #567150; font-size: 24px; font-weight: 600; }
+.meal-invite-actions { margin-top: 24px; padding-top: 24px; border-top: 2px dashed #d8e0d1; }
+.meal-invite-places { display: block; color: #21543e; font-size: 30px; font-weight: 600; }
+.meal-invite-share { display: flex; align-items: center; justify-content: center; min-height: 88px; line-height: 1.5; padding: 18px 20px; }
+.meal-invite-copy { margin: 0 0 18px; padding: 12px; background: transparent; color: #21543e; font-size: 26px; line-height: 1.5; }
+.meal-invite-copy::after { border: 0; }
+.meal-invite-canvas { position: fixed; left: -2000px; top: 0; width: 500px; height: 400px; pointer-events: none; }

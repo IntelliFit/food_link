@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: '约饭详情', backgroundColor: '#f6f5ed' })
+export default definePageConfig({ navigationBarTitleText: '约饭详情', backgroundColor: '#f6f5ed', enableShareAppMessage: true })

@@ -1,7 +1,7 @@
 import { View, Text, Image } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
 import {
   getAnalyzeTask,
   setAnalyzeTaskAutoRecord,
@@ -18,6 +18,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTaskRecordTargetDate } from '../../../utils/record-date'
 import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
+import { openRecordedMealPoster } from '../../../utils/open-analyze-task'
 import {
   markAnalyzeTaskRecognizing,
   readAutoRecordPreference,
@@ -1332,6 +1333,27 @@ function AnalyzeLoadingPage() {
   const routeSignatureRef = useRef<string>('')
   const autoRecordEnabledRef = useRef(autoRecordEnabled)
   const autoRecordAppliedTaskRef = useRef('')
+  const pageVisibleRef = useRef(true)
+  const autoRecordShareTaskRef = useRef('')
+  const pendingAutoRecordPosterRef = useRef<{ taskId: string; recordId: string } | null>(null)
+
+  const offerAutoRecordPoster = useCallback((recordId: string) => {
+    if (!recordId || autoRecordShareTaskRef.current === taskId) return
+    if (!pageVisibleRef.current) {
+      pendingAutoRecordPosterRef.current = { taskId, recordId }
+      return
+    }
+    pendingAutoRecordPosterRef.current = null
+    autoRecordShareTaskRef.current = taskId
+    setStatus('done')
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
+    if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current)
+    if (tipTimerRef.current) clearInterval(tipTimerRef.current)
+    pollTimerRef.current = null
+    elapsedTimerRef.current = null
+    tipTimerRef.current = null
+    void openRecordedMealPoster(recordId, true)
+  }, [taskId])
 
   useEffect(() => {
     autoRecordEnabledRef.current = autoRecordEnabled
@@ -1399,6 +1421,7 @@ function AnalyzeLoadingPage() {
     }
     if (routeSignatureRef.current !== nextSignature) {
       routeSignatureRef.current = nextSignature
+      pendingAutoRecordPosterRef.current = null
       console.info('[analyze-loading] sync route task', {
         task_id: id,
         task_type: type,
@@ -1442,11 +1465,18 @@ function AnalyzeLoadingPage() {
   }, [])
 
   useDidShow(() => {
+    pageVisibleRef.current = true
     syncRouteTaskFromParams()
     syncImagePathFromStorage()
     syncTextRecordInputFromStorage()
+    const pendingPoster = pendingAutoRecordPosterRef.current
+    if (pendingPoster?.taskId === taskId) offerAutoRecordPoster(pendingPoster.recordId)
     // 切后台再回前台：补一次任务拉取（与 setInterval 互补）
     void pollFnRef.current?.()
+  })
+
+  useDidHide(() => {
+    pageVisibleRef.current = false
   })
 
   useEffect(() => {
@@ -1511,6 +1541,7 @@ function AnalyzeLoadingPage() {
       let settled = false
       try {
         const task: AnalysisTask = await getAnalyzeTask(taskId)
+        if (cancelled) return
         pollFailureCountRef.current = 0
         setLastTaskStatusText(task.status === 'processing' ? '处理中' : task.status === 'pending' ? '排队中' : '收尾中')
         const taskMode = pickExecutionModeFromTask(task)
@@ -1576,6 +1607,10 @@ function AnalyzeLoadingPage() {
           if (autoRecordEnabledRef.current && !isCorrectionMode) {
             try {
               const autoRecordResult = await setAnalyzeTaskAutoRecord(taskId, true, getAutoRecordMealType() as MealType)
+              if (cancelled) {
+                void syncAnalyzeTaskReminderState().catch(() => undefined)
+                return
+              }
               if (autoRecordResult.status === 'recorded' || autoRecordResult.record_id) {
                 settled = true
                 setStatus('done')
@@ -1585,7 +1620,8 @@ function AnalyzeLoadingPage() {
                 elapsedTimerRef.current = null
                 void syncAnalyzeTaskReminderState().catch(() => undefined)
                 Taro.showToast({ title: `已自动记入${AUTO_RECORD_MEAL_LABELS[getAutoRecordMealType()]}`, icon: 'success' })
-                setTimeout(() => Taro.switchTab({ url: '/pages/index/index' }), 500)
+                if (autoRecordResult.record_id) offerAutoRecordPoster(autoRecordResult.record_id)
+                else if (pageVisibleRef.current) Taro.switchTab({ url: '/pages/index/index' })
                 return
               }
             } catch (error) {
@@ -1759,6 +1795,7 @@ function AnalyzeLoadingPage() {
         icon: next && result.status === 'recorded' ? 'success' : 'none',
       })
       void syncAnalyzeTaskReminderState().catch(() => undefined)
+      if (next && result.record_id) offerAutoRecordPoster(result.record_id)
     } catch (error) {
       await showUnifiedApiError(error, next ? '开启自动记录失败' : '关闭自动记录失败')
     } finally {

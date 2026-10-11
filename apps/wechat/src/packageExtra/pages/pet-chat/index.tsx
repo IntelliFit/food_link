@@ -93,18 +93,33 @@ function questionRange(question: string, fallback: RangeMode): RangeMode {
 
 export function isDietRecommendationQuestion(question: string): boolean {
   const normalized = question.replace(/\s+/g, '')
-  return /吃什么|推荐(?:一道|一些|几个)?(?:菜|餐|食物)|附近.*(?:吃|餐|饭|菜)|外卖|(?:北大|清华|大学|学院|学校).*学生|学生.*(?:北大|清华|大学|学院|学校)/.test(normalized)
+  return /吃(?:点)?什么|吃啥|点什么|想吃|想点|(?:推荐|找|选|搭配|安排|换)[^，。？！!?；;]{0,20}(?:餐|饭|菜|食物|吃的|外卖)|(?:早|午|晚)(?:餐|饭)[^，。？！!?；;]{0,20}(?:推荐|选|搭配)|(?:附近|周边)[^，。？！!?；;]{0,20}(?:吃|餐|饭|菜|食堂|外卖)|(?:食堂|外卖)[^，。？！!?；;]{0,12}(?:吃|推荐|选|有什么|有哪些)|(?:这顿|这餐|这一餐)[^，。？！!?；;]{0,15}(?:吃什么|吃啥|选|推荐|搭配)/.test(normalized)
 }
 
 export type DietRecommendationIntent = 'initial' | 'refine' | 'more' | 'location' | 'compare' | 'context'
 
+function leavesMealConversation(question: string): boolean {
+  return /(?:不一定|不要|不用|不需要|不想|别|停止|先不)(?:再|要|是|只|仅|给我|帮我|总是|一直|都|每次){0,6}(?:推荐|建议|聊|谈|选|考虑)?(?:饮食|餐食|食物|吃的|吃什么|饭菜|菜)(?:了|给我|这些|建议|推荐|方面)?(?:$|[，。？！!?；;])|换个话题|(?:其他|别的)(?:的|方面的|通用|生活|健康){0,3}建议/.test(question)
+    || (/洗澡|洗浴|泡澡|洗脸|冷热交替|睡觉|拉伸|热身|心情|情绪/.test(question) && !isDietRecommendationQuestion(question))
+    || (/训练计划|运动计划|训练怎么|训练建议|怎么练|跑步计划|睡眠|作息|喝水|补剂|体检|体重趋势/.test(question) && !/吃|菜|餐|食堂|饮食|热量|蛋白|碳水|脂肪/.test(question))
+}
+
+function isMealFollowUpQuestion(question: string): boolean {
+  // Keep the same positive-evidence boundary as shouldUseCampusDietAgent.
+  return isDietRecommendationQuestion(question)
+    || /这道菜|这份(?:饭|餐)|这些菜|这(?:几|[一二两三四五六七八九十0-9０-９]+)个(?:菜|餐|选项)|你推荐(?:的(?:菜|餐|饭|饮食)|这些)|这个(?:套餐|组合)|这(?:餐|顿)|那(?:餐|顿)|(?:其他|别的|更多)(?:的)?选择|刚才那几个[^，。？！!?；;]{0,10}(?:哪个|更适合|减脂)|(?:这些|它们)[^，。？！!?；;]{0,12}(?:太贵|价格|热量|蛋白|碳水|脂肪|营养)/.test(question)
+    || /^(?:那|再|请|麻烦|帮我)?(?:换(?:一份|一餐|一道|一个|一批|几个|几份|几道|两份|三种)(?:选择|推荐)?|再来(?:一批|一份|几个|一组)|还有(?:什么|别的|其他)?(?:选择|推荐)?(?:吗)?|更多(?:选择|推荐)?|其他的?|别的)(?:吧|吗|呢|呀|啊)?[?？。!！]*$/.test(question)
+    || /^(?:这些|这几个|这几道|这份|它|各自|分别)?(?:在哪(?:里|个食堂)?|哪里|位置(?:在哪)?|几楼|楼层|窗口|档口|怎么去|多少钱|价格(?:是多少)?|热量(?:是多少)?|多少卡|蛋白(?:质)?(?:多少)?|碳水(?:多少)?|脂肪(?:多少)?|营养(?:怎么样)?|份量|分量|来源|核对来源|为什么(?:这么推荐|推荐这些|适合我)?)(?:呢|吗|啊)?[?？。!！]*$/.test(question)
+    || /^(?:我|那|今天|现在|这次)?(?:刚(?:刚)?(?:训练|健身|跑步)(?:结束|完|了)|减脂|减肥|增肌|高蛋白|低脂|清淡|少油|便宜|实惠)(?:一点|一些|点|的|呢|吧|啊)?[?？。!！]*$|^(?:那|我|我的|这餐|今天)?预算[^，。？！!?；;]{1,18}[?？。!！]*$|^[^，。？！!?；;]{0,8}\d+(?:\.\d+)?(?:元|块|千卡|大卡|卡路里|kcal|卡)(?:以内|以下|左右|最好)?[?？。!！]*$/.test(question)
+    || /(?:不吃|不要|不想吃|避开|换成|改成)(?:鸡|牛|猪|羊|鸭|鱼|虾|蟹|蛋|奶|豆|花生|海鲜|香菜|葱|蒜|面|米饭|辣|油|糖|盐|汤|粥|饼|包子)|^(?:我|本人)?(?:现在|目前|今天|这次)?在[^，。？！!?；;]{1,20}(?:大学|学院|学校|食堂|餐厅|社区|大厦|园|北京|上海|深圳)[?？。!！]*$/.test(question)
+}
+
 export function classifyDietRecommendationIntent(question: string, hasActiveRecommendation: boolean): DietRecommendationIntent | null {
   const normalized = question.replace(/\s+/g, '')
   if (/自己做|自炊|家里做|食谱|菜谱/.test(normalized) && !/历史|吃过|记录/.test(normalized)) return null
+  if (leavesMealConversation(normalized)) return null
   if (hasActiveRecommendation) {
-    const explicitTopicSwitch = /训练计划|运动计划|训练怎么|训练建议|怎么练|跑步计划|睡眠|作息|喝水|补剂|体检|体重趋势/.test(normalized)
-      && !/吃|菜|餐|食堂|饮食/.test(normalized)
-    if (explicitTopicSwitch) return null
+    if (!isMealFollowUpQuestion(normalized)) return null
     if (/在哪|在哪里|哪里|哪个食堂|什么食堂|位置|几楼|楼层|窗口|档口|怎么去/.test(normalized)) return 'location'
     if (/还有|其他|再来|再换|换一批|更多|多推荐|再推荐|别的|另外/.test(normalized)) return 'more'
     if (/(?:哪个|哪道|哪款).*(?:适合|更好|优先|减脂|蛋白|热量)|更适合|热量最低|蛋白最高/.test(normalized)) return 'compare'
@@ -126,15 +141,18 @@ function recommendationSourceIDs(result?: DietRecommendationResult): string[] {
 function activeDietRecommendationContext(messages: ChatMessage[]): { latest?: DietRecommendationResult; sourceIDs: string[] } {
   let latest: DietRecommendationResult | undefined
   let sourceIDs: string[] = []
+  let mealTurn = true
   for (const message of messages) {
+    if (message.role === 'user') mealTurn = Boolean(classifyDietRecommendationIntent(message.text, true))
+    if (!mealTurn || (message.role === 'pet' && !message.recommendation && message.kind !== 'intro')) {
+      latest = undefined
+      sourceIDs = []
+      continue
+    }
     if (message.recommendation) {
       latest = message.recommendation
       sourceIDs = Array.from(new Set([...sourceIDs, ...recommendationSourceIDs(message.recommendation)]))
       continue
-    }
-    if (latest && message.role === 'user' && !classifyDietRecommendationIntent(message.text, true)) {
-      latest = undefined
-      sourceIDs = []
     }
   }
   return { latest, sourceIDs }
@@ -401,7 +419,7 @@ function PetChatPage() {
       setEstimatingCredits(false)
       return
     }
-    if (readyImageURLs.length === 0 && classifyDietRecommendationIntent(question, Boolean(homeMealContext || latestDietRecommendation))) {
+    if (readyImageURLs.length === 0 && classifyDietRecommendationIntent(question, Boolean(latestDietRecommendation || (homeMealContext && !sessionID)))) {
       setEstimatedCredits(homeMealContext || mealUnlocked ? 0 : 1)
       setEstimatingCredits(false)
       return
@@ -425,7 +443,7 @@ function PetChatPage() {
     }, 350)
 
     return () => clearTimeout(timer)
-  }, [activeRange, draftQuestion, enableThinking, homeMealContext, latestDietRecommendation, mealUnlocked, readyImageURLs])
+  }, [activeRange, draftQuestion, enableThinking, homeMealContext, latestDietRecommendation, mealUnlocked, readyImageURLs, sessionID])
 
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message])
