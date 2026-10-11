@@ -6954,7 +6954,7 @@ button.poster-share-channel--btn {
 
 .wellness-overview-summary-row {
   position: absolute;
-  top: -20rpx;
+  top: -36rpx;
   right: 0;
   justify-content: flex-end;
 }
@@ -6963,7 +6963,11 @@ button.poster-share-channel--btn {
 .wellness-total-progress { display: none; }
 
 .wellness-target-edit {
-  padding: 7rpx 13rpx;
+  position: relative;
+  min-height: 44rpx;
+  padding: 7rpx 16rpx;
+  font-size: 22rpx;
+  &::before { content: ''; position: absolute; inset: -12rpx; }
   border-color: rgb(40 104 76 / 14%);
   color: #34664f;
   background: rgb(249 251 238 / 76%);
@@ -7261,5 +7265,4 @@ button.poster-share-channel--btn {
   .home-layout-toolbar__edit { color: #aec0b3; }
 }
 /* Daily plans stay inside the original calorie/macro panel. */
-.wellness-plan-label { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; color: #6c8c78; font-size: 20rpx; margin: 10rpx 0 4rpx; > text:first-child { font-weight: 600; } }
 .wellness-plan-undo { position: fixed; z-index: 1550; left: 28rpx; right: 28rpx; bottom: calc(150rpx + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 24rpx; padding: 24rpx 30rpx; border-radius: 24rpx; background: #274b39; color: #fff; box-shadow: 0 8rpx 30rpx #17362533; font-size: 25rpx; > text:first-child { flex: 1; } button { background: transparent; padding: 4rpx; margin: 0; color: #d2edbf; font-size: 25rpx; line-height: 1.5; &::after { border: none; } } }

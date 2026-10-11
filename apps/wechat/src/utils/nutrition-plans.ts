@@ -1,5 +1,5 @@
 import Taro from '@tarojs/taro'
-import { authenticatedRequest } from './api'
+import { authenticatedRequest, unwrapResponse } from './api'
 import { HOME_DASHBOARD_REFRESH_EVENT } from './home-events'
 import { HOME_DASHBOARD_LOCAL_CACHE_KEY } from './home-dashboard-local-cache'
 
@@ -27,8 +27,10 @@ async function request<T>(path = '', method: 'GET' | 'POST' | 'PUT' | 'DELETE' =
     const error = new Error(res.statusCode === 404 && (!path || path.startsWith('/day/')) ? '饮食方案尚未启用，请更新后端后再试' : res.data?.message || '操作失败，请重试')
     Object.assign(error, { statusCode: res.statusCode }); throw error
   }
-  if (!res.data?.data || typeof res.data.data !== 'object') throw new Error('方案数据不完整，请刷新重试')
-  return res.data.data as T
+  // 公共请求已经解包，不能再取 data.data；共享 helper 兼容已解包的数据。
+  const payload = unwrapResponse<T>(res)
+  if (!payload || typeof payload !== 'object') throw new Error('方案数据不完整，请刷新重试')
+  return payload
 }
 function notify(date = planToday()) {
   Taro.removeStorageSync(HOME_DASHBOARD_LOCAL_CACHE_KEY)
