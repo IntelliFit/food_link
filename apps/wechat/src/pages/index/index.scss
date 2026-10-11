@@ -5475,6 +5475,27 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   gap: 16rpx;
 }
 
+.record-menu-content.record-menu-content--ink {
+  .record-menu-dev-trigger { filter: grayscale(1); }
+  background: #f7f7f4;
+  color: #222;
+  border: 1rpx solid #b9b9b3;
+  border-radius: 28rpx 28rpx 0 0;
+  .record-menu-ink-heading { display: flex; flex-direction: column; gap: 10rpx; margin: 16rpx 0 28rpx; }
+  .record-menu-ink-heading text:first-child { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 42rpx; }
+  .record-menu-ink-heading text:last-child { color: #666; font-size: 24rpx; }
+  .record-menu-grid-card { border-radius: 6rpx; box-shadow: none; }
+  .record-menu-grid-label { font-family: 'Songti SC', STSong, SimSun, serif; font-size: 28rpx; }
+  .record-menu-list-v2 { background: transparent; border-top: 1rpx solid #ccc; }
+  .record-menu-list-item { border-color: #ccc; }
+  .record-menu-list-label-v2, .record-menu-list-arrow-v2 { color: #222; }
+  .record-menu-list-desc-v2 { color: #666; }
+  .record-menu-dev-trigger { background: #e9e9e3; border-color: #b9b9b3; }
+  .record-menu-dev-kcal-badge { background: #222; }
+  .record-menu-dev-trigger-title { color: #222; }
+  .record-menu-dev-trigger-sub, .record-menu-dev-trigger-right { color: #555; }
+}
+
 .record-menu-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

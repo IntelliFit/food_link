@@ -1,16 +1,23 @@
 import { Canvas, Image, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState } from 'react'
-import { getStoredHomeExperienceConfig } from '../utils/home-experience'
+import { getStoredHomeExperienceConfig, HOME_EXPERIENCE_MODE_EVENT } from '../utils/home-experience'
 import landscape from '../assets/ink-wellness/landscape.jpg'
 import header from '../assets/ink-wellness/header.jpg'
 import scoreArt from '../assets/ink-wellness/score.jpg'
 import taiji from '../assets/ink-wellness/taiji.jpg'
 import bookshelf from '../assets/ink-wellness/bookshelf.jpg'
+import mealPlate from '../assets/ink-wellness/meal-plate.webp'
 import './InkWellness.scss'
 
 export function useInkWellness() {
   const [active, setActive] = useState(() => getStoredHomeExperienceConfig().mode === 'wellness')
+  useEffect(() => {
+    const sync = () => setActive(getStoredHomeExperienceConfig().mode === 'wellness')
+    Taro.eventCenter.on(HOME_EXPERIENCE_MODE_EVENT, sync)
+    sync()
+    return () => { Taro.eventCenter.off(HOME_EXPERIENCE_MODE_EVENT, sync) }
+  }, [])
   useDidShow(() => setActive(getStoredHomeExperienceConfig().mode === 'wellness'))
   return active
 }
@@ -35,6 +42,7 @@ export function InkHomeHero({ current, target, date, onModeToggle, onTarget, rem
     <Text className='ink-home-hero__title'>一餐一饮，{ '\n' }皆有平衡</Text>
     <Text className='ink-home-hero__date'>{date?.replace(/-/g, ' · ')}</Text>
     <Text className='ink-home-hero__verse'>饮食有节，动静相宜</Text>
+    <Image className='ink-home-hero__plate' src={mealPlate} mode='aspectFit' aria-hidden />
     <View className='ink-home-hero__intake'><Text className='ink-home-hero__number'>{known ? Math.round(Number(current)).toLocaleString() : '—'}</Text><Text>已摄入 · 千卡</Text></View>
     <View className='ink-home-hero__remaining' role='button' aria-label='查看和修改饮食目标' onClick={onTarget}><Text className='ink-home-hero__number'>{known ? Math.round(Math.abs(remaining)).toLocaleString() : '—'}</Text><Text>{remaining < 0 ? '超出目标' : '余量'} · 千卡</Text><Text className='ink-home-hero__target'>调整目标 ›</Text></View>
     {reminder && <View className='ink-home-hero__reminder' onClick={onReminder}><Text>{reminder}</Text><Text> ›</Text></View>}

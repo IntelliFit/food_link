@@ -10,6 +10,64 @@
   }
 }
 
+.analyze-page.analyze-page--ink {
+  background: #f7f7f4;
+  color: #222;
+  padding: 24rpx 32rpx 200rpx;
+  .ink-masthead { margin: -24rpx -32rpx 24rpx; padding-top: 24rpx; }
+  .quota-bar { background: #e9e9e3; color: #444; border-color: #c6c6bf; }
+  .quota-bar-text, .mode-link { color: #444; }
+  .quota-bar-dot, .photo-tip-bar__dot { background: #222; }
+  .photo-tip-bar { background: #e9e9e3; border-color: #b9b9b3; }
+  .photo-tip-bar__text { color: #333; }
+  .photo-tip-bar__action { background: #222; color: white; }
+  .help-sheet-content { background: #f7f7f4; border: 1rpx solid #aaa; }
+  .help-sheet-title, .help-sheet-body, .help-sheet-close-icon { color: #222; }
+  .image-preview-section { border: 1rpx solid #aaa; border-radius: 8rpx; background: white; box-shadow: none; }
+  .no-image-placeholder { background: #eeeee9; }
+  .placeholder-text { color: #333; font-size: 28rpx; }
+  .placeholder-sub { color: #666; font-size: 24rpx; line-height: 1.6; padding: 0 24rpx; }
+  .placeholder-content .iconfont { color: #666 !important; }
+  .mode-switch-item, .analysis-engine-options > view { color: #444; border-color: #bbb; background: transparent; }
+  .mode-switch-item.active { background: #222; color: white; border-color: #222; box-shadow: none; }
+  .analysis-engine-option.active { background: #e9e9e3; border-color: #222; }
+  .analysis-engine-option__label { color: #222; font-size: 26rpx; }
+  .analysis-engine-option__description { color: #555; font-size: 24rpx; line-height: 1.6; }
+  .analysis-option-card { background: #f7f7f4; border-color: #ccc; }
+  .analysis-option-card.active { border-color: #222; background: #e9e9e3; }
+  .analysis-option-title { color: #444; }
+  .analysis-option-switch--on { background: #222; }
+  .analysis-option-card.disabled { opacity: 1; background: #eeeee9; }
+  .analysis-option-card.disabled .analysis-option-title { color: #777; }
+  .help-icon { background: #e9e9e3; border-color: #aaa; }
+  .help-icon-text { color: #555; }
+  .confirm-btn { background: #222; border-radius: 48rpx; box-shadow: none; }
+  .confirm-btn-text { color: white; }
+  .confirm-btn.disabled { background: #d5d5ce; }
+  .confirm-btn.disabled .confirm-btn-text { color: #666; }
+  .details-section, .meal-section, .state-section, .analysis-engine-section {
+    background: transparent;
+    border: 0;
+    border-top: 1rpx solid #c6c6bf;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 28rpx 0;
+  }
+  .section-title { font-family: 'Songti SC', STSong, SimSun, serif; color: #222; font-size: 30rpx; }
+  .section-hint { color: #666; }
+  .meal-option, .state-option { background: transparent; color: #555; border-color: #bbb; border-radius: 36rpx; }
+  .meal-option.active, .state-option.active { background: #222; color: white; border-color: #222; box-shadow: none; }
+}
+
+.ink-capture-guide {
+  .onboarding-guide__panel { background: #f7f7f4; border: 1rpx solid #aaa; border-radius: 8rpx; }
+  .onboarding-guide__title { color: #222; font-family: 'Songti SC', STSong, SimSun, serif; }
+  .onboarding-guide__desc, .onboarding-guide__skip { color: #555; }
+  .onboarding-guide__next { background: #222; color: white; }
+}
+.analyze-page.analyze-page--ink .history-link { background: transparent; border-color: #aaa; color: #222; }
+.analyze-page.analyze-page--ink .history-link-text { color: #222; }
+
 .mode-link {
   font-size: 22rpx;
   color: #00bc7d;

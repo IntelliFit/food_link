@@ -1,9 +1,9 @@
 .fl-balanced-theme--picturebook-companion:not(.fl-d) {
-  .bt-experience:not(.bt-experience--home) { min-height: 235rpx; }
+  .bt-experience:not(.bt-experience--home) { min-height: 0; height: auto; }
   .theme-chapter--picturebook-companion { display: flex; gap: 24rpx; align-items: center; }
   .theme-chapter--picturebook-companion .tc-title { flex-shrink: 0; padding: 14rpx 20rpx; background: #f3e7cf; color: #222d29; font: 50rpx 'Kaiti SC', KaiTi, serif; letter-spacing: 3rpx; }
   .theme-chapter--picturebook-companion .tc-subtitle { font-size: 23rpx; color: #eadab8; margin-top: 0; }
-  .bt-experience--profile .bt-integrated-content { margin-top: 220rpx; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 96rpx; }
   .bt-experience--profile .profile-header-section { border: 0; padding: 24rpx 0; background: #101e27d9; }
   .bt-experience--home .bt-chapter-label { border: 0; box-shadow: none; padding: 16rpx 26rpx; }
   .bt-experience--home .bt-chapter-label--morning { max-width: 265rpx; top: 40%; }
@@ -24,4 +24,16 @@
   .theme-feed-entry--photo .feed-image { order: 1; border: 7rpx solid #25312f; padding: 0; }
   .theme-feed-entry--photo .feed-content { order: 2; font: 30rpx/1.85 'Kaiti SC', KaiTi, serif; padding: 20rpx 12rpx; margin: 0; }
   .theme-feed-entry--photo .feed-meta, .theme-feed-entry--photo .feed-actions { order: 3; }
+  .bt-experience--home .bt-heading { padding: 18rpx 26rpx; box-shadow: 0 5rpx 12rpx #07181a30; }
+  .bt-experience--home .bt-heading__title { font-size: 49rpx; font-weight: 500; }
+  .bt-experience--home .bt-chapter-label { border-left: 3rpx solid #af8c50; }
+  .bt-experience--home .bt-action--record { border-radius: 2rpx; background: #f3e7cf; color: #29332c; min-height: 110rpx; }
+  .theme-review--picturebook-companion .tr-film { padding: 24rpx 12rpx; }
+  .theme-review--picturebook-companion .tr-film__frame { border-color: #ac9772; }
+  .theme-review--picturebook-companion .tr-story { border: 1rpx solid #bca987; box-shadow: 0 5rpx 0 #d0b995; }
+  .theme-profile-sections { border: 1rpx solid #c6b38f; box-shadow: 0 7rpx 0 #07191d40; }
+  .tp-section .profile-section-heading { min-height: 120rpx; box-sizing: border-box; }
+  .tp-section .profile-section-hint { font-size: 24rpx; }
+  .feed-card { background: #f3e7cf; color: #29332c; border-radius: 2rpx; border: 1rpx solid #bba682; box-shadow: none; }
+  .feed-card .feed-author-name, .feed-card .feed-content { color: #29332c; }
 }

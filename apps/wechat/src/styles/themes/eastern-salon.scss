@@ -1,6 +1,6 @@
 .fl-balanced-theme--eastern-salon:not(.fl-d) {
-  .bt-experience:not(.bt-experience--home) { min-height: 300rpx; }
-  .theme-chapter--eastern-salon .tc-brand { padding-bottom: 44rpx; }
+  .bt-experience:not(.bt-experience--home) { min-height: 0; height: auto; }
+  .theme-chapter--eastern-salon .tc-brand { padding-bottom: 28rpx; }
   .theme-chapter--eastern-salon .tc-title { font: 57rpx 'Songti SC', STSong, SimSun, serif; letter-spacing: 5rpx; }
   .theme-chapter--eastern-salon .tc-marginal { font-size: 22rpx; }
   .bt-experience--home .bt-scroll { border-width: 4rpx 10rpx; padding: 28rpx 24rpx; }
@@ -18,4 +18,20 @@
   .theme-feed-entry--photo .feed-image { grid-column: 1; grid-row: 2; padding: 0; border: 0; margin: 0; height: 345rpx; }
   .theme-feed-entry--photo .feed-content { grid-column: 2; grid-row: 2; font: 29rpx/1.8 'Songti SC', SimSun, serif; margin: 0; letter-spacing: 3rpx; }
   .theme-feed-entry--photo .feed-image-content { height: 345rpx; }
+  .bt-experience--home { font-family: 'Songti SC', STSong, SimSun, serif; }
+  .bt-experience--home .bt-masthead__brand { font-size: 68rpx; font-weight: 400; letter-spacing: 8rpx; }
+  .bt-experience--home .bt-heading__title { font-size: 60rpx; font-weight: 500; }
+  .bt-experience--home .bt-scroll { margin: 0 8rpx; border-color: #76664c; background: #f6f0e0ed; box-shadow: 0 12rpx 22rpx #4b44351c; }
+  .bt-experience--home .bt-scroll__plate { height: 405rpx; }
+  .bt-experience--home .bt-scroll__plate image { width: 72%; }
+  .bt-experience--home .bt-live-summary { border-bottom: 1rpx solid #b0a28b; margin-top: 12rpx; }
+  .bt-experience--home .bt-live-summary text + text { font: 34rpx/1.6 Georgia, 'Songti SC', serif; }
+  .theme-review--eastern-salon .tr-detail { border-color: #b0a28b; }
+  .theme-review--eastern-salon .tr-day { border-radius: 0; min-height: 96rpx; }
+  .theme-review--eastern-salon .tr-day.is-selected { background: #dfe4d7; color: #293f33; border-color: #677b66; }
+  .profile-page .tp-section .profile-section-title { color: #f3e5c9; font-family: 'Songti SC', STSong, SimSun, serif; }
+  .profile-page .tp-section .profile-section-hint { color: #cabd9e; font-size: 24rpx; }
+  .profile-page .tp-section .profile-section-chevron { border-color: #ccb88f; }
+  .profile-page .tp-section .list-card { background: #f7f0df; color: #29271f; border-radius: 0; }
+  .feed-card { border-radius: 0; box-shadow: none; border: 0; border-bottom: 1rpx solid #b0a28b; background: transparent; }
 }

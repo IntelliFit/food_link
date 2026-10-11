@@ -1,20 +1,12 @@
 import { View } from '@tarojs/components'
-import Taro, { useDidShow } from '@tarojs/taro'
-import React, { type PropsWithChildren } from 'react'
+import * as React from 'react'
+import type { PropsWithChildren } from 'react'
 import { useAppColorSchemeOptional } from './AppColorSchemeContext'
 import { useBalancedTheme } from './BalancedThemeContext'
-import { HOME_DISPLAY_MODE_STORAGE_KEY } from '../utils/home-display-mode'
+import { useInkWellness } from './InkWellness'
 import { applyThemeNavigationBar } from '../utils/theme-navigation-bar'
 import { BALANCED_SCENES } from '../utils/balanced-theme-scenes'
 import { ThemeSceneImage } from './ThemeSceneImage'
-
-function readWellnessMode(): boolean {
-  try {
-    return Taro.getStorageSync(HOME_DISPLAY_MODE_STORAGE_KEY) === 'wellness'
-  } catch {
-    return false
-  }
-}
 
 /**
  * 页面级主题壳：铺满视口，深色下提供底衬；浅色不额外盖色（沿用各页原背景）。
@@ -23,14 +15,13 @@ export function FlPageThemeRoot({ children }: PropsWithChildren): React.ReactEle
   const ctx = useAppColorSchemeOptional()
   const { theme: balancedTheme } = useBalancedTheme()
   const scheme = ctx?.scheme ?? 'light'
-  const dark = scheme === 'dark'
-  const [wellness, setWellness] = React.useState(readWellnessMode)
+  // Shell and content must reconcile together, including a switch on a visible page.
+  const wellness = useInkWellness()
+  // The ink references use paper in both appearance settings. The shared green
+  // dark palette belongs to balanced mode and must not override that material.
+  const dark = scheme === 'dark' && !wellness
 
   React.useEffect(() => { applyThemeNavigationBar(scheme) }, [scheme, balancedTheme, wellness])
-
-  useDidShow(() => {
-    setWellness(readWellnessMode())
-  })
 
   return (
     <View

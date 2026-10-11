@@ -3,8 +3,8 @@
   .theme-chapter--miniature-world .tc-imprint { margin-bottom: 12rpx; align-items: baseline; }
   .theme-chapter--miniature-world .tc-date { font-size: 21rpx; }
   .theme-chapter--miniature-world .tc-sign { display: inline-block; margin-top: 36rpx; padding: 16rpx 28rpx; background: #f2e3c8; color: #362b1e; border: 4rpx double #8c714c; font: 36rpx 'Songti SC', SimSun, serif; }
-  .bt-experience--profile .bt-integrated-content { margin-top: 50rpx; }
-  .bt-experience--profile.bt-experience--integrated { min-height: 720rpx; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 36rpx; }
+  .bt-experience--profile.bt-experience--integrated { min-height: 0; height: auto; }
   .bt-experience--profile .user-card { flex-direction: column; align-items: flex-start; gap: 22rpx; }
   .bt-experience--profile .profile-header-section { width: 91%; padding: 28rpx; }
   .bt-experience--home .bt-garden-sign--meals { left: 32rpx; top: 34%; }
@@ -24,4 +24,17 @@
   .theme-feed-entry--photo .feed-content { grid-column: 1; grid-row: 2; font-size: 27rpx; margin: 0; }
   .theme-feed-entry--photo .feed-image { grid-column: 2; grid-row: 2; margin: 0; height: 290rpx; }
   .theme-feed-entry--photo .feed-image-content { height: 290rpx; }
+  .bt-experience--home .bt-heading { max-width: 80%; padding: 20rpx 24rpx; background: #fff5e3ed; border: 1rpx solid #bda57e; }
+  .bt-experience--home .bt-heading__title { font-size: 48rpx; letter-spacing: 3rpx; }
+  .bt-experience--home .bt-garden-sign .bt-action { min-height: 112rpx; padding: 20rpx 24rpx; }
+  .bt-experience--home .bt-garden-sign--meals { max-width: 310rpx; }
+  .bt-experience--home .bt-garden-sign--water { max-width: 310rpx; }
+  .theme-review--miniature-world .tr-diorama__sign { border-radius: 4rpx; box-shadow: 0 6rpx 0 #9c835e; }
+  .theme-review--miniature-world .tr-diorama__river { border-radius: 8rpx; padding: 24rpx 16rpx; }
+  .theme-profile-sections { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20rpx; }
+  .tp-section .profile-section-heading { box-sizing: border-box; min-height: 195rpx; gap: 12rpx; }
+  .tp-section .profile-section-title { line-height: 1.45; letter-spacing: 1rpx; }
+  .tp-section .profile-section-hint { color: #645038; line-height: 1.65; }
+  .tp-section .list-card { border-radius: 0; background: #fff6e7; box-shadow: none; }
+  .feed-card { background: #fff6e7; border: 1rpx solid #b5a07c; border-radius: 5rpx; box-shadow: 0 5rpx 0 #c1a57d; }
 }

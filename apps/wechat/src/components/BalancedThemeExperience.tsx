@@ -11,6 +11,7 @@ import { getBalancedThemeDefinition } from '../utils/balanced-theme'
 import { extraPkgUrl } from '../utils/subpackage-extra'
 import clarityFood from '../assets/balanced-themes/clarity-food.webp'
 import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
+import easternProfileGold from '../assets/balanced-themes/eastern-profile-gold-v11.webp'
 import waterDrop from '../assets/balanced-themes/water-drop-v6.webp'
 import { BALANCED_SCENES, loadBalancedScenes } from '../utils/balanced-theme-scenes'
 import './BalancedThemeExperience.scss'
@@ -97,14 +98,21 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   </View>
   const rootClass = `bt-experience bt-experience--${theme} bt-experience--${surface}${children ? ' bt-experience--integrated' : ''}${motion.active ? ' bt-motion--active' : ' bt-motion--paused'}`
   if (surface !== 'home') {
+    // A portrait archive scene belongs to the page, not the variable-height
+    // identity card. Keep its scale when names, auth state or drawers change.
+    const profileArt = surface === 'profile' && scenesReady
+      ? ({ 'miniature-world': BALANCED_SCENES.miniatureProfile, 'picturebook-companion': BALANCED_SCENES.picturebookProfile, 'modern-gallery': BALANCED_SCENES.galleryProfile, 'natural-symbiosis': BALANCED_SCENES.naturalLeaves, 'eastern-salon': easternProfileGold } as Partial<Record<typeof theme, string>>)[theme]
+      : undefined
     const art = theme === 'miniature-world' ? (surface === 'profile' ? miniatureDesk : surface === 'community' ? miniatureSquare : miniatureGarden)
       : theme === 'picturebook-companion' ? picturebookDesk
-      : theme === 'eastern-salon' ? easternLandscape : theme === 'way-of-water' ? ({ stats: waterStats, community: waterCommunity, profile: waterProfile } as const)[surface] || waterRock
+      : theme === 'eastern-salon' ? (surface === 'profile' ? undefined : easternLandscape) : theme === 'way-of-water' ? ({ stats: waterStats, community: waterCommunity, profile: waterProfile } as const)[surface] || waterRock
       : theme === 'modern-gallery' ? galleryCollage : undefined
-    return <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
+    return <>
+      {profileArt && <Image className={`bt-profile-backdrop bt-profile-backdrop--${theme}`} src={profileArt} mode='widthFix' aria-hidden />}
+      <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
       <ThemeSceneBackground
         className={`bt-scene bt-scene--chapter bt-scene--${surface}`}
-        poster={art}
+        poster={profileArt ? undefined : art}
         src={sceneVideo}
         active={motion.active}
         initialTime={{ stats: 0.8, community: 1.7, profile: 2.6 }[surface]}
@@ -112,7 +120,8 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       <ThemeChapterHeader theme={theme} title={title} surfaceName={SURFACE_NAME[surface]} date={date.replace(/-/g, '.')} />{sceneRetry}
       {children && <View className='bt-integrated-content'>{children}</View>}
       {surface === 'community' && onPublish && <View className='bt-publish'>{action('publish', '分享我的一餐', '', 'icon-paizhao-xianxing', onPublish)}</View>}
-    </View>
+      </View>
+    </>
   }
   return <View id='balanced-theme-experience-home' className={rootClass}>{sceneRetry}
     {(theme === 'clarity-order' || theme === 'clear-care') && <ThemeSceneBackground src={sceneVideo} active={motion.active} />}

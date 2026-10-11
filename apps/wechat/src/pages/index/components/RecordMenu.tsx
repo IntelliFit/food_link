@@ -372,9 +372,10 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     {visible ? (
     <View className='record-menu-modal' catchMove>
       <View className='record-menu-mask' onClick={onClose} />
-      <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}${isWater ? ' record-menu-content--water' : ''}`}>
+      <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}${isWater ? ' record-menu-content--water' : ''}${wellness ? ' record-menu-content--ink' : ''}`}>
         {/* 顶部圆角指示条 */}
         <View className='record-menu-handle-bar' />
+        {wellness && <View className='record-menu-ink-heading'><Text>一餐一味</Text><Text>留下今天的饮食与生活</Text></View>}
         {isWater && (
           <View className='record-menu-water-heading'>
             <Text className='record-menu-water-title'>记录这一餐</Text>
@@ -386,10 +387,10 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
         <View className='record-menu-grid-v2'>
           {GRID_FEATURES.map((feature) => {
             const IconComponent = feature.Icon
-            const featureColor = isWater ? '#c0edf7' : isDark ? feature.darkColor : feature.color
-            const featureBackground = isWater ? 'rgba(30, 67, 81, 0.48)' : isDark ? feature.darkBackgroundColor : feature.backgroundColor
-            const featureBorder = isWater ? 'rgba(160, 219, 235, 0.28)' : isDark ? feature.darkBorderColor : feature.borderColor
-            const iconBackground = isWater ? 'rgba(129, 214, 251, 0.12)' : isDark ? feature.darkIconBackgroundColor : feature.iconBackgroundColor
+            const featureColor = wellness ? '#222222' : isWater ? '#c0edf7' : isDark ? feature.darkColor : feature.color
+            const featureBackground = wellness ? '#f7f7f4' : isWater ? 'rgba(30, 67, 81, 0.48)' : isDark ? feature.darkBackgroundColor : feature.backgroundColor
+            const featureBorder = wellness ? '#b9b9b3' : isWater ? 'rgba(160, 219, 235, 0.28)' : isDark ? feature.darkBorderColor : feature.borderColor
+            const iconBackground = wellness ? '#e9e9e3' : isWater ? 'rgba(129, 214, 251, 0.12)' : isDark ? feature.darkIconBackgroundColor : feature.iconBackgroundColor
             return (
               <View
                 key={feature.id}

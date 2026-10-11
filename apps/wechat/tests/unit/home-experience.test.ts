@@ -9,6 +9,7 @@ describe('home experience mode storage', () => {
   const setStorageSync = Taro.setStorageSync as jest.Mock
 
   beforeEach(() => {
+    ;(Taro.getCurrentPages as jest.Mock).mockReturnValue([])
     getStorageSync.mockReset()
     setStorageSync.mockReset()
     getStorageSync.mockImplementation((key: string) => {
@@ -36,4 +37,20 @@ describe('home experience mode storage', () => {
     )
     expect(setStorageSync).toHaveBeenCalledWith('home_display_mode_v1', 'balanced')
   })
+  it('updates mounted native tab bars immediately in both directions without page show', () => {
+    const first = jest.fn()
+    const second = jest.fn()
+    ;(Taro.getCurrentPages as jest.Mock).mockReturnValue([
+      { getTabBar: () => ({ setData: first }) },
+      { getTabBar: () => { throw new Error('disposed page') } },
+      { getTabBar: () => ({ setData: second }) },
+    ])
+    saveHomeExperienceConfig({ version: 2, mode: 'wellness' })
+    expect(first).toHaveBeenLastCalledWith({ wellnessActive: true })
+    expect(second).toHaveBeenLastCalledWith({ wellnessActive: true })
+    saveHomeExperienceConfig({ version: 2, mode: 'balanced' })
+    expect(first).toHaveBeenLastCalledWith({ wellnessActive: false })
+    expect(second).toHaveBeenLastCalledWith({ wellnessActive: false })
+  })
+
 })

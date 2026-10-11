@@ -630,7 +630,7 @@ function ProfilePage() {
   }
 
   return (
-    <View className={`profile-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
+    <View className={`profile-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' && !ink ? 'profile-page--dark' : ''}`}>
       {/* 顶部用户信息区域（仿知乎风格） */}
       {ink && <InkMasthead title='我的' compact />}
       <BalancedThemeExperience surface='profile'>
@@ -846,6 +846,7 @@ function ProfilePage() {
       </View>
 
       {/* 清除缓存（独立工具卡片） */}
+      {ink && <Text className='ink-profile-verse'>认真生活，自有回响</Text>}
       <View className='profile-card tool-card' onClick={handleClearCache}>
         <Text className='tool-text'>清除缓存</Text>
       </View>

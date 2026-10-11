@@ -2,6 +2,7 @@ import Taro from '@tarojs/taro'
 import { HOME_DISPLAY_MODE_STORAGE_KEY } from './home-display-mode'
 
 export type HomeExperienceMode = 'wellness' | 'balanced'
+export const HOME_EXPERIENCE_MODE_EVENT = 'fl_home_experience_mode_changed'
 
 export interface HomeExperienceConfig {
   version: 2
@@ -31,6 +32,18 @@ function syncHomeDisplayMode(mode: HomeExperienceMode): void {
   } catch {
     /* 底栏主题同步失败不影响用户模式配置读取 */
   }
+  // Native tab bars do not subscribe to React events; update mounted instances
+  // in this interaction instead of waiting for their polling or page show.
+  try {
+    Taro.getCurrentPages().forEach(page => {
+      try {
+        const tabBar = (page as unknown as {
+          getTabBar?: () => { setData: (data: { wellnessActive: boolean }) => void }
+        }).getTabBar?.()
+        tabBar?.setData({ wellnessActive: mode === 'wellness' })
+      } catch { /* A disposed native page must not block other tabs. */ }
+    })
+  } catch { /* Non-mini-program platforms do not expose native tab bars. */ }
 }
 
 export function sanitizeHomeExperienceConfig(value: unknown): HomeExperienceConfig {
@@ -68,5 +81,10 @@ export function saveHomeExperienceConfig(config: HomeExperienceConfig): HomeExpe
     /* 模式偏好保存失败不影响首页核心记录链路 */
   }
   syncHomeDisplayMode(sanitized.mode)
+  try {
+    Taro.eventCenter.trigger(HOME_EXPERIENCE_MODE_EVENT)
+  } catch {
+    /* Persisted preferences remain usable if an event listener is unavailable. */
+  }
   return sanitized
 }

@@ -21,8 +21,9 @@ export function applyThemeNavigationBar(
   scheme: AppColorScheme,
   options?: NavigationBarThemeOptions
 ): void {
-  const lightBackground = isWellnessMode()
-    ? options?.wellnessBackground || '#f7f3e8'
+  const wellness = isWellnessMode()
+  const lightBackground = wellness
+    ? options?.wellnessBackground || '#f7f7f4'
     : options?.lightBackground || '#ffffff'
   const darkBackground = options?.darkBackground || '#101716'
   const pages = Taro.getCurrentPages()
@@ -32,7 +33,7 @@ export function applyThemeNavigationBar(
   const waterLeaderboard = !isWellnessMode() && theme === 'way-of-water' && route === 'packageExtra/pages/checkin-leaderboard/index'
   const easternProfile = theme === 'eastern-salon' && route === 'pages/profile/index'
   const darkArtTheme = waterLeaderboard || (isBalancedTab && (theme === 'way-of-water' || theme === 'picturebook-companion' || easternProfile))
-  const isDark = scheme === 'dark' || darkArtTheme
+  const isDark = !wellness && (scheme === 'dark' || darkArtTheme)
   const background = darkArtTheme && scheme !== 'dark'
     ? (easternProfile ? '#1c1d18' : theme === 'picturebook-companion' ? '#10222a' : '#07111a')
     : isDark ? darkBackground : lightBackground

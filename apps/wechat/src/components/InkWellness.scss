@@ -3,6 +3,7 @@ $paper: #f7f7f4;
 $serif: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif CJK SC', serif;
 $reading: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
 
+
 .ink-brand { position: relative; display: flex; align-items: center; gap: 20rpx; color: $ink; height: 64rpx; font-family: $serif; z-index: 1; }
 .ink-brand__name { font-size: 44rpx; font-weight: 700; line-height: 1.2; }
 .ink-brand__mode { padding-left: 22rpx; border-left: 1rpx solid #999; font-size: 26rpx; }
@@ -264,4 +265,122 @@ $reading: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', '
   .feed-card-main-col > view, .feed-card-main-col > text { order: 2; }
   .feed-card-main-col > .feed-card-name-block { order: 0; }
   .feed-card-main-col > .feed-image { order: 1; margin-bottom: 24rpx; }
+}
+
+/* Original ink references: keep the mountain composition at its native ratio. */
+.fl-page-theme-root--wellness {
+  .ink-brand .ink-brand__name { font-weight: 700 !important; font-synthesis: weight; }
+  .home-page.home-page--mode-wellness {
+    .date-item.is-selected { background: transparent; border-radius: 0; box-shadow: none; }
+    .date-day-circle { background: transparent; border: 0; box-shadow: none; }
+    .date-item.is-selected .date-day-circle { background: #222 !important; color: white; border: 0; border-radius: 50%; }
+    .date-item.is-selected .date-day-name { color: #222; }
+    .meals-section { border: 0; border-radius: 32rpx; box-shadow: none; }
+    .health-wheel.health-wheel--wellness { border: 0; padding-left: 0; padding-right: 0; border-radius: 0; }
+    .health-wheel__metric--water .health-wheel__hint, .health-wheel__metric--water .health-wheel__detail { color: #555; }
+    .health-wheel__metric--water .health-wheel__quick-record { color: #222; }
+    .health-wheel__metric--exercise .health-wheel__quick-record { color: white; }
+    .water-quick-btn { background: #e9e9e3; border: 1rpx solid #ccc; border-radius: 8rpx; filter: grayscale(1); }
+    .water-quick-btn:active { background: #dcdcd6; }
+    .water-quick-btn image { filter: grayscale(1); }
+    .water-quick-btn-text, .target-form-label, .target-input, .target-input-unit { color: #333; }
+    .target-input-wrap { background: #eee; border-color: #bbb; }
+    .target-modal-btn.secondary { background: #e9e9e3; border-color: #ccc; }
+    .target-modal-btn-text.secondary { color: #333; }
+  }
+  .home-page.home-page--mode-wellness.home-page .ink-home-hero {
+    height: 730rpx;
+    margin: 0 -32rpx;
+    padding: 0 36rpx;
+    overflow: hidden;
+    .ink-home-hero__art { top: 0; height: 100%; }
+    .ink-home-hero__title { font-size: 54rpx; font-weight: 700; font-synthesis: weight; line-height: 1.35; margin-top: 60rpx; }
+    .ink-home-hero__intake { top: 210rpx; left: 58%; width: 38%; }
+    .ink-home-hero__remaining { top: 450rpx; left: 38%; width: 34%; }
+    .ink-home-hero__number { font-family: Georgia, $serif; font-size: 76rpx; }
+    .ink-home-hero__plate { position: absolute; left: 12%; top: 415rpx; width: 230rpx; height: 230rpx; pointer-events: none; }
+    .ink-home-hero__remaining { left: 35%; width: 34%; }
+  }
+  .profile-page.ink-page.ink-page {
+    background: $paper url('../assets/ink-wellness/header.jpg') top right / 100% 610rpx no-repeat !important;
+    .ink-masthead { min-height: 180rpx; background: transparent; }
+    .ink-masthead__art { opacity: 0; }
+    .profile-header-section { padding: 28rpx 36rpx 38rpx; }
+    .user-avatar-wrapper { width: 132rpx; height: 132rpx; border-radius: 50%; border: 3rpx solid white; }
+    .user-name-row { flex-wrap: wrap; }
+    .user-name { font-family: $serif; font-size: 38rpx; line-height: 1.5; }
+    .user-info-main { min-width: 0; background: rgba(247, 247, 244, .9); padding: 12rpx 16rpx; }
+    .profile-quick-actions { margin-top: 38rpx; padding: 20rpx 0; }
+    .quick-action-item + .quick-action-item { border-left: 1rpx solid #bcbcb6; }
+    .quick-action-num { font-family: Georgia, $serif; font-size: 48rpx; }
+    .ink-shelf-entry { height: 360rpx; }
+    .ink-shelf-entry__copy { padding: 38rpx 36rpx; }
+    .ink-shelf-entry__title { font-size: 42rpx; }
+    .ink-shelf-entry__book { top: 116rpx; }
+    .profile-section-heading.is-toggle { min-height: 100rpx; padding: 18rpx 0; }
+    .ink-section-icon { width: 64rpx; height: 64rpx; margin-right: 22rpx; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #222; }
+    .ink-section-icon .iconfont { font-family: 'iconfont' !important; font-size: 42rpx; }
+    .tp-section__copy { flex: 1; min-width: 0; }
+    .profile-section-title { font-family: $serif; font-size: 32rpx; }
+    .profile-section-chevron { transform: rotate(-45deg); }
+    .profile-section-chevron.is-expanded { transform: rotate(45deg); }
+    .ink-profile-verse { display: block; padding: 38rpx 32rpx 52rpx; color: #666; text-align: center; font-family: $serif; font-size: 26rpx; }
+  }
+  .stats-page.ink-page.ink-page {
+    .ink-masthead { min-height: 260rpx; padding-top: 12rpx; }
+    .ink-masthead__title { font-size: 60rpx; font-weight: 600; }
+    .ink-score-scene { height: 450rpx; }
+    .ink-score-scene__score { top: 76rpx; }
+    .ink-score-scene__number { font-family: Georgia, $serif; font-size: 122rpx; }
+    .ink-plan {
+      min-height: 300rpx; box-sizing: border-box; display: flex;
+      flex-direction: column; align-items: flex-start; gap: 16rpx;
+      padding: 48rpx 36rpx;
+      background: $paper url('../assets/ink-wellness/plan-landscape.webp') center / 100% 100% no-repeat;
+    }
+    .ink-plan__label, .ink-plan__title, .ink-plan__advice, .ink-plan__link {
+      margin: 0; padding: 0; background: transparent; width: auto;
+      max-width: 100%; flex-shrink: 0; color: white; line-height: 1.6;
+    }
+    .ink-plan__title { font-size: 42rpx; }
+    .ink-plan__label { color: #deded8; font-size: 24rpx; }
+    .ink-plan__advice { font-size: 28rpx; }
+    .ink-plan__label, .ink-plan__title, .ink-plan__advice { max-width: 58%; }
+    .ink-plan__link { margin-top: 8rpx; padding: 10rpx 24rpx; background: #222; }
+    .health-next-action-icon, .risk-card-icon-circle { background: #e9e9e3 !important; }
+    .health-next-action-icon__glyph, .health-next-action-eyebrow,
+    .health-next-action-title, .risk-card-icon { color: #333 !important; }
+    .risk-card-summary, .risk-card-affordance__text, .risk-card-affordance__icon { color: #666; }
+    .risk-detail-score, .risk-detail-title, .risk-detail-section-text { color: #222; }
+    .risk-detail-section-label { color: #666; }
+    .risk-detail-badge, .risk-detail-delta { background: #e9e9e3; color: #333; }
+    .risk-detail-badge-text, .risk-detail-delta-text { color: #333; }
+    .risk-detail-close-btn { background: #222; }
+    .risk-detail-close-text { color: white; }
+    .analysis-content { color: #444; font-size: 28rpx; line-height: 1.8; }
+    .analysis-md-heading { color: #222; font-family: $serif; font-size: 32rpx; line-height: 1.6; }
+    .analysis-md-paragraph, .analysis-md-list-text { color: #444; line-height: 1.8; }
+    .analysis-md-list-bullet { color: #555; }
+    .analysis-md-table-cell { color: #333; border-color: #ccc; }
+    .analysis-md-table-header { background: #e9e9e3; color: #222; }
+    .card-subtitle, .chart-switch-label, .bar-label, .bar-value, .macro-name, .macro-value, .macro-percent { color: #666; }
+    .card-header-arrow { filter: grayscale(1); }
+    .loading-spinner-md { border-color: #ccc; border-top-color: #333; }
+    .error-icon, .error-text, .analysis-empty-title, .analysis-empty-text { color: #555; }
+    .error-wrap .btn-primary { background: #222; }
+    .error-wrap .btn-text, .stats-guest-btn-text { color: white; }
+    .analysis-empty--gate { background: #efefe9; border-color: #ccc; }
+    .analysis-empty-action { background: #222; border: 1rpx solid #222; border-radius: 8rpx; box-shadow: none; }
+    .analysis-empty-action-text { color: white; }
+    .analysis-empty-action.is-disabled {
+      opacity: 1; background: #e9e9e3; border-color: #ccc;
+      .analysis-empty-action-text { color: #666; }
+    }
+    .analysis-skeleton-line {
+      background-image: linear-gradient(90deg, #e8e8e2 0%, #d4d4ce 45%, #e8e8e2 100%);
+    }
+    .analysis-loading-icon, .analysis-loading-text { color: #555; }
+    .analysis-error { background: #f7f7f4; border-color: #bbaaaa; }
+    .analysis-error-text { color: #873d3d; }
+  }
 }

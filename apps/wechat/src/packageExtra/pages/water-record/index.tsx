@@ -189,8 +189,8 @@ function WaterRecordPage() {
       </View>
 
       <View className='water-action-card'>
-        <View className='section-title-row'>
-          <Text className='section-title'>快捷加水</Text>
+        <View className='water-section-title-row'>
+          <Text className='water-section-title'>快捷加水</Text>
           {loading ? <View className='water-mini-spinner' /> : null}
         </View>
         <View className='water-preset-grid'>
@@ -222,8 +222,8 @@ function WaterRecordPage() {
       </View>
 
       <View className='water-day-card'>
-        <View className='section-title-row'>
-          <Text className='section-title'>{routeDateLabel}记录</Text>
+        <View className='water-section-title-row'>
+          <Text className='water-section-title'>{routeDateLabel}记录</Text>
           {currentTotal > 0 ? (
             <Text className={`water-clear-link ${clearing ? 'is-disabled' : ''}`} onClick={() => !clearing && clearWater()}>
               清空

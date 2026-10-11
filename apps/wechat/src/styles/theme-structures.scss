@@ -6,6 +6,9 @@
 @use './themes/picturebook-companion';
 @use './themes/clear-care';
 @use './themes/way-of-water';
+@use './theme-analysis-tabs';
+@use './theme-functional-details';
+@use './theme-profile-scenes';
 
 .theme-chapter {
   position: relative; z-index: 1;

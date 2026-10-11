@@ -3339,7 +3339,7 @@ function IndexPage() {
 
   return (
     <View
-      className={`home-page home-page--mode-${homeExperienceConfig.mode} ${scheme === 'dark' ? 'home-page--dark' : ''} ${homePageScrollLocked ? 'home-page--modal-open' : ''}`}
+      className={`home-page home-page--mode-${homeExperienceConfig.mode} ${scheme === 'dark' && !isWellnessMode ? 'home-page--dark' : ''} ${homePageScrollLocked ? 'home-page--modal-open' : ''}`}
       onClick={homeModulesEditing ? finishHomeModuleEditing : undefined}
       onTouchStart={(event) => {
         const touch = (event as ITouchEvent).touches?.[0]
@@ -3905,7 +3905,7 @@ function IndexPage() {
               exerciseKcal={exerciseBurnedKcal}
               busy={dashboardBusy}
               guest={isGuest}
-              dark={scheme === 'dark'}
+              dark={scheme === 'dark' && !isWellnessMode}
               wellness={isWellnessMode}
               onOpen={openBodyMetricRecord}
               onQuickRecord={(kind) => {

@@ -1,4 +1,63 @@
 /* Shared functional surfaces inherit the selected balanced theme. Wellness is excluded. */
+$social-themes: clarity-order, natural-symbiosis, eastern-salon, modern-gallery, miniature-world, picturebook-companion, clear-care;
+@each $theme in $social-themes {
+  .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} .social-menu {
+    .social-menu__trigger {
+      box-sizing: border-box; width: 100rpx; height: 96rpx;
+      background: var(--bt-accent); color: var(--bt-accent-text);
+      border: var(--bt-border-width) solid var(--bt-border);
+      border-radius: var(--bt-control-radius); box-shadow: var(--bt-toolbox-shadow);
+    }
+    .social-menu__trigger::after { content: none; }
+    .social-menu__trigger-icon, .social-menu__trigger-label { color: inherit; }
+    .social-menu__trigger-label { font-size: 22rpx; line-height: 30rpx; }
+    .social-menu__ball {
+      background: var(--bt-surface); color: var(--bt-text);
+      border: var(--bt-border-width) solid var(--bt-border);
+      border-radius: var(--bt-control-radius); box-shadow: var(--bt-shadow);
+    }
+    .social-menu__label {
+      background: var(--bt-surface); color: var(--bt-text);
+      border: var(--bt-border-width) solid var(--bt-border);
+      border-radius: var(--bt-control-radius); box-shadow: var(--bt-shadow);
+    }
+    .social-menu__badge { background: #b72220; color: #fff; border-color: var(--bt-surface); }
+    .social-menu__dismiss { background: rgb(0 0 0 / 16%); }
+  }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--modern-gallery .social-menu {
+  .social-menu__trigger { border: 3rpx solid var(--bt-text); border-radius: 0; box-shadow: 5rpx 5rpx 0 #173eb5; }
+  .social-menu__ball, .social-menu__label { border-radius: 0; border-width: 2rpx; box-shadow: 4rpx 4rpx 0 #173eb5; }
+  .social-menu__trigger-label, .social-menu__label { font-family: sans-serif; font-weight: 700; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--natural-symbiosis .social-menu {
+  .social-menu__trigger, .social-menu__ball { border-radius: 32rpx 10rpx; }
+  .social-menu__label { border-radius: 24rpx 8rpx; font-family: 'Songti SC', SimSun, serif; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--eastern-salon .social-menu {
+  .social-menu__trigger { background: #22211d; color: #f7f2e6; border-color: #8e8a79; border-radius: 4rpx; box-shadow: none; }
+  .social-menu__trigger-label, .social-menu__label { font-family: 'Songti SC', SimSun, serif; letter-spacing: 2rpx; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--miniature-world .social-menu {
+  .social-menu__trigger { background: #65452b; color: #fff5df; border: 3rpx solid #d9bd8a; border-radius: 8rpx; box-shadow: 0 5rpx 0 #352516; }
+  .social-menu__ball, .social-menu__label { background: #f5e8cb; color: #513b24; border: 2rpx solid #a47a4b; border-radius: 6rpx; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--picturebook-companion .social-menu {
+  .social-menu__trigger { background: #f6e7bf; color: #352b22; border: 2rpx solid #9c8764; border-radius: 4rpx; box-shadow: 4rpx 4rpx 0 #493b2e; }
+  .social-menu__ball, .social-menu__label { background: #f6e7bf; color: #352b22; border-color: #9c8764; border-radius: 4rpx; }
+  .social-menu__trigger-label, .social-menu__label { font-family: 'Songti SC', SimSun, serif; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--clear-care .social-menu {
+  .social-menu__trigger { background: #004c2b; color: #fff; border-radius: 12rpx; box-shadow: none; }
+  .social-menu__trigger-label { font-size: 26rpx; font-weight: 700; }
+  .social-menu__ball, .social-menu__label { border-radius: 12rpx; box-shadow: none; }
+}
+/* Preserve the ink button; remove the shared green speech tail and gold menu surfaces. */
+.fl-page-theme-root--wellness .community-page.ink-page .social-menu {
+  .social-menu__trigger::after { content: none; }
+  .social-menu__ball, .social-menu__label { background: #f6f5ef; color: #222; border: 1rpx solid #777; box-shadow: none; filter: none; }
+  .social-menu__badge { background: #222; color: #fff; border-color: #f6f5ef; }
+}
 .fl-page-theme-root--balanced {
   .profile-page .profile-recap-section .recap-archive-entry {
     color: var(--bt-text);

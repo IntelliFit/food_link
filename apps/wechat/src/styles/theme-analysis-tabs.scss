@@ -1,0 +1,96 @@
+/* Analysis navigation extends each reference's controls; business panels stay mounted. */
+$themes: clarity-order, natural-symbiosis, eastern-salon, modern-gallery, miniature-world, picturebook-companion, clear-care;
+@each $theme in $themes {
+  .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} .stats-page {
+    .analysis-tabs-container { margin: 24rpx 28rpx; padding: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+    .analysis-panel-control { padding: 0; gap: 0; backdrop-filter: none; box-shadow: none; }
+    .analysis-panel-control .segment-item { display: flex; align-items: center; justify-content: center; flex: 1; min-width: 0; min-height: 88rpx; padding: 8rpx 4rpx; box-sizing: border-box; font-size: 26rpx; line-height: 1.4; border-radius: 0; box-shadow: none; color: var(--bt-text); }
+    .analysis-panel-control .segment-item text { color: inherit; }
+    .analysis-panel-control .segment-item.active { font-weight: 700; box-shadow: none; }
+    .analysis-panel-control .loading-spinner-md { border-top-color: var(--bt-text); }
+    .analysis-panel-content {
+      .stats-card, .health-index-preview-card, .action-plan-panel { background: var(--bt-surface); color: var(--bt-text); border-color: var(--bt-border); border-radius: var(--bt-radius); }
+      .risk-overview-card::before, .risk-overview-card::after { content: none; }
+      .risk-overview-title, .risk-overview-score, .risk-overview-chip-value, .risk-overview-summary,
+      .risk-score-explain__title, .risk-card-title, .risk-card-score, .ai-insight-card-title,
+      .action-plan-panel__title, .action-plan-item__title, .health-index-preview-title,
+      .health-next-action-title, .meal-gauge-label, .meal-gauge-percent { color: var(--bt-text); }
+      .risk-overview-subtitle, .risk-overview-score-unit, .risk-score-gauge__projected,
+      .risk-overview-score-hint, .risk-overview-chip-label, .risk-card-summary,
+      .risk-score-explain__action, .health-index-preview-desc, .health-index-preview-meta,
+      .action-plan-item__detail, .ai-insight-card-summary { color: var(--bt-muted); }
+      .risk-score-gauge { background: conic-gradient(from 225deg, var(--bt-accent) 0 var(--risk-score-progress), var(--bt-border) var(--risk-score-progress) 75%, transparent 75% 100%); }
+      .risk-score-gauge__center, .risk-overview-chip, .risk-score-explain, .risk-overview-badge { background: var(--bt-surface-muted); border-color: var(--bt-border); }
+      .risk-overview-badge-label { color: var(--bt-text); }
+      .health-index-preview-badge, .health-next-action-btn { background: var(--bt-accent); border-radius: var(--bt-control-radius); }
+      .health-index-preview-badge-text, .health-next-action-btn__text { color: var(--bt-accent-text); }
+      .health-next-action-eyebrow, .health-next-action-icon__glyph, .risk-card-affordance__text, .risk-card-affordance__icon { color: var(--bt-text); }
+      .health-next-action-icon, .risk-card-icon-circle { background: var(--bt-surface-muted); }
+      .analysis-md-heading, .analysis-md-strong, .analysis-md-paragraph, .analysis-md-list-text, .analysis-md-table-cell { color: var(--bt-text); }
+      .analysis-md-list-bullet, .risk-score-explain__icon, .risk-focus-edit-icon, .risk-focus-edit-text, .card-icon { color: var(--bt-text); }
+      .analysis-md-table-header, .risk-focus-edit-btn { background: var(--bt-surface-muted); color: var(--bt-text); }
+      .analysis-md-table-cell { border-color: var(--bt-border); }
+    }
+  }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--clarity-order .stats-page {
+  .analysis-panel-control { background: var(--bt-surface-muted); border: 0; border-radius: 0; }
+  .analysis-panel-control .segment-item { font-family: sans-serif; border-bottom: 3rpx solid transparent; }
+  .analysis-panel-control .segment-item.active { background: #c8ff00; color: #111; border-bottom-color: #111; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--natural-symbiosis .stats-page {
+  .analysis-panel-control { padding: 6rpx; gap: 8rpx; background: transparent; border: 1rpx solid var(--bt-border); border-radius: 48rpx 16rpx; }
+  .analysis-panel-control .segment-item { font-family: 'Songti SC', SimSun, serif; border-radius: 40rpx 12rpx; }
+  .analysis-panel-control .segment-item.active { background: #496c40; color: #fffbed; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--eastern-salon .stats-page {
+  .analysis-panel-control { background: transparent; border: 0; border-top: 1rpx solid var(--bt-border); border-bottom: 1rpx solid var(--bt-border); border-radius: 0; }
+  .analysis-panel-control .segment-item { font-family: 'Songti SC', SimSun, serif; letter-spacing: 2rpx; border-bottom: 3rpx solid transparent; }
+  .analysis-panel-control .segment-item.active { background: transparent; color: var(--bt-text); border-bottom-color: var(--bt-text); }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--modern-gallery .stats-page {
+  .analysis-panel-control { background: var(--bt-surface); border: 0; border-top: 3rpx solid var(--bt-text); border-bottom: 3rpx solid var(--bt-text); border-radius: 0; }
+  .analysis-panel-control .segment-item { font-family: sans-serif; border-bottom: 7rpx solid transparent; }
+  .analysis-panel-control .segment-item + .segment-item { border-left: 1rpx solid var(--bt-border); }
+  .analysis-panel-control .segment-item.active { background: transparent; color: var(--bt-text); border-bottom-color: #d52b21; }
+  .analysis-panel-content .risk-overview-chip, .analysis-panel-content .risk-score-explain,
+  .analysis-panel-content .risk-overview-badge, .analysis-panel-content .risk-focus-edit-btn { border-radius: 0; box-shadow: none; }
+  .action-section-header { margin: 42rpx 32rpx 22rpx; padding-top: 22rpx; border-top: 3rpx solid var(--bt-text); }
+  .action-section-title { font: 700 34rpx/1.5 sans-serif; color: var(--bt-text); }
+  .action-plan-grid { grid-template-columns: minmax(0, 1fr); gap: 20rpx; }
+  .analysis-panel-content .action-plan-panel { padding: 26rpx 28rpx; border: 1rpx solid var(--bt-border); border-radius: 0; box-shadow: none; }
+  .analysis-panel-content .action-plan-panel--red { border-left: 8rpx solid #d52b21; }
+  .analysis-panel-content .action-plan-panel--green { border-left: 8rpx solid #173eb5; }
+  .action-plan-panel__title { font-size: 30rpx; line-height: 1.5; margin-bottom: 20rpx; }
+  .action-plan-item { gap: 12rpx; }
+  .action-plan-item + .action-plan-item { padding-top: 16rpx; margin-top: 16rpx; border-top: 1rpx solid var(--bt-border); }
+  .action-plan-item__title { font-size: 26rpx; line-height: 1.6; }
+  .action-plan-item__detail, .action-plan-panel__empty { font-size: 23rpx; line-height: 1.65; color: var(--bt-muted); }
+  .action-plan-item__bullet { font-size: 26rpx; line-height: 1.6; color: #173eb5; }
+  .action-plan-item__bullet--error { color: #d52b21; }
+  .action-score-delta { flex-wrap: wrap; justify-content: space-between; gap: 20rpx; padding: 24rpx 26rpx; margin-top: 24rpx; border-radius: 0; border: 1rpx solid var(--bt-border); border-left: 8rpx solid var(--bt-text); background: var(--bt-surface-muted); }
+  .action-score-delta__copy { flex: 1; min-width: 230rpx; }
+  .action-score-delta__label { display: block; font-size: 26rpx; font-weight: 700; line-height: 1.5; color: var(--bt-text); }
+  .action-score-delta__note { display: block; margin-top: 8rpx; font-size: 21rpx; line-height: 1.5; color: var(--bt-muted); }
+  .action-score-delta__values { display: flex; align-items: baseline; gap: 14rpx; flex-shrink: 0; }
+  .action-score-delta__before { font: 500 40rpx/1.2 sans-serif; color: var(--bt-muted); }
+  .action-score-delta__arrow { font-size: 28rpx; color: var(--bt-text); }
+  .action-score-delta__after { font: 800 52rpx/1.2 sans-serif; color: var(--bt-text); }
+  .stats-page-disclaimer__text { color: var(--bt-muted); font-size: 22rpx; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--miniature-world .stats-page {
+  .analysis-panel-control { gap: 10rpx; background: transparent; border: 0; border-radius: 0; padding-bottom: 8rpx; }
+  .analysis-panel-control .segment-item { background: #efe2c6; color: #513b24; border: 2rpx solid #a47a4b; border-radius: 6rpx; box-shadow: 0 5rpx 0 #a47a4b; font-family: 'Songti SC', SimSun, serif; }
+  .analysis-panel-control .segment-item.active { background: #406255; color: #fff5df; border-color: #28493c; box-shadow: 0 5rpx 0 #28493c; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--picturebook-companion .stats-page {
+  .analysis-panel-control { gap: 8rpx; background: transparent; border: 0; border-radius: 0; }
+  .analysis-panel-control .segment-item { background: #e9dcc0; color: #493b2e; border: 1rpx solid #9c8764; border-radius: 3rpx; font-family: 'Songti SC', SimSun, serif; }
+  .analysis-panel-control .segment-item.active { background: #f6e7bf; color: #352b22; border-bottom: 5rpx solid #ad6c38; }
+  .risk-section-header .risk-section-title, .action-section-header .action-section-title { color: #f6e7bf; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--clear-care .stats-page {
+  .analysis-panel-control { gap: 8rpx; background: transparent; border: 0; border-radius: 0; }
+  .analysis-panel-control .segment-item { background: var(--bt-surface-muted); border: 2rpx solid var(--bt-border); border-radius: 12rpx; font-size: 30rpx; min-height: 104rpx; font-family: sans-serif; font-weight: 600; }
+  .analysis-panel-control .segment-item.active { background: #004c2b; color: #fff; border-color: #004c2b; }
+}

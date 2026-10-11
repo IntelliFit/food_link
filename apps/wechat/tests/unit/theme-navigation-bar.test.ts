@@ -17,7 +17,9 @@ describe('dark artwork navigation contrast', () => {
     ;(Taro.getCurrentPages as jest.Mock).mockReturnValue([{ route: 'pages/index/index' }])
     ;(Taro.getStorageSync as jest.Mock).mockReturnValue('wellness')
     applyThemeNavigationBar('light')
-    expect(Taro.setNavigationBarColor).toHaveBeenLastCalledWith(expect.objectContaining({ frontColor: '#000000', backgroundColor: '#f7f3e8' }))
+    expect(Taro.setNavigationBarColor).toHaveBeenLastCalledWith(expect.objectContaining({ frontColor: '#000000', backgroundColor: '#f7f7f4' }))
+    applyThemeNavigationBar('dark')
+    expect(Taro.setNavigationBarColor).toHaveBeenLastCalledWith(expect.objectContaining({ frontColor: '#000000', backgroundColor: '#f7f7f4' }))
   })
   it('limits the eastern lacquer surface to profile', () => {
     mockTheme = 'eastern-salon'

@@ -1,0 +1,148 @@
+/* Profile-only portrait scenery. No home, stats, community, water or ink rules. */
+$scene-themes: miniature-world, picturebook-companion, modern-gallery, eastern-salon;
+@each $theme in $scene-themes {
+  .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} .profile-page {
+    isolation: isolate;
+    .bt-profile-backdrop {
+      position: absolute; z-index: -1; top: 180rpx; left: 0;
+      display: block; width: 100%; height: auto; pointer-events: none;
+    }
+    .bt-experience--profile { background: transparent; overflow: visible; margin-bottom: 24rpx; }
+    .bt-experience--profile .profile-header-section { box-sizing: border-box; margin: 0; box-shadow: none; border-radius: 0; }
+    .bt-experience--profile .user-name-row { flex-wrap: wrap; }
+    .bt-experience--profile .user-name { flex: 1 1 100%; }
+    .bt-experience--profile .user-name-actions { flex-wrap: wrap; max-width: 100%; }
+    .bt-experience--profile .user-days-pill, .bt-experience--profile .user-id-chip { background: var(--bt-surface); border: 1rpx solid var(--bt-border); border-radius: 3rpx; }
+    .bt-experience--profile .user-days-pill-text, .bt-experience--profile .user-id-chip-text { color: var(--bt-text); }
+    .bt-experience--profile .quick-action-item { min-width: 0; flex: 1; padding: 12rpx 8rpx; box-sizing: border-box; }
+    .bt-experience--profile .quick-action-text { font-size: 23rpx; }
+  }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--miniature-world .profile-page {
+  /* Warm wood remains the fallback below the finite portrait, even on long pages. */
+  background: #39291c !important;
+  .bt-experience--profile { padding: 30rpx; min-height: 0; height: auto; }
+  .bt-experience--profile .tc-display { font: 86rpx/1.1 'Songti SC', SimSun, serif; color: #fff5df; }
+  .bt-experience--profile .tc-date, .bt-experience--profile .tc-subtitle { color: #fff5df; text-shadow: 0 2rpx 6rpx #241a12; }
+  .bt-experience--profile .tc-subtitle { max-width: 450rpx; font-size: 24rpx; }
+  .bt-experience--profile .tc-sign { margin-top: 42rpx; padding: 8rpx 16rpx; border: 0; background: #f7ecd6ed; font-size: 34rpx; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 12rpx; }
+  .bt-experience--profile .profile-header-section { width: 100%; padding: 0; border: 0; background: transparent; }
+  .bt-experience--profile .user-card { width: 58%; min-height: 300rpx; box-sizing: border-box; padding: 24rpx 18rpx; gap: 14rpx; background: #f6ead4ed; border: 1rpx solid #ae8d5f; }
+  .bt-experience--profile .user-avatar-wrapper { width: 108rpx; height: 108rpx; border: 2rpx solid #9b7b4d; }
+  .bt-experience--profile .user-info-main { width: 100%; }
+  .bt-experience--profile .user-name { font-size: 34rpx; }
+  .bt-experience--profile .user-name, .bt-experience--profile .user-meta-text, .bt-experience--profile .user-meta-arrow { color: #392c1d; }
+  .bt-experience--profile .profile-quick-actions { margin-top: 40rpx; padding: 16rpx 8rpx; background: #f6ead4f5; border: 3rpx double #a88960; box-shadow: 0 6rpx 0 #62442c; border-radius: 6rpx; }
+  .balanced-theme-entry, .profile-recap-section { background: #f6ead4; color: #392c1d; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--picturebook-companion .profile-page {
+  background: #14212a !important;
+  .bt-experience--profile { padding: 30rpx; }
+  .bt-experience--profile .theme-chapter { align-items: flex-start; gap: 20rpx; }
+  .bt-experience--profile .tc-title { font-size: 50rpx; }
+  .bt-experience--profile .tc-subtitle { color: #f6e8ce; text-shadow: 0 2rpx 6rpx #14212a; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 400rpx; }
+  .bt-experience--profile .profile-header-section { padding: 20rpx 0 0; border: 0; background: #14212ae8; }
+  .bt-experience--profile .user-card { padding: 16rpx 20rpx; }
+  .bt-experience--profile .user-avatar-wrapper { border: 4rpx double #d4b47c; }
+  .bt-experience--profile .user-name, .bt-experience--profile .user-meta-text, .bt-experience--profile .user-meta-arrow, .bt-experience--profile .quick-action-num, .bt-experience--profile .quick-action-text { color: #f6e8ce; }
+  .bt-experience--profile .profile-quick-actions { border-top: 1rpx solid #b99d6a; }
+  .balanced-theme-entry, .profile-recap-section { background: #f2e5cb; color: #29332c; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--modern-gallery .profile-page {
+  background: #f4f1e9 !important;
+  .bt-experience--profile { padding: 30rpx 22rpx 0; }
+  .bt-experience--profile .tc-display { font: 700 190rpx/1.02 'Songti SC', SimSun, serif; letter-spacing: -7rpx; color: #fffdf5; }
+  .bt-experience--profile .tc-title { margin-top: 12rpx; color: #fffdf5; }
+  .bt-experience--profile .tc-caption { color: #fffdf5; padding: 12rpx 8rpx; background: #111111e8; }
+  .bt-experience--profile .bt-integrated-content { margin-top: 84rpx; }
+  .bt-experience--profile .profile-header-section { padding: 14rpx 12rpx 0; border: 0; background: #f8f6eeeb; }
+  .bt-experience--profile .user-card { flex-direction: column; align-items: flex-start; padding: 12rpx 12rpx 20rpx; gap: 14rpx; }
+  .bt-experience--profile .user-info-main { width: 100%; }
+  .bt-experience--profile .user-avatar-wrapper { border: 2rpx solid #363630; background: #e5e1d7; }
+  .bt-experience--profile .user-avatar-image { filter: grayscale(1); }
+  .bt-experience--profile .user-name, .bt-experience--profile .user-meta-text, .bt-experience--profile .user-meta-arrow, .bt-experience--profile .quick-action-num, .bt-experience--profile .quick-action-text { color: #171815; }
+  .bt-experience--profile .profile-quick-actions { border-top: 1rpx solid #aaa69a; padding-top: 14rpx; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--natural-symbiosis:not(.fl-d) .profile-page {
+  isolation: isolate; background: #f2eddf !important;
+  .bt-profile-backdrop { display: block; position: absolute; z-index: -1; top: 180rpx; left: 0; width: 100%; height: auto; pointer-events: none; }
+  .bt-experience--profile { background: transparent; }
+  .bt-experience--profile .profile-header-section { background: #fbf7eacc; border: 0; box-shadow: none; }
+  .bt-experience--profile .tc-title { color: #293c2b; }
+  .bt-experience--profile .tc-subtitle, .bt-experience--profile .tc-marginal { color: #41563c; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--eastern-salon .profile-page {
+  background: #11110f !important;
+  .bt-experience--profile { background: transparent; color: #e7d5b2; }
+  .bt-experience--profile .tc-brand, .bt-experience--profile .tc-title, .bt-experience--profile .tc-subtitle, .bt-experience--profile .tc-marginal { color: #e7d5b2; }
+  .bt-experience--profile .profile-header-section { background: transparent; }
+  .bt-experience--profile .user-days-pill, .bt-experience--profile .user-id-chip { background: #1b1b17; border: 1rpx solid #8e7448; border-radius: 0; }
+  .bt-experience--profile .user-days-pill-text, .bt-experience--profile .user-id-chip-text { color: #e7d5b2; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--natural-symbiosis.fl-d .profile-page .bt-profile-backdrop { display: none; }
+
+/* Keep additional live features after the reference's primary archive directory. */
+$archive-themes: miniature-world, picturebook-companion, modern-gallery, natural-symbiosis, eastern-salon;
+@each $theme in $archive-themes {
+  .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} .profile-page {
+    display: flex; flex-direction: column;
+    > .bt-experience { order: 0; flex-shrink: 0; }
+    > .theme-profile-sections { order: 1; flex-shrink: 0; width: 100%; box-sizing: border-box; }
+    > .balanced-theme-entry { order: 2; flex-shrink: 0; margin-top: 32rpx; }
+    > .profile-card { order: 3; flex-shrink: 0; }
+    > .profile-recap-section { order: 4; flex-shrink: 0; }
+    > .tool-card { order: 5; }
+    > .profile-version { order: 6; }
+    > .balanced-theme-picker { order: 7; }
+  }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--eastern-salon .profile-page .bt-experience--profile {
+  .tc-brand { font: 80rpx/1.1 'Songti SC', SimSun, serif; padding-bottom: 12rpx; }
+  .tc-scroll-heading, .tc-subtitle { display: none; }
+  .bt-integrated-content { margin-top: 20rpx; }
+}
+
+/* The scene is ornament only; titles, counters and toggles stay live. */
+.fl-page-theme-root--balanced.fl-balanced-theme--eastern-salon .profile-page {
+  isolation: isolate;
+  .bt-profile-backdrop { top: 140rpx; }
+  .bt-experience--profile .user-card { padding: 20rpx 0; }
+  .bt-experience--profile .profile-header-section { border: 0; box-shadow: none; }
+  .bt-experience--profile .profile-quick-actions { margin-top: 20rpx; border: 0; }
+  .theme-profile-sections { padding: 12rpx 6rpx; }
+  .tp-section {
+    margin: 0 0 14rpx; border: 3rpx double #8e7448; border-radius: 8rpx;
+    background: #11110f;
+    box-shadow: none;
+  }
+  .tp-section .profile-section-heading.is-toggle { position: relative; isolation: isolate; overflow: hidden; margin: 0; padding: 20rpx 24rpx; min-height: 136rpx; box-sizing: border-box; gap: 22rpx; border-bottom: 0; }
+  .tp-section__material { position: absolute; z-index: -1; right: 0; bottom: 0; width: 350rpx; height: auto; pointer-events: none; }
+  .tp-section .tp-section__mark { width: 58rpx; height: 58rpx; border: 0; flex-shrink: 0; background: transparent; }
+  .tp-section .tp-section__mark > text { font-size: 40rpx; color: #d6bd87; }
+  .tp-section .profile-section-title { font-size: 30rpx; letter-spacing: 4rpx; }
+  .tp-section .profile-section-hint { font-size: 22rpx; color: #d0bf9f; }
+  .tp-section .list-card { margin: 0 18rpx 18rpx; background: #191912; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--miniature-world .profile-page {
+  .theme-profile-sections { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12rpx; padding: 14rpx 0; }
+  .tp-section {
+    background: #654022;
+    border: 1rpx solid #5b391e; border-radius: 5rpx;
+    box-shadow: 0 5rpx 0 #342516;
+  }
+  .tp-section .profile-section-heading.is-toggle { position: relative; isolation: isolate; overflow: hidden; background: #654022; min-height: 200rpx; margin: 0; padding: 20rpx 14rpx; gap: 8rpx; border-bottom: 0; align-items: center; }
+  .tp-section__material { position: absolute; z-index: -1; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .tp-section .tp-section__mark { width: 42rpx; height: 42rpx; }
+  .tp-section .tp-section__copy { width: 100%; text-align: center; }
+  .tp-section .tp-section__mark > text { color: #f3dfb5; }
+  .tp-section .profile-section-title { color: #fff0cd; font-size: 24rpx; letter-spacing: 0; font-family: 'Songti SC', SimSun, serif; }
+  .tp-section .profile-section-hint { color: #f2dfbc; font-size: 19rpx; line-height: 1.55; }
+  .tp-section .profile-section-chevron { border-color: #f3dfb5; right: 12rpx; top: 22rpx; width: 10rpx; height: 10rpx; }
+  .tp-section:last-child, .tp-section--open { grid-column: 1 / -1; }
+  .tp-section:last-child .profile-section-heading.is-toggle, .tp-section--open .profile-section-heading.is-toggle { flex-direction: row; min-height: 120rpx; padding: 20rpx 52rpx 20rpx 24rpx; gap: 20rpx; }
+  .tp-section:last-child .tp-section__copy, .tp-section--open .tp-section__copy { text-align: left; }
+  .tp-section:last-child .profile-section-title, .tp-section--open .profile-section-title { font-size: 29rpx; }
+  .tp-section:last-child .profile-section-chevron, .tp-section--open .profile-section-chevron { right: 24rpx; top: 44rpx; }
+}

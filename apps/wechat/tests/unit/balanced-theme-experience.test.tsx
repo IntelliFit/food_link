@@ -3,13 +3,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { BalancedThemeExperience } from '../../src/components/BalancedThemeExperience'
 import { BALANCED_THEME_IDS, type BalancedThemeId } from '../../src/utils/balanced-theme'
 import { loadBalancedScenes } from '../../src/utils/balanced-theme-scenes'
+import easternProfileGold from '../../src/assets/balanced-themes/eastern-profile-gold-v11.webp'
 
 let mockTheme: BalancedThemeId = 'clarity-order'
 let mockWellness = false
+jest.mock('../../src/assets/balanced-themes/eastern-profile-gold-v11.webp', () => ({ __esModule: true, default: '/eastern-profile-gold.webp' }))
 jest.mock('../../src/components/BalancedThemeContext', () => ({ useBalancedTheme: () => ({ theme: mockTheme }) }))
 jest.mock('../../src/components/InkWellness', () => ({ useInkWellness: () => mockWellness }))
 jest.mock('../../src/utils/balanced-theme-scenes', () => ({
-  BALANCED_SCENES: { miniatureGarden: '/garden.webp', waterVessel: '/water.webp' },
+  BALANCED_SCENES: { miniatureGarden: '/garden.webp', waterVessel: '/water.webp', miniatureProfile: '/miniature-profile.webp', picturebookProfile: '/picturebook-profile.webp', galleryProfile: '/gallery-profile.webp' },
   loadBalancedScenes: jest.fn().mockResolvedValue(undefined),
 }))
 const home = { date: '2026-09-28', mealCount: 2, waterMl: 850, calories: 1024, authenticated: true, loading: false }
@@ -80,5 +82,27 @@ describe('balanced theme live experiences', () => {
     expect(login).toHaveBeenCalledTimes(2)
     expect(screen.queryByText('旅行者档案')).not.toBeInTheDocument()
     await waitFor(() => expect(screen.getByText('真实资料入口')).toBeInTheDocument())
+  })
+  it('replaces the profile portrait on the same page and removes it in water and wellness without losing live actions', async () => {
+    mockTheme = 'miniature-world'
+    const openProfile = jest.fn()
+    const content = <button onClick={openProfile}>当前用户资料</button>
+    const { container, rerender } = render(<BalancedThemeExperience surface='profile'>{content}</BalancedThemeExperience>)
+    await waitFor(() => expect(container.querySelector('.bt-profile-backdrop')).toHaveAttribute('src', '/miniature-profile.webp'))
+    for (const [theme, asset] of [['picturebook-companion', '/picturebook-profile.webp'], ['modern-gallery', '/gallery-profile.webp'], ['eastern-salon', easternProfileGold]] as const) {
+      mockTheme = theme
+      rerender(<BalancedThemeExperience surface='profile'>{content}</BalancedThemeExperience>)
+      await waitFor(() => expect(container.querySelectorAll('.bt-profile-backdrop')).toHaveLength(1))
+      expect(container.querySelector('.bt-profile-backdrop')).toHaveAttribute('src', asset)
+      fireEvent.click(screen.getByText('当前用户资料'))
+    }
+    mockTheme = 'way-of-water'
+    rerender(<BalancedThemeExperience surface='profile'>{content}</BalancedThemeExperience>)
+    expect(container.querySelector('.bt-profile-backdrop')).not.toBeInTheDocument()
+    mockWellness = true
+    rerender(<BalancedThemeExperience surface='profile'>{content}</BalancedThemeExperience>)
+    expect(container.querySelector('.bt-profile-backdrop')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('当前用户资料'))
+    expect(openProfile).toHaveBeenCalledTimes(4)
   })
 })

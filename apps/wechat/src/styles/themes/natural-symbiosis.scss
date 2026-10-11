@@ -6,7 +6,7 @@
   .bt-integrated-content .profile-header-section { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 24rpx 0; }
   .profile-header-section::after { content: none; }
   .profile-quick-actions { border-top: 1rpx solid #a1ac8e; border-bottom: 1rpx solid #a1ac8e; padding: 24rpx 0; }
-  .bt-experience:not(.bt-experience--home) { min-height: 280rpx; }
+  .bt-experience:not(.bt-experience--home) { min-height: 0; height: auto; padding-bottom: 30rpx; }
   .theme-chapter--natural-symbiosis { display: flex; justify-content: space-between; gap: 18rpx; }
   .theme-chapter--natural-symbiosis .tc-title { font: 56rpx 'Kaiti SC', KaiTi, serif; }
   .theme-chapter--natural-symbiosis .tc-marginal { margin-top: 76rpx; }
@@ -16,7 +16,7 @@
   .bt-experience--home .bt-leaf-note { width: 300rpx; }
   .theme-profile-sections { padding: 24rpx 0 30rpx; border-top: 1rpx solid #9cae8b; }
   .tp-section { margin: 0 0 12rpx; padding: 0; border-radius: 2rpx; border: 0; background: #eee4ce; box-shadow: none; }
-  .tp-section .profile-section-heading { position: relative; min-height: 192rpx; padding: 34rpx 38rpx 34rpx 104rpx; box-sizing: border-box; border: 0; }
+  .tp-section .profile-section-heading { position: relative; min-height: 156rpx; padding: 28rpx 34rpx 28rpx 92rpx; box-sizing: border-box; border: 0; }
   .tp-section .tp-section__drawer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .tp-section .tp-section__copy, .tp-section .profile-section-chevron { position: relative; }
   .tp-section .tp-section__mark { display: none; }
@@ -41,6 +41,15 @@
   .bt-experience--home .bt-leaf-note--meals { right: 30rpx; top: 38%; }
   .bt-experience--home .bt-leaf-note--water { left: 28rpx; top: 62%; }
   .bt-leaf-note .bt-action { min-height: 155rpx; padding: 24rpx; background: #fffff3cf; border: 2rpx solid #f8f7e7; box-shadow: 0 5rpx 18rpx #29462e1a; }
+  .bt-masthead__brand, .theme-chapter .tc-title { font-family: 'Kaiti SC', STKaiti, KaiTi, serif; font-weight: 500; letter-spacing: 4rpx; }
+  .bt-heading__subtitle { color: #425440; line-height: 1.85; }
+  .bt-leaf-note .bt-action__copy > text:first-child { font-size: 30rpx; font-weight: 500; letter-spacing: 2rpx; }
+  .theme-review--natural-symbiosis { padding: 20rpx 10rpx 32rpx; }
+  .theme-review--natural-symbiosis .tr-day { border-radius: 18rpx 4rpx; min-height: 96rpx; }
+  .theme-review--natural-symbiosis .tr-day.is-selected { background: #dce6d5; color: #294b35; border-color: #4e6848; }
+  .theme-review--natural-symbiosis .tr-detail { border-color: #a6ad92; padding: 26rpx 12rpx; }
+  .theme-review--natural-symbiosis .tr-caption { color: #51624c; }
+  .profile-section-chevron { border-color: #4e5d43; }
 }
 
 /* Paper art belongs to the light herbarium; dark mode keeps its readable palette. */

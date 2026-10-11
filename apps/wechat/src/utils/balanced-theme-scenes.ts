@@ -4,9 +4,11 @@ const root = '/packageThemeScenes/assets'
 export const BALANCED_SCENES = {
   miniatureGarden: `${root}/miniature-garden-v4.webp`,
   miniatureDesk: `${root}/miniature-desk-v4.webp`,
+  miniatureProfile: `${root}/miniature-profile-v10.webp`,
   miniatureSquare: `${root}/miniature-square-v4.webp`,
   picturebookDay: `${root}/picturebook-day-v4.webp`,
   picturebookDesk: `${root}/picturebook-desk-v4.webp`,
+  picturebookProfile: `${root}/picturebook-profile-v10.webp`,
   waterVessel: `${root}/water-vessel-v4.webp`,
   waterRock: `${root}/water-rock-v6.webp`,
   waterHome: `${root}/water-home-v5.webp`,
@@ -21,6 +23,7 @@ export const BALANCED_SCENES = {
   motionCloud: `${root}/motion-cloud-v9.webp`,
   easternSoup: `${root}/eastern-soup-v4.webp`,
   galleryCollage: `${root}/gallery-collage-v4.webp`,
+  galleryProfile: `${root}/gallery-profile-v10.webp`,
 } as const
 
 let pending: Promise<void> | undefined

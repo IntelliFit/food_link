@@ -109,14 +109,14 @@ $water-faint: #9ca3af;
   text-align: center;
 }
 
-.section-title-row {
+.water-record-page .water-section-title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16rpx;
 }
 
-.section-title {
+.water-record-page .water-section-title {
   font-size: 29rpx;
   line-height: 1.35;
   color: $water-text;
@@ -255,25 +255,40 @@ $water-faint: #9ca3af;
   }
 }
 
-.fl-page-theme-root--dark .water-record-page {
+.fl-page-theme-root.fl-d .water-record-page {
   background: transparent;
 }
 
-.fl-page-theme-root--dark .water-record-topbar,
-.fl-page-theme-root--dark .water-progress-card,
-.fl-page-theme-root--dark .water-action-card,
-.fl-page-theme-root--dark .water-day-card {
+.fl-page-theme-root.fl-d .water-record-topbar,
+.fl-page-theme-root.fl-d .water-progress-card,
+.fl-page-theme-root.fl-d .water-action-card,
+.fl-page-theme-root.fl-d .water-day-card {
   background: #18211f;
   border-color: #3d5d51;
 }
 
-.fl-page-theme-root--dark .water-record-title,
-.fl-page-theme-root--dark .water-total-value,
-.fl-page-theme-root--dark .section-title,
-.fl-page-theme-root--dark .water-custom-input {
+.fl-page-theme-root.fl-d .water-record-title,
+.fl-page-theme-root.fl-d .water-total-value,
+.fl-page-theme-root.fl-d .water-record-page .water-section-title,
+.fl-page-theme-root.fl-d .water-custom-input {
   color: #e8ece9;
 }
 
-.fl-page-theme-root--dark .water-custom-input {
+.fl-page-theme-root.fl-d .water-custom-input {
   background: #222c29;
+}
+
+.fl-page-theme-root.fl-d .water-record-kicker,
+.fl-page-theme-root.fl-d .water-trend-link-text,
+.fl-page-theme-root.fl-d .water-preset-text {
+  color: #8ac9eb;
+}
+
+.fl-page-theme-root.fl-d .water-total-unit,
+.fl-page-theme-root.fl-d .water-progress-note {
+  color: #b9c8c5;
+}
+
+.fl-page-theme-root.fl-d .water-progress-track {
+  background: #314842;
 }

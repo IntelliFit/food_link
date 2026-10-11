@@ -1,0 +1,83 @@
+/* Targeted follow-up to the gallery review, extended in each reference's visual language. */
+$themes: clarity-order, natural-symbiosis, eastern-salon, miniature-world, picturebook-companion, clear-care;
+@each $theme in $themes {
+  .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} {
+    .profile-page .tp-section .profile-section-chevron { transform: rotate(-45deg); border-color: var(--bt-text); margin-right: 6rpx; }
+    .profile-page .tp-section .profile-section-chevron.is-expanded { transform: rotate(45deg); }
+    .profile-page .tp-section .list-card { background: var(--bt-surface); border-color: var(--bt-border); }
+    .profile-page .tp-section .list-title, .profile-page .tp-section .list-arrow { color: var(--bt-text); }
+    .profile-page .tp-section .list-desc { color: var(--bt-muted); }
+    /* The legacy icon palette is inline, so these two properties intentionally win. */
+    .profile-page .tp-section .list-icon { color: var(--bt-text) !important; background: var(--bt-surface-muted) !important; border-color: var(--bt-border); }
+    .profile-page .tp-section .profile-list-icon-symbol { color: inherit; }
+    .stats-page {
+      .risk-card.stats-card { background: var(--bt-surface) !important; }
+      .risk-card-icon-circle { background: var(--bt-surface-muted) !important; }
+      .risk-card-icon { color: var(--bt-text) !important; }
+      .risk-card-score-unit { color: var(--bt-text); }
+      .action-plan-grid { grid-template-columns: minmax(0, 1fr); gap: 22rpx; }
+      .action-section-title { color: var(--bt-text); line-height: 1.5; }
+      .analysis-panel-content .action-plan-panel { padding: 28rpx; box-shadow: none; }
+      .action-plan-panel__title { font-size: 30rpx; line-height: 1.5; margin-bottom: 20rpx; }
+      .action-plan-item { gap: 12rpx; }
+      .action-plan-item + .action-plan-item { margin-top: 18rpx; padding-top: 18rpx; border-top: 1rpx solid var(--bt-border); }
+      .action-plan-item__title { font-size: 26rpx; line-height: 1.65; }
+      .action-plan-item__detail, .action-plan-panel__empty { font-size: 23rpx; line-height: 1.65; color: var(--bt-muted); }
+      .action-plan-item__bullet { font-size: 26rpx; line-height: 1.65; color: var(--bt-text); }
+      .action-plan-item__bullet--error { color: #a32e22; }
+      .action-score-delta { flex-wrap: wrap; justify-content: space-between; gap: 20rpx; padding: 24rpx 26rpx; margin-top: 24rpx; border-radius: var(--bt-radius); border: var(--bt-border-width) solid var(--bt-border); background: var(--bt-surface); }
+      .action-score-delta__copy { flex: 1; min-width: 230rpx; }
+      .action-score-delta__label { display: block; font-size: 26rpx; font-weight: 700; line-height: 1.5; color: var(--bt-text); }
+      .action-score-delta__note { display: block; margin-top: 8rpx; font-size: 21rpx; line-height: 1.5; color: var(--bt-muted); }
+      .action-score-delta__values { display: flex; align-items: baseline; gap: 14rpx; flex-shrink: 0; }
+      .action-score-delta__before { font: 500 40rpx/1.2 sans-serif; color: var(--bt-muted); }
+      .action-score-delta__arrow { font-size: 28rpx; color: var(--bt-text); }
+      .action-score-delta__after { font: 800 52rpx/1.2 sans-serif; color: var(--bt-text); }
+      .stats-page-disclaimer__text { color: var(--bt-muted); font-size: 22rpx; }
+    }
+  }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--clarity-order {
+  .profile-page .tp-section--open .profile-section-heading { border-bottom: 4rpx solid #c8ff00; }
+  .stats-page .action-section-header { border-top: 2rpx solid var(--bt-text); padding-top: 24rpx; }
+  .stats-page .analysis-panel-content .action-plan-panel { border: 1rpx solid var(--bt-border); border-radius: 0; }
+  .stats-page .action-plan-panel__title { font-weight: 800; }
+  .stats-page .action-score-delta { border-radius: 0; border-top: 6rpx solid #c8ff00; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--natural-symbiosis {
+  .profile-page .tp-section .profile-section-chevron { border-color: #4e5d43; }
+  .stats-page .action-plan-panel__title, .stats-page .action-score-delta__label { font-family: 'Kaiti SC', KaiTi, serif; letter-spacing: 2rpx; }
+  .stats-page .analysis-panel-content .action-plan-panel { border-radius: 32rpx 8rpx; border: 1rpx solid var(--bt-border); }
+  .stats-page .action-score-delta { border-radius: 8rpx 32rpx; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--eastern-salon {
+  .profile-page .tp-section .profile-section-chevron { border-color: #ccb88f; }
+  .stats-page .action-section-header { border-top: 1rpx solid var(--bt-border); padding-top: 24rpx; }
+  .stats-page .analysis-panel-content .action-plan-panel { border: 3rpx double var(--bt-border); border-radius: 0; }
+  .stats-page .action-plan-panel__title, .stats-page .action-score-delta__label { font-family: 'Songti SC', SimSun, serif; letter-spacing: 3rpx; font-weight: 500; }
+  .stats-page .action-score-delta { border-radius: 0; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--miniature-world {
+  .profile-page .tp-section .profile-section-chevron { border-color: #65452b; }
+  .stats-page .analysis-panel-content .action-plan-panel { border: 3rpx double #a47a4b; border-radius: 6rpx; box-shadow: 0 5rpx 0 #a47a4b; }
+  .stats-page .action-plan-panel__title, .stats-page .action-score-delta__label { font-family: 'Songti SC', SimSun, serif; }
+  .stats-page .action-score-delta { border: 2rpx solid #a47a4b; border-radius: 6rpx; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--picturebook-companion {
+  .profile-page .tp-section .profile-section-chevron { border-color: #655e4c; }
+  .stats-page .action-section-title { color: #f6e7bf; }
+  .stats-page .analysis-panel-content .action-plan-panel { border: 1rpx solid #9c8764; border-left: 5rpx solid #ad6c38; border-radius: 2rpx; }
+  .stats-page .action-plan-panel__title, .stats-page .action-score-delta__label { font-family: 'Kaiti SC', KaiTi, serif; letter-spacing: 2rpx; }
+  .stats-page .action-score-delta { border-radius: 2rpx; }
+  .stats-page .stats-page-disclaimer__text { color: #eadab8; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--clear-care {
+  .profile-page .tp-section .profile-section-chevron { width: 18rpx; height: 18rpx; border-width: 4rpx; border-color: #005630; }
+  .stats-page .action-section-title { font-size: 36rpx; }
+  .stats-page .action-plan-panel__title { font-size: 34rpx; }
+  .stats-page .action-plan-item__title { font-size: 30rpx; }
+  .stats-page .action-plan-item__detail, .stats-page .action-plan-panel__empty { font-size: 27rpx; }
+  .stats-page .action-score-delta__label { font-size: 30rpx; }
+  .stats-page .action-score-delta__note { font-size: 25rpx; }
+  .stats-page .action-score-delta { border: 2rpx solid #005630; }
+}

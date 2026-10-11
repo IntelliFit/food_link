@@ -5,7 +5,7 @@
   .theme-chapter--clear-care .tc-badge { padding: 12rpx 20rpx; background: #005630; color: #fff; font-size: 32rpx; border-radius: 18rpx; }
   .theme-chapter--clear-care .tc-title { font: 800 60rpx sans-serif; letter-spacing: 0; }
   .theme-chapter--clear-care .tc-subtitle { font-size: 31rpx; }
-  .bt-experience--home .bt-care-actions .bt-action { min-height: 182rpx; }
+  .bt-experience--home .bt-care-actions .bt-action { min-height: 178rpx; padding: 28rpx 30rpx; }
   .bt-experience--profile .bt-integrated-content { margin-top: 30rpx; }
   .theme-profile-sections { border: 2rpx solid #d2ded3; border-radius: 20rpx; padding: 0 22rpx; background: #fff; }
   .tp-section { margin: 0; border: 0; border-bottom: 1rpx solid #d2ded3; box-shadow: none; }
@@ -18,4 +18,17 @@
   .feed-card .feed-content { font-size: 35rpx; line-height: 1.85; font-weight: 500; }
   .feed-card .feed-image { margin-top: 28rpx; }
   .feed-card .feed-actions { min-height: 100rpx; }
+  .bt-experience--home .bt-masthead > view { display: flex; align-items: center; gap: 20rpx; flex-wrap: wrap; }
+  .bt-experience--home .bt-masthead__brand { font-size: 68rpx; }
+  .bt-experience--home .bt-masthead__edition { margin-top: 0; background: #005b38; color: #fff; padding: 10rpx 16rpx; border-radius: 16rpx; letter-spacing: 0; }
+  .bt-experience--home .bt-care-greeting text:first-child { font-size: 54rpx; line-height: 1.4; }
+  .bt-experience--home .bt-care-actions .bt-action__icon { font-size: 54rpx; }
+  .bt-experience--home .bt-care-actions .bt-action__copy > text:first-child { font-size: 44rpx; line-height: 1.35; }
+  .bt-experience--home .bt-care-summary { margin-top: 22rpx; padding: 26rpx; background: #edf6ed; border-radius: 18rpx; }
+  .theme-review--clear-care .tr-care-panel { padding: 32rpx 26rpx; }
+  .theme-review--clear-care .tr-day { min-height: 108rpx; }
+  .theme-review--clear-care .tr-day.is-selected { color: #082e1a; background: #ffbd21; border-color: #082e1a; }
+  .theme-review--clear-care .tr-record { min-height: 110rpx; box-sizing: border-box; }
+  .profile-header-section { border-radius: 20rpx; box-shadow: none; }
+  .feed-card { border: 1rpx solid #d2ded3; border-radius: 20rpx; background: #fff; box-shadow: none; padding: 28rpx; }
 }

@@ -1,7 +1,7 @@
 .fl-balanced-theme--modern-gallery:not(.fl-d) {
-  .bt-experience:not(.bt-experience--home) { min-height: 300rpx; padding: 24rpx 30rpx 38rpx; }
+  .bt-experience:not(.bt-experience--home) { min-height: 0; height: auto; padding: 28rpx 30rpx 38rpx; }
   .theme-chapter--modern-gallery { display: flex; justify-content: space-between; align-items: flex-start; }
-  .theme-chapter--modern-gallery .tc-display { font: 144rpx/1.1 'Songti SC', SimSun, serif; letter-spacing: -8rpx; }
+  .theme-chapter--modern-gallery .tc-display { font: 124rpx/1.1 'Songti SC', SimSun, serif; letter-spacing: -5rpx; }
   .theme-chapter--modern-gallery .tc-title { font: 45rpx 'Songti SC', SimSun, serif; margin-top: 20rpx; }
   .theme-chapter--modern-gallery .tc-caption { max-width: 165rpx; padding-top: 16rpx; font-size: 23rpx; line-height: 1.7; letter-spacing: 3rpx; white-space: pre-line; }
   .theme-chapter--modern-gallery .tc-caption text + text { font: 20rpx/1.4 Georgia, serif; margin-top: 20rpx; }
@@ -22,4 +22,54 @@
   .theme-feed-entry--photo .feed-image { order: 1; background: #151614; padding: 8rpx 8rpx 8rpx 20rpx; border-left: 10rpx solid #d62d22; }
   .theme-feed-entry--photo .feed-content { order: 2; font: 34rpx/1.6 'Songti SC', SimSun, serif; margin-top: 24rpx; }
   .theme-feed-entry--photo .feed-meta, .theme-feed-entry--photo .feed-actions { order: 3; }
+  .bt-experience--home .bt-masthead__brand { font-family: 'Songti SC', STSong, SimSun, serif; font-weight: 500; line-height: 1.15; }
+  .bt-experience--home .bt-heading__title { font-size: 56rpx; font-weight: 500; }
+  .bt-experience--home .bt-gallery-caption { padding: 22rpx 26rpx; max-width: 360rpx; box-shadow: 4rpx 6rpx 0 #10101040; }
+  .bt-experience--home .bt-gallery-bottom .bt-action--record { min-height: 108rpx; justify-content: center; }
+  .theme-review--modern-gallery { border-radius: 0; border-top: 2rpx solid #191919; }
+  .theme-review--modern-gallery .tr-gallery-note { padding: 28rpx 24rpx; font-size: 38rpx; background: #eee6d7; }
+  .theme-profile-sections { box-sizing: border-box; }
+  .tp-section .profile-section-heading { min-height: 146rpx; }
+  .tp-section .profile-section-hint { font-size: 23rpx; opacity: 1; }
+  .tp-section .profile-section-chevron { border-color: #fff4de; }
+  .tp-section .tp-section__number { color: #fff4de; }
+  .theme-feed-entry--photo .feed-image { box-shadow: none; border-radius: 0; }
+}
+
+/* Cabinet hardware follows the gallery reference; the whole heading remains the toggle. */
+.fl-balanced-theme--modern-gallery .profile-page .theme-profile-sections .tp-section--modern-gallery {
+  .profile-section-heading {
+    background: linear-gradient(180deg, #df3026 0%, #bd170f 18%, #ac130c 82%, #c92118 100%);
+    border: 2rpx solid #78100a;
+    box-shadow: inset 0 3rpx 1rpx #ff706770, inset 0 -5rpx 4rpx #67090080;
+  }
+  .tp-section__gallery-control { display: flex; align-items: center; gap: 22rpx; flex-shrink: 0; }
+  .tp-section__drawer-pull {
+    position: relative; width: 138rpx; height: 72rpx; box-sizing: border-box;
+    border: 3rpx solid #777975; border-radius: 3rpx;
+    background: linear-gradient(135deg, #e5e6df, #484a46 20%, #b9bab3 48%, #333633 78%, #93958e);
+    box-shadow: 0 7rpx 8rpx #31040090, inset 0 2rpx 0 #ffffffb0;
+  }
+  .tp-section__pull-inset {
+    position: absolute; inset: 10rpx 13rpx 13rpx; background: #211e1b;
+    border: 2rpx solid #161715; box-shadow: inset 0 7rpx 8rpx #0009;
+  }
+  .tp-section__pull-grip {
+    position: absolute; left: 12rpx; right: 12rpx; bottom: 8rpx; height: 13rpx;
+    border-radius: 3rpx; background: linear-gradient(#f4f2e8, #8b8d85 35%, #30342f 68%, #abaea5);
+    box-shadow: 0 4rpx 3rpx #0007;
+  }
+  .tp-section__pull-screw {
+    position: absolute; width: 7rpx; height: 7rpx; border-radius: 50%;
+    background: linear-gradient(135deg, #fff, #8b8e85 55%, #343830);
+    box-shadow: 0 1rpx 1rpx #0009;
+  }
+  .tp-section__pull-screw--tl { top: 3rpx; left: 3rpx; }
+  .tp-section__pull-screw--tr { top: 3rpx; right: 3rpx; }
+  .tp-section__pull-screw--bl { bottom: 3rpx; left: 3rpx; }
+  .tp-section__pull-screw--br { bottom: 3rpx; right: 3rpx; }
+  .profile-section-chevron { margin: 0 4rpx 0 0; border-color: #fff4de; transform: rotate(-45deg); }
+  .profile-section-chevron.is-expanded { transform: rotate(45deg); }
+  .list-card .list-title, .list-card .list-arrow { color: #191a17; }
+  .list-card .list-desc { color: #655a4d; }
 }

@@ -1310,7 +1310,7 @@ function StatsPage() {
 
   if (guestBrowse && ink) {
     return (
-      <View className={`stats-page stats-page--guest ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+      <View className={`stats-page stats-page--guest ${ink ? 'ink-page' : ''} ${scheme === 'dark' && !ink ? 'stats-page--dark' : ''}`}>
         {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
         <BalancedThemeExperience surface='stats' />
         {!ink ? <ThemeDailyReview theme={theme} endDate={formatLocalDate()} guest onRecord={() => redirectToLogin()} /> : <View className='stats-guest-card'>
@@ -1326,7 +1326,7 @@ function StatsPage() {
 
   if (loading && !data) {
     return (
-      <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+      <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' && !ink ? 'stats-page--dark' : ''}`}>
         {ink && <InkMasthead title='观照日常' />}
         <BalancedThemeExperience surface='stats' />
         <View className='loading-wrap'>
@@ -1338,7 +1338,7 @@ function StatsPage() {
 
   if (error && !data) {
     return (
-      <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+      <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' && !ink ? 'stats-page--dark' : ''}`}>
         {ink && <InkMasthead title='观照日常' />}
         <BalancedThemeExperience surface='stats' />
         <View className='error-wrap'>
@@ -1557,7 +1557,7 @@ function StatsPage() {
   }
 
   return (
-    <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
+    <View className={`stats-page ${ink ? 'ink-page' : ''} ${scheme === 'dark' && !ink ? 'stats-page--dark' : ''}`}>
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
         {ink && <InkMasthead title='观照日常' subtitle='在起伏中，找到自己的节奏' />}
         <BalancedThemeExperience surface='stats' />
@@ -2009,7 +2009,7 @@ function StatsPage() {
         </View>
         <View className='action-plan-grid'>
             <View className='action-plan-panel action-plan-panel--red'>
-              <Text className='action-plan-panel__title'>当前主要拖累项</Text>
+              <Text className='action-plan-panel__title'>{!ink && theme !== 'way-of-water' ? '重点观察' : '当前主要拖累项'}</Text>
               {topIssues.length > 0 ? (
                 topIssues.map((issue) => (
                   <View key={issue.title} className='action-plan-item'>
@@ -2026,7 +2026,7 @@ function StatsPage() {
             </View>
 
             <View className='action-plan-panel action-plan-panel--green'>
-              <Text className='action-plan-panel__title'>建议你先这样改</Text>
+              <Text className='action-plan-panel__title'>{!ink && theme !== 'way-of-water' ? '建议行动' : '建议你先这样改'}</Text>
               {actionList.map((action) => (
                 <View key={action} className='action-plan-item'>
                   <Text className='action-plan-item__bullet'>•</Text>
@@ -2038,8 +2038,20 @@ function StatsPage() {
             </View>
           </View>
           <View className='action-score-delta'>
+            {!ink && theme !== 'way-of-water' ? <>
+              <View className='action-score-delta__copy'>
+                <Text className='action-score-delta__label'>完成建议后的估计</Text>
+                <Text className='action-score-delta__note'>{isHealthIndexPreview ? '示例数据 · 仅展示改善方向' : '基于当前记录估算 · 供趋势参考'}</Text>
+              </View>
+              <View className='action-score-delta__values'>
+                <Text className='action-score-delta__before'>{overallRiskScore}</Text>
+                <Text className='action-score-delta__arrow'>→</Text>
+                <Text className='action-score-delta__after'>{projectedOverallScore}</Text>
+              </View>
+            </> : <>
             <Text className='action-score-delta__dot' />
             <Text className='action-score-delta__text'>如果完成修改，综合健康分约为 {overallRiskScore} → {projectedOverallScore}</Text>
+            </>}
           </View>
 
           </View>

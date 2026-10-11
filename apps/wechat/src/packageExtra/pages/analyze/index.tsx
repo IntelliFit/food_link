@@ -1,6 +1,7 @@
 import { View, Text, Image, Textarea, PageMeta, Video } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { InkMasthead, useInkWellness } from '../../../components/InkWellness'
 import {
   imageToBase64,
   compressImagePathForUpload,
@@ -439,6 +440,7 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
 }
 
 function AnalyzePage() {
+  const ink = useInkWellness()
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
@@ -1314,8 +1316,9 @@ function AnalyzePage() {
         pageStyle={showAnalyzeOnboardingGuide ? PAGE_SCROLL_LOCK_STYLE : 'overflow: visible;'}
       />
       <View
-        className={`analyze-page ${showAnalyzeOnboardingGuide ? 'analyze-page--scroll-locked' : ''}`}
+        className={`analyze-page ${ink ? 'analyze-page--ink' : ''} ${showAnalyzeOnboardingGuide ? 'analyze-page--scroll-locked' : ''}`}
       >
+      {ink && <InkMasthead title='记下一餐' subtitle='一餐一味，皆有平衡' compact />}
       {/* 提示：长按页面任意位置可启用开发者模式 */}
       {/* 配额提示 */}
       {membershipStatus && (
@@ -1915,12 +1918,14 @@ function AnalyzePage() {
 
       </View>
 
+      <View className={ink ? 'ink-capture-guide' : ''}>
       <OnboardingGuide
         visible={showAnalyzeOnboardingGuide}
         steps={ANALYZE_PREP_ONBOARDING_STEPS}
         storageKey={ONBOARDING_ANALYZE_PREP_GUIDE_KEY}
         onClose={() => setShowAnalyzeOnboardingGuide(false)}
       />
+      </View>
     </>
   )
 }

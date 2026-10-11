@@ -5,13 +5,25 @@
   .theme-chapter--clarity-order .tc-imprint > text + text { font-size: 22rpx; color: #444; }
   .theme-chapter--clarity-order .tc-title { font-size: 64rpx; font-weight: 800; letter-spacing: -2rpx; }
   .theme-chapter--clarity-order .tc-date { margin-top: 20rpx; }
-  .bt-experience--home .bt-heading__title { font-size: 78rpx; }
+  .bt-experience--home .bt-heading__title { font-size: 72rpx; line-height: 1.2; font-weight: 900; letter-spacing: -2rpx; }
+  .bt-experience--home .bt-masthead { border-top: 1rpx solid #b8b8b0; padding-top: 24rpx; }
+  .bt-experience--home .bt-masthead__brand { font-size: 58rpx; letter-spacing: -2rpx; }
+  .bt-experience--home .bt-heading { margin-top: 36rpx; margin-bottom: 30rpx; }
+  .bt-experience--home .bt-heading__subtitle { max-width: 550rpx; color: #333; line-height: 1.65; }
+  .bt-experience--home .bt-clarity-photo { margin-left: -30rpx; margin-right: -30rpx; height: 390rpx; border-radius: 0; }
+  .bt-experience--home .bt-action--record { justify-content: center; min-height: 100rpx; border-radius: 3rpx; }
+  .theme-review--clarity-order { border-top: 1rpx solid #a9aaa2; border-bottom: 1rpx solid #a9aaa2; padding: 30rpx 0; }
+  .theme-review--clarity-order .tr-average > view text:first-child { font-size: 82rpx; letter-spacing: -3rpx; }
+  .theme-review--clarity-order .tr-day.is-selected { border: 0; border-bottom: 3rpx solid #111; }
+  .profile-header-section { border: 0; border-radius: 0; box-shadow: none; }
+  .feed-card { border: 0; border-bottom: 1rpx solid #b8b8b0; border-radius: 0; box-shadow: none; padding: 30rpx 0; }
   .bt-experience--home .bt-live-summary { border-top: 2rpx solid #151515; padding: 24rpx 0; }
   .bt-experience--home .bt-live-summary text + text { font-size: 39rpx; font-weight: 800; }
   .tp-section { margin: 0; border: 0; border-top: 2rpx solid #111; background: transparent; }
   .tp-section .profile-section-heading { padding: 34rpx 0; }
   .tp-section .tp-section__mark { align-self: flex-start; justify-content: flex-start; width: 54rpx; }
   .tp-section .profile-section-title { font-size: 34rpx; font-weight: 800; }
+  .tp-section .profile-section-hint { color: #555; font-size: 24rpx; }
   .tp-section .list-card { padding-left: 76rpx; }
   .theme-feed-entry--photo .feed-card-main-col { display: flex; flex-direction: column; }
   .theme-feed-entry--photo .feed-card-name-block { order: 0; }
