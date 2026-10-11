@@ -1,13 +1,16 @@
-import { View, Text, Input, Button } from '@tarojs/components'
+import { View, Text, Input, Button, Canvas } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { useRef, useState } from 'react'
 import { showUnifiedApiError } from '../../../utils/api'
 import { mealPath, mealRequest, mealRequestKey, mealStatus, mealWhen } from '../../../utils/meal-meetup'
 import { useMealDetail } from '../../use-detail'
+import { useMealInvitation } from '../../use-invitation'
 import '../../common.scss'
 
 export default function MealDetail() {
   const { id, row, loading, error, reload } = useMealDetail()
+  const invitation = useMealInvitation(row, loading || Boolean(error))
+  const justCreated = Taro.getCurrentInstance().router?.params.created === '1'
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const applying = useRef(false)
@@ -33,8 +36,17 @@ export default function MealDetail() {
     {error && <View className='meal-error'><Text>{error}</Text><Button onClick={() => { void reload() }}>重试</Button><Button onClick={() => { void Taro.navigateTo({ url: mealPath('mine') }) }}>我的约饭</Button>{/^[0-9a-f-]{36}$/i.test(id) && <Button disabled={busy} onClick={() => { void report() }}>举报这场约饭</Button>}</View>}
     {row && <>
       <Text className='meal-page-title'>{row.title}</Text>
-      <View className='meal-panel'><Text className='meal-title'>{mealWhen(row.starts_at)} · 北京时间</Text><Text className='meal-copy'>{row.venue_name}</Text><Text className='meal-muted'>{row.address}</Text><Text className='meal-copy'>人均{row.budget ? `${row.budget}元以内` : '协商'} · {row.payment === 'aa' ? 'AA' : '各自付款'}</Text><Text className='meal-muted'>共{row.capacity}人，含发起人 · 预计至 {mealWhen(row.ends_at).slice(-5)}</Text><Text className='meal-state'>{mealStatus[row.status]} · {row.member_count}/{row.capacity}人</Text>
+      <View className='meal-panel meal-invite-card'>
+        <Text className='meal-invite-eyebrow'>{invitation ? (justCreated && row.is_host ? '约饭已发布 · 喊朋友一起吃' : '约饭邀请单') : '约饭信息'}</Text>
+        <Text className='meal-title'>{mealWhen(row.starts_at)} · 北京时间</Text><Text className='meal-copy'>{row.venue_name}</Text><Text className='meal-muted'>{row.address}</Text><Text className='meal-copy'>人均{row.budget ? `${row.budget}元以内` : '协商'} · {row.payment === 'aa' ? 'AA' : '各自付款'}</Text><Text className='meal-muted'>共{row.capacity}人，含发起人 · 预计至 {mealWhen(row.ends_at).slice(-5)}</Text><Text className='meal-state'>{mealStatus[row.status]} · {row.member_count}/{row.capacity}人</Text>
         {row.latitude != null && row.longitude != null && <Button className='meal-secondary' onClick={() => { void Taro.openLocation({ latitude: row.latitude!, longitude: row.longitude!, name: row.venue_name, address: row.address }).catch((e) => showUnifiedApiError(e)) }}>查看地点</Button>}
+        {invitation && <View className='meal-invite-actions'>
+          <Text className='meal-invite-places'>{invitation.places}</Text>
+          <Button className='meal-primary meal-invite-share' openType='share'>邀请好友 / 群聊</Button>
+          <Button className='meal-invite-copy' onClick={() => { void Taro.setClipboardData({ data: invitation.text }).catch((e) => showUnifiedApiError(e)) }}>复制邀请文案</Button>
+          <Text className='meal-muted'>转发约饭卡片，对方点开申请，同意后一起吃。</Text>
+        </View>}
+        {!loading && !error && !invitation && <Text className='meal-muted'>这场约饭暂不接受新邀请。</Text>}
       </View>
       <View className='meal-panel'><Text className='meal-title'>{row.host.nickname} 发起</Text><Text className='meal-copy'>{row.description || '一起吃一顿饭，轻松聊聊。'}</Text><Text className='meal-muted'>请在公共餐厅或食堂见面，校内地点请提前确认通行要求。</Text></View>
       {row.members.length > 0 && <View className='meal-panel'><Text className='meal-title'>这顿饭的搭子</Text><View className='meal-members'>{row.members.map((p) => <Text key={p.user_id}>{p.nickname}{p.user_id === row.host.user_id ? ' · 发起人' : ''}</Text>)}</View></View>}
@@ -48,5 +60,6 @@ export default function MealDetail() {
       {row.is_host && ['active', 'full', 'started'].includes(row.status) && <Button className='meal-danger' disabled={busy} onClick={() => { void act('/cancel', {}, '取消后会通知申请者和已加入成员，房间停止新留言。') }}>取消约饭</Button>}
       <Button className='meal-secondary' disabled={busy} onClick={() => { void report() }}>举报这场约饭</Button>
     </>}
+    <Canvas type='2d' id='mealInvitationCanvas' className='meal-invite-canvas' />
   </View>
 }

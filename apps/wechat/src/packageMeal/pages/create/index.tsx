@@ -38,7 +38,7 @@ function MealCreate() {
     submitLock.current = true; setBusy(true)
     try {
       const result = await mealRequest<{ id: string }>('', 'POST', req)
-      await Taro.redirectTo({ url: mealPath('detail', result.id) })
+      await Taro.redirectTo({ url: `${mealPath('detail', result.id)}&created=1` })
     } catch (e) { void showUnifiedApiError(e) }
     finally { submitLock.current = false; setBusy(false) }
   }
