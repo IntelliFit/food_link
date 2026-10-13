@@ -37,6 +37,7 @@ import {
 } from '../../../utils/weapp-privacy'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import { DevNewUserOnboardingPreview } from '../../../components/DevNewUserOnboardingPreview'
+import './RecordMenu.scss'
 
 interface RecordMenuProps {
   visible: boolean
@@ -48,67 +49,27 @@ interface RecordMenuProps {
 const GRID_FEATURES: Array<{
   id: string
   label: string
-  color: string
-  backgroundColor: string
-  borderColor: string
-  iconBackgroundColor: string
-  darkColor: string
-  darkBackgroundColor: string
-  darkBorderColor: string
-  darkIconBackgroundColor: string
   Icon: typeof IconCamera
   isNew?: boolean
 }> = [
   {
     id: 'camera',
     label: '拍照识别',
-    color: '#38a97b',
-    backgroundColor: '#f9fefc',
-    borderColor: '#d9faeb',
-    iconBackgroundColor: '#ebfcf4',
-    darkColor: '#6ff6bc',
-    darkBackgroundColor: 'rgba(111, 246, 188, 0.10)',
-    darkBorderColor: 'rgba(111, 246, 188, 0.22)',
-    darkIconBackgroundColor: 'rgba(111, 246, 188, 0.16)',
     Icon: IconCamera,
   },
   {
     id: 'album',
     label: '相册上传',
-    color: '#4295bc',
-    backgroundColor: '#f9fdfe',
-    borderColor: '#d9f2fa',
-    iconBackgroundColor: '#ebf7fc',
-    darkColor: '#81d6fb',
-    darkBackgroundColor: 'rgba(129, 214, 251, 0.10)',
-    darkBorderColor: 'rgba(129, 214, 251, 0.22)',
-    darkIconBackgroundColor: 'rgba(129, 214, 251, 0.16)',
     Icon: IconAlbum,
   },
   {
     id: 'text',
     label: '文本输入',
-    color: '#9f823a',
-    backgroundColor: '#fefcf7',
-    borderColor: '#f7e9ce',
-    iconBackgroundColor: '#fbf5e6',
-    darkColor: '#fcd666',
-    darkBackgroundColor: 'rgba(252, 214, 102, 0.10)',
-    darkBorderColor: 'rgba(252, 214, 102, 0.22)',
-    darkIconBackgroundColor: 'rgba(252, 214, 102, 0.16)',
     Icon: IconText,
   },
   {
     id: 'manual',
     label: '食物库输入',
-    color: '#6951bd',
-    backgroundColor: '#fefcfe',
-    borderColor: '#e6defa',
-    iconBackgroundColor: '#f3effc',
-    darkColor: '#b39ef4',
-    darkBackgroundColor: 'rgba(179, 158, 244, 0.10)',
-    darkBorderColor: 'rgba(179, 158, 244, 0.22)',
-    darkIconBackgroundColor: 'rgba(179, 158, 244, 0.16)',
     Icon: IconFoodshop,
   },
 ]
@@ -148,10 +109,11 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 
 export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
-  const isDark = scheme === 'dark'
   const { theme } = useBalancedTheme()
   const wellness = useInkWellness()
+  const isDark = scheme === 'dark' && !wellness
   const isWater = !wellness && theme === 'way-of-water'
+  const isThemed = !wellness && !isWater
   const [devToolsOpen, setDevToolsOpen] = React.useState(false)
   const [onboardingPreviewOpen, setOnboardingPreviewOpen] = React.useState(false)
   /** 预置测试图 URL（仅 development 本地 UI 调试） */
@@ -372,9 +334,10 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     {visible ? (
     <View className='record-menu-modal' catchMove>
       <View className='record-menu-mask' onClick={onClose} />
-      <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}${isWater ? ' record-menu-content--water' : ''}${wellness ? ' record-menu-content--ink' : ''}`}>
+      <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}${isWater ? ' record-menu-content--water' : ''}${wellness ? ' record-menu-content--ink' : ''}${isThemed ? ` record-menu-content--themed record-menu-theme--${theme}` : ''}`}>
         {/* 顶部圆角指示条 */}
         <View className='record-menu-handle-bar' />
+        {isThemed && <View className='record-menu-themed-heading'><Text>记录这一餐</Text><Text>选择一种方式，留下今天的饮食</Text></View>}
         {wellness && <View className='record-menu-ink-heading'><Text>一餐一味</Text><Text>留下今天的饮食与生活</Text></View>}
         {isWater && (
           <View className='record-menu-water-heading'>
@@ -385,12 +348,12 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
 
         {/* 2x2 功能网格 */}
         <View className='record-menu-grid-v2'>
-          {GRID_FEATURES.map((feature) => {
+          {GRID_FEATURES.map((feature, index) => {
             const IconComponent = feature.Icon
-            const featureColor = wellness ? '#222222' : isWater ? '#c0edf7' : isDark ? feature.darkColor : feature.color
-            const featureBackground = wellness ? '#f7f7f4' : isWater ? 'rgba(30, 67, 81, 0.48)' : isDark ? feature.darkBackgroundColor : feature.backgroundColor
-            const featureBorder = wellness ? '#b9b9b3' : isWater ? 'rgba(160, 219, 235, 0.28)' : isDark ? feature.darkBorderColor : feature.borderColor
-            const iconBackground = wellness ? '#e9e9e3' : isWater ? 'rgba(129, 214, 251, 0.12)' : isDark ? feature.darkIconBackgroundColor : feature.iconBackgroundColor
+            const featureColor = wellness ? '#222222' : isWater ? '#c0edf7' : feature.id === 'camera' ? 'var(--rm-primary-ink)' : 'var(--rm-ink)'
+            const featureBackground = wellness ? '#f7f7f4' : isWater ? 'rgba(30, 67, 81, 0.48)' : feature.id === 'camera' ? 'var(--rm-primary)' : 'var(--rm-card)'
+            const featureBorder = wellness ? '#b9b9b3' : isWater ? 'rgba(160, 219, 235, 0.28)' : 'var(--rm-border)'
+            const iconBackground = wellness ? '#e9e9e3' : isWater ? 'rgba(129, 214, 251, 0.12)' : 'var(--rm-icon-panel)'
             return (
               <View
                 key={feature.id}
@@ -399,6 +362,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
                 style={{ backgroundColor: featureBackground, borderColor: featureBorder }}
                 onClick={() => handleGridClick(feature.id)}
               >
+                {isThemed && <Text className='record-menu-grid-index' aria-hidden>{`0${index + 1}`}</Text>}
                 {feature.isNew && (
                   <View className='record-menu-new-badge'>
                     <Text className='record-menu-new-text'>NEW</Text>
@@ -457,10 +421,10 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
                   </View>
                 </View>
                 <View className='record-menu-dev-trigger-right'>
-                  <IconTrendingUp size={22} color={isWater ? '#a8ddeb' : '#00bc7d'} />
+                  <IconTrendingUp size={22} color={wellness ? '#222222' : isWater ? '#a8ddeb' : 'var(--rm-ink)'} />
                   <IconChevronRight
                     size={16}
-                    color='#94a3b8'
+                    color={wellness ? '#555555' : isWater ? '#94a3b8' : 'var(--rm-muted)'}
                     className={
                       devToolsOpen
                         ? 'record-menu-dev-chevron record-menu-dev-chevron-open'
