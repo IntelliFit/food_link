@@ -201,9 +201,9 @@ func applyMealRequirementUpdates(state *campusDietAgentRunState, raw string) (in
 			}
 			mealApplyFoodUpdate(&state.Constraints, update.Field, update.Action, value)
 		case "canteen_name":
-			if update.Action == "clear" && mealCanteenRelease.MatchString(evidence) {
-				state.Constraints.CanteenName = ""
-			} else if update.Action == "set" && strings.Contains(evidence, update.Value) && regexp.MustCompile(`只|仅|就去|就在|锁定|指定|决定去|准备去`).MatchString(evidence) && (regexp.MustCompile(`园|食堂|餐厅|社区`).MatchString(update.Value) || mealExplicitVenue(evidence) == update.Value) && len([]rune(update.Value)) <= 32 {
+			if update.Action == "clear" && (mealCanteenRelease.MatchString(evidence) || mealRequestsOtherVenue(evidence)) {
+				applyMealVenueConstraints(&state.Constraints, evidence)
+			} else if update.Action == "set" && strings.Contains(evidence, update.Value) && mealExplicitVenue(evidence) != "" && len([]rune(update.Value)) <= 40 {
 				state.Constraints.CanteenName = update.Value
 			} else {
 				continue
@@ -219,6 +219,9 @@ func applyMealRequirementUpdates(state *campusDietAgentRunState, raw string) (in
 		}
 		accepted++
 	}
+	// The latest explicit destination beats model arguments quoting an earlier
+	// clause; in particular "not A, I am at B" must never restore A.
+	applyMealVenueConstraints(&state.Constraints, question)
 	state.Constraints.Version = mealRequirementVersion
 	return accepted, nil
 }

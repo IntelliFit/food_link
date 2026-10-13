@@ -310,6 +310,9 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 	if canteenName := strings.TrimSpace(filter.CanteenName); canteenName != "" {
 		like := diningVenueLike(canteenName)
 		base = base.Where("(LOWER(REPLACE(canteen_name, ' ', '')) LIKE ? OR LOWER(REPLACE(merchant_name, ' ', '')) LIKE ?)", like, like)
+		if school, _ := domain.DiningVenueParts(canteenName); school != "" {
+			base = base.Where("REPLACE(school_name, ' ', '') = ?", school)
+		}
 	}
 	if len(filter.IncludeSourceIDs) > 0 {
 		base = base.Where("id IN ?", filter.IncludeSourceIDs)
