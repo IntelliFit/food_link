@@ -628,6 +628,12 @@
   --capture-outline: #777; --capture-inner-line: #b9b9b3;
   --capture-shadow: 0 4rpx 0 #d2d2ca; --capture-glint: transparent;
 }
+.custom-tab-bar.custom-tab-bar--wellness .tab-item.center-item .tab-text {
+  height: 34rpx;
+  flex-basis: 34rpx;
+  font-size: 24rpx;
+  line-height: 34rpx;
+}
 .custom-tab-bar .center-taiji {
   position: absolute;
   left: 7%; top: 7%; width: 86%; height: 86%;
