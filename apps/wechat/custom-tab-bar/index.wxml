@@ -2,6 +2,7 @@
   <view 
     wx:for="{{tabList}}" 
     wx:key="index"
+    id="{{item.isCenter ? 'tab-capture-entry' : 'tab-' + item.id}}"
     class="tab-item {{item.isCenter ? 'center-item' : ''}} {{item.isCenter && recordOpening ? 'center-item--opening' : ''}} {{selectedIndex === index ? 'selected' : ''}}"
     data-index="{{index}}"
     data-path="{{item.pagePath}}"
@@ -25,10 +26,22 @@
         </view>
       </block>
       <block wx:elif="{{item.isCenter}}">
-        <view class="center-icon-wrapper {{recordOpening ? 'is-opening' : ''}}">
+        <view
+          id="tab-capture-control"
+          class="center-icon-wrapper {{recordOpening ? 'is-opening' : ''}}"
+          data-index="{{index}}"
+          data-path="{{item.pagePath}}"
+          data-iscenter="{{item.isCenter}}"
+          catchtap="switchTab"
+        >
           <image wx:if="{{wellnessActive}}" class="center-taiji" src="./taiji.jpg" mode="aspectFit" />
           <view wx:if="{{recordOpening}}" class="center-opening-spinner"></view>
-          <text wx:else class="iconfont icon-paizhao-xianxing center-icon"></text>
+          <view wx:else class="capture-camera" aria-hidden="true">
+            <view class="capture-camera__body">
+              <view class="capture-camera__lens"></view>
+              <view class="capture-camera__flash"></view>
+            </view>
+          </view>
           <view
             wx:if="{{analyzeReminderKind === 'waiting_record' && analyzeReminderCount > 0}}"
             class="center-task-badge center-task-badge--waiting"

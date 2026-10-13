@@ -36,11 +36,7 @@
   z-index: 999;
 }
 
-/* 下凹曲线背景（SVG 作为 data URI，全宽拉伸）
-   参考图风格：中间按钮为旋转 45° 的圆角正方形，
-   下凹两侧为 45° 斜线，与菱形按钮平行呼应，
-   底部用 cubic-bezier 画圆润过渡。
-   开口宽 180rpx（325~425），深度 42rpx（到 y=42）
+/* 底部导航背景；中心拍照按钮使用下方独立的正常流布局。
 */
 .custom-tab-bar::before {
   content: '';
@@ -98,62 +94,6 @@
 
 .tab-item.selected .icon-wrapper {
   transform: scale(1.05);
-}
-
-/* ===== 中间记录按钮 - 旋转 45° 的圆角正方形（参考图风格） ===== */
-.tab-item.center-item {
-  z-index: 2;
-}
-
-.tab-item.center-item .icon-wrapper {
-  width: 110rpx;
-  height: 110rpx;
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.center-icon-wrapper {
-  width: 110rpx;
-  height: 110rpx;
-  background: #5cb896;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8rpx 24rpx rgba(92, 184, 150, 0.55), 0 4rpx 8rpx rgba(0, 0, 0, 0.08);
-  position: absolute;
-  left: 50%;
-  top: 39%;
-  margin-left: -55rpx;
-  margin-top: -55rpx;
-  transform: translateY(-18rpx);
-  transition: background 0.3s ease, box-shadow 0.3s ease;
-}
-
-.center-icon {
-  font-size: 52rpx;
-  color: #ffffff;
-  font-weight: 500;
-  line-height: 1;
-}
-
-.center-icon-wrapper.is-opening {
-  box-shadow: 0 5rpx 16rpx rgba(92, 184, 150, 0.4), 0 2rpx 6rpx rgba(0, 0, 0, 0.06);
-}
-
-.center-opening-spinner {
-  width: 42rpx;
-  height: 42rpx;
-  box-sizing: border-box;
-  border: 5rpx solid rgba(255, 255, 255, 0.45);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: center-opening-spin 0.7s linear infinite;
 }
 
 .center-task-badge {
@@ -278,29 +218,12 @@
   color: #eed6a2;
 }
 
-.custom-tab-bar--wellness .center-icon-wrapper {
-  background: #f4ead4;
-  box-shadow: 0 8rpx 24rpx rgba(8, 32, 23, 0.42), 0 0 0 2rpx rgba(216, 189, 130, 0.52);
-}
-
-.custom-tab-bar--wellness .center-icon {
-  color: #285c40;
-}
-
-.custom-tab-bar--wellness .center-opening-spinner {
-  border-color: rgba(40, 92, 64, 0.28);
-  border-top-color: #285c40;
-}
-
 /* Wellness navigation shares the ink / paper theme. */
 .custom-tab-bar--wellness::before { background: #222; border-color: #444; }
 .custom-tab-bar--wellness .tab-icon,
 .custom-tab-bar--wellness .tab-text { color: #aaa; }
 .custom-tab-bar--wellness .tab-item.selected .tab-icon,
 .custom-tab-bar--wellness .tab-item.selected .tab-text { color: #fff; }
-.custom-tab-bar--wellness .center-icon-wrapper { background: #f7f7f4; border-color: #222; box-shadow: 0 4rpx 16rpx #00000022; }
-.custom-tab-bar--wellness .center-icon { color: #222; }
-.custom-tab-bar--wellness .center-opening-spinner { border-color: #bbb; border-top-color: #222; }
 /* Approved ink theme: white paper navigation and an actual Taiji photo control. */
 .custom-tab-bar.custom-tab-bar--wellness::before { background: #f7f7f4; background-image: none; filter: none; border-top: 1rpx solid #ccc; }
 .custom-tab-bar.custom-tab-bar--wellness .tab-icon,
@@ -308,26 +231,6 @@
 .custom-tab-bar.custom-tab-bar--wellness .tab-item.selected .tab-icon,
 .custom-tab-bar.custom-tab-bar--wellness .tab-item.selected .tab-text { color: #111; }
 .custom-tab-bar.custom-tab-bar--wellness .tab-text { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; font-size: 24rpx; font-weight: 500; line-height: 1.4; }
-.custom-tab-bar.custom-tab-bar--wellness .center-icon-wrapper {
-  background: white;
-  border: 1rpx solid #aaa;
-  width: 100rpx;
-  height: 100rpx;
-  flex-shrink: 0;
-  box-sizing: border-box;
-  position: relative;
-  left: auto;
-  top: auto;
-  margin: 0;
-  transform: translateY(-18rpx);
-  border-radius: 50%;
-  overflow: hidden;
-  box-shadow: 0 0 0 7rpx #f7f7f4;
-}
-.center-taiji { position: absolute; width: 110%; height: 110%; left: -5%; top: -5%; border-radius: 50%; }
-.custom-tab-bar.custom-tab-bar--wellness .center-icon { position: relative; z-index: 1; font-size: 39rpx; color: white; background: #222; border: 2rpx solid #fff; border-radius: 12rpx; padding: 4rpx; }
-.custom-tab-bar.custom-tab-bar--wellness .center-item { gap: 9rpx; }
-.custom-tab-bar.custom-tab-bar--wellness .center-opening-spinner { position: relative; z-index: 2; border-top-color: #222; }
 
 /* Balanced mode: each visual theme owns the navigation material and capture control. */
 .custom-tab-bar[class*="custom-tab-bar--theme-"]::before {
@@ -339,11 +242,6 @@
 .custom-tab-bar[class*="custom-tab-bar--theme-"] .tab-text {
   font-weight: 650;
   letter-spacing: 1rpx;
-}
-
-.custom-tab-bar[class*="custom-tab-bar--theme-"] .center-icon-wrapper {
-  box-sizing: border-box;
-  transition: background .35s ease, border-radius .35s ease, box-shadow .35s ease, transform .35s ease;
 }
 
 /* 01 澄明秩序：黑白栅格与荧光黄绿操作块。 */
@@ -359,12 +257,6 @@
 .custom-tab-bar--balanced.custom-tab-bar--theme-clarity-order .tab-item.selected::after {
   content: ''; position: absolute; left: 24%; right: 24%; bottom: 12rpx; height: 7rpx; background: #c8ff00;
 }
-.custom-tab-bar--balanced.custom-tab-bar--theme-clarity-order .center-icon-wrapper {
-  width: 104rpx; height: 104rpx; margin-left: -52rpx; margin-top: -52rpx;
-  color: #111; background: #c8ff00; border: 4rpx solid #111; border-radius: 4rpx;
-  box-shadow: 9rpx 9rpx 0 #173eb5;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-clarity-order .center-icon { color: #111; }
 
 /* 02 自然共生：植物纸、林叶绿与种荚形入口。 */
 .custom-tab-bar--balanced.custom-tab-bar--theme-natural-symbiosis::before {
@@ -376,12 +268,6 @@
 .custom-tab-bar--balanced.custom-tab-bar--theme-natural-symbiosis .tab-text { color: #7d806f; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; }
 .custom-tab-bar--balanced.custom-tab-bar--theme-natural-symbiosis .tab-item.selected .tab-icon,
 .custom-tab-bar--balanced.custom-tab-bar--theme-natural-symbiosis .tab-item.selected .tab-text { color: #376b4d; }
-.custom-tab-bar--balanced.custom-tab-bar--theme-natural-symbiosis .center-icon-wrapper {
-  width: 112rpx; height: 100rpx; margin-left: -56rpx; margin-top: -50rpx;
-  background: #376b4d; border: 3rpx solid #f3efe2; border-radius: 66% 34% 62% 38% / 58% 46% 54% 42%;
-  box-shadow: 0 9rpx 0 #9f815d, 0 14rpx 28rpx rgba(49, 83, 58, .28); transform: translateY(-18rpx) rotate(-6deg);
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-natural-symbiosis .center-icon { transform: rotate(6deg); }
 
 /* 03 东方雅集：宣纸底栏与直立黑金印钮。 */
 .custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon::before {
@@ -393,35 +279,8 @@
 .custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .tab-text { color: #777264; font-family: 'Songti SC', STSong, SimSun, serif; }
 .custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .tab-item.selected .tab-icon,
 .custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .tab-item.selected .tab-text { color: #9f3328; }
-.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .center-icon-wrapper {
-  position: relative; left: auto; top: auto;
-  width: 84rpx; height: 84rpx; flex-shrink: 0; margin: 0;
-  background: #1d211b; border: 2rpx solid #c5ab70; border-radius: 26rpx;
-  box-shadow: inset 0 0 0 5rpx #1d211b, inset 0 0 0 6rpx rgba(197, 171, 112, .45), 0 5rpx 12rpx rgba(31, 29, 23, .16);
-  transform: none;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .center-item {
-  justify-content: flex-end; gap: 6rpx; padding-bottom: 20rpx; overflow: visible;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .tab-item.center-item .icon-wrapper {
-  width: 84rpx; height: 84rpx; flex-shrink: 0; margin: 0;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .center-icon {
-  color: #f0d89f; font-size: 44rpx; font-weight: 400; transform: none;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .center-item .tab-text {
-  color: #645139; font-weight: 600; letter-spacing: 2rpx;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .center-opening-spinner {
-  width: 36rpx; height: 36rpx; border-color: rgba(240, 216, 159, .28); border-top-color: #f0d89f;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .center-icon-wrapper.is-opening {
-  box-shadow: inset 0 0 0 5rpx #1d211b, inset 0 0 0 6rpx rgba(197, 171, 112, .45);
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon .center-item:active .center-icon-wrapper { transform: scale(.96); }
-.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon.custom-tab-bar--dark .center-item .tab-text { color: #ead7ae; }
 
-/* 04 现代艺廊：原色、硬边和偏轴构图。 */
+/* 04 现代艺廊：原色、硬边和展签构图。 */
 .custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery::before {
   background: #fffefa;
   border-top: 5rpx solid #111 !important;
@@ -437,13 +296,6 @@
 .custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(2).selected .tab-text,
 .custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(5).selected .tab-icon,
 .custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery .tab-item:nth-child(5).selected .tab-text { color: #e33b25; }
-.custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery .center-icon-wrapper {
-  width: 104rpx; height: 104rpx; margin-left: -52rpx; margin-top: -52rpx;
-  background: #e33b25; border: 5rpx solid #111; border-radius: 0;
-  box-shadow: 10rpx 10rpx 0 #173eb5; transform: translateY(-18rpx) rotate(11deg);
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery .center-icon,
-.custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery .center-opening-spinner { transform: rotate(-11deg); }
 
 /* 05 微缩世界：木质地台与青铜工具钮。 */
 .custom-tab-bar--balanced.custom-tab-bar--theme-miniature-world::before {
@@ -455,11 +307,6 @@
 .custom-tab-bar--balanced.custom-tab-bar--theme-miniature-world .tab-text { color: #6b5540; }
 .custom-tab-bar--balanced.custom-tab-bar--theme-miniature-world .tab-item.selected .tab-icon,
 .custom-tab-bar--balanced.custom-tab-bar--theme-miniature-world .tab-item.selected .tab-text { color: #176d83; }
-.custom-tab-bar--balanced.custom-tab-bar--theme-miniature-world .center-icon-wrapper {
-  width: 118rpx; height: 92rpx; margin-left: -59rpx; margin-top: -46rpx;
-  background: #287992; border: 4rpx solid #674c37; border-radius: 18rpx;
-  box-shadow: 0 12rpx 0 #674c37, 0 18rpx 26rpx rgba(74, 51, 30, .28);
-}
 
 /* 06 绘本陪伴：深蓝布脊和纸页签。 */
 .custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion::before {
@@ -471,11 +318,6 @@
 .custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion .tab-text { color: #6b5a4b; font-family: 'Kaiti SC', STKaiti, KaiTi, serif; }
 .custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion .tab-item.selected .tab-icon,
 .custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion .tab-item.selected .tab-text { color: #a75536; }
-.custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion .center-icon-wrapper {
-  width: 112rpx; height: 100rpx; margin-left: -56rpx; margin-top: -50rpx;
-  background: #263746; border: 4rpx solid #5b4637; border-radius: 8rpx 24rpx 24rpx 8rpx;
-  box-shadow: 9rpx 9rpx 0 #a75536;
-}
 
 /* 07 清朗关怀：高对比、大触控、明确状态。 */
 .custom-tab-bar--balanced.custom-tab-bar--theme-clear-care::before {
@@ -488,12 +330,6 @@
 .custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .tab-text { color: #39433e; font-size: 24rpx; font-weight: 850; }
 .custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .tab-item.selected .tab-icon,
 .custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .tab-item.selected .tab-text { color: #005b38; }
-.custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .center-icon-wrapper {
-  width: 126rpx; height: 102rpx; margin-left: -63rpx; margin-top: -51rpx;
-  background: #f5ad19; border: 5rpx solid #071b12; border-radius: 12rpx;
-  box-shadow: none;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .center-icon { color: #071b12; }
 
 /* 08 水之道：深水玻璃、冷光水线与暖铜焦点。 */
 .custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water::before {
@@ -508,13 +344,6 @@
 .custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .tab-item.selected::after {
   content: ''; position: absolute; left: 36%; right: 36%; bottom: 11rpx; height: 4rpx; background: #d06f3f; border-radius: 999rpx; box-shadow: 0 0 14rpx #d06f3f;
 }
-.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .center-icon-wrapper {
-  width: 112rpx; height: 112rpx; margin-left: -56rpx; margin-top: -56rpx;
-  background: radial-gradient(circle at 34% 28%, #24536b, #0c2230 48%, #06111a 76%);
-  border: 2rpx solid rgba(142, 213, 237, .7); border-radius: 50%;
-  box-shadow: inset 0 0 28rpx rgba(90, 184, 216, .2), 0 0 0 6rpx rgba(208, 111, 63, .24), 0 12rpx 30rpx rgba(0, 0, 0, .5);
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .center-icon { color: #e8edf0; }
 .custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .center-task-badge { border-color: #07121b; }
 /* Match the dark literary chapter artwork across the native navigation surface. */
 .custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion::before { background: #10222a; border-top: 1rpx solid #52605d !important; }
@@ -522,8 +351,6 @@
 .custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion .tab-text { color: #b6afa1; }
 .custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion .tab-item.selected .tab-icon,
 .custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion .tab-item.selected .tab-text { color: #efd292; }
-.custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion .center-icon-wrapper { background: #e4cd9d; border: 2rpx solid #213731; box-shadow: none; }
-.custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion .center-icon { color: #14272e; }
 
 /* Balanced themes keep capture in the same navigation rhythm as the four tabs. */
 .custom-tab-bar--balanced {
@@ -543,17 +370,11 @@
   filter: none !important;
 }
 .custom-tab-bar--balanced .tab-item { height: 112rpx; justify-content: center; gap: 9rpx; padding-bottom: 0; }
-.custom-tab-bar--balanced .tab-item.center-item .icon-wrapper { width: 48rpx; height: 48rpx; }
-.custom-tab-bar--balanced .center-icon-wrapper {
-  position: relative; left: auto; top: auto; width: 48rpx; height: 48rpx;
-  margin: 0; padding: 0; transform: none; background: transparent; border: 0; border-radius: 0; box-shadow: none;
-}
-.custom-tab-bar--balanced .tab-icon, .custom-tab-bar--balanced .center-icon { color: var(--nav-muted); font-size: 39rpx; }
+.custom-tab-bar--balanced .tab-icon { color: var(--nav-muted); font-size: 39rpx; }
 .custom-tab-bar--balanced .tab-text { color: var(--nav-muted); font-size: 23rpx; }
 .custom-tab-bar--balanced .tab-item.selected .tab-icon, .custom-tab-bar--balanced .tab-item.selected .tab-text { color: var(--nav-ink); }
 .custom-tab-bar--balanced .tab-item.selected .icon-wrapper { transform: none; }
 .custom-tab-bar--balanced .tab-item.selected::after { background: var(--nav-accent); height: 3rpx; left: 30%; right: 30%; bottom: 5rpx; box-shadow: none; }
-.custom-tab-bar--balanced .center-opening-spinner { width: 36rpx; height: 36rpx; border-color: var(--nav-line); border-top-color: var(--nav-ink); }
 .custom-tab-bar--balanced.custom-tab-bar--theme-natural-symbiosis { --nav-paper: #f4f1e2; --nav-ink: #254830; --nav-muted: #71816c; --nav-accent: #56795b; --nav-line: #afbaa0; --nav-radius: 18rpx; }
 .custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon { --nav-paper: #eee7d8; --nav-ink: #292d28; --nav-muted: #7b7d71; --nav-accent: #98734b; --nav-line: #9e9582; }
 .custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery { --nav-paper: #f4eddc; --nav-ink: #b0261b; --nav-muted: #292929; --nav-accent: #1748aa; --nav-line: #111; }
@@ -567,46 +388,250 @@
   border-top-color: rgba(142, 213, 237, .44) !important;
   filter: drop-shadow(0 -10rpx 28rpx rgba(0, 0, 0, .48)) !important;
 }
-.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .center-item { overflow: visible; }
-.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .center-item .icon-wrapper {
-  width: 104rpx;
-  height: 104rpx;
-  flex-shrink: 0;
-  margin-top: -32rpx;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .center-icon-wrapper {
-  width: 104rpx;
-  height: 104rpx;
-  flex-shrink: 0;
-  box-sizing: border-box;
-  /* Flow positioning must clear the earlier water theme's negative left margin. */
-  margin: 0;
-  border: 2rpx solid rgba(174, 226, 241, .78);
-  border-radius: 50%;
-  background: radial-gradient(circle at 34% 27%, rgba(226, 248, 255, .54), rgba(61, 126, 148, .68) 42%, rgba(7, 30, 42, .96) 76%);
-  box-shadow: inset 0 0 26rpx rgba(202, 243, 255, .22), 0 0 0 7rpx rgba(93, 180, 205, .12), 0 12rpx 32rpx rgba(0, 0, 0, .52);
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .center-icon-wrapper::before {
-  content: '';
-  position: absolute;
-  inset: 9rpx;
-  border-radius: 50%;
-  border: 1rpx solid rgba(198, 241, 252, .45);
-  border-top-color: rgba(240, 253, 255, .9);
-  pointer-events: none;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .center-icon-wrapper::after {
-  content: '';
-  position: absolute;
-  left: 19rpx;
-  top: 13rpx;
-  width: 36rpx;
-  height: 13rpx;
-  border-radius: 50%;
-  background: rgba(231, 251, 255, .55);
-  transform: rotate(-28deg);
-  pointer-events: none;
-}
-.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .center-icon { color: #eefbff; font-size: 46rpx; text-shadow: 0 0 13rpx rgba(156, 225, 243, .72); }
 .custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .tab-item.selected::after { background: #aee9f7; box-shadow: 0 0 14rpx rgba(136, 220, 240, .75); }
 .custom-tab-bar--balanced.custom-tab-bar--dark { --nav-paper: #101716; --nav-ink: #f1f4ef; --nav-muted: #a4b0aa; --nav-line: #40504a; }
+
+/* Capture has one upright layout. Theme variables change its material only. */
+.custom-tab-bar {
+  --capture-width: 92rpx;
+  --capture-height: 88rpx;
+  --capture-radius: 24rpx;
+  --capture-surface: #397e66;
+  --capture-ink: #fff;
+  --capture-label: #53605a;
+  --capture-outline: #28624e;
+  --capture-border: 2rpx;
+  --capture-shadow: 0 5rpx 0 #28624e;
+  --capture-inner-line: transparent;
+  --capture-inner-style: solid;
+  --capture-glint: transparent;
+}
+.custom-tab-bar .tab-item.center-item {
+  z-index: 2;
+  height: 160rpx;
+  justify-content: flex-end;
+  gap: 6rpx;
+  padding-bottom: 20rpx;
+  overflow: visible;
+}
+.custom-tab-bar .tab-item.center-item .icon-wrapper {
+  width: 108rpx;
+  height: 100rpx;
+  flex: 0 0 100rpx;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  transform: none;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+.custom-tab-bar .tab-item.center-item .center-icon-wrapper {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: var(--capture-width);
+  height: var(--capture-height);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  transform: none;
+  color: var(--capture-ink);
+  background: var(--capture-surface);
+  border: var(--capture-border) solid var(--capture-outline);
+  border-radius: var(--capture-radius);
+  box-shadow: var(--capture-shadow);
+  overflow: visible;
+  transition: filter .15s ease;
+}
+.custom-tab-bar .center-icon-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 7rpx;
+  border: 1rpx var(--capture-inner-style) var(--capture-inner-line);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.custom-tab-bar .center-icon-wrapper::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 10rpx;
+  width: 32rpx;
+  height: 7rpx;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: var(--capture-glint);
+  pointer-events: none;
+}
+.custom-tab-bar .tab-item.center-item .tab-text {
+  display: block;
+  height: 30rpx;
+  flex: 0 0 30rpx;
+  margin: 0;
+  font-size: 23rpx;
+  line-height: 30rpx;
+  letter-spacing: 1rpx;
+  text-align: center;
+  color: var(--capture-label);
+  transform: none;
+  transition: none;
+}
+.custom-tab-bar .center-item:active .center-icon-wrapper { filter: brightness(.92); }
+
+/* Draw the camera on a fixed axis instead of counter-rotating a font glyph. */
+.capture-camera {
+  position: relative;
+  z-index: 1;
+  width: 52rpx;
+  height: 44rpx;
+  flex-shrink: 0;
+  color: var(--capture-ink);
+  transform: none;
+  pointer-events: none;
+}
+.capture-camera__body {
+  position: absolute;
+  left: 2rpx;
+  right: 2rpx;
+  bottom: 3rpx;
+  height: 34rpx;
+  box-sizing: border-box;
+  border: 4rpx solid var(--capture-ink);
+  border-radius: 7rpx;
+}
+.capture-camera__body::before {
+  content: '';
+  position: absolute;
+  left: 6rpx;
+  top: -9rpx;
+  width: 18rpx;
+  height: 9rpx;
+  box-sizing: border-box;
+  background: var(--capture-head-fill, var(--capture-surface));
+  border: 4rpx solid var(--capture-ink);
+  border-bottom: 0;
+  border-radius: 5rpx 5rpx 0 0;
+}
+.capture-camera__lens {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 17rpx;
+  height: 17rpx;
+  box-sizing: border-box;
+  border: 4rpx solid var(--capture-ink);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.capture-camera__flash {
+  position: absolute;
+  right: 5rpx;
+  top: 5rpx;
+  width: 4rpx;
+  height: 4rpx;
+  background: var(--capture-ink);
+  border-radius: 50%;
+}
+.custom-tab-bar .center-opening-spinner {
+  position: relative;
+  z-index: 2;
+  width: 38rpx;
+  height: 38rpx;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  color: var(--capture-ink);
+  border: 4rpx solid currentColor;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  animation: center-opening-spin .7s linear infinite;
+}
+
+/* 01: an aligned grid key with a centered black base. */
+.custom-tab-bar--balanced.custom-tab-bar--theme-clarity-order {
+  --capture-radius: 12rpx; --capture-surface: #c8ff00; --capture-ink: #111;
+  --capture-label: #111;
+  --capture-outline: #111; --capture-border: 3rpx; --capture-shadow: 0 5rpx 0 #111;
+}
+/* 02: a leaf-shaped ceramic seal on the paper navigation. */
+.custom-tab-bar--balanced.custom-tab-bar--theme-natural-symbiosis {
+  --capture-width: 98rpx; --capture-radius: 42rpx 16rpx 42rpx 16rpx;
+  --capture-surface: #376b4d; --capture-ink: #fffdf6; --capture-outline: #e3e7d1;
+  --capture-label: #376b4d;
+  --capture-border: 3rpx; --capture-shadow: 0 5rpx 0 #9b805e; --capture-inner-line: #c9dabc80;
+}
+/* 03: a straight lacquer seal, with an inset gold frame. */
+.custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon {
+  --capture-width: 88rpx; --capture-radius: 18rpx; --capture-surface: #20231b;
+  --capture-ink: #f2dbab; --capture-outline: #ba9b60; --capture-inner-line: #ba9b60;
+  --capture-label: #5f5138;
+  --capture-shadow: 0 5rpx 0 #817044;
+}
+/* 04: a red exhibition key, grounded on a blue plinth. */
+.custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery {
+  --capture-radius: 4rpx; --capture-surface: #b92d22; --capture-ink: #fff;
+  --capture-label: #b92d22;
+  --capture-outline: #111; --capture-border: 3rpx; --capture-shadow: 0 6rpx 0 #173eb5;
+}
+/* 05: a turquoise tool set into a wooden frame. */
+.custom-tab-bar--balanced.custom-tab-bar--theme-miniature-world {
+  --capture-width: 98rpx; --capture-radius: 22rpx; --capture-surface: #236c81;
+  --capture-ink: #fff7e8; --capture-outline: #745535; --capture-border: 4rpx;
+  --capture-label: #493321;
+  --capture-inner-line: #d9bf8e; --capture-shadow: 0 6rpx 0 #745535;
+}
+/* 06: a stitched, upright bookplate. */
+.custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion {
+  --capture-radius: 14rpx; --capture-surface: #ecd8b0; --capture-ink: #213731;
+  --capture-outline: #6d5139; --capture-inner-line: #8e7350; --capture-inner-style: dashed;
+  --capture-label: #eed3a1;
+  --capture-shadow: 0 5rpx 0 #6d5139;
+}
+/* 07: a large high-contrast control with no decorative shadow. */
+.custom-tab-bar--balanced.custom-tab-bar--theme-clear-care {
+  --capture-width: 104rpx; --capture-radius: 26rpx; --capture-surface: #005b38;
+  --capture-ink: #fff; --capture-outline: #fff; --capture-border: 3rpx; --capture-shadow: none;
+  --capture-label: #005b38;
+}
+.custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .capture-camera { width: 60rpx; height: 48rpx; }
+.custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .capture-camera__body { height: 38rpx; }
+.custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .center-item .tab-text { font-size: 27rpx; }
+/* 08: retain the water-glass material while centering the control and lens. */
+.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water {
+  --capture-width: 96rpx; --capture-height: 96rpx; --capture-radius: 50%;
+  --capture-surface: radial-gradient(circle at 50% 24%, #789ca8, #285a70 46%, #092334 85%);
+  --capture-head-fill: #44788b; --capture-ink: #eefbff; --capture-outline: #aee2f1c7;
+  --capture-label: #eefbff;
+  --capture-inner-line: #c6f1fc73; --capture-glint: #e7fbff80;
+  --capture-shadow: inset 0 0 24rpx #caf3ff38, 0 0 0 5rpx #5db4cd1f, 0 5rpx 16rpx #00000070;
+}
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-clarity-order { --capture-label: #c8ff00; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-natural-symbiosis { --capture-outline: #b8cdb0; --capture-label: #bfd7b4; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-eastern-salon { --capture-label: #dfcda9; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-modern-gallery { --capture-label: #ffb6aa; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-miniature-world { --capture-outline: #b79566; --capture-label: #e8cda3; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-clear-care { --capture-outline: #b8e6c7; --capture-label: #b8e6c7; }
+
+/* Paper / Taiji remains independent of the saved balanced theme. */
+.custom-tab-bar.custom-tab-bar--wellness {
+  --capture-width: 96rpx; --capture-height: 96rpx; --capture-radius: 50%;
+  --capture-surface: #fafaf7; --capture-head-fill: #fafaf7; --capture-ink: #222;
+  --capture-label: #222;
+  --capture-outline: #777; --capture-inner-line: #b9b9b3;
+  --capture-shadow: 0 4rpx 0 #d2d2ca; --capture-glint: transparent;
+}
+.custom-tab-bar .center-taiji {
+  position: absolute;
+  left: 7%; top: 7%; width: 86%; height: 86%;
+  border-radius: 50%;
+  opacity: .16;
+  pointer-events: none;
+}
