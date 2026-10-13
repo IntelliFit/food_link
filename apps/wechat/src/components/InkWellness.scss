@@ -74,8 +74,8 @@ $reading: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', '
 }
 .fl-page-theme-root .profile-page.ink-page.ink-page {
   display: flex; flex-direction: column; padding-bottom: 230rpx;
-  .ink-masthead { order: -4; min-height: 170rpx; }
-  .profile-header-section { order: -3; margin: 0; padding: 10rpx 32rpx 14rpx; background: transparent; }
+  .ink-masthead { min-height: 170rpx; }
+  .profile-header-section { margin: 0; padding: 10rpx 32rpx 14rpx; background: transparent; }
   .user-card { padding: 0; background: transparent; box-shadow: none; }
   .user-avatar-wrapper { border: 2rpx solid #bbb; box-shadow: none; width: 105rpx; height: 105rpx; }
   .user-name { color: $ink; font-family: $serif; font-size: 38rpx; }
@@ -84,7 +84,7 @@ $reading: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', '
   .user-days-pill-text, .user-id-chip-text, .quick-action-num { color: $ink; }
   .profile-quick-actions { border-top: 0; margin-top: 16rpx; padding: 12rpx 0 4rpx; background: transparent; }
   .quick-action-num { font-family: Georgia, serif; font-size: 42rpx; }
-  .profile-recap-section { order: -2; margin: 0 0 20rpx; }
+  .profile-recap-section { margin: 0 0 20rpx; }
   .ink-shelf-entry { height: 300rpx; }
   .ink-shelf-entry__copy { padding-top: 24rpx; }
   .ink-shelf-entry__book { top: 96rpx; }
@@ -98,9 +98,8 @@ $reading: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', '
   .list-icon { filter: grayscale(1); background: transparent !important; }
   .list-title, .list-arrow { color: $ink; }
   .list-desc { color: #666; }
-  .member-card { order: 3; margin-top: 30rpx; background: #292929; border: 1rpx solid #888; box-shadow: none; }
-  .onboarding-card { order: 2; margin-top: 22rpx; color: #333; background: #eee; }
-  .tool-card, .profile-version { order: 4; }
+  .member-card { margin-top: 30rpx; background: #292929; border: 1rpx solid #888; box-shadow: none; }
+  .onboarding-card { margin-top: 22rpx; color: #333; background: #eee; }
   .tool-card { background: transparent; box-shadow: none; border: 0; margin-top: 12rpx; }
   .tool-text { color: #666; }
 }

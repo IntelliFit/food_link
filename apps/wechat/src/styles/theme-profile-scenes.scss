@@ -83,19 +83,13 @@ $scene-themes: miniature-world, picturebook-companion, modern-gallery, eastern-s
 }
 .fl-page-theme-root--balanced.fl-balanced-theme--natural-symbiosis.fl-d .profile-page .bt-profile-backdrop { display: none; }
 
-/* Keep additional live features after the reference's primary archive directory. */
+/* All themes follow the shared profile DOM order: identity, theme, membership, recap, directory. */
 $archive-themes: miniature-world, picturebook-companion, modern-gallery, natural-symbiosis, eastern-salon;
 @each $theme in $archive-themes {
   .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} .profile-page {
     display: flex; flex-direction: column;
-    > .bt-experience { order: 0; flex-shrink: 0; }
-    > .theme-profile-sections { order: 1; flex-shrink: 0; width: 100%; box-sizing: border-box; }
-    > .balanced-theme-entry { order: 2; flex-shrink: 0; margin-top: 32rpx; }
-    > .profile-card { order: 3; flex-shrink: 0; }
-    > .profile-recap-section { order: 4; flex-shrink: 0; }
-    > .tool-card { order: 5; }
-    > .profile-version { order: 6; }
-    > .balanced-theme-picker { order: 7; }
+    > .bt-experience, > .balanced-theme-entry, > .profile-card, > .profile-recap-section { flex-shrink: 0; }
+    > .theme-profile-sections { flex-shrink: 0; width: 100%; box-sizing: border-box; }
   }
 }
 .fl-page-theme-root--balanced.fl-balanced-theme--eastern-salon .profile-page .bt-experience--profile {

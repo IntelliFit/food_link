@@ -714,17 +714,6 @@ function ProfilePage() {
       </BalancedThemeExperience>
       {!ink && <BalancedThemeEntry onOpen={() => setShowBalancedThemePicker(true)} />}
 
-      {/* 引导横幅 */}
-      {isLoggedIn && onboardingStatus !== 'completed' && (
-        <View
-          className='profile-card onboarding-card'
-          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })}
-        >
-          <Text className='onboarding-text'>📋 完善健康档案，获取更贴合你的饮食建议</Text>
-          <Text className='onboarding-arrow'>{'>'}</Text>
-        </View>
-      )}
-
       {/* 会员卡片（仅登录后展示） */}
       {isLoggedIn && (
         <View
@@ -799,6 +788,17 @@ function ProfilePage() {
             <Text className='profile-section-mark'>✦</Text>
           </View>
           <RecapDelivery archive ink={ink} />
+        </View>
+      )}
+
+      {/* 引导保留在主要卡片之后，让主题入口与会员卡紧接顶部信息。 */}
+      {isLoggedIn && onboardingStatus !== 'completed' && (
+        <View
+          className='profile-card onboarding-card'
+          onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })}
+        >
+          <Text className='onboarding-text'>📋 完善健康档案，获取更贴合你的饮食建议</Text>
+          <Text className='onboarding-arrow'>{'>'}</Text>
         </View>
       )}
 
