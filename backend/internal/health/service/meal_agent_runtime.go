@@ -103,6 +103,9 @@ func normalizeMealToolArguments(raw string) (string, error) {
 }
 
 func mealAgentSearchTool(state *campusDietAgentRunState) string {
+	if state.Constraints.CanteenName != "" {
+		return "search_nearby_foods" // also accepts an explicitly named venue without GPS
+	}
 	if mealHistoryQuestion(state.Question) {
 		return "search_history_meals"
 	}
@@ -320,7 +323,7 @@ func mealValidateFinalSelections(state *campusDietAgentRunState, final campusDie
 		if !ok || seen[id] || len(mealHarnessRank(state, []DietRecommendationCandidate{candidate})) == 0 {
 			continue
 		}
-		if state.Constraints.CompleteMeal && !mealHasEvidenceStructure(candidate) {
+		if campusDietAgentIsSearchIntent(state.Intent) && state.Constraints.CompleteMeal && !mealHasEvidenceStructure(candidate) {
 			continue
 		}
 		if state.Constraints.CompleteMeal && candidate.Source != "food_record" && selection.OrderingCheck != nil && (!selection.OrderingCheck.ReadyToOrder || !selection.OrderingCheck.MandatoryCostsIncluded) {

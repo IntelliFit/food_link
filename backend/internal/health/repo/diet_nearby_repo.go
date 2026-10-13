@@ -81,7 +81,8 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 		base = base.Where("(LOWER(p.food_name) LIKE ? OR LOWER(p.description) LIKE ? OR LOWER(p.merchant_name) LIKE ?)", like, like, like)
 	}
 	if f.CanteenName != "" {
-		base = base.Where("p.canteen_name LIKE ?", "%"+f.CanteenName+"%")
+		like := diningVenueLike(f.CanteenName)
+		base = base.Where("(LOWER(REPLACE(p.canteen_name, ' ', '')) LIKE ? OR LOWER(REPLACE(p.merchant_name, ' ', '')) LIKE ?)", like, like)
 	}
 	if len(f.IncludeSourceIDs) > 0 {
 		base = base.Where("p.id IN ?", f.IncludeSourceIDs)

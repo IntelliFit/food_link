@@ -40,6 +40,7 @@ func (s *StatsService) resolvePreviewSchools(ctx context.Context, state *campusD
 
 type MealCatalogCoverage struct {
 	Scope     string                          `json:"scope,omitempty"`
+	VenueName string                          `json:"venue_name,omitempty"`
 	RadiusKM  float64                         `json:"radius_km,omitempty"`
 	School    domain.DietRecommendationSchool `json:"school"`
 	Total     int64                           `json:"total_matches"`
