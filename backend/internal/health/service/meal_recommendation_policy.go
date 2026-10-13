@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"food_link/backend/internal/health/domain"
 	"regexp"
 	"slices"
 	"strings"
@@ -48,6 +49,11 @@ func initializeMealAccess(state *campusDietAgentRunState) {
 	c := &state.Constraints
 	q := strings.ReplaceAll(state.Question, " ", "")
 	c.AllowedSchoolIDs, c.PendingSchool, c.CampusAccessDenied = nil, nil, false
+	if c.CanteenName != "" && c.Scene != "campus" {
+		state.School = domain.DietRecommendationSchool{}
+		state.CampusID, state.CampusName = "", ""
+		return
+	}
 	if mealDeniesCampusAccess(q) {
 		c.Scene = "takeout"
 		return

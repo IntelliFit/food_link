@@ -4,9 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"food_link/backend/internal/health/domain"
 	"food_link/backend/internal/nutritionagg"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -28,7 +30,8 @@ func mealHasStructure(c DietRecommendationCandidate) bool {
 }
 
 func mealHasNamedStructure(c DietRecommendationCandidate) bool {
-	text := c.Title + " " + c.Description
+	// Suggested pairings in a description are not components included in sale.
+	text := c.Title
 	for _, item := range c.Items {
 		text += " " + item.Name
 	}
@@ -42,21 +45,45 @@ func mealHasNamedStructure(c DietRecommendationCandidate) bool {
 }
 
 func mealSamePlace(a, b DietRecommendationCandidate) bool {
-	if a.IsCampusFood != b.IsCampusFood {
+	if a.SourceID != "" && a.SourceID == b.SourceID {
+		return true
+	}
+	if a.SchoolID != "" && b.SchoolID != "" && a.SchoolID != b.SchoolID {
 		return false
 	}
-	if a.IsCampusFood {
-		if a.WindowID != "" && b.WindowID != "" && a.WindowID != b.WindowID || a.WindowName != "" && b.WindowName != "" && a.WindowName != b.WindowName || a.Floor != "" && b.Floor != "" && a.Floor != b.Floor {
-			return false
-		}
+	if a.CampusID != "" && b.CampusID != "" && a.CampusID != b.CampusID {
+		return false
 	}
+	sameVenue := false
 	if a.CanteenID != "" && b.CanteenID != "" {
-		return a.CanteenID == b.CanteenID
+		sameVenue = a.CanteenID == b.CanteenID
+	} else {
+		an := domain.DiningVenueKey(defaultIfEmpty(a.CanteenName, a.MerchantName))
+		bn := domain.DiningVenueKey(defaultIfEmpty(b.CanteenName, b.MerchantName))
+		sameArea := a.SchoolID != "" && a.SchoolID == b.SchoolID || a.SchoolName != "" && a.SchoolName == b.SchoolName || a.Address != "" && a.Address == b.Address
+		sameVenue = an != "" && an == bn && sameArea
 	}
-	if a.IsCampusFood {
-		return a.SchoolID != "" && a.SchoolID == b.SchoolID && a.CanteenName != "" && a.CanteenName == b.CanteenName
+	if !sameVenue {
+		return false
 	}
-	return a.MerchantName != "" && a.MerchantName == b.MerchantName && a.Address != "" && a.Address == b.Address
+	af, bf := mealFloorKey(a.Floor), mealFloorKey(b.Floor)
+	if af != "" || bf != "" {
+		return af != "" && af == bf
+	}
+	// Without floor evidence only a verified identical window (or a single
+	// ordinary merchant at one address) can be composed, never two windows.
+	return a.WindowID != "" && a.WindowID == b.WindowID ||
+		a.WindowName != "" && a.WindowName == b.WindowName ||
+		!a.IsCampusFood && !b.IsCampusFood && a.CanteenName == "" && b.CanteenName == "" && a.Address != "" && a.Address == b.Address
+}
+
+func mealFloorKey(floor string) string {
+	floor = strings.ToUpper(strings.Join(strings.Fields(floor), ""))
+	if m := regexp.MustCompile(`^B([1-9][0-9]*)`).FindStringSubmatch(floor); len(m) > 1 {
+		return "B" + m[1]
+	}
+	floor = strings.NewReplacer("地下一层", "B1", "负一层", "B1", "地下二层", "B2", "负二层", "B2", "一楼", "1", "一层", "1", "二楼", "2", "二层", "2", "三楼", "3", "三层", "3", "四楼", "4", "四层", "4").Replace(floor)
+	return strings.TrimRight(floor, "F层楼")
 }
 
 func registerMealPlan(state *campusDietAgentRunState, components []DietRecommendationCandidate) (DietRecommendationCandidate, error) {
@@ -86,7 +113,7 @@ func registerMealPlan(state *campusDietAgentRunState, components []DietRecommend
 			return DietRecommendationCandidate{}, fmt.Errorf("组合只接受份价已知的原始条目，不能将按两单价当作整份")
 		}
 		if !mealSamePlace(components[0], c) {
-			return DietRecommendationCandidate{}, fmt.Errorf("组合须在同一食堂窗口或同一具明确地址的商家购买，不跨窗口或楼层拼总价")
+			return DietRecommendationCandidate{}, fmt.Errorf("组合须在同一食堂且有同层依据，或同一具明确地址的商家购买；不跨食堂或楼层拼餐")
 		}
 		if len(mealHarnessRank(&componentState, []DietRecommendationCandidate{c})) == 0 {
 			return DietRecommendationCandidate{}, fmt.Errorf("组合中的菜品不符合本餐条件")
@@ -116,6 +143,17 @@ func registerMealPlan(state *campusDietAgentRunState, components []DietRecommend
 		return DietRecommendationCandidate{}, fmt.Errorf("整餐合计%s kcal，超过本餐上限", formatCampusDietNumber(combined.Calories))
 	}
 	combined.Title = strings.Join(titles, " + ")
+	windows := []string{}
+	for _, c := range components {
+		if c.WindowName != "" && !slices.Contains(windows, c.WindowName) {
+			windows = append(windows, c.WindowName)
+		}
+	}
+	if len(windows) > 1 {
+		combined.WindowID = ""
+		combined.WindowName = strings.Join(windows, " + ")
+		combined.Address = strings.Join(compactDietStrings(combined.SchoolName, combined.CanteenName, combined.Floor), " · ")
+	}
 	if !mealHasStructure(combined) {
 		return DietRecommendationCandidate{}, fmt.Errorf("组合仍缺少有记录依据的主食与蛋白搭配，不能当成完整一餐")
 	}
@@ -203,4 +241,85 @@ func mealOriginalSourceIDs(ids []string) []string {
 		}
 	}
 	return out
+}
+
+// Build bounded, purchasable combinations before ranking whole meals. Ranking
+// sides as if each were lunch otherwise rewards a low-calorie mushroom dish.
+// Only real portion-priced rows participate; no invented rice, price or menu.
+func mealBuildCombinations(state *campusDietAgentRunState, candidates []DietRecommendationCandidate) []DietRecommendationCandidate {
+	componentState := *state
+	componentState.Constraints.MinProtein = nil
+	componentState.Constraints.RequiredStaple = ""
+	groups := map[string][]DietRecommendationCandidate{}
+	for _, c := range mealHarnessRank(&componentState, candidates) {
+		if c.Source == "food_record" || c.Source == "meal_plan" || !mealKnownServing(c) || mealOrderingRisk(c) != "" || mealHasEvidenceStructure(c) {
+			continue
+		}
+		venue := domain.DiningVenueKey(defaultIfEmpty(c.CanteenName, c.MerchantName))
+		if venue == "" {
+			continue
+		}
+		area := defaultIfEmpty(c.SchoolID, defaultIfEmpty(c.SchoolName, c.Address))
+		floor := mealFloorKey(c.Floor)
+		if floor == "" {
+			floor = defaultIfEmpty(c.WindowID, c.WindowName)
+		}
+		key := strings.Join([]string{area, c.CampusID, venue, floor}, "|")
+		groups[key] = append(groups[key], c)
+	}
+	keys := make([]string, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := []DietRecommendationCandidate{}
+	staplePattern := regexp.MustCompile(`^(?:白|杂粮|糙米|黑米|紫米|小份|大份)?(?:米饭|饭)|^(?:蒸|煮)?(?:红薯|玉米|馒头)|燕麦粥`)
+	proteinPattern := regexp.MustCompile(`肉|鸡|牛|猪|鱼|虾|蛋|豆腐|豆干|奶|排骨|鸭|羊`)
+	vegetablePattern := regexp.MustCompile(`青菜|油菜|白菜|包菜|西兰花|芥兰|菠菜|生菜|黄瓜|番茄|西红柿|菌|菇|木耳|豆芽|茄子|冬瓜|海带`)
+	for _, key := range keys {
+		var staples, proteins, vegetables []DietRecommendationCandidate
+		seen := map[string]bool{}
+		for _, c := range groups[key] {
+			if seen[c.Title] {
+				continue
+			}
+			seen[c.Title] = true
+			switch {
+			case staplePattern.MatchString(c.Title) && len(staples) < 2:
+				staples = append(staples, c)
+			case proteinPattern.MatchString(strings.ReplaceAll(c.Title, "鱼香", "")) && len(proteins) < 6:
+				proteins = append(proteins, c)
+			case vegetablePattern.MatchString(c.Title) && len(vegetables) < 4:
+				vegetables = append(vegetables, c)
+			}
+		}
+		scratch := *state
+		scratch.Candidates, scratch.MealPlans = nil, nil
+		plans := []DietRecommendationCandidate{}
+		for _, staple := range staples {
+			for _, protein := range proteins {
+				parts := []DietRecommendationCandidate{staple, protein}
+				if plan, err := registerMealPlan(&scratch, parts); err == nil {
+					plans = append(plans, plan)
+				}
+				for _, vegetable := range vegetables {
+					if plan, err := registerMealPlan(&scratch, append(slices.Clone(parts), vegetable)); err == nil {
+						plans = append(plans, plan)
+					}
+				}
+			}
+		}
+		plans = mealHarnessRank(state, plans)
+		if len(plans) > 6 {
+			plans = plans[:6]
+		}
+		if state.MealPlans == nil {
+			state.MealPlans = map[string][]DietRecommendationCandidate{}
+		}
+		for _, plan := range plans {
+			state.MealPlans[plan.SourceID] = scratch.MealPlans[plan.SourceID]
+		}
+		result = append(result, plans...)
+	}
+	return result
 }

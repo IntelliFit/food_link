@@ -194,6 +194,9 @@ func summarizeMealHistory(records []domain.FoodRecord, now time.Time) mealPerson
 }
 
 func mealHarnessScope(state *campusDietAgentRunState) string {
+	if state.Constraints.CanteenName != "" {
+		return "named_venue"
+	}
 	if mealHistoryQuestion(state.Question) && !mealRequestsNearbyOnly(state.Question) {
 		return "history"
 	}
@@ -271,6 +274,9 @@ func mealHarnessEmptyResult(state *campusDietAgentRunState, reason string) *Camp
 	if state.Constraints.Scene == "home" {
 		answer = "这餐准备自己做，我需要知道你手边有哪些食材、大概有多少时间？补充后我会按你的目标安排搭配。"
 	}
+	if state.Constraints.CanteenName != "" && !state.RetrievalFailed {
+		answer = "这次只在" + state.Constraints.CanteenName + "内选餐。已收录资料暂时不足以给出符合条件的完整一餐；我会保留这个地点，不换到其他食堂。你可以发一下现场菜单，我再按同层菜品搭配。"
+	}
 	answer = mealConstraintConfirmation(state) + answer
 	recommendation := DietRecommendationResult{Scene: "eat_out", Title: "补充这餐的需求", Summary: answer, Recommendations: []DietRecommendationOption{}, HarnessVersion: mealHarnessVersion, SearchScope: mealHarnessScope(state), NeedsClarification: true, DataNotes: mealHarnessNotes(state), AgentConstraints: &state.Constraints}
 	if state.School.ID != "" {
@@ -318,7 +324,7 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 		if !isHistory && state.Constraints.Scene == "campus" && state.School.ID != "" && candidate.SchoolID != state.School.ID {
 			continue
 		}
-		if !isHistory && state.Constraints.CanteenName != "" && !strings.Contains(candidate.CanteenName, state.Constraints.CanteenName) {
+		if !mealMatchesVenue(state, candidate) {
 			continue
 		}
 		eval := evaluateDietDecisionCandidate(ctx, candidate)

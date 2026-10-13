@@ -23,7 +23,7 @@ type mealRequirementUpdate struct {
 var mealFoodNegative = regexp.MustCompile(`不想再吃|不想吃|不喜欢|别再推荐|不能有|不能吃|不(?:能)?含|不吃|不要|忌口|避开`)
 var mealFoodRelease = regexp.MustCompile(`取消|解除|不再忌口|可以(?:吃)?|能吃|可接受|想吃|换成|改成`)
 var mealFoodPreference = regexp.MustCompile(`想吃|要吃|喜欢|偏好|换成|改成`)
-var mealCanteenRelease = regexp.MustCompile(`不限(?:定)?(?:食堂|桃李|紫荆|清芬|清青)|不(?:再)?(?:限制|限定|锁定)|所有食堂|全校食堂|其他食堂`)
+var mealCanteenRelease = regexp.MustCompile(`不限(?:定)?(?:食堂|地点|餐厅|社区|桃李|紫荆|清芬|清青)|不(?:再)?(?:限制|限定|锁定)(?:在)?(?:食堂|地点|餐厅|社区|范围|桃李|紫荆|清芬|清青)|(?:取消|解除)(?:食堂|地点|就餐地点)(?:限制|限定)?|所有食堂|全校食堂|(?:^|[，。；,;])(?:也|可以)?(?:看看|换到|去|推荐)其他食堂|^不限定(?:了)?[。！!]*$|附近都(?:行|可以)`)
 
 func mealCanonicalFood(value string) string {
 	value = strings.Trim(strings.TrimSpace(value), "：:。！!?？")
@@ -203,7 +203,7 @@ func applyMealRequirementUpdates(state *campusDietAgentRunState, raw string) (in
 		case "canteen_name":
 			if update.Action == "clear" && mealCanteenRelease.MatchString(evidence) {
 				state.Constraints.CanteenName = ""
-			} else if update.Action == "set" && strings.Contains(evidence, update.Value) && regexp.MustCompile(`只|仅|就去|就在|锁定|指定`).MatchString(evidence) && regexp.MustCompile(`园|食堂|餐厅`).MatchString(update.Value) && len([]rune(update.Value)) <= 24 {
+			} else if update.Action == "set" && strings.Contains(evidence, update.Value) && regexp.MustCompile(`只|仅|就去|就在|锁定|指定|决定去|准备去`).MatchString(evidence) && (regexp.MustCompile(`园|食堂|餐厅|社区`).MatchString(update.Value) || mealExplicitVenue(evidence) == update.Value) && len([]rune(update.Value)) <= 32 {
 				state.Constraints.CanteenName = update.Value
 			} else {
 				continue

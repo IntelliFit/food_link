@@ -58,6 +58,9 @@ func (s *StatsService) retrievePreviewCandidates(ctx context.Context, state *cam
 	var total int64
 	seen := map[string]bool{}
 	coverage := MealCatalogCoverage{School: domain.DietRecommendationSchool{ID: f.SchoolID}, Scope: "school", Status: "complete"}
+	if f.CanteenName != "" {
+		coverage.Scope, coverage.VenueName = "named_venue", f.CanteenName
+	}
 	if f.Location != nil {
 		coverage.Scope, coverage.RadiusKM = "nearby", f.RadiusKM
 	}

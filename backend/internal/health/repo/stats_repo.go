@@ -250,6 +250,8 @@ type dietRecommendationRow struct {
 	Price        float64 `gorm:"column:price"`
 	PriceUnit    string  `gorm:"column:price_unit"`
 	ImagePath    string  `gorm:"column:image_path"`
+	MerchantName string  `gorm:"column:merchant_name"`
+	Address      string  `gorm:"column:address"`
 }
 
 func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domain.CampusDietSearchFilter) ([]domain.DietRecommendationCandidate, int64, error) {
@@ -257,8 +259,8 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 		return r.searchNearbyDietCandidates(ctx, filter)
 	}
 	filter.SchoolID = strings.TrimSpace(filter.SchoolID)
-	if filter.SchoolID == "" {
-		return nil, 0, fmt.Errorf("school_id required")
+	if filter.SchoolID == "" && domain.DiningVenueKey(filter.CanteenName) == "" {
+		return nil, 0, fmt.Errorf("school_id or dining venue required")
 	}
 	if filter.Limit <= 0 || filter.Limit > 100 {
 		filter.Limit = 20
@@ -272,8 +274,14 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 
 	base := r.db.WithContext(ctx).
 		Table("public_food_library").
-		Where(`status = ? AND COALESCE(is_campus_food, false) = true AND school_id = ?
-			AND COALESCE(food_name, '') !~* '(餐盒|打包盒|包装盒|纸袋|塑料袋|餐具|筷子|勺子|吸管|杯盖|餐巾)'`, "published", filter.SchoolID)
+		Where(`status = ? AND COALESCE(food_name, '') !~* '(餐盒|打包盒|包装盒|纸袋|塑料袋|餐具|筷子|勺子|吸管|杯盖|餐巾)'`, "published")
+	if filter.SchoolID != "" {
+		base = base.Where("COALESCE(is_campus_food, false) = true AND school_id = ?", filter.SchoolID)
+	} else if filter.CampusOnly {
+		base = base.Where("(COALESCE(is_campus_food, false) = true OR type = 'campus')")
+	} else if filter.MerchantOnly {
+		base = base.Where("COALESCE(is_campus_food, false) = false AND COALESCE(type, '') <> 'campus' AND COALESCE(merchant_name, '') <> ''")
+	}
 	if !filter.AllowUnknownNutrition {
 		base = base.Where("total_calories > 0")
 	}
@@ -300,7 +308,8 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 		)`, like, like, like, like, like)
 	}
 	if canteenName := strings.TrimSpace(filter.CanteenName); canteenName != "" {
-		base = base.Where("canteen_name ILIKE ?", "%"+canteenName+"%")
+		like := diningVenueLike(canteenName)
+		base = base.Where("(LOWER(REPLACE(canteen_name, ' ', '')) LIKE ? OR LOWER(REPLACE(merchant_name, ' ', '')) LIKE ?)", like, like)
 	}
 	if len(filter.IncludeSourceIDs) > 0 {
 		base = base.Where("id IN ?", filter.IncludeSourceIDs)
@@ -351,7 +360,8 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 		COALESCE(CAST(canteen_id AS TEXT), '') AS canteen_id, COALESCE(canteen_name, '') AS canteen_name,
 		COALESCE(CAST(window_id AS TEXT), '') AS window_id, COALESCE(window_name, '') AS window_name,
 		COALESCE(floor, '') AS floor, COALESCE(price, 0) AS price,
-		COALESCE(price_unit, '') AS price_unit, COALESCE(image_path, '') AS image_path`)
+		COALESCE(price_unit, '') AS price_unit, COALESCE(image_path, '') AS image_path,
+		COALESCE(merchant_name, '') AS merchant_name, COALESCE(NULLIF(detail_address, ''), merchant_address, '') AS address`)
 	if filter.ScanCatalog {
 		q = q.Order("id ASC")
 	} else {
@@ -527,6 +537,8 @@ func rowsToDietRecommendationCandidates(rows []dietRecommendationRow, source str
 			Price:                   row.Price,
 			PriceUnit:               strings.TrimSpace(row.PriceUnit),
 			ImagePath:               strings.TrimSpace(row.ImagePath),
+			MerchantName:            strings.TrimSpace(row.MerchantName),
+			Address:                 strings.TrimSpace(row.Address),
 			NutritionBasis:          evidence.Basis,
 			NutritionSourceCategory: evidence.SourceCategory,
 			WeightMethod:            evidence.WeightMethod,
