@@ -97,10 +97,11 @@ type DietRecommendationResult struct {
 }
 
 type CampusDietRecommendationConstraints struct {
-	Version        int    `json:"version,omitempty"`
-	OptionCount    int    `json:"option_count,omitempty"`
-	RequiredStaple string `json:"required_staple,omitempty"`
-	CanteenName    string `json:"canteen_name,omitempty"`
+	Version          int      `json:"version,omitempty"`
+	OptionCount      int      `json:"option_count,omitempty"`
+	RequiredStaple   string   `json:"required_staple,omitempty"`
+	CanteenName      string   `json:"canteen_name,omitempty"`
+	ExcludedCanteens []string `json:"excluded_canteens,omitempty"`
 	// Legacy fields are no longer decoded/persisted or used as access gates.
 	AllowedSchoolIDs   []string                         `json:"-"`
 	PendingSchool      *domain.DietRecommendationSchool `json:"-"`

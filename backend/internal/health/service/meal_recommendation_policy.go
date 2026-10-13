@@ -20,6 +20,9 @@ func mealDeniesCampusAccess(question string) bool {
 }
 
 func mealRequestsCampusDining(question string) bool {
+	if school, _ := domain.DiningVenueParts(mealExplicitVenue(question)); school != "" {
+		return true // a positive current dining destination also applies to corrections without "推荐"
+	}
 	return !mealDeniesCampusAccess(question) && !mealRequestsMixedDining(question) && strings.Contains(question, "食堂") &&
 		regexp.MustCompile(`推荐|想吃|吃什么|饭菜|菜品|点餐|去吃|就餐|吃饭`).MatchString(question)
 }
@@ -112,6 +115,9 @@ func mealEvidenceText(state *campusDietAgentRunState, answer string) string {
 	unsafe := regexp.MustCompile(`完美契合|不会给.{0,8}(?:肠胃|胃|消化)|胃炎|胃部|胃黏膜|易消化|促进消化|升糖指数|肌酸|即可满足.{0,8}需求|长期偏低|今天.{0,6}(?:没吃|空着)|不含花生|不含虾|均不含|均避开|(?:验证|核实|确认|过敏).{0,4}安全|一次买齐|一起解决|稳稳控制|实时外卖平台|一碗管饱|保证.{0,4}吃饱|能吃饱|份量扎实|皮薄馅大|饱腹感强`)
 	for _, segment := range segments {
 		segment = strings.TrimSpace(segment)
+		if regexp.MustCompile(`(?:系统|数据库|菜单|食堂|这里|目前).{0,30}(?:只有|仅有|没其他|没有其他)`).MatchString(segment) {
+			continue // a shortlist or earlier assistant reply cannot establish catalog completeness
+		}
 		if regexp.MustCompile(`不含.{0,8}(?:上述|这些|忌口|过敏)|高饱腹感|避开了.{0,16}忌口`).MatchString(segment) {
 			continue // Matching recorded ingredients is not a guarantee about a kitchen's allergens or serving size.
 		}
@@ -169,12 +175,33 @@ func mealFeasibleChoices(state *campusDietAgentRunState, candidates []DietRecomm
 		if state.Constraints.CompleteMeal && !mealHasEvidenceStructure(c) {
 			continue
 		}
-		if state.Intent == "more" && slices.Contains(state.ExcludedSourceIDs, c.SourceID) {
+		if mealIsMoreRepeat(state, c) {
 			continue
 		}
 		out = append(out, c)
 	}
 	return out
+}
+
+func mealIsMoreRepeat(state *campusDietAgentRunState, candidate DietRecommendationCandidate) bool {
+	if state.Intent != "more" {
+		return false
+	}
+	if slices.Contains(state.ExcludedSourceIDs, candidate.SourceID) {
+		return true
+	}
+	// Catalog duplicates can have different IDs/windows for the same dish.
+	// "Other dishes" must not merely swap that ID. A changed venue clears the
+	// active result upstream, so this does not block an explicitly chosen place.
+	if state.ActiveResult != nil {
+		name := normalizeMealVarietyName(candidate.Title)
+		for _, option := range state.ActiveResult.Recommendations {
+			if name != "" && name == normalizeMealVarietyName(option.Title) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func mealAvoidFoodMatches(avoid, text string) bool {

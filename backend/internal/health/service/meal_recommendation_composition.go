@@ -35,7 +35,10 @@ func mealHasNamedStructure(c DietRecommendationCandidate) bool {
 	for _, item := range c.Items {
 		text += " " + item.Name
 	}
-	staple := regexp.MustCompile(`米饭|拌饭|盖饭|盖浇饭|鸡饭|牛肉饭|滑蛋饭|炒饭|煲仔饭|石锅饭|鳗鱼饭|面条|面包|意面|荞麦面|牛肉面|臊子面|打卤面|阳春面|清汤面|拉面|拌面|炒面|生煎|烧麦|烧卖|汉堡|鸡肉卷|肉夹馍|煎饼|馅饼|米粉|米线|土豆粉|馒头|包子|饺|馄饨|杂粮|红薯|玉米|燕麦|粥|饭`).MatchString(text)
+	staple := regexp.MustCompile(`米饭|拌饭|盖饭|盖浇饭|鸡饭|牛肉饭|滑蛋饭|炒饭|煲仔饭|石锅饭|鳗鱼饭|面条|面包|意面|荞麦面|牛肉面|臊子面|打卤面|阳春面|清汤面|拉面|拌面|炒面|生煎|烧麦|烧卖|汉堡|鸡肉卷|肉夹馍|煎饼|馅饼|米粉|米线|土豆粉|馒头|包子|饺|馄饨|杂粮|红薯|燕麦|粥|饭`).MatchString(text)
+	// Corn inside a stir-fry is not evidence of an included staple serving.
+	// A separately recorded cob can still supply the staple in a real combo.
+	staple = staple || regexp.MustCompile(`(?:^|[ +])(?:蒸|煮|烤|甜)?玉米(?:棒|段)?(?:$|[ +])`).MatchString(text)
 	protein := regexp.MustCompile(`肉|鸡|牛|猪|鱼|虾|蛋|豆腐|豆皮|豆干|奶|排骨|鸭|羊`).MatchString(text)
 	// A cooked noodle bowl is a main dish even when its name does not contain
 	// 肉/蛋/豆. Known nutrition and explicit user minimums are checked separately;
