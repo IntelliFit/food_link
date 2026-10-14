@@ -97,7 +97,23 @@ export function boardingPose(rig: PetRig, ride: RigPose, weight: number): RigPos
     const cell = arms ? Math.floor(bone[0].x / rig.frame[2]) * rig.frame[2] : 0
     const shiftX = arms && rig.shoulders ? rig.shoulders[i].x - (bone[0].x - cell) : 0
     const shiftY = arms && rig.shoulders ? rig.shoulders[i].y - bone[0].y : 0
-    return bone.map((point, j) => lerp(project(p(point.x + shiftX, point.y + shiftY), rig.hip.x + cell), to[i][j], t))
+    const source = bone.map(point => project(p(point.x + shiftX, point.y + shiftY), rig.hip.x + cell)) as Bone
+    if (!arms) return source.map((point, j) => lerp(point, to[i][j], t))
+    const angle = (a: Point, b: Point) => Math.atan2(b.y - a.y, b.x - a.x)
+    const wrap = (value: number) => Math.atan2(Math.sin(value), Math.cos(value))
+    const fromUpper = angle(source[0], source[1]), toUpper = angle(to[i][0], to[i][1])
+    const upperAngle = fromUpper + wrap(toUpper - fromUpper) * t
+    const fromElbow = wrap(angle(source[1], source[2]) - fromUpper), toElbow = wrap(angle(to[i][1], to[i][2]) - toUpper)
+    const elbowAngle = fromElbow + wrap(toElbow - fromElbow) * t
+    const chain = [lerp(source[0], to[i][0], t)]
+    // Interpolating joint coordinates collapsed short forearms. Rotate the
+    // upper arm and its relative elbow flexion while retaining segment lengths.
+    for (let part = 0; part < 2; part++) {
+      const theta = upperAngle + (part ? elbowAngle : 0)
+      const length = distance(source[part], source[part + 1]) * (1 - t) + distance(to[i][part], to[i][part + 1]) * t
+      chain.push(p(chain[part].x + Math.cos(theta) * length, chain[part].y + Math.sin(theta) * length))
+    }
+    return chain
   }) as RigPose['arms']
   const pairs = (from: [number, number], to: [number, number]): [number, number] => from.map((n, i) => n + (to[i] - n) * t) as [number, number]
   return { ...ride, hip: lerp(project(rig.hip), ride.hip, t), angle: ride.angle * t,

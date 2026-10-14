@@ -22,7 +22,7 @@ beforeEach(() => {
   original = Object.fromEntries(['createSelectorQuery', 'nextTick', 'onAppHide', 'onAppShow', 'offAppHide', 'offAppShow'].map(key => [key, Taro[key]]))
   image = { onload: null, onerror: null }
   Object.defineProperty(image, 'src', { set: () => image.onload?.() })
-  ctx = { globalAlpha: 1, drawImage: jest.fn(), translate: jest.fn(), scale: jest.fn(), clearRect: jest.fn(), save: jest.fn(), restore: jest.fn() }
+  ctx = { globalAlpha: 1, drawImage: jest.fn(), translate: jest.fn(), scale: jest.fn(), rotate: jest.fn(), transform: jest.fn(), clearRect: jest.fn(), save: jest.fn(), restore: jest.fn() }
   node = { width: 0, height: 0, getContext: () => ctx, createImage: jest.fn(() => {
     if (!node.createImage.mock.calls.length || node.createImage.mock.calls.length === 1) return image
     const extra: any = { onload: null, onerror: null }
@@ -219,6 +219,30 @@ test('Guigui retains the selected original scarf in the standing half of the han
   expect(ctx.drawImage).toHaveBeenLastCalledWith(scarf, expect.any(Number), expect.any(Number), expect.any(Number), expect.any(Number))
   const args = ctx.drawImage.mock.calls[ctx.drawImage.mock.calls.length - 1]
   expect(args[3] / args[4]).toBeCloseTo(2)
+  fade(160)
+  expect(ctx.translate).toHaveBeenCalledWith(latestPose().hip.x, latestPose().hip.y)
+  expect(ctx.rotate).toHaveBeenCalledWith(latestPose().angle)
+  expect(ctx.transform).toHaveBeenCalledWith(latestPose().bodyWidth, latestPose().bodySkew, 0, 1, 0, 0)
+})
+
+test('left-facing reboarding turns the original frame before revealing the bike or completing', () => {
+  const complete = jest.fn(), alphas: number[] = []
+  draw.mockImplementation((...args) => alphas.push(args[7]))
+  const { rerender } = render(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' active={false} visible={false} />)
+  ready(); ctx.scale.mockClear()
+  rerender(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' active={false} boardingFacing='left' handoff='boarding' onHandoffComplete={complete} />)
+  expect(ctx.scale).toHaveBeenCalledWith(-1, 1)
+  fade(64)
+  expect(alphas[alphas.length - 1]).toBe(0)
+  expect(ctx.scale.mock.calls.some(([x, y]) => Math.abs(x) < .4 && y === 1)).toBe(true)
+  fade(256)
+  expect(alphas[alphas.length - 1]).toBeCloseTo(.625)
+  expect(complete).not.toHaveBeenCalled()
+  fade(128)
+  expect(alphas[alphas.length - 1]).toBe(1)
+  expect(complete).toHaveBeenCalledTimes(1)
+  expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 200, 220)
+  draw.mockReset()
 })
 test('reduced motion draws a stable pose and never starts an animation clock', () => {
   const media = { matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn() }

@@ -12,15 +12,16 @@ type MiniCanvas = HTMLCanvasElement & { createImage: () => HTMLImageElement; req
 let canvasSerial = 0
 
 /** One clock drives both the character's joints and the tool's pedals. No frame-by-frame React updates. */
-export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visible = true, facing = 'right', showGround = false, standingScarf, handoff, handoffId = 0, handoffAcknowledged = true, handoffMs = 320, onPresented, onHandoffComplete, onReady, onUnavailable }: {
+export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visible = true, facing = 'right', boardingFacing = facing, showGround = false, standingScarf, handoff, handoffId = 0, handoffAcknowledged = true, handoffMs = 320, onPresented, onHandoffComplete, onReady, onUnavailable }: {
   rig: PetRig; vehicle?: PetTransportId; action?: PetMotionAction; active?: boolean; visible?: boolean; facing?: 'left' | 'right'; showGround?: boolean
   handoff?: 'boarding' | 'alighting'; handoffId?: number; handoffAcknowledged?: boolean; handoffMs?: number; onPresented?: () => void; onHandoffComplete?: () => void; onReady?: () => void; onUnavailable?: () => void
   standingScarf?: PetLoadout['scarf']
+  boardingFacing?: 'left' | 'right'
 }) {
   const [id] = useState(() => `pet-rig-${++canvasSerial}`)
   const [ready, setReady] = useState(false)
-  const options = useRef({ vehicle, action, active, visible, facing, showGround, handoff, handoffId, handoffMs, onPresented, onHandoffComplete, onReady, onUnavailable })
-  options.current = { vehicle, action, active, visible, facing, showGround, handoff, handoffId, handoffMs, onPresented, onHandoffComplete, onReady, onUnavailable }
+  const options = useRef({ vehicle, action, active, visible, facing, boardingFacing, showGround, handoff, handoffId, handoffMs, onPresented, onHandoffComplete, onReady, onUnavailable })
+  options.current = { vehicle, action, active, visible, facing, boardingFacing, showGround, handoff, handoffId, handoffMs, onPresented, onHandoffComplete, onReady, onUnavailable }
   const unavailable = useRef<() => void>()
   const paint = useRef<((reset?: boolean) => void) | null>(null)
   const paintedRig = useRef<PetRig>()
@@ -44,7 +45,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
     // discarded. Restart only after the shown node has reached the native view.
     if (visible && paint.current) Taro.nextTick(() => { if (current) paint.current?.() })
     return () => { current = false }
-  }, [active, visible, facing, handoff, handoffId, handoffMs])
+  }, [active, visible, facing, boardingFacing, handoff, handoffId, handoffMs])
   useEffect(() => {
     let current = true
     if (visible && handoff === 'boarding' && handoffAcknowledged) Taro.nextTick(() => {
@@ -91,6 +92,8 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
         if (standingScarf && rig.key === 'guigui') scarfImage = canvas.createImage()
         const start = () => {
           if (disposed || !canvas || !image) return
+          const turnMs = () => options.current.handoff === 'boarding' && options.current.boardingFacing !== options.current.facing ? 120 : 0
+          const duration = () => Math.max(1, options.current.handoffMs) + turnMs()
           const draw = () => {
             const current = options.current
             // Some native canvas layers ignore ancestor visibility/opacity.
@@ -102,29 +105,42 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
             }
             const pose = rigPose(rig, current.vehicle, current.action, reduce ? 0 : clock)
             const acknowledged = current.handoff !== 'boarding' || presentationAck.current === `${current.handoffId}:${current.handoff}`
-            const progress = current.handoff ? !acknowledged ? 0 : reduce ? 1 : Math.min(1, handoffElapsed / Math.max(1, current.handoffMs)) : 1
-            const rideAlpha = current.handoff === 'boarding' ? progress : current.handoff === 'alighting' ? 1 - progress : 1
-            const mirrorAxis = 100 + (rig.frame[0] + rig.frame[2] / 2 - rig.hip.x) * pose.scale * (current.handoff === 'alighting' ? 1 - rideAlpha : 0)
+            const progress = current.handoff ? !acknowledged ? 0 : reduce ? 1 : Math.min(1, handoffElapsed / duration()) : 1
+            const rideAlpha = current.handoff === 'boarding' ? !acknowledged ? 0 : reduce ? 1 : Math.max(0, Math.min(1, (handoffElapsed - turnMs()) / Math.max(1, current.handoffMs))) : current.handoff === 'alighting' ? 1 - progress : 1
+            const handoffPose = current.handoff ? boardingPose(rig, pose, rideAlpha) : pose
+            const frameAxis = 100 + (rig.frame[0] + rig.frame[2] / 2 - rig.hip.x) * pose.scale
+            const mirrorAxis = 100 + (frameAxis - 100) * (current.handoff === 'alighting' ? 1 - rideAlpha : 0)
+            const turnProgress = !acknowledged ? 0 : reduce ? 1 : Math.min(1, handoffElapsed / Math.max(1, turnMs()))
+            const easedTurn = turnProgress * turnProgress * (3 - 2 * turnProgress)
+            const direction = current.facing === 'left' ? -1 : 1
+            const standingDirection = current.handoff === 'boarding' && turnMs() ? (current.boardingFacing === 'left' ? -1 : 1) * (1 - easedTurn) + direction * easedTurn : direction
+            // Clear in the unmirrored coordinate plane. A narrowing turn cannot
+            // clear last frame's full-width pixels through its own transform.
+            ctx.clearRect(0, 0, 200, 220)
             ctx.save()
             try {
               ctx.globalAlpha = current.handoff && rideAlpha === 0 ? 0 : 1
               if (current.facing === 'left') { ctx.translate(mirrorAxis * 2, 0); ctx.scale(-1, 1) }
-              drawPetRig(ctx, image!, rig, current.handoff ? boardingPose(rig, pose, rideAlpha) : pose, current.vehicle, current.showGround, armImage, rideAlpha)
+              drawPetRig(ctx, image!, rig, handoffPose, current.vehicle, current.showGround, armImage, rideAlpha)
             } finally { ctx.restore() }
             if (current.handoff) {
               // Paint the exact original frame only at the standing endpoint. In
               // between, one skeleton changes pose; two faces never overlap.
               const [x, y, width, height] = rig.frame
               ctx.save()
-              if (current.facing === 'left') { ctx.translate(mirrorAxis * 2, 0); ctx.scale(-1, 1) }
+              const axis = current.handoff === 'boarding' && turnMs() ? frameAxis : mirrorAxis
+              ctx.translate(axis, 0); ctx.scale(standingDirection, 1); ctx.translate(-axis, 0)
               const left = 100 + (x - rig.hip.x) * pose.scale, top = pose.floor + (y - rig.floor) * pose.scale
               if (rideAlpha === 0) ctx.drawImage(image!, x, y, width, height, left, top, width * pose.scale, height * pose.scale)
               if (scarfImage) {
                 ctx.globalAlpha = 1 - rideAlpha
-                const boxWidth = width * pose.scale * .34, boxHeight = height * pose.scale * .19
+                ctx.translate(handoffPose.hip.x, handoffPose.hip.y); ctx.rotate(handoffPose.angle)
+                ctx.scale(handoffPose.scale, handoffPose.scale); ctx.transform(handoffPose.bodyWidth, handoffPose.bodySkew, 0, 1, 0, 0)
+                ctx.translate(-rig.hip.x, -rig.hip.y)
+                const boxWidth = width * .34, boxHeight = height * .19
                 const aspect = (scarfImage.naturalWidth || scarfImage.width || 1) / (scarfImage.naturalHeight || scarfImage.height || 1)
                 const scarfWidth = Math.min(boxWidth, boxHeight * aspect), scarfHeight = scarfWidth / aspect
-                ctx.drawImage(scarfImage, left + width * pose.scale * .34 + (boxWidth - scarfWidth) / 2, top + height * pose.scale * .34 + (boxHeight - scarfHeight) / 2, scarfWidth, scarfHeight)
+                ctx.drawImage(scarfImage, x + width * .34 + (boxWidth - scarfWidth) / 2, y + height * .34 + (boxHeight - scarfHeight) / 2, scarfWidth, scarfHeight)
               }
               ctx.restore()
             }
@@ -139,7 +155,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
               Taro.nextTick(() => { if (!disposed && epoch === handoffEpoch && options.current.visible && options.current.handoff === current.handoff && options.current.handoffId === current.handoffId) options.current.onPresented?.() })
             }
             const acknowledged = current.handoff !== 'boarding' || presentationAck.current === `${current.handoffId}:${current.handoff}`
-            if (!completed && acknowledged && (reduce || handoffElapsed >= current.handoffMs)) {
+            if (!completed && acknowledged && (reduce || handoffElapsed >= duration())) {
               completed = true
               Taro.nextTick(() => { if (!disposed && epoch === handoffEpoch && options.current.visible && options.current.handoff === current.handoff && options.current.handoffId === current.handoffId) options.current.onHandoffComplete?.() })
             }
@@ -182,7 +198,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
             if (reduce) notifyHandoff()
             if (!disposed && !hidden && !pageHidden.current && options.current.visible && !reduce) {
               if (options.current.handoff && !completed) {
-                // This short crossfade must advance while pedalling is paused.
+                // This short pose handoff must advance while pedalling is paused.
                 // Native RAF delivery on a previously hidden, paused canvas is
                 // unreliable; one finite timer paints the same prepared bitmap.
                 handoffLast = options.current.handoff !== 'boarding' || presentationAck.current === `${options.current.handoffId}:${options.current.handoff}` ? Date.now() : undefined

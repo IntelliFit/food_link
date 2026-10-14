@@ -4,33 +4,20 @@ type Chain = [Point, Point, Point]
 export type SkinVertex = { source: Point; target: Point }
 export type SkinTriangle = [SkinVertex, SkinVertex, SkinVertex]
 
-/** One connected strip: both bones share the elbow's vertices and material. */
-export function armSkin(source: Chain, target: Chain, width: number, scale: number, sourceHipX: number): SkinTriangle[] {
-  const upper = distance(source[0], source[1]), lower = distance(source[1], source[2])
+/** Build corresponding UV stations at each chain's actual segment lengths. */
+function armRails(chain: Chain, width: number, hipX: number): [Point, Point][] {
+  const upper = distance(chain[0], chain[1]), lower = distance(chain[1], chain[2])
   const radius = Math.min(width * .55, upper * .45, lower * .45)
-  const turn = (chain: Chain) => {
-    const a = { x: chain[1].x - chain[0].x, y: chain[1].y - chain[0].y }
-    const b = { x: chain[2].x - chain[1].x, y: chain[2].y - chain[1].y }
-    return Math.acos(Math.max(-1, Math.min(1, (a.x * b.x + a.y * b.y) / (Math.hypot(a.x, a.y) * Math.hypot(b.x, b.y)))))
-  }
-  const corner = Math.tan(Math.max(turn(source), turn(target)) / 2)
   const units = [0, 1].map(i => {
-    const a = source[i], b = source[i + 1], length = distance(a, b)
+    const a = chain[i], b = chain[i + 1], length = Math.max(.001, distance(a, b))
     return { x: (b.x - a.x) / length, y: (b.y - a.y) / length }
   })
-  const transform = (point: Point, part: number): Point => {
-    const u = units[part], length = distance(source[part], source[part + 1])
-    const d = target[part], end = target[part + 1], projected = distance(d, end)
-    const vx = (end.x - d.x) / Math.max(.001, projected), vy = (end.y - d.y) / Math.max(.001, projected)
-    const dx = point.x - source[part].x, dy = point.y - source[part].y
-    const along = (dx * u.x + dy * u.y) * projected / length
-    const across = (-dx * u.y + dy * u.x) * scale
-    return { x: d.x + vx * along - vy * across, y: d.y + vy * along + vx * across }
-  }
+  const turn = Math.acos(Math.max(-1, Math.min(1, units[0].x * units[1].x + units[0].y * units[1].y)))
+  const corner = Math.tan(turn / 2)
   const stations = [-radius * .3, 0, upper * .45, upper - radius, upper, upper + radius, upper + lower * .55, upper + lower]
   const rows = stations.map(s => {
     const part = s <= upper ? 0 : 1
-    const center = part ? lerp(source[1], source[2], (s - upper) / lower) : lerp(source[0], source[1], s / upper)
+    const center = part ? lerp(chain[1], chain[2], (s - upper) / Math.max(.001, lower)) : lerp(chain[0], chain[1], s / Math.max(.001, upper))
     const blend = Math.max(0, Math.min(1, (s - upper + radius) / (radius * 2)))
     const weight = blend * blend * (3 - 2 * blend)
     // A bisector at the elbow prevents a crack when the source arm is bent.
@@ -38,7 +25,7 @@ export function armSkin(source: Chain, target: Chain, width: number, scale: numb
     const ny = units[0].x * (1 - weight) + units[1].x * weight
     const normalLength = Math.max(.1, Math.hypot(nx, ny))
     return [-1, 1].map(side => {
-      const inward = side * nx * (sourceHipX - source[0].x) > 0
+      const inward = side * nx * (hipX - chain[0].x) > 0
       // The torso owns shoulder straps. Do not rotate those pixels with skin.
       const shoulderInset = inward ? .2 + .8 * Math.max(0, Math.min(1, s / Math.max(1, upper * .35))) : 1
       const shoulderCap = s < 0 ? .4 : 1
@@ -48,9 +35,17 @@ export function armSkin(source: Chain, target: Chain, width: number, scale: numb
       const jointLimit = (Math.abs(s - upper) + radius * .4) / Math.max(.05, corner) * .4
       const extent = Math.min(width * .5, jointLimit) * shoulderInset * shoulderCap * tip
       const point = { x: center.x + side * nx / normalLength * extent, y: center.y + side * ny / normalLength * extent }
-      return { source: point, target: lerp(transform(point, 0), transform(point, 1), weight) }
-    }) as [SkinVertex, SkinVertex]
+      return point
+    }) as [Point, Point]
   })
+  return rows
+}
+
+/** One connected strip: both bones share the elbow's vertices and material. */
+export function armSkin(source: Chain, target: Chain, width: number, scale: number, sourceHipX: number): SkinTriangle[] {
+  const sourceRows = armRails(source, width, sourceHipX)
+  const targetRows = armRails(target, width * scale, target[0].x + (sourceHipX - source[0].x) * scale)
+  const rows = sourceRows.map((row, i) => row.map((point, side) => ({ source: point, target: targetRows[i][side] })) as [SkinVertex, SkinVertex])
   return rows.slice(1).flatMap((row, i) => [
     [rows[i][0], rows[i][1], row[0]], [rows[i][1], row[1], row[0]],
   ] as SkinTriangle[])
