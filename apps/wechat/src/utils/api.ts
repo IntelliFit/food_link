@@ -657,6 +657,8 @@ export interface FoodRecord {
   pfc_ratio_comment?: string | null
   absorption_notes?: string | null
   context_advice?: string | null
+  eating_order_advice?: string | null
+  advice_source?: 'analysis' | 'nutrition_summary'
   items: FoodRecordItemRow[]
   total_calories: number
   total_protein: number
@@ -6601,6 +6603,10 @@ export async function saveManualCustomFood(
     timeout: 15000
   })
   return unwrapResponse<{ item: ManualFoodSearchResult }>(response).item
+}
+
+export async function deleteManualCustomFood(id: string): Promise<void> {
+  await authenticatedRequest(`/api/manual-food/custom/${encodeURIComponent(id)}`, { method: 'DELETE', timeout: 15000 })
 }
 
 export interface ManualFoodBrowseResult {

@@ -6,6 +6,7 @@ import {
   getHealthProfile,
   imageToBase64,
   saveFoodRecord,
+  deleteManualCustomFood,
   fetchManualFoodCatalog,
   fetchManualCustomFoods,
   searchManualFood,
@@ -329,6 +330,18 @@ function loadStoredCustomFoodItems() {
   }
 }
 
+function loadDeletedCustomIds(): Set<string> {
+  try {
+    const raw = Taro.getStorageSync(`${customFoodStorageKey()}:deleted`)
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return new Set(Array.isArray(parsed) ? parsed.filter(id => typeof id === 'string') : [])
+  } catch { return new Set() }
+}
+
+function persistDeletedCustomIds(ids: Set<string>) {
+  try { Taro.setStorageSync(`${customFoodStorageKey()}:deleted`, Array.from(ids)) } catch { /* 当前页面保留标记；云端软删除仍是有效依据。 */ }
+}
+
 function persistStoredCustomFoodItems(items: ManualFoodSearchResult[]) {
   try {
     Taro.setStorageSync(customFoodStorageKey(), mergeCustomFoodItems(items))
@@ -520,9 +533,14 @@ function RecordManualPage() {
   const [customFat, setCustomFat] = useState('')
   const [customMicroValues, setCustomMicroValues] = useState<Record<string, string>>({})
   const [showCustomMicroPanel, setShowCustomMicroPanel] = useState(false)
-  const [customImageLocalPath, setCustomImageLocalPath] = useState('')
-  const [customImageUrl, setCustomImageUrl] = useState('')
   const [customImageUploading, setCustomImageUploading] = useState(false)
+  const [customImages, setCustomImages] = useState<string[]>([])
+  const [editingCustomItem, setEditingCustomItem] = useState<ManualFoodSearchResult | null>(null)
+  const [customSaving, setCustomSaving] = useState(false)
+  const customSaveLock = useRef(false)
+  const mealSaveLock = useRef(false)
+  const deletedCustomIds = useRef(new Set<string>())
+  const customDraftGeneration = useRef(0)
   const [customItems, setCustomItems] = useState<ManualFoodSearchResult[]>([])
   const [showSelectedDrawer, setShowSelectedDrawer] = useState(false)
   const entryTypeRef = useRef<FoodRecordEntryType>('food_library')
@@ -553,7 +571,8 @@ function RecordManualPage() {
   }, [normalizedQuery])
 
   useEffect(() => {
-    const storedCustomItems = loadStoredCustomFoodItems()
+    deletedCustomIds.current = loadDeletedCustomIds()
+    const storedCustomItems = loadStoredCustomFoodItems().filter(item => !deletedCustomIds.current.has(item.id))
     if (storedCustomItems.length > 0) {
       setCustomItems(storedCustomItems)
     }
@@ -654,7 +673,7 @@ function RecordManualPage() {
           ...prev,
           ...baseItems,
           ...recentCustomItems,
-        ])
+        ].filter(item => !deletedCustomIds.current.has(item.id)))
         persistStoredCustomFoodItems(next)
         return next
       })
@@ -756,6 +775,8 @@ function RecordManualPage() {
   const activeCategoryLabel = categories.find((item) => item.key === activeCategory)?.label || '常见'
 
   const openCustomPanel = () => {
+    if (customSaveLock.current) return
+    resetCustomDraft()
     if (normalizedQuery && !customName.trim()) {
       setCustomName(normalizedQuery)
     }
@@ -763,6 +784,9 @@ function RecordManualPage() {
   }
 
   const resetCustomDraft = () => {
+    customDraftGeneration.current += 1
+    setEditingCustomItem(null)
+    setCustomImages([])
     setCustomName('')
     setCustomWeight('100')
     setCustomNutritionBasis('100')
@@ -773,8 +797,6 @@ function RecordManualPage() {
     setCustomFat('')
     setCustomMicroValues({})
     setShowCustomMicroPanel(false)
-    setCustomImageLocalPath('')
-    setCustomImageUrl('')
     setCustomImageUploading(false)
   }
 
@@ -784,20 +806,21 @@ function RecordManualPage() {
   }
 
   const handleChooseCustomImage = async () => {
-    if (customImageUploading) return
+    if (customImageUploading || customImages.length >= 4) return
+    const generation = customDraftGeneration.current
     try {
       setCustomImageUploading(true)
       const res = await chooseImageWithPrivacy({
-        count: 1,
+        count: 4 - customImages.length,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
       })
-      const localPath = res.tempFilePaths?.[0]
-      if (!localPath) return
-      setCustomImageLocalPath(localPath)
-      const base64 = await imageToBase64(localPath)
-      const uploadRes = await uploadAnalyzeImage(base64)
-      setCustomImageUrl(uploadRes.imageUrl)
+      for (const localPath of res.tempFilePaths || []) {
+        const base64 = await imageToBase64(localPath)
+        const uploadRes = await uploadAnalyzeImage(base64)
+        if (generation !== customDraftGeneration.current) return
+        setCustomImages(prev => [...prev, uploadRes.imageUrl].slice(0, 4))
+      }
     } catch (e: any) {
       const message = String(e?.errMsg || e?.message || e || '')
       if (/cancel/i.test(message)) return
@@ -805,20 +828,18 @@ function RecordManualPage() {
         showPrivacyAuthorizeFailure(e, '需要授权后才能选择图片')
         return
       }
-      setCustomImageLocalPath('')
-      setCustomImageUrl('')
       await showUnifiedApiError(e, '上传图片失败')
     } finally {
-      setCustomImageUploading(false)
+      if (generation === customDraftGeneration.current) setCustomImageUploading(false)
     }
   }
 
   const handleRemoveCustomImage = () => {
-    setCustomImageLocalPath('')
-    setCustomImageUrl('')
+    setCustomImages([])
   }
 
   const handleAddCustomItem = async () => {
+    if (customSaveLock.current) return
     const name = customName.trim()
     const parsedWeight = Number(customWeight)
     const parsedBasis = Number(customNutritionBasis)
@@ -878,7 +899,7 @@ function RecordManualPage() {
     const nutrients = scaledNutrients(labelNutrients, weight / nutritionBasis)
     const nutrientsPer100g = scaledNutrients(labelNutrients, 100 / nutritionBasis)
     const id = `custom:${Date.now()}:${name}`
-    const imagePath = customImageUrl || null
+    const imagePath = customImages[0] || null
     const sourceEnergyText = customEnergyUnit === 'kj'
       ? `标示 ${roundToSingle(parsedEnergy)} kJ ≈ ${labelCaloriesKcal} kcal`
       : `标示 ${labelCaloriesKcal} kcal`
@@ -898,7 +919,7 @@ function RecordManualPage() {
         nutrients_per_100g: nutrientsPer100g,
         extra_nutrients: nutrientsPer100g,
         image_path: imagePath,
-        image_paths: imagePath ? [imagePath] : null,
+        image_paths: customImages.length ? customImages : null,
         portion_label: `${formatWeightGrams(weight)}g`,
         source_label: '自定义',
         recommend_reason: `${sourceEnergyText} / 每${formatWeightGrams(nutritionBasis)}g`,
@@ -907,9 +928,12 @@ function RecordManualPage() {
         collected: false,
       }
     let savedCustomResult = customResult
+    customSaveLock.current = true
+    setCustomSaving(true)
     if (getAccessToken()) {
       try {
         savedCustomResult = await saveManualCustomFood({
+          id: editingCustomItem && /^[0-9a-f-]{36}$/i.test(editingCustomItem.id) ? editingCustomItem.id : undefined,
           title: customResult.title,
           default_weight_grams: customResult.default_weight_grams,
           total_calories: customResult.total_calories,
@@ -925,23 +949,84 @@ function RecordManualPage() {
           share_to_public: false,
         })
       } catch (e) {
+        if (editingCustomItem && /^[0-9a-f-]{36}$/i.test(editingCustomItem.id)) {
+          customSaveLock.current = false
+          setCustomSaving(false)
+          await showUnifiedApiError(e, '修改失败，原商品资料已保留')
+          return
+        }
         Taro.showToast({ title: '已先保存到本机', icon: 'none' })
       }
     }
     setCustomItems((prev) => {
       const next = mergeCustomFoodItems([
         savedCustomResult,
-        ...prev.filter((item) => item.title.trim() !== name),
+        ...prev.filter((item) => item.id !== editingCustomItem?.id && item.title.trim() !== name),
       ])
       persistStoredCustomFoodItems(next)
       return next
     })
+    if (editingCustomItem) {
+      if (editingCustomItem.id !== savedCustomResult.id) {
+        deletedCustomIds.current.add(editingCustomItem.id)
+        persistDeletedCustomIds(deletedCustomIds.current)
+      }
+      const profile = inferServingProfile(savedCustomResult)
+      setSelectedItems(prev => prev.map(item => {
+        if (item.id !== editingCustomItem.id) return item
+        const next = {
+          ...item, id: savedCustomResult.id, title: savedCustomResult.title,
+          defaultWeight: profile.defaultWeight, portionLabel: profile.portionLabel,
+          nutrientsPer100g: savedCustomResult.nutrients_per_100g || undefined,
+          imagePath: pickFoodDisplayImageUrl(savedCustomResult) || null,
+          baseNutrients: { ...item.baseNutrients, calories: savedCustomResult.total_calories, protein: savedCustomResult.total_protein, carbs: savedCustomResult.total_carbs, fat: savedCustomResult.total_fat },
+        }
+        return { ...next, nutrients: buildNutrientsFromWeight(next, item.weight) }
+      }))
+    }
+    customSaveLock.current = false
+    setCustomSaving(false)
     Taro.vibrateShort({ type: 'light' }).catch(() => {})
     resetCustomDraft()
     setShowCustomPanel(false)
     setActiveCategory('custom')
     setSearchText('')
     Taro.showToast({ title: '自定义完成', icon: 'success' })
+  }
+
+  const handleManageCustomItem = async (item: ManualFoodSearchResult) => {
+    if (customSaveLock.current) return
+    const choice = await Taro.showActionSheet({ itemList: ['编辑商品资料', '删除自定义商品'] }).catch(() => null)
+    if (!choice) return
+    if (choice.tapIndex === 1) {
+      const confirmed = await Taro.showModal({ title: '删除自定义商品', content: `删除“${item.title}”后将不再出现在商品库；已经保存的饮食记录会保留。`, confirmText: '删除', confirmColor: '#ef4444' })
+      if (!confirmed.confirm) return
+      try {
+        if (/^[0-9a-f-]{36}$/i.test(item.id)) await deleteManualCustomFood(item.id)
+        deletedCustomIds.current.add(item.id)
+        persistDeletedCustomIds(deletedCustomIds.current)
+        setCustomItems(prev => { const next = prev.filter(food => food.id !== item.id); persistStoredCustomFoodItems(next); return next })
+        setCatalogItems(prev => prev.filter(food => food.id !== item.id))
+        setSearchResults(prev => prev.filter(food => food.id !== item.id))
+        Taro.showToast({ title: '商品已删除', icon: 'success' })
+      } catch (error) { await showUnifiedApiError(error, '删除失败') }
+      return
+    }
+    resetCustomDraft()
+    const basis = positiveWeightGrams(Number(item.recommend_reason?.match(/每([\d.]+)g/)?.[1]), 100)
+    const nutrients = scaledNutrients(item.nutrients_per_100g || item.extra_nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0 }, basis / 100)
+    setEditingCustomItem(item)
+    setCustomName(item.title)
+    setCustomWeight(formatWeightGrams(item.default_weight_grams))
+    setCustomNutritionBasis(formatWeightGrams(basis))
+    setCustomEnergyUnit('kcal')
+    setCustomCalories(String(nutrients.calories))
+    setCustomProtein(String(nutrients.protein))
+    setCustomCarbs(String(nutrients.carbs))
+    setCustomFat(String(nutrients.fat))
+    setCustomMicroValues(Object.fromEntries(CUSTOM_MICRO_FIELDS.map(field => [field.key, String(nutrients[field.key] ?? '')])))
+    setCustomImages((item.image_paths || (item.image_path ? [item.image_path] : [])).slice(0, 4))
+    setShowCustomPanel(true)
   }
 
   useEffect(() => {
@@ -1116,6 +1201,7 @@ function RecordManualPage() {
   }, [selectedItems])
 
   const handleSave = async () => {
+    if (mealSaveLock.current) return
     if (selectedItems.length === 0) {
       Taro.showToast({ title: '请先添加食物', icon: 'none' })
       return
@@ -1125,6 +1211,7 @@ function RecordManualPage() {
       return
     }
     
+    mealSaveLock.current = true
     setSaving(true)
     try {
       const items = selectedItems.map(item => ({
@@ -1185,6 +1272,7 @@ function RecordManualPage() {
     } catch (e: any) {
       await showUnifiedApiError(e, '保存失败')
     } finally {
+      mealSaveLock.current = false
       setSaving(false)
     }
   }
@@ -1300,7 +1388,6 @@ function RecordManualPage() {
       <View
         key={key}
         className='food-item'
-        onClick={() => handleAddItem(item)}
       >
         <View className='food-cover'>
           {hasFoodDisplayImage(item) ? (
@@ -1335,7 +1422,12 @@ function RecordManualPage() {
             </Text>
           )}
         </View>
-        <View className={`add-btn ${selected ? 'active' : ''}`}>
+        {item.source === 'custom' && (
+          <View className='custom-item-manage' onClick={() => handleManageCustomItem(item)}>
+            <Text>编辑</Text>
+          </View>
+        )}
+        <View className={`add-btn ${selected ? 'active' : ''}`} onClick={() => handleAddItem(item)}>
           <Text>
             {selected
               ? formatSelectedAmount(selected)
@@ -1351,6 +1443,7 @@ function RecordManualPage() {
       <ScrollView
         className='content-scroll'
         scrollY
+        scrollIntoView={showCustomPanel ? 'custom-food-editor' : undefined}
         lowerThreshold={160}
         onScrollToLower={handleLoadMoreCatalog}
       >
@@ -1406,15 +1499,15 @@ function RecordManualPage() {
           </View>
 
           {showCustomPanel && (
-            <View className='custom-food-panel'>
+            <View className='custom-food-panel' id='custom-food-editor'>
               <View className='custom-food-header'>
-                <Text className='custom-food-title'>自定义食物</Text>
+                <Text className='custom-food-title'>{editingCustomItem ? '编辑自定义食物' : '新建自定义食物'}</Text>
                 <Text className='custom-food-close' onClick={() => setShowCustomPanel(false)}>收起</Text>
               </View>
               <View className='custom-image-row'>
                 <View className='custom-image-preview' onClick={handleChooseCustomImage}>
-                  {customImageLocalPath || customImageUrl ? (
-                    <Image className='custom-image' src={customImageLocalPath || customImageUrl} mode='aspectFill' />
+                  {customImages[0] ? (
+                    <Image className='custom-image' src={customImages[0]} mode='aspectFill' />
                   ) : (
                     <View className='custom-image-empty'>
                       {customImageUploading ? (
@@ -1426,18 +1519,26 @@ function RecordManualPage() {
                   )}
                 </View>
                 <View className='custom-image-actions'>
-                  <Text className='custom-image-title'>食物图片</Text>
+                  <Text className='custom-image-title'>商品照片 · {customImages.length}/4</Text>
                   <View className='custom-image-buttons'>
                     <View className={`custom-image-btn ${customImageUploading ? 'disabled' : ''}`} onClick={handleChooseCustomImage}>
-                      {customImageUploading ? <View className='custom-image-btn-spinner' /> : <Text>添加图片</Text>}
+                      {customImageUploading ? <View className='custom-image-btn-spinner' /> : <Text>添加照片</Text>}
                     </View>
-                    {(customImageLocalPath || customImageUrl) && (
+                    {customImages.length > 0 && (
                       <View className='custom-image-remove' onClick={handleRemoveCustomImage}>
                         <Text>移除</Text>
                       </View>
                     )}
                   </View>
                 </View>
+              </View>
+              <View className='custom-photo-list'>
+                {customImages.map((url, index) => (
+                  <View className='custom-photo-thumb' key={url}>
+                    <Image src={url} mode='aspectFill' onClick={() => Taro.previewImage({ current: url, urls: customImages })} />
+                    <Text className='custom-photo-delete' onClick={() => setCustomImages(prev => prev.filter((_, i) => i !== index))}>×</Text>
+                  </View>
+                ))}
               </View>
               <View className='custom-food-grid'>
                 <View className='custom-field custom-field-full'>
@@ -1450,7 +1551,7 @@ function RecordManualPage() {
                   />
                 </View>
                 <View className='custom-field'>
-                  <Text className='custom-field-label'>实际重量 g</Text>
+                  <Text className='custom-field-label'>默认一份重量 g</Text>
                   <Input
                     className='custom-field-input'
                     type='digit'
@@ -1459,7 +1560,7 @@ function RecordManualPage() {
                   />
                 </View>
                 <View className='custom-field'>
-                  <Text className='custom-field-label'>营养标示每 g</Text>
+                  <Text className='custom-field-label'>标签营养每多少 g</Text>
                   <Input
                     className='custom-field-input'
                     type='digit'
@@ -1558,11 +1659,11 @@ function RecordManualPage() {
                 </View>
               )}
               <View className='custom-food-actions'>
-                <View className='custom-food-secondary' onClick={resetCustomDraft}>
-                  <Text>清空</Text>
+                <View className='custom-food-secondary' onClick={() => { resetCustomDraft(); setShowCustomPanel(false) }}>
+                  <Text>取消</Text>
                 </View>
                 <View className='custom-food-primary' onClick={handleAddCustomItem}>
-                  <Text>完成自定义</Text>
+                  {customSaving ? <View className='custom-image-btn-spinner' /> : <Text>{editingCustomItem ? '保存商品修改' : '保存商品'}</Text>}
                 </View>
               </View>
             </View>
@@ -1676,9 +1777,9 @@ function RecordManualPage() {
           </View>
           <View
             className={`save-btn ${saving ? 'loading' : ''}`}
-            onClick={handleSave}
+            onClick={() => setShowSelectedDrawer(true)}
           >
-            <Text>{saving ? '保存中...' : '保存到今天记录'}</Text>
+            <Text>选好了，核对本餐</Text>
           </View>
         </View>
       )}
@@ -1689,7 +1790,7 @@ function RecordManualPage() {
             <View className='selected-drawer-handle' />
             <View className='selected-drawer-header'>
               <View>
-                <Text className='selected-drawer-title'>已选食物</Text>
+                <Text className='selected-drawer-title'>核对本餐 · {MEALS.find(meal => meal.id === selectedMeal)?.name || '本餐'}</Text>
                 <Text className='selected-drawer-subtitle'>
                   {selectedItems.length} 项 · {Math.round(totalNutrients.calories)} kcal
                 </Text>
@@ -1727,7 +1828,7 @@ function RecordManualPage() {
                 className={`selected-drawer-primary ${saving ? 'loading' : ''}`}
                 onClick={handleSave}
               >
-                <Text>{saving ? '保存中...' : '保存本餐'}</Text>
+                {saving ? <View className='custom-image-btn-spinner' /> : <Text>确认提交本餐</Text>}
               </View>
             </View>
           </View>

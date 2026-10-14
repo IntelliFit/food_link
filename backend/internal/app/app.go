@@ -896,6 +896,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/manual-food/search", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodSearch)
 	engine.GET("/api/manual-food/custom", authmw.RequireJWT(jwtSvc), utilityHandler.ManualFoodCustomList)
 	engine.POST("/api/manual-food/custom", authmw.RequireJWT(jwtSvc), utilityHandler.ManualFoodCustomSave)
+	engine.DELETE("/api/manual-food/custom/:id", authmw.RequireJWT(jwtSvc), utilityHandler.ManualFoodCustomDelete)
 	engine.GET("/api/schools", authmw.RequireJWT(jwtSvc), schoolHandler.Search)
 	engine.GET("/api/schools/provinces", authmw.RequireJWT(jwtSvc), schoolHandler.Provinces)
 	engine.GET("/api/schools/:school_id/campuses", authmw.RequireJWT(jwtSvc), schoolHandler.Campuses)

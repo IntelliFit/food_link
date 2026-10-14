@@ -6,6 +6,13 @@
   box-sizing: border-box;
 }
 
+.advice-source-note {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #64748b;
+}
+
 /* 主内容区（与 day-record 一致：微信默认导航栏，无自定义顶栏占位） */
 .record-detail-below-nav {
   box-sizing: border-box;

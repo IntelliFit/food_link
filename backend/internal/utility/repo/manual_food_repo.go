@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode"
 
+	commonerrors "food_link/backend/internal/common/errors"
 	fooddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	publicdomain "food_link/backend/internal/publicfood/domain"
@@ -102,7 +103,12 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 	}
 	normalizedTitle := normalizeCustomFoodTitle(title)
 	id := strings.TrimSpace(input.ID)
-	if _, err := uuid.Parse(id); err != nil {
+	editing := id != ""
+	if editing {
+		if _, err := uuid.Parse(id); err != nil {
+			return domain.ManualFoodResult{}, commonerrors.ErrBadRequest
+		}
+	} else {
 		id = uuid.New().String()
 	}
 	defaultWeight := input.DefaultWeightGrams
@@ -163,6 +169,29 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 	if row.PortionLabel == "" {
 		row.PortionLabel = fmt.Sprintf("%sg", formatManualCompactNumber(defaultWeight))
 	}
+	if editing {
+		err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var existing domain.UserCustomFood
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ? AND status <> ?", id, userID, "deleted").First(&existing).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return commonerrors.ErrNotFound
+				}
+				return err
+			}
+			var duplicate int64
+			if err := tx.Model(&domain.UserCustomFood{}).Where("user_id = ? AND normalized_title = ? AND id <> ?", userID, normalizedTitle, id).Count(&duplicate).Error; err != nil {
+				return err
+			}
+			if duplicate > 0 {
+				return &commonerrors.AppError{Code: 10002, Message: "已有同名自定义食物，请使用不同名称", HTTPStatus: 400}
+			}
+			return tx.Model(&existing).Select("title", "normalized_title", "default_weight_grams", "total_calories", "total_protein", "total_carbs", "total_fat", "nutrients_per_100g", "extra_nutrients", "image_path", "image_paths", "portion_label", "recommend_reason", "updated_at").Updates(&row).Error
+		})
+		if err != nil {
+			return domain.ManualFoodResult{}, err
+		}
+		return r.manualFoodResultFromCustomFood(row), nil
+	}
 	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "normalized_title"}},
 		DoUpdates: clause.AssignmentColumns([]string{
@@ -193,6 +222,20 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 		return domain.ManualFoodResult{}, err
 	}
 	return r.manualFoodResultFromCustomFood(saved), nil
+}
+
+func (r *ManualFoodRepo) DeleteCustomFood(ctx context.Context, userID, id string) error {
+	if _, err := uuid.Parse(id); err != nil {
+		return commonerrors.ErrBadRequest
+	}
+	result := r.db.WithContext(ctx).Model(&domain.UserCustomFood{}).Where("id = ? AND user_id = ?", id, userID).Updates(map[string]any{"status": "deleted", "updated_at": time.Now()})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return commonerrors.ErrNotFound
+	}
+	return nil
 }
 
 func (r *ManualFoodRepo) ListCustomFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error) {
@@ -673,6 +716,10 @@ func (r *ManualFoodRepo) listRecentItems(ctx context.Context, userID string, lim
 		WHERE user_id = ?
 			AND item->>'manual_source' IN ('public_library', 'nutrition_library', 'packaged_food', 'custom')
 			AND COALESCE(item->>'manual_source_id', '') <> ''
+			AND NOT (item->>'manual_source' = 'custom' AND EXISTS (
+				SELECT 1 FROM user_custom_foods cf WHERE cf.id::text = item->>'manual_source_id'
+				AND cf.user_id = user_food_records.user_id AND cf.status = 'deleted'
+			))
 		GROUP BY 1,2,3,4
 		ORDER BY usage_count DESC, latest_record_time DESC
 		LIMIT ?
@@ -2497,6 +2544,18 @@ func applyManualFoodServingProfile(item *domain.ManualFoodResult) {
 			item.PortionLabel = fmt.Sprintf("%.0f%s", item.DefaultWeightGrams, item.DisplayUnitLabel)
 		}
 		applyPackagedFoodPortionNutrition(item)
+		return
+	}
+	if item.Source == "custom" {
+		// 自定义份量由用户明确填写，不能被名称推断的咖啡杯量或鸡蛋个重覆盖。
+		item.DisplayUnit = "g"
+		item.DisplayUnitLabel = "g"
+		if item.DefaultWeightGrams <= 0 {
+			item.DefaultWeightGrams = 100
+		}
+		if strings.TrimSpace(item.PortionLabel) == "" {
+			item.PortionLabel = fmt.Sprintf("%sg", formatManualCompactNumber(item.DefaultWeightGrams))
+		}
 		return
 	}
 	title := strings.TrimSpace(item.Title)

@@ -2,9 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/utility/domain"
 	"food_link/backend/internal/utility/repo"
+	"food_link/backend/pkg/logger"
 )
 
 type ManualFoodService struct {
@@ -69,5 +73,31 @@ func (s *ManualFoodService) ListCustomFoods(ctx context.Context, userID string, 
 }
 
 func (s *ManualFoodService) SaveCustomFood(ctx context.Context, userID string, input repo.CustomFoodInput) (domain.ManualFoodResult, error) {
-	return s.repo.SaveCustomFood(ctx, userID, input)
+	logger.Info(ctx, "保存自定义食物", slog.String("user_id", userID), slog.String("food_id", input.ID))
+	item, err := s.repo.SaveCustomFood(ctx, userID, input)
+	if err != nil {
+		logCustomFoodFailure(ctx, "保存自定义食物失败", err, userID, input.ID)
+		return item, err
+	}
+	logger.Info(ctx, "自定义食物已保存", slog.String("user_id", userID), slog.String("food_id", item.ID), slog.Int("image_count", len(item.ImagePaths)))
+	return item, nil
+}
+
+func (s *ManualFoodService) DeleteCustomFood(ctx context.Context, userID, id string) error {
+	logger.Info(ctx, "删除自定义食物", slog.String("user_id", userID), slog.String("food_id", id))
+	if err := s.repo.DeleteCustomFood(ctx, userID, id); err != nil {
+		logCustomFoodFailure(ctx, "删除自定义食物失败", err, userID, id)
+		return err
+	}
+	logger.Info(ctx, "自定义食物已删除", slog.String("user_id", userID), slog.String("food_id", id))
+	return nil
+}
+
+func logCustomFoodFailure(ctx context.Context, message string, err error, userID, id string) {
+	var expected *commonerrors.AppError
+	if errors.As(err, &expected) && expected.HTTPStatus < 500 {
+		logger.Warn(ctx, message, slog.String("user_id", userID), slog.String("food_id", id), slog.String("reason", err.Error()))
+		return
+	}
+	logger.Error(ctx, message, err, slog.String("user_id", userID), slog.String("food_id", id))
 }

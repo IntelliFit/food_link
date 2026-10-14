@@ -13,6 +13,7 @@ import {
   type Nutrients
 } from '../../../utils/api'
 import { getCurrentPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
+import { mealRecordAdvice } from '../../../utils/meal-record-advice'
 import { MealRecordPosterModal, type MealPosterSharePayload } from '../../../pages/index/components/MealRecordPosterModal'
 
 import { IconBreakfast, IconCollapse, IconExpand, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
@@ -224,7 +225,7 @@ function RecordDetailPage() {
         try {
           setLoading(true)
           // 自动记录后的本人入口使用鉴权接口，关闭公开记录也能生成自己的打卡图。
-          const res = router.params?.from_auto_record === '1'
+          const res = (router.params?.from_auto_record === '1' || router.params?.owned === '1')
             ? await getFoodRecordById(recordId)
             : await getSharedFoodRecord(recordId)
           const fetchedRecord = res.record
@@ -335,7 +336,7 @@ function RecordDetailPage() {
   const handleEditSuccess = useCallback(async () => {
     if (!record?.id) return
     try {
-      const res = router.params?.from_auto_record === '1'
+      const res = (router.params?.from_auto_record === '1' || router.params?.owned === '1')
         ? await getFoodRecordById(record.id)
         : await getSharedFoodRecord(record.id)
       setRecord(res.record)
@@ -348,7 +349,7 @@ function RecordDetailPage() {
     } catch (e: any) {
       console.warn('[record-detail] 编辑后刷新记录失败', e)
     }
-  }, [record?.id, router.params?.from_auto_record])
+  }, [record?.id, router.params?.from_auto_record, router.params?.owned])
 
   if (loading || !record) {
     return (
@@ -363,6 +364,7 @@ function RecordDetailPage() {
   }
 
   const mealName = MEAL_TYPE_NAMES[record.meal_type] || record.meal_type
+  const advice = mealRecordAdvice(record)
   const mealIconConfig = MEAL_ICON_CONFIG[record.meal_type as keyof typeof MEAL_ICON_CONFIG] || MEAL_ICON_CONFIG.snack
   const timeStr = formatRecordTime(record.record_time)
   const items = record.items || []
@@ -493,36 +495,37 @@ function RecordDetailPage() {
         }
 
         {
-          record.insight ? (
+          advice.insight ? (
             <View className='detail-insight'>
               <Text className='label'>
                 <Text className='iconfont icon-a-144-lvye' style={{ marginRight: 6 }}></Text>
-                AI 健康建议
+                {advice.title}
               </Text>
-              <Text>{record.insight}</Text>
+              <Text>{advice.insight}</Text>
+              <Text className='advice-source-note'>{advice.source}</Text>
             </View>
           ) : null
         }
 
         {
-          record.pfc_ratio_comment ? (
+          advice.ratio ? (
             <View className='detail-insight'>
               <Text className='label'>
                 <Text className='iconfont icon-tubiao-zhuzhuangtu' style={{ marginRight: 6 }}></Text>
                 PFC 比例分析
               </Text>
-              <Text>{record.pfc_ratio_comment}</Text>
+              <Text>{advice.ratio}</Text>
             </View>
           ) : null
         }
         {
-          record.absorption_notes ? (
+          advice.absorption ? (
             <View className='detail-insight'>
               <Text className='label'>
                 <Text className='iconfont icon-huore' style={{ marginRight: 6 }}></Text>
                 吸收与利用
               </Text>
-              <Text>{record.absorption_notes}</Text>
+              <Text>{advice.absorption}</Text>
             </View>
           ) : null
         }
@@ -537,6 +540,17 @@ function RecordDetailPage() {
             </View>
           ) : null
         }
+
+        <View className='detail-insight'>
+          <Text className='label'>进食顺序</Text>
+          <Text>{advice.order}</Text>
+        </View>
+        {!!advice.ratioAdvice && (
+          <View className='detail-insight'>
+            <Text className='label'>饮食比例建议</Text>
+            <Text>{advice.ratioAdvice}</Text>
+          </View>
+        )}
 
         {!isOwner && inviteCode && (
           <View className='friend-invite-card'>

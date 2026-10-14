@@ -218,6 +218,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		RecipeID:         recipeID,
 		RecordTime:       recordTime,
 	}
+	s.hydrateRecordAdvice(ctx, record)
 	if s.contentSecurity != nil {
 		if err := s.contentSecurity.CheckValue(ctx, userID, 4, record, s.storage); err != nil {
 			return nil, err
@@ -698,6 +699,7 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 			return nil, &commonerrors.AppError{Code: 10002, Message: "meal_type 不合法", HTTPStatus: 400}
 		}
 		updates["meal_type"] = normalizeMealType(*input.MealType, nil)
+		updates["context_advice"] = nil
 	}
 	effectiveItems := existingItems(existing)
 	if input.Items != nil {
@@ -727,6 +729,25 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	}
 	if input.TotalWeightGrams != nil {
 		updates["total_weight_grams"] = *input.TotalWeightGrams
+	}
+	if nutritionUpdate && existing != nil {
+		updated := *existing
+		updated.Items = effectiveItems
+		if value, ok := updates["total_calories"].(float64); ok {
+			updated.TotalCalories = value
+		}
+		if input.TotalProtein != nil {
+			updated.TotalProtein = *input.TotalProtein
+		}
+		if input.TotalCarbs != nil {
+			updated.TotalCarbs = *input.TotalCarbs
+		}
+		if input.TotalFat != nil {
+			updated.TotalFat = *input.TotalFat
+		}
+		insight, ratio, _, absorption := generatedRecordAdvice(&updated)
+		updates["insight"], updates["pfc_ratio_comment"], updates["absorption_notes"], updates["context_advice"] = insight, ratio, absorption, nil
+		logger.Info(ctx, "餐食修改后营养点评已更新", slog.String("user_id", userID), slog.String("record_id", recordID))
 	}
 	if input.Description != nil {
 		updates["description"] = *input.Description
@@ -893,6 +914,7 @@ func (s *FoodRecordService) hydrateRecordWithContext(ctx context.Context, record
 	s.hydrateRecordImages(ctx, record)
 	s.hydrateRecordNutrientsFromTask(ctx, record)
 	hydrateManualRecordNutrients(record)
+	s.hydrateRecordAdvice(ctx, record)
 	return record
 }
 

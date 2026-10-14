@@ -9,31 +9,33 @@ import (
 
 // FoodRecord — table: user_food_records
 type FoodRecord struct {
-	ID               string     `gorm:"column:id" json:"id"`
-	UserID           string     `gorm:"column:user_id" json:"user_id"`
-	MealType         string     `gorm:"column:meal_type" json:"meal_type"`
-	ImagePath        *string    `gorm:"column:image_path" json:"image_path,omitempty"`
-	ImagePaths       []string   `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`
-	Description      *string    `gorm:"column:description" json:"description,omitempty"`
-	Insight          *string    `gorm:"column:insight" json:"insight,omitempty"`
-	Items            []FoodItem `gorm:"column:items;serializer:json" json:"items"`
-	TotalCalories    float64    `gorm:"column:total_calories" json:"total_calories"`
-	TotalProtein     float64    `gorm:"column:total_protein" json:"total_protein"`
-	TotalCarbs       float64    `gorm:"column:total_carbs" json:"total_carbs"`
-	TotalFat         float64    `gorm:"column:total_fat" json:"total_fat"`
-	TotalWeightGrams int        `gorm:"column:total_weight_grams" json:"total_weight_grams"`
-	DietGoal         *string    `gorm:"column:diet_goal" json:"diet_goal,omitempty"`
-	ActivityTiming   *string    `gorm:"column:activity_timing" json:"activity_timing,omitempty"`
-	EatingMood       *string    `gorm:"column:eating_mood" json:"eating_mood,omitempty"`
-	PFCRatioComment  *string    `gorm:"column:pfc_ratio_comment" json:"pfc_ratio_comment,omitempty"`
-	AbsorptionNotes  *string    `gorm:"column:absorption_notes" json:"absorption_notes,omitempty"`
-	ContextAdvice    *string    `gorm:"column:context_advice" json:"context_advice,omitempty"`
-	SourceTaskID     *string    `gorm:"column:source_task_id" json:"source_task_id,omitempty"`
-	EntryType        *string    `gorm:"column:entry_type" json:"entry_type,omitempty"`
-	RecipeID         *string    `gorm:"column:recipe_id" json:"recipe_id,omitempty"`
-	RecordTime       *time.Time `gorm:"column:record_time" json:"record_time"`
-	CreatedAt        *time.Time `gorm:"column:created_at" json:"created_at"`
-	AlreadySaved     bool       `gorm:"-" json:"-"`
+	ID                string     `gorm:"column:id" json:"id"`
+	UserID            string     `gorm:"column:user_id" json:"user_id"`
+	MealType          string     `gorm:"column:meal_type" json:"meal_type"`
+	ImagePath         *string    `gorm:"column:image_path" json:"image_path,omitempty"`
+	ImagePaths        []string   `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`
+	Description       *string    `gorm:"column:description" json:"description,omitempty"`
+	Insight           *string    `gorm:"column:insight" json:"insight,omitempty"`
+	Items             []FoodItem `gorm:"column:items;serializer:json" json:"items"`
+	TotalCalories     float64    `gorm:"column:total_calories" json:"total_calories"`
+	TotalProtein      float64    `gorm:"column:total_protein" json:"total_protein"`
+	TotalCarbs        float64    `gorm:"column:total_carbs" json:"total_carbs"`
+	TotalFat          float64    `gorm:"column:total_fat" json:"total_fat"`
+	TotalWeightGrams  int        `gorm:"column:total_weight_grams" json:"total_weight_grams"`
+	DietGoal          *string    `gorm:"column:diet_goal" json:"diet_goal,omitempty"`
+	ActivityTiming    *string    `gorm:"column:activity_timing" json:"activity_timing,omitempty"`
+	EatingMood        *string    `gorm:"column:eating_mood" json:"eating_mood,omitempty"`
+	PFCRatioComment   *string    `gorm:"column:pfc_ratio_comment" json:"pfc_ratio_comment,omitempty"`
+	AbsorptionNotes   *string    `gorm:"column:absorption_notes" json:"absorption_notes,omitempty"`
+	ContextAdvice     *string    `gorm:"column:context_advice" json:"context_advice,omitempty"`
+	EatingOrderAdvice *string    `gorm:"-" json:"eating_order_advice,omitempty"`
+	AdviceSource      string     `gorm:"-" json:"advice_source,omitempty"`
+	SourceTaskID      *string    `gorm:"column:source_task_id" json:"source_task_id,omitempty"`
+	EntryType         *string    `gorm:"column:entry_type" json:"entry_type,omitempty"`
+	RecipeID          *string    `gorm:"column:recipe_id" json:"recipe_id,omitempty"`
+	RecordTime        *time.Time `gorm:"column:record_time" json:"record_time"`
+	CreatedAt         *time.Time `gorm:"column:created_at" json:"created_at"`
+	AlreadySaved      bool       `gorm:"-" json:"-"`
 }
 
 func (FoodRecord) TableName() string { return "user_food_records" }
