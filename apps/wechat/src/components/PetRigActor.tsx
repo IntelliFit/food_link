@@ -11,13 +11,14 @@ type MiniCanvas = HTMLCanvasElement & { createImage: () => HTMLImageElement; req
 let canvasSerial = 0
 
 /** One clock drives both the character's joints and the tool's pedals. No frame-by-frame React updates. */
-export function PetRigActor({ rig, vehicle, action = 'idle', active = true, showGround = false, onReady, onUnavailable }: {
-  rig: PetRig; vehicle?: PetTransportId; action?: PetMotionAction; active?: boolean; showGround?: boolean; onReady?: () => void; onUnavailable?: () => void
+export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visible = true, facing = 'right', showGround = false, onReady, onUnavailable }: {
+  rig: PetRig; vehicle?: PetTransportId; action?: PetMotionAction; active?: boolean; visible?: boolean; facing?: 'left' | 'right'; showGround?: boolean; onReady?: () => void; onUnavailable?: () => void
 }) {
   const [id] = useState(() => `pet-rig-${++canvasSerial}`)
   const [ready, setReady] = useState(false)
-  const options = useRef({ vehicle, action, active, showGround, onReady, onUnavailable })
-  options.current = { vehicle, action, active, showGround, onReady, onUnavailable }
+  const options = useRef({ vehicle, action, active, visible, facing, showGround, onReady, onUnavailable })
+  options.current = { vehicle, action, active, visible, facing, showGround, onReady, onUnavailable }
+  const unavailable = useRef<() => void>()
   const paint = useRef<((reset?: boolean) => void) | null>(null)
   const paintedRig = useRef<PetRig>()
   const pageHidden = useRef(false)
@@ -30,7 +31,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, show
     Taro.nextTick(() => { if (current) options.current.onReady?.() })
     return () => { current = false }
   }, [vehicle, action, showGround, ready, rig])
-  useEffect(() => { paint.current?.() }, [active])
+  useEffect(() => { paint.current?.() }, [active, visible, facing])
   useEffect(() => {
     let disposed = false, hidden = false, frame = 0, clock = 0, last = 0, timer: ReturnType<typeof setTimeout> | undefined
     let canvas: MiniCanvas | undefined, image: HTMLImageElement | undefined, armImage: HTMLImageElement | undefined
@@ -44,6 +45,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, show
     Taro.onAppHide?.(hide); Taro.onAppShow?.(show)
     setReady(false)
     const fail = () => { if (!disposed) { stop(); setReady(false); options.current.onUnavailable?.() } }
+    unavailable.current = fail
     const connect = (attempt = 0) => {
       if (disposed) return
       if (typeof Taro.createSelectorQuery !== 'function') { fail(); return }
@@ -68,14 +70,21 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, show
           if (disposed || !canvas || !image) return
           const draw = () => {
             const current = options.current
+            // Some native canvas layers ignore ancestor visibility/opacity.
+            // A standby layer must contain no pixels, even before its hidden flag commits.
+            if (!current.visible) { ctx.clearRect(0, 0, 200, 220); return }
             const pose = rigPose(rig, current.vehicle, current.action, reduce ? 0 : clock)
-            drawPetRig(ctx, image!, rig, pose, current.vehicle, current.showGround, armImage)
+            ctx.save()
+            try {
+              if (current.facing === 'left') { ctx.translate(200, 0); ctx.scale(-1, 1) }
+              drawPetRig(ctx, image!, rig, pose, current.vehicle, current.showGround, armImage)
+            } finally { ctx.restore() }
             // Read-only native QA metadata; no clock injection or React updates.
             if (process.env.NODE_ENV === 'development') canvas!.__petRigFrame = { phase: pose.phase, stage: pose.stage, clock }
           }
           const tick = (timestamp: number) => {
             frame = 0
-            if (disposed || hidden || pageHidden.current || !options.current.active || reduce) { last = 0; return }
+            if (disposed || hidden || pageHidden.current || !options.current.active || !options.current.visible || reduce) { last = 0; return }
             // Preserve the real cadence at 10–20 fps too. Capping every frame
             // at 50ms made a normal stride take several seconds on a busy device.
             // Hide/pause clears last; only unexplained long stalls are discarded.
@@ -88,7 +97,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, show
           }
           paint.current = reset => {
             stop(); if (reset) clock = 0; draw()
-            if (!disposed && !hidden && !pageHidden.current && options.current.active && !reduce && (options.current.vehicle || options.current.action !== 'idle')) frame = canvas!.requestAnimationFrame(tick)
+            if (!disposed && !hidden && !pageHidden.current && options.current.active && options.current.visible && !reduce && (options.current.vehicle || options.current.action !== 'idle')) frame = canvas!.requestAnimationFrame(tick)
           }
           paint.current(true); paintedRig.current = rig; setReady(true)
         }
@@ -101,7 +110,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, show
     }
     timer = setTimeout(connect, 30)
     return () => {
-      disposed = true; clearTimeout(timer); stop(); paint.current = null; paintedRig.current = undefined
+      disposed = true; clearTimeout(timer); stop(); paint.current = null; paintedRig.current = undefined; unavailable.current = undefined
       if (image) { image.onload = null; image.onerror = null }
       if (armImage) { armImage.onload = null; armImage.onerror = null }
       media?.removeEventListener?.('change', motionPreference)
@@ -110,8 +119,8 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, show
   }, [id, rig])
   const [left, top, width, height] = rig.frame
   const isSheet = rig.key === 'guigui' || rig.key === 'jianwen'
-  return <View className={`pet-rig${ready ? ' is-ready' : ''}${active ? '' : ' is-paused'}`} data-character={rig.key} data-source={rig.src} data-motion={vehicle || action}>
-    <View className='pet-rig__fallback'><Image src={rig.src} className='pet-rig__source' mode='scaleToFill' onError={onUnavailable} style={isSheet ? { width: '400%', height: rig.key === 'jianwen' ? '200%' : '100%', transform: `translate(${-left / width * 100}%, ${-top / height * 100}%)` } : undefined} /></View>
-    <Canvas type='2d' id={id} className='pet-rig__canvas' />
+  return <View className={`pet-rig${ready ? ' is-ready' : ''}${active ? '' : ' is-paused'}`} data-character={rig.key} data-source={rig.src} data-motion={vehicle || action} data-facing={facing}>
+    <View className='pet-rig__fallback' style={{ visibility: visible && !ready ? 'visible' : 'hidden' }}><Image src={rig.src} className='pet-rig__source' mode='scaleToFill' onError={onUnavailable} style={isSheet ? { width: '400%', height: rig.key === 'jianwen' ? '200%' : '100%', transform: `translate(${-left / width * 100}%, ${-top / height * 100}%)` } : undefined} /></View>
+    <Canvas type='2d' id={id} className='pet-rig__canvas' hidden={ready && !visible} style={{ opacity: visible && ready ? 1 : 0, visibility: visible ? 'visible' : 'hidden' }} onError={() => unavailable.current?.()} />
   </View>
 }

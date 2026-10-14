@@ -21,6 +21,7 @@ let listeners: Map<string, Set<() => void>>
 
 beforeEach(() => {
   jest.clearAllMocks()
+  Object.assign(Taro, { getWindowInfo: jest.fn(() => ({ windowWidth: 375, windowHeight: 667 })), hideKeyboard: jest.fn().mockResolvedValue(undefined), onKeyboardHeightChange: jest.fn(), offKeyboardHeightChange: jest.fn() })
   storage = new Map(); listeners = new Map()
   ;(Taro.getStorageSync as jest.Mock).mockImplementation(key => storage.get(key))
   ;(Taro.setStorageSync as jest.Mock).mockImplementation((key, value) => storage.set(key, value))
@@ -68,14 +69,14 @@ test('manual docking leaves a working recall button and does not return automati
   expect(container.querySelector('.pet-rig')).not.toHaveClass('is-paused')
   expect(container.querySelector('.pet-assistant-rider-limbs')).toBeNull()
   expect(container.querySelector('.pet-assistant-rider-arms')).toBeNull()
-  advance(980)
+  advance(980); fireEvent.transitionEnd(container.querySelector('#home-floating-pet')!)
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--docked')
   advance(5000)
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--docked')
   fireEvent.click(screen.getByRole('button', { name: '叫回宠物' }))
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--returning')
   expect(container.querySelector('.pet-rig')).toHaveAttribute('data-motion', 'bicycle')
-  advance(1800)
+  advance(1800); fireEvent.animationEnd(container.querySelector('#home-floating-pet')!)
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
 })
 
@@ -104,10 +105,10 @@ test.each(['scooter', 'skateboard'])('the confirmed %s is used for the actual de
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', vehicle)
   expect(container.querySelector('.pet-rig__source')).toHaveAttribute('src', JIANWEN_COMPANION_SRC)
   expect(container.querySelector('.pet-assistant-ride--fitted')).toBeNull()
-  advance(980)
+  advance(980); fireEvent.transitionEnd(container.querySelector('#home-floating-pet')!)
   fireEvent.click(screen.getByRole('button', { name: '叫回宠物' }))
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', vehicle)
-  advance(1800)
+  advance(1800); fireEvent.animationEnd(container.querySelector('#home-floating-pet')!)
   expect(container.querySelector('.pet-assistant-transport')).toHaveClass('is-standby')
   expect(container.querySelector('.pet-transport-actor')).toHaveClass('is-paused')
 })
@@ -120,7 +121,7 @@ test('changing preference mid-trip waits for the next trip instead of popping a 
   storage.set(key, { version: 1, appearance: JIANWEN_COMPANION_SRC, vehicle: 'scooter' })
   act(() => { for (const callback of listeners.get(PET_TRANSPORT_CHANGED) || []) callback() })
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'skateboard')
-  advance(980)
+  advance(980); fireEvent.transitionEnd(container.querySelector('#home-floating-pet')!)
   fireEvent.click(screen.getByRole('button', { name: '叫回宠物' }))
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'scooter')
 })
@@ -134,12 +135,12 @@ test('a cold departure waits for the first painted vehicle and then reuses it th
   act(() => mockRigReady?.())
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
   expect(container.querySelector('.pet-assistant-transport .pet-rig')).toBe(transport)
-  advance(980)
+  advance(980); fireEvent.transitionEnd(container.querySelector('#home-floating-pet')!)
   expect(container.querySelector('.pet-assistant-transport .pet-rig')).toBe(transport)
   expect(transport).toHaveClass('is-paused')
   fireEvent.click(screen.getByRole('button', { name: '叫回宠物' }))
   expect(container.querySelector('.pet-assistant-transport .pet-rig')).toBe(transport)
-  advance(1800)
+  advance(1800); fireEvent.animationEnd(container.querySelector('#home-floating-pet')!)
   expect(container.querySelector('.pet-assistant-transport .pet-rig')).toBe(transport)
   expect(container.querySelector('.pet-assistant-transport')).toHaveClass('is-standby')
 })
@@ -153,16 +154,88 @@ test('automatic recall uses the latest prepared vehicle rather than the departur
   act(() => ref.current.onPageScroll(20))
   storage.set(key, { version: 1, appearance: JIANWEN_COMPANION_SRC, vehicle: 'scooter' })
   act(() => { for (const callback of listeners.get(PET_TRANSPORT_CHANGED) || []) callback() })
-  advance(980)
+  advance(980); fireEvent.transitionEnd(container.querySelector('#home-floating-pet')!)
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'scooter')
   advance(1820)
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--returning')
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'scooter')
 })
 
-jest.mock('../../src/components/PetRigActor', () => ({ PetRigActor: ({ rig, vehicle, action, active, onReady, onUnavailable }: any) => {
+test('opening and closing chat retains the prepared transport instance and hides it directly', () => {
+  const ref = React.createRef<any>()
+  const { container } = render(<FloatingPetAssistant ref={ref} companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={jest.fn()} />)
+  const transport = container.querySelector('.pet-assistant-transport .pet-rig')!
+  act(() => ref.current.openChat())
+  expect(container.querySelector('.pet-assistant-transport .pet-rig')).toBe(transport)
+  expect(transport).toHaveAttribute('data-visible', 'false')
+  fireEvent.click(container.querySelector('#pet-assistant-chat-mask')!)
+  expect(container.querySelector('.pet-assistant-transport .pet-rig')).toBe(transport)
+  act(() => ref.current.onPageScroll(20))
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
+  expect(transport).toHaveAttribute('data-visible', 'true')
+})
+
+test('travel finishes on the actual root view event and ignores bubbling child animations', () => {
+  const { container } = mount()
+  const root = container.querySelector('#home-floating-pet')!
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  advance(1000)
+  expect(root).toHaveClass('pet-assistant-float--running')
+  fireEvent.transitionEnd(container.querySelector('.pet-assistant-traveler')!)
+  expect(root).toHaveClass('pet-assistant-float--running')
+  fireEvent.transitionEnd(root)
+  expect(root).toHaveClass('pet-assistant-float--docked')
+  fireEvent.click(screen.getByRole('button', { name: '叫回宠物' }))
+  advance(1850)
+  expect(root).toHaveClass('pet-assistant-float--returning')
+  fireEvent.animationEnd(root)
+  expect(root).toHaveClass('pet-assistant-float--playing')
+})
+
+test('a fresh transport owner after suppression does not retain the failed walking geometry', () => {
+  const pet = { id: 'p', name: '健文', builtin_avatar_id: 'jianwen-01' } as PetProfile
+  const renderPet = (suppressed: boolean) => <FloatingPetAssistant pet={pet} companionSpriteOverride={JIANWEN_COMPANION_SRC} suppressed={suppressed} onChatOpenChange={jest.fn()} />
+  const { container, rerender } = render(renderPet(false))
+  const size = (container.querySelector('.pet-assistant-transport') as HTMLElement).style.width
+  fireEvent.error(container.querySelector('.pet-assistant-transport .pet-rig__source')!)
+  expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'walk')
+  rerender(renderPet(true))
+  expect(container.querySelector('#home-floating-pet')).toBeNull()
+  rerender(renderPet(false))
+  expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'bicycle')
+  expect((container.querySelector('.pet-assistant-transport') as HTMLElement).style.width).toBe(size)
+})
+
+test('an appearance round trip never reuses an old ready callback for a newly mounted canvas', () => {
+  const pet = { id: 'p', name: '健文', builtin_avatar_id: 'jianwen-01' } as PetProfile
+  const renderPet = (sprite: string) => <FloatingPetAssistant pet={pet} companionSpriteOverride={sprite} onChatOpenChange={jest.fn()} />
+  const { container, rerender } = render(renderPet(JIANWEN_COMPANION_SRC))
+  const oldReady = mockRigReady
+  mockDelayReady = true
+  rerender(renderPet('/assets/pets/companions/companion-fbd87f73-v1.png'))
+  rerender(renderPet(JIANWEN_COMPANION_SRC))
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  act(() => oldReady?.())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
+  act(() => mockRigReady?.())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
+})
+
+test('a failed appearance can be revisited with fresh riding geometry', () => {
+  const pet = { id: 'p', name: '健文', builtin_avatar_id: 'jianwen-01' } as PetProfile
+  const renderPet = (sprite: string) => <FloatingPetAssistant pet={pet} companionSpriteOverride={sprite} onChatOpenChange={jest.fn()} />
+  const { container, rerender } = render(renderPet(JIANWEN_COMPANION_SRC))
+  const size = (container.querySelector('.pet-assistant-transport') as HTMLElement).style.width
+  fireEvent.error(container.querySelector('.pet-assistant-transport .pet-rig__source')!)
+  rerender(renderPet('/assets/pets/companions/companion-fbd87f73-v1.png'))
+  rerender(renderPet(JIANWEN_COMPANION_SRC))
+  expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'bicycle')
+  expect((container.querySelector('.pet-assistant-transport') as HTMLElement).style.width).toBe(size)
+})
+
+jest.mock('../../src/components/PetRigActor', () => ({ PetRigActor: ({ rig, vehicle, action, active, visible, onReady, onUnavailable }: any) => {
   const React = require('react')
   if (onReady) mockRigReady = onReady
   React.useLayoutEffect(() => { if (!mockDelayReady) onReady?.() }, [rig, vehicle])
-  return React.createElement('div', { className: `pet-rig${active ? '' : ' is-paused'}`, 'data-source': rig.src, 'data-motion': vehicle || action }, React.createElement('img', { className: 'pet-rig__source', src: rig.src, onError: onUnavailable }))
+  return React.createElement('div', { className: `pet-rig${active ? '' : ' is-paused'}`, 'data-source': rig.src, 'data-motion': vehicle || action, 'data-visible': String(visible) }, React.createElement('img', { className: 'pet-rig__source', src: rig.src, onError: onUnavailable }))
 } }))

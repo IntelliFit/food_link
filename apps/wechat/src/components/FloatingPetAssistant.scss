@@ -13,6 +13,7 @@
 }
 
 .pet-assistant-float.is-roaming-near { transform: translateX(0); }
+.pet-assistant-float.is-chat-open { visibility: hidden; pointer-events: none; }
 
 .pet-assistant-companion {
   position: absolute;
@@ -628,6 +629,7 @@
   transition: transform 1800ms cubic-bezier(.42, 0, .58, 1);
   &.is-roaming-near { transform: translateX(-28rpx); }
   .pet-assistant-look { animation: pet-refined-breathe 5.6s ease-in-out infinite; transform-origin: 50% 100%; }
+  .pet-assistant-look .pet-avatar { width: 100% !important; height: 100% !important; }
   &.is-walking .pet-assistant-look { animation: pet-refined-step 800ms ease-in-out infinite; }
   &.is-wave .pet-assistant-look { animation: pet-refined-greet 1.2s ease-in-out; }
   &.is-look .pet-assistant-look { animation: pet-refined-look 1.2s ease-in-out; }
@@ -637,22 +639,26 @@
   .pet-assistant-ground { opacity: .5; background: #8baeb738; }
 }
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--running {
-  animation-name: pet-refined-depart;
-  transform: translateX(210rpx);
-  &.is-roaming-near { animation-name: pet-refined-depart-near; }
+  animation: none;
+  transform: translateX(224rpx);
+  transition: transform 980ms ease-in;
+  &.is-roaming-near { animation: none; }
 }
-.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--docked { transform: translateX(116rpx); transition: none; }
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--docked {
+  transform: translateX(224rpx); transition: none;
+  .pet-assistant-edge-call { animation: none; transform: translateX(-108rpx); }
+}
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--returning {
-  animation-name: pet-refined-arrive;
+  animation: pet-refined-arrive 1800ms cubic-bezier(.22, .38, .3, 1) both;
   &.is-roaming-near { animation-name: pet-refined-arrive-near; }
+  .pet-assistant-companion { transform: none; }
 }
-@keyframes pet-refined-arrive { from { transform: translateX(210rpx); } to { transform: translateX(0); } }
-@keyframes pet-refined-depart { from { transform: translateX(0); } to { transform: translateX(210rpx); } }
-@keyframes pet-refined-depart-near { from { transform: translateX(-28rpx); } to { transform: translateX(210rpx); } }
+.pet-assistant--refined-motion .pet-assistant-facing { transform: none !important; }
+@keyframes pet-refined-arrive { from { transform: translateX(224rpx); } to { transform: translateX(0); } }
 .fl-page-theme-root--balanced.fl-balanced-theme--way-of-water .pet-assistant--refined-motion .pet-assistant-float {
   bottom: calc(690rpx + env(safe-area-inset-bottom)) !important;
 }
-@keyframes pet-refined-arrive-near { from { transform: translateX(210rpx); } to { transform: translateX(-28rpx); } }
+@keyframes pet-refined-arrive-near { from { transform: translateX(224rpx); } to { transform: translateX(-28rpx); } }
 @keyframes pet-refined-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.008, 1.012); } }
 @keyframes pet-refined-step { 0%, 50%, 100% { transform: translateY(0); } 25%, 75% { transform: translateY(-2rpx); } }
 @keyframes pet-refined-greet { 0%, 100% { transform: rotate(0); } 24% { transform: rotate(-3deg); } 54% { transform: rotate(2deg); } 78% { transform: rotate(-1deg); } }

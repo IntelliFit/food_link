@@ -1,5 +1,6 @@
 import { act, render } from '@testing-library/react'
 import Taro from '@tarojs/taro'
+import { createElement } from 'react'
 import { PetRigActor } from '../../src/components/PetRigActor'
 import { PET_RIGS } from '../../src/utils/pet-rig'
 import { drawPetRig } from '../../src/utils/pet-rig-render'
@@ -7,14 +8,22 @@ import { PetActor } from '../../src/components/PetActor'
 
 jest.mock('../../src/utils/pet-rig-render', () => ({ drawPetRig: jest.fn() }))
 const draw = drawPetRig as jest.Mock
-let node: any, image: any, hide: () => void, show: () => void
+let node: any, image: any, ctx: any, hide: () => void, show: () => void
 let original: Record<string, unknown>
+let canvasError: (() => void) | undefined
 beforeEach(() => {
   jest.useFakeTimers(); jest.clearAllMocks()
+  canvasError = undefined
+  // Canvas error is a native event; React DOM does not attach it to a canvas element.
+  jest.spyOn(require('@tarojs/components'), 'Canvas').mockImplementation((props: any) => {
+    canvasError = props.onError as (() => void) | undefined
+    return createElement('canvas', { ...props, onError: undefined })
+  })
   original = Object.fromEntries(['createSelectorQuery', 'nextTick', 'onAppHide', 'onAppShow', 'offAppHide', 'offAppShow'].map(key => [key, Taro[key]]))
   image = { onload: null, onerror: null }
   Object.defineProperty(image, 'src', { set: () => image.onload?.() })
-  node = { width: 0, height: 0, getContext: () => ({ translate: jest.fn(), scale: jest.fn() }), createImage: jest.fn(() => {
+  ctx = { translate: jest.fn(), scale: jest.fn(), clearRect: jest.fn(), save: jest.fn(), restore: jest.fn() }
+  node = { width: 0, height: 0, getContext: () => ctx, createImage: jest.fn(() => {
     if (!node.createImage.mock.calls.length || node.createImage.mock.calls.length === 1) return image
     const extra: any = { onload: null, onerror: null }
     Object.defineProperty(extra, 'src', { set: () => extra.onload?.() })
@@ -26,7 +35,7 @@ beforeEach(() => {
     onAppHide: jest.fn(callback => { hide = callback }), onAppShow: jest.fn(callback => { show = callback }), offAppHide: jest.fn(), offAppShow: jest.fn(),
   })
 })
-afterEach(() => { Object.assign(Taro, original); jest.useRealTimers(); delete (window as any).matchMedia })
+afterEach(() => { Object.assign(Taro, original); jest.restoreAllMocks(); jest.useRealTimers(); delete (window as any).matchMedia })
 const ready = () => act(() => { jest.advanceTimersByTime(40) })
 const latestPose = () => draw.mock.calls[draw.mock.calls.length - 1][3]
 const tick = (timestamp: number) => act(() => { const calls = node.requestAnimationFrame.mock.calls; calls[calls.length - 1][0](timestamp) })
@@ -95,6 +104,50 @@ test('transport readiness is reported after the first paint and again after a to
   rerender(<PetRigActor rig={PET_RIGS.guigui} vehicle='scooter' active={false} onReady={onReady} />)
   expect(onReady).toHaveBeenCalledTimes(2)
   expect(node.createImage).toHaveBeenCalledTimes(loads)
+})
+
+test('standby hides the native canvas itself while a paused preview remains visible', () => {
+  const { container, rerender } = render(<PetRigActor rig={PET_RIGS.guigui} vehicle='bicycle' visible={false} />)
+  ready()
+  const canvas = container.querySelector('canvas')!
+  expect(canvas).toHaveStyle({ opacity: '0', visibility: 'hidden' })
+  expect(canvas).toHaveAttribute('hidden')
+  expect(draw).not.toHaveBeenCalled()
+  expect(node.requestAnimationFrame).not.toHaveBeenCalled()
+  rerender(<PetRigActor rig={PET_RIGS.guigui} vehicle='bicycle' active={false} />)
+  expect(container.querySelector('canvas')).toBe(canvas)
+  expect(canvas).toHaveStyle({ opacity: '1', visibility: 'visible' })
+  expect(canvas).not.toHaveAttribute('hidden')
+  expect(draw).toHaveBeenCalled()
+  expect(node.requestAnimationFrame).not.toHaveBeenCalled()
+})
+
+test('the idle standby canvas is hidden directly', () => {
+  const { container } = render(<PetActor pet={{ builtin_avatar_id: 'jianwen-01' }} action='idle' />)
+  ready()
+  expect(container.querySelector('canvas')).toHaveStyle({ opacity: '0', visibility: 'hidden' })
+})
+
+test('a native canvas error stops its clock and invokes the existing fallback', () => {
+  const onUnavailable = jest.fn()
+  const { container } = render(<PetRigActor rig={PET_RIGS.guigui} vehicle='bicycle' onUnavailable={onUnavailable} />)
+  ready()
+  act(() => canvasError?.())
+  expect(onUnavailable).toHaveBeenCalledTimes(1)
+  expect(node.cancelAnimationFrame).toHaveBeenCalled()
+  expect(container.querySelector('canvas')).toHaveStyle({ opacity: '0' })
+})
+
+test('return direction flips pixels in the same canvas without changing its clock or source', () => {
+  const { container, rerender } = render(<PetRigActor rig={PET_RIGS.guigui} vehicle='bicycle' />)
+  ready(); tick(100); tick(150)
+  const canvas = container.querySelector('canvas'), phase = latestPose().phase, loads = node.createImage.mock.calls.length
+  rerender(<PetRigActor rig={PET_RIGS.guigui} vehicle='bicycle' facing='left' />)
+  expect(container.querySelector('canvas')).toBe(canvas)
+  expect(node.createImage).toHaveBeenCalledTimes(loads)
+  expect(latestPose().phase).toBe(phase)
+  expect(ctx.translate).toHaveBeenCalledWith(200, 0)
+  expect(ctx.scale).toHaveBeenCalledWith(-1, 1)
 })
 test('reduced motion draws a stable pose and never starts an animation clock', () => {
   const media = { matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn() }
