@@ -44,9 +44,10 @@ it('does not draw a river connecting across a missing day', async () => {
   expect(canvasContext.arc).toHaveBeenCalledTimes(2)
 })
 
-it('keeps water-only days selectable without plotting an empty food week', () => {
+it.each(BALANCED_THEME_IDS.filter(theme => theme !== 'way-of-water'))('%s keeps water-only days selectable without plotting an empty food week', async theme => {
   const record = jest.fn()
-  const { container } = render(<ThemeDailyReview theme='clarity-order' endDate='2026-09-28' water={[{ date: '2026-09-22', total: 650 }, { date: '2026-09-28', total: 900 }]} onRecord={record} />)
+  const { container } = render(<ThemeDailyReview theme={theme} endDate='2026-09-28' water={[{ date: '2026-09-22', total: 650 }, { date: '2026-09-28', total: 900 }]} onRecord={record} />)
+  await act(async () => { await Promise.resolve() })
   expect(container.querySelector('canvas')).not.toBeInTheDocument()
   expect(screen.getByText('900 ml')).toBeInTheDocument()
   fireEvent.click(container.querySelector('#theme-review-day-0')!)
