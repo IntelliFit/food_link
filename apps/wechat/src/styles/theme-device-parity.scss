@@ -1,0 +1,119 @@
+@use 'sass:map';
+
+/* Balanced dark surfaces own their palette; water and ink have separate materials. */
+$palettes: (
+  clarity-order: (page: #181a18, surface: #242623, soft: #30332e, text: #f4f5ed, muted: #c0c5b7, border: #717767, accent: #c8ff00, ink: #111),
+  natural-symbiosis: (page: #15241c, surface: #24372b, soft: #304636, text: #f3f4e7, muted: #c6d1b9, border: #819579, accent: #bfd7b4, ink: #25432f),
+  eastern-salon: (page: #11110f, surface: #24241e, soft: #343328, text: #f4e6c8, muted: #d0bf9f, border: #8e7448, accent: #dfcda9, ink: #23231d),
+  modern-gallery: (page: #181817, surface: #272724, soft: #373731, text: #fff9ea, muted: #d1cabc, border: #a39b8b, accent: #ffb6aa, ink: #491b14),
+  miniature-world: (page: #2b2018, surface: #443324, soft: #59422e, text: #fff0d8, muted: #dfc9a8, border: #b79566, accent: #e8cda3, ink: #493321),
+  picturebook-companion: (page: #10222a, surface: #1d333e, soft: #29434e, text: #f6e8ce, muted: #d4c8b3, border: #8c9586, accent: #efd292, ink: #263746),
+  clear-care: (page: #0c1c14, surface: #183025, soft: #254336, text: #f6fff7, muted: #d1e4d5, border: #92b99e, accent: #b8e6c7, ink: #07351f)
+);
+
+@each $theme, $palette in $palettes {
+  .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme}.fl-d {
+    --bt-page: #{map.get($palette, page)};
+    --bt-surface: #{map.get($palette, surface)};
+    --bt-surface-muted: #{map.get($palette, soft)};
+    --bt-text: #{map.get($palette, text)};
+    --bt-muted: #{map.get($palette, muted)};
+    --bt-border: #{map.get($palette, border)};
+    --bt-accent: #{map.get($palette, accent)};
+    --bt-accent-text: #{map.get($palette, ink)};
+
+    .home-page, .stats-page { background: var(--bt-page) !important; }
+    .home-page, .stats-page, .profile-page {
+      .main-card, .macro-card, .water-card, .health-wheel,
+      .analysis-card, .stats-card, .profile-card {
+        color: var(--bt-text);
+        background: var(--bt-surface) !important;
+        border-color: var(--bt-border) !important;
+      }
+      .analysis-panel-control { background: var(--bt-surface-muted); }
+      .member-card .card-title, .credit-overview__value,
+      .credit-overview__label, .credit-overview__unit { color: var(--bt-text) !important; }
+      .credit-overview__meta, .card-benefit { color: var(--bt-muted) !important; }
+      .member-card .card-badge { color: var(--bt-accent-text); background: var(--bt-accent); }
+      .profile-card .list-title, .profile-card .service-title,
+      .profile-card .setting-title { color: var(--bt-text); }
+    }
+    .stats-page .analysis-panel-content {
+      .analysis-md-heading, .analysis-md-strong, .analysis-md-paragraph,
+      .analysis-md-list-text, .analysis-md-list-bullet, .analysis-md-table-cell { color: var(--bt-text); }
+      .analysis-md-table-header { background: var(--bt-surface-muted); }
+      .analysis-md-underline { text-decoration-color: var(--bt-accent); }
+    }
+  }
+}
+
+/* Pale identity materials keep their own ink even inside a dark page. */
+@each $theme in clarity-order, natural-symbiosis, clear-care, modern-gallery, miniature-world {
+  .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme}.fl-d .profile-page .bt-experience--profile {
+    .profile-header-section { --bt-text: #26352b; --bt-muted: #52604f; --bt-surface: #fffaf0; --bt-border: #b4bba8; }
+    .user-card .user-name, .user-card .user-meta-text, .user-card .user-meta-arrow,
+    .quick-action-num, .quick-action-text { color: #26352b !important; }
+    .user-days-pill, .user-id-chip { background: #f4f5e8; border: 1rpx solid #9fac93; }
+    .user-days-pill-text, .user-id-chip-text { color: #354e37 !important; }
+    .profile-quick-actions { border-color: #a5b09b; }
+  }
+}
+
+/* Structural rules apply in both appearances; decorative images never enter flex flow. */
+.fl-page-theme-root--balanced.fl-balanced-theme--natural-symbiosis {
+  .theme-chapter--natural-symbiosis { display: flex; justify-content: space-between; gap: 18rpx; }
+  .theme-chapter--natural-symbiosis > view { min-width: 0; }
+  .theme-chapter--natural-symbiosis .tc-marginal { margin-top: 76rpx; flex-shrink: 0; }
+  .bt-experience--home .bt-heading { width: 45%; }
+  .bt-experience--home .bt-action--record {
+    position: relative; isolation: isolate; min-height: 166rpx;
+    padding: 28rpx 28rpx 28rpx 80rpx; color: #2c3c2e; background: #efe4cd;
+  }
+  .bt-action__specimen { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .bt-action--record .bt-action__copy, .bt-action--record .bt-action__arrow { position: relative; z-index: 1; }
+  .bt-action--record .bt-action__icon { display: none; }
+  .bt-action--record .bt-action__copy { min-width: 0; white-space: normal; }
+  .bt-leaf-note .bt-action { color: #293f2d; }
+  &.fl-d .bt-experience--home { color: #253b29; background: #f3efe2; }
+  &.fl-d .bt-experience--home .bt-heading__subtitle { color: #425440; }
+}
+
+.fl-page-theme-root--balanced.fl-balanced-theme--modern-gallery {
+  .theme-chapter--modern-gallery { display: flex; justify-content: space-between; align-items: flex-start; gap: 20rpx; }
+  .theme-chapter--modern-gallery > view:first-child { min-width: 0; }
+  .theme-chapter--modern-gallery .tc-caption { max-width: 165rpx; flex: 0 0 165rpx; box-sizing: border-box; font-size: 23rpx; line-height: 1.7; white-space: pre-line; }
+}
+
+/* Native image layers have a nonnegative depth, independent of isolation support. */
+@each $theme in natural-symbiosis, eastern-salon, modern-gallery, miniature-world, picturebook-companion {
+  .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} .profile-page {
+    position: relative;
+    .bt-profile-backdrop.bt-profile-backdrop--#{$theme} { display: block; position: absolute; z-index: 0; top: 180rpx; left: 0; width: 100%; height: auto; pointer-events: none; }
+    > .bt-experience, > .balanced-theme-entry, > .profile-card,
+    > .profile-recap-section, > .theme-profile-sections { position: relative; z-index: 1; }
+  }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--eastern-salon .profile-page .bt-profile-backdrop.bt-profile-backdrop--eastern-salon { top: 140rpx; }
+.fl-page-theme-root--balanced.fl-balanced-theme--natural-symbiosis.fl-d .profile-page {
+  background: #15241c !important;
+  .bt-profile-backdrop { display: block; opacity: .38; }
+  .bt-experience--profile { color: var(--bt-text); background: transparent; }
+  .theme-chapter .tc-title, .theme-chapter .tc-subtitle, .theme-chapter .tc-marginal { color: var(--bt-text); }
+  .profile-header-section { background: #fbf7eae8; }
+}
+.fl-page-theme-root--balanced.fl-balanced-theme--modern-gallery .profile-page .bt-experience--profile {
+  .theme-chapter { padding: 18rpx 14rpx; background: #171815; }
+  &.bt-profile-art--loaded .theme-chapter { background: transparent; }
+}
+
+/* These archive cards intentionally keep paper surfaces in either appearance. */
+@each $theme in eastern-salon, miniature-world, picturebook-companion {
+  .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme}.fl-d .profile-page {
+    .balanced-theme-entry, .profile-recap-section {
+      --bt-text: #26352b; --bt-muted: #52604f; --bt-surface: #fffaf0;
+      --bt-surface-muted: #ece3ce; --bt-border: #9f957e;
+    }
+    .profile-recap-section .profile-section-title { color: #26352b; }
+    .profile-recap-section .profile-section-hint { color: #52604f; }
+  }
+}

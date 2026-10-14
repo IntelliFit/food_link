@@ -663,3 +663,20 @@
   opacity: .16;
   pointer-events: none;
 }
+
+/* Dark navigation ink wins over the earlier fixed theme colors. */
+.custom-tab-bar--balanced.custom-tab-bar--dark:not(.custom-tab-bar--theme-way-of-water) .tab-item:not(.center-item) .tab-icon,
+.custom-tab-bar--balanced.custom-tab-bar--dark:not(.custom-tab-bar--theme-way-of-water) .tab-item:not(.center-item) .tab-text { color: var(--nav-muted); }
+.custom-tab-bar--balanced.custom-tab-bar--dark:not(.custom-tab-bar--theme-way-of-water) .tab-item.selected:not(.center-item) .tab-icon,
+.custom-tab-bar--balanced.custom-tab-bar--dark:not(.custom-tab-bar--theme-way-of-water) .tab-item.selected:not(.center-item) .tab-text { color: var(--nav-ink); }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-clarity-order { --nav-ink: #f1f4ef; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-natural-symbiosis { --nav-ink: #bfd7b4; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-eastern-salon { --nav-ink: #dfcda9; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-modern-gallery { --nav-ink: #ffb6aa; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-miniature-world { --nav-ink: #e8cda3; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-picturebook-companion { --nav-ink: #efd292; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-clear-care { --nav-ink: #b8e6c7; }
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-modern-gallery .tab-item.selected:nth-child(1):not(.center-item) .tab-icon,
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-modern-gallery .tab-item.selected:nth-child(1):not(.center-item) .tab-text,
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-modern-gallery .tab-item.selected:nth-child(4):not(.center-item) .tab-icon,
+.custom-tab-bar--balanced.custom-tab-bar--dark.custom-tab-bar--theme-modern-gallery .tab-item.selected:nth-child(4):not(.center-item) .tab-text { color: #8aacfa; }

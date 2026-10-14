@@ -163,3 +163,4 @@ page > view {
 @include meta.load-css('./styles/balanced-theme-controls.scss');
 @include meta.load-css('./styles/rounded-surfaces.scss');
 @include meta.load-css('./styles/reading-type.scss');
+@include meta.load-css('./styles/theme-device-parity.scss');

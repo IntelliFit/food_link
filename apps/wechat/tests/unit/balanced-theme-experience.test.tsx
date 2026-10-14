@@ -79,6 +79,35 @@ describe('balanced theme live experiences', () => {
     expect(container).toBeEmptyDOMElement()
     expect(loadBalancedScenes).not.toHaveBeenCalled()
   })
+  it('keeps profile content usable through a failed portrait and remounts its retry', async () => {
+    mockTheme = 'modern-gallery'
+    const openProfile = jest.fn()
+    const { container } = render(<BalancedThemeExperience surface='profile'><button onClick={openProfile}>当前用户资料</button></BalancedThemeExperience>)
+    await waitFor(() => expect(container.querySelector('.bt-profile-backdrop')).toBeInTheDocument())
+    const firstImage = container.querySelector('.bt-profile-backdrop')!
+    const hero = container.querySelector('#balanced-theme-experience-profile')!
+    expect(hero).not.toHaveClass('bt-profile-art--loaded')
+    fireEvent.load(firstImage)
+    expect(hero).toHaveClass('bt-profile-art--loaded')
+    fireEvent.error(firstImage)
+    expect(hero).not.toHaveClass('bt-profile-art--loaded')
+    fireEvent.click(screen.getByText('当前用户资料'))
+    expect(openProfile).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByText('场景未能打开，轻触重试'))
+    await waitFor(() => expect(screen.queryByText('场景未能打开，轻触重试')).not.toBeInTheDocument())
+    const retryImage = container.querySelector('.bt-profile-backdrop')!
+    expect(retryImage).not.toBe(firstImage)
+    fireEvent.load(retryImage)
+    expect(hero).toHaveClass('bt-profile-art--loaded')
+  })
+  it('shows bundled eastern profile art even when the separate scene package fails', async () => {
+    mockTheme = 'eastern-salon'
+    ;(loadBalancedScenes as jest.Mock).mockRejectedValueOnce(new Error('offline'))
+    const { container } = render(<BalancedThemeExperience surface='profile'><button>当前用户资料</button></BalancedThemeExperience>)
+    expect(container.querySelector('.bt-profile-backdrop')).toHaveAttribute('src', easternProfileGold)
+    await screen.findByText('场景未能打开，轻触重试')
+    expect(container.querySelector('.bt-profile-backdrop')).toHaveAttribute('src', easternProfileGold)
+  })
   it('keeps the real profile actions usable when embedded in a scene or switched to wellness', async () => {
     mockTheme = 'miniature-world'
     const login = jest.fn()

@@ -56,6 +56,8 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const motion = useThemeMotion()
   const [scenesReady, setScenesReady] = React.useState(false)
   const [sceneError, setSceneError] = React.useState(false)
+  const [loadedProfileArt, setLoadedProfileArt] = React.useState<string>()
+  const [sceneAttempt, setSceneAttempt] = React.useState(0)
   React.useEffect(() => {
     let active = true
     if (!wellness && theme !== 'clarity-order' && theme !== 'clear-care') {
@@ -68,7 +70,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   // before that package is ready makes the native player fail and retain the still fallback.
   const sceneVideo = scenesReady ? getThemeSceneVideo(theme, surface) : undefined
   const { miniatureGarden, miniatureDesk, miniatureSquare, picturebookDay, picturebookDesk, waterVessel, waterRock, waterHome, waterStats, waterCommunity, waterProfile, naturalLeaves, easternSoup, galleryCollage } = scenesReady ? BALANCED_SCENES : {} as Partial<typeof BALANCED_SCENES>
-  const retryScene = () => { setSceneError(false); loadBalancedScenes().then(() => setScenesReady(true)).catch(() => setSceneError(true)) }
+  const retryScene = () => { setSceneError(false); setSceneAttempt(attempt => attempt + 1); loadBalancedScenes().then(() => setScenesReady(true)).catch(() => setSceneError(true)) }
   const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}>场景未能打开，轻触重试</View>
   const definition = getBalancedThemeDefinition(theme)
   const title = TITLES[theme][SURFACE_INDEX[surface]]
@@ -100,16 +102,18 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   if (surface !== 'home') {
     // A portrait archive scene belongs to the page, not the variable-height
     // identity card. Keep its scale when names, auth state or drawers change.
-    const profileArt = surface === 'profile' && scenesReady
-      ? ({ 'miniature-world': BALANCED_SCENES.miniatureProfile, 'picturebook-companion': BALANCED_SCENES.picturebookProfile, 'modern-gallery': BALANCED_SCENES.galleryProfile, 'natural-symbiosis': BALANCED_SCENES.naturalLeaves, 'eastern-salon': easternProfileGold } as Partial<Record<typeof theme, string>>)[theme]
+    const profileArt = surface === 'profile'
+      ? theme === 'eastern-salon' ? easternProfileGold : scenesReady
+        ? ({ 'miniature-world': BALANCED_SCENES.miniatureProfile, 'picturebook-companion': BALANCED_SCENES.picturebookProfile, 'modern-gallery': BALANCED_SCENES.galleryProfile, 'natural-symbiosis': BALANCED_SCENES.naturalLeaves } as Partial<Record<typeof theme, string>>)[theme]
+        : undefined
       : undefined
     const art = theme === 'miniature-world' ? (surface === 'profile' ? miniatureDesk : surface === 'community' ? miniatureSquare : miniatureGarden)
       : theme === 'picturebook-companion' ? picturebookDesk
       : theme === 'eastern-salon' ? (surface === 'profile' ? undefined : easternLandscape) : theme === 'way-of-water' ? ({ stats: waterStats, community: waterCommunity, profile: waterProfile } as const)[surface] || waterRock
       : theme === 'modern-gallery' ? galleryCollage : undefined
     return <>
-      {profileArt && <Image className={`bt-profile-backdrop bt-profile-backdrop--${theme}`} src={profileArt} mode='widthFix' aria-hidden />}
-      <View id={`balanced-theme-experience-${surface}`} className={rootClass}>
+      {profileArt && <Image key={`${profileArt}:${sceneAttempt}`} className={`bt-profile-backdrop bt-profile-backdrop--${theme}`} src={profileArt} mode='widthFix' aria-hidden onLoad={() => setLoadedProfileArt(profileArt)} onError={() => { setLoadedProfileArt(undefined); setSceneError(true) }} />}
+      <View id={`balanced-theme-experience-${surface}`} className={`${rootClass}${surface === 'profile' && loadedProfileArt === profileArt && profileArt ? ' bt-profile-art--loaded' : ''}`}>
       <ThemeSceneBackground
         className={`bt-scene bt-scene--chapter bt-scene--${surface}`}
         poster={profileArt ? undefined : art}
