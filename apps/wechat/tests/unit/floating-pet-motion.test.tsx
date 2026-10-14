@@ -234,7 +234,8 @@ test('a failed appearance can be revisited with fresh riding geometry', () => {
 })
 
 test('returning from wellness waits for its newly mounted transport owner', () => {
-  const renderPet = () => <FloatingPetAssistant companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={jest.fn()} />
+  const onChatOpenChange = jest.fn()
+  const renderPet = () => <FloatingPetAssistant companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={onChatOpenChange} />
   const { container, rerender } = render(renderPet())
   mockWellness = true
   rerender(renderPet())
@@ -248,10 +249,12 @@ test('returning from wellness waits for its newly mounted transport owner', () =
 
 test('switching modes cancels the previous journey timers', () => {
   const ref = React.createRef<any>()
-  const renderPet = () => <FloatingPetAssistant ref={ref} companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={jest.fn()} />
+  const onChatOpenChange = jest.fn()
+  const renderPet = () => <FloatingPetAssistant ref={ref} companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={onChatOpenChange} />
   const { container, rerender } = render(renderPet())
   act(() => ref.current.onPageScroll(20))
   advance(400)
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
   mockWellness = true; rerender(renderPet())
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
   advance(5000)
