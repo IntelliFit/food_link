@@ -53,6 +53,7 @@ import { ManualFoodCards } from './components/ManualFoodCards'
 import { ExerciseActivityCards, hasExerciseActivityCards } from './components/ExerciseActivityCards'
 import { FeedReportSheet } from './components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedActionSheet'
+import { WaterFeedTabs } from './components/WaterFeedTabs'
 
 import { IconTrendingUp } from '../../components/iconfont'
 
@@ -2052,10 +2053,7 @@ function CommunityPage() {
             }}
           >
             <BalancedThemeExperience surface='community' onPublish={() => void handlePublishPost()} />
-            {!ink && theme === 'way-of-water' && <View className='water-feed-tabs'>
-              {([{ key: 'priority', label: '关注' }, { key: 'public', label: '发现' }, { key: 'all', label: '附近' }] as const).map(tab => <View key={tab.key} role='button' className={`water-feed-tabs__tab${feedAuthorScope === tab.key ? ' is-active' : ''}`} onClick={() => { if (tab.key !== 'public' && !loggedIn) { redirectToLogin(); return }; setFeedAuthorScope(tab.key) }}><Text>{tab.label}</Text></View>)}
-              <Text className='water-feed-tabs__verse'>同一片水面，连着不同的生活</Text>
-            </View>}
+            {!ink && theme === 'way-of-water' && <WaterFeedTabs scope={feedAuthorScope} onSelect={scope => { if (scope !== 'public' && !loggedIn) { redirectToLogin(); return }; setFeedAuthorScope(scope) }} onPublish={() => void handlePublishPost()} />}
             {ink && <>
               <InkMasthead title='烟火人间' subtitle='一餐一味，彼此相伴' />
               <View className='ink-feed-tabs'>

@@ -119,7 +119,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       />
       <ThemeChapterHeader theme={theme} title={title} surfaceName={SURFACE_NAME[surface]} date={date.replace(/-/g, '.')} />{sceneRetry}
       {children && <View className='bt-integrated-content'>{children}</View>}
-      {surface === 'community' && onPublish && <View className='bt-publish'>{action('publish', '分享我的一餐', '', 'icon-paizhao-xianxing', onPublish)}</View>}
+      {surface === 'community' && theme !== 'way-of-water' && onPublish && <View className='bt-publish'>{action('publish', '分享我的一餐', '', 'icon-paizhao-xianxing', onPublish)}</View>}
       </View>
     </>
   }

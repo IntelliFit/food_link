@@ -52,6 +52,16 @@ describe('balanced theme live experiences', () => {
     expect(onPublish).toHaveBeenCalledTimes(1)
     expect(container.textContent).not.toMatch(/王阿姨|128|张建国|70岁/)
   })
+  it('does not render the retired floating water publishing action', async () => {
+    mockTheme = 'way-of-water'
+    const onPublish = jest.fn()
+    const onRecord = jest.fn()
+    const { container } = render(<BalancedThemeExperience surface='community' onPublish={onPublish} onRecord={onRecord} />)
+    expect(container.querySelector('#bt-action-publish')).not.toBeInTheDocument()
+    expect(onPublish).not.toHaveBeenCalled()
+    expect(onRecord).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByText('场景未能打开，轻触重试')).not.toBeInTheDocument())
+  })
   it('retries a failed scene download without blocking core actions', async () => {
     mockTheme = 'miniature-world'
     ;(loadBalancedScenes as jest.Mock).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(undefined)
