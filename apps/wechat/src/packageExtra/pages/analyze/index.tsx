@@ -441,6 +441,7 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
 function AnalyzePage() {
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
+  const mealTypeChosenRef = useRef(false)
   const [mealType, setMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [defaultMealType, setDefaultMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
@@ -672,7 +673,7 @@ function AnalyzePage() {
         setTargetDateStatus(null)
       }
     }
-    if (imagePathsRef.current.length === 0) {
+    if (imagePathsRef.current.length === 0 && !mealTypeChosenRef.current) {
       setMealType(defaultMealType)
     }
     if (shouldOfferOnboardingGuide(ONBOARDING_ANALYZE_PREP_GUIDE_KEY)) {
@@ -707,7 +708,7 @@ function AnalyzePage() {
         const profile = await getHealthProfile()
         const inferredMealType = await getRecommendedMealTypeWithFallback({ profile })
         setDefaultMealType(inferredMealType)
-        setMealType(inferredMealType)
+        if (!mealTypeChosenRef.current) setMealType(inferredMealType)
         if (!nextSessionId && profile.execution_mode) {
           const profileMode = normalizeAvailableExecutionMode(profile.execution_mode)
           setExecutionMode(profileMode)
@@ -1820,7 +1821,7 @@ function AnalyzePage() {
             <View
               key={opt.value}
               className={`meal-option ${mealType === opt.value ? 'active' : ''}`}
-              onClick={() => setMealType(opt.value)}
+              onClick={() => { mealTypeChosenRef.current = true; setMealType(opt.value) }}
             >
               <Text className={`meal-icon iconfont ${opt.iconClass}`} />
               <Text className='meal-label'>{opt.label}</Text>

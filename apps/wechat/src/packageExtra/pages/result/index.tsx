@@ -7,6 +7,7 @@ import {
   type Nutrients,
   type SaveFoodRecordRequest,
   type FoodRecord,
+  type FoodRecordItemPayload,
   saveFoodRecord,
   getFoodRecordById,
   getAccessToken,
@@ -66,7 +67,6 @@ import {
 } from '../../../components/MealTypeSelector'
 import {
   buildCorrectionItemsPayload,
-  buildCorrectionPreviousResultItems,
   formatCorrectionWeight,
   hasCorrectionWeightChanged,
   normalizeFoodNameForCorrection,
@@ -77,6 +77,8 @@ import {
   type NutritionItem,
 } from './result-item-converter'
 
+import { FOOD_LIBRARY_PICKED_EVENT, libraryItemToAnalyzeItem } from '../../../utils/food-library-picker'
+import { mealRecordAdvice } from '../../../utils/meal-record-advice'
 import './index.scss'
 
 
@@ -633,6 +635,7 @@ function ResultPage() {
   const [insightCollapsed, setInsightCollapsed] = useState(false)
 
   // 餐次选择弹窗状态
+  const mealTypeChosenRef = useRef(false)
   const [showMealSelector, setShowMealSelector] = useState(false)
   const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(
     () => getSavedSelectableMealType(inferDefaultMealTypeFromLocalTime())
@@ -642,6 +645,8 @@ function ResultPage() {
   const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
   const [quickRatioSheetVisible, setQuickRatioSheetVisible] = useState(false)
   const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
+  const currentItemsRef = useRef(nutritionItems)
+  currentItemsRef.current = nutritionItems
   const [additionalContext, setAdditionalContext] = useState('')
   const [isResubmitting, setIsResubmitting] = useState(false)
   const [snackDraft, setSnackDraft] = useState<SnackContributionDraft | null>(null)
@@ -688,7 +693,7 @@ function ResultPage() {
   }, [])
 
   useEffect(() => {
-    setSelectedMealType(getSavedSelectableMealType(defaultMealType))
+    if (!mealTypeChosenRef.current) setSelectedMealType(getSavedSelectableMealType(defaultMealType))
   }, [defaultMealType])
 
   useEffect(() => {
@@ -1380,6 +1385,7 @@ function ResultPage() {
 
       // 重新计算营养统计
       calculateNutritionStats(updatedItems)
+      refreshEditedMealAdvice(updatedItems)
 
       return updatedItems
     })
@@ -1452,6 +1458,7 @@ function ResultPage() {
       })
 
       calculateNutritionStats(updatedItems)
+      refreshEditedMealAdvice(updatedItems)
       return updatedItems
     })
   }
@@ -1512,6 +1519,7 @@ function ResultPage() {
 
       // 重新计算营养统计
       calculateNutritionStats(updatedItems)
+      refreshEditedMealAdvice(updatedItems)
 
       return updatedItems
     })
@@ -1529,6 +1537,7 @@ function ResultPage() {
         intake: Math.round(item.weight * (ratio / 100)),
       }))
       calculateNutritionStats(updatedItems)
+      refreshEditedMealAdvice(updatedItems)
       return updatedItems
     })
     setQuickRatioSheetVisible(false)
@@ -1630,16 +1639,25 @@ function ResultPage() {
         } as NutritionItem
       })
       calculateNutritionStats(updatedItems)
+      refreshEditedMealAdvice(updatedItems)
       return updatedItems
     })
   }
 
   const buildAnalyzeResultFromItems = (items: NutritionItem[]): AnalyzeResponse => ({
-    description,
-    insight: healthAdvice,
+    description: nutritionAdjustedRef.current ? `本餐：${items.map(item => item.name).join('、')}` : description,
+    insight: nutritionAdjustedRef.current ? `营养点评：${adviceForItems(items).insight}` : healthAdvice,
     items: items.map(item => ({
-      itemId: item.id,
+      itemId: item.sourceItemId ?? item.id,
       name: item.name,
+      intakeRatio: item.ratio,
+      intakeGrams: item.intake,
+      manual_source: item.manual_source,
+      manual_source_id: item.manual_source_id,
+      manual_source_title: item.manual_source_title,
+      manual_portion_label: item.manual_portion_label,
+      image_path: item.image_path,
+      image_paths: item.image_paths,
       estimatedWeightGrams: item.weight,
       originalWeightGrams: item.originalWeight,
       grossWeightGrams: item.grossWeight,
@@ -1664,10 +1682,10 @@ function ResultPage() {
       waterMl: item.waterMl,
       nutrients: buildFoodItemNutrients(item)
     })),
-    pfc_ratio_comment: pfcRatioComment || undefined,
-    eating_order_advice: eatingOrderAdvice || undefined,
-    absorption_notes: absorptionNotes || undefined,
-    context_advice: contextAdvice || undefined,
+    pfc_ratio_comment: nutritionAdjustedRef.current ? adviceForItems(items).ratio : pfcRatioComment || undefined,
+    eating_order_advice: nutritionAdjustedRef.current ? adviceForItems(items).order : eatingOrderAdvice || undefined,
+    absorption_notes: nutritionAdjustedRef.current ? adviceForItems(items).absorption : absorptionNotes || undefined,
+    context_advice: nutritionAdjustedRef.current ? adviceForItems(items).context : contextAdvice || undefined,
     recognitionOutcome,
     rejectionReason: rejectionReason || undefined,
     retakeGuidance: retakeGuidance.length > 0 ? retakeGuidance : undefined,
@@ -1782,6 +1800,7 @@ function ResultPage() {
         } : item)
         nutritionAdjustedRef.current = true
         calculateNutritionStats(nextItems)
+        refreshEditedMealAdvice(nextItems)
         setNutritionItems(nextItems)
         setFoodEditDraft(null)
         void syncEditedAnalyzeResult(nextItems)
@@ -1851,6 +1870,7 @@ function ResultPage() {
         } as NutritionItem
       })
     calculateNutritionStats(nextItems)
+        refreshEditedMealAdvice(nextItems)
     setNutritionItems(nextItems)
     setFoodEditDraft(null)
     Taro.showToast({ title: '已修改', icon: 'success' })
@@ -1868,7 +1888,9 @@ function ResultPage() {
         if (!res.confirm) return
         setNutritionItems(items => {
           const updated = items.filter(item => item.id !== id)
+          nutritionAdjustedRef.current = true
           calculateNutritionStats(updated)
+          refreshEditedMealAdvice(updated)
           return updated
         })
       }
@@ -2297,6 +2319,53 @@ function ResultPage() {
     })
   }
 
+  const adviceForItems = (items: NutritionItem[]) => {
+    const payloads = items.map(item => buildFoodRecordItemPayloadFromResultItem(item, buildFoodItemNutrients(item)))
+    const sum = (key: 'calories' | 'protein' | 'carbs' | 'fat') => payloads.reduce((total, item) => total + item.nutrients[key] * item.ratio / 100, 0)
+    return mealRecordAdvice({ items: payloads, total_calories: sum('calories'), total_protein: sum('protein'), total_carbs: sum('carbs'), total_fat: sum('fat'), advice_source: 'nutrition_summary', meal_type: selectedMealType })
+  }
+
+  const refreshEditedMealAdvice = (items: NutritionItem[]) => {
+    const advice = adviceForItems(items)
+    setDescription(`本餐：${items.map(item => item.name).join('、')}`)
+    setHealthAdvice(`营养点评：${advice.insight}`)
+    setPfcRatioComment(advice.ratio)
+    setEatingOrderAdvice(advice.order)
+    setAbsorptionNotes(advice.absorption)
+    setContextAdvice(advice.context)
+  }
+
+  const openFoodLibraryPicker = (intoCorrection = false) => {
+    if (isAnalyzeSessionCommitted()) {
+      Taro.showToast({ title: '该餐已记录，请在记录详情修改', icon: 'none' })
+      return
+    }
+    let received = false
+    void Taro.navigateTo({
+      url: `${extraPkgUrl('/pages/record-manual/index')}?picker=1&date=${encodeURIComponent(recordDate)}`,
+      events: {
+        [FOOD_LIBRARY_PICKED_EVENT]: (picked: FoodRecordItemPayload[]) => {
+          if (received || !Array.isArray(picked) || !picked.length) return
+          received = true
+          const append = (base: NutritionItem[]) => {
+            let nextId = Math.max(Date.now(), ...base.map(item => item.id)) + 1
+            return [...base, ...picked.map(item => ({ ...convertApiFoodItemsToNutritionItems([libraryItemToAnalyzeItem(item, nextId++)])[0], nutritionEdited: true }))]
+          }
+          if (intoCorrection) {
+            setCorrectionItems(append)
+          } else {
+            const next = append(currentItemsRef.current)
+            nutritionAdjustedRef.current = true
+            currentItemsRef.current = next
+            setNutritionItems(next)
+            calculateNutritionStats(next)
+            refreshEditedMealAdvice(next)
+          }
+        },
+      },
+    }).catch(error => showUnifiedApiError(error, '打开食物库失败'))
+  }
+
   // --- 二次纠错功能相关方法 ---
 
   // 打开纠错抽屉
@@ -2309,12 +2378,13 @@ function ResultPage() {
 
   // 修改纠错项的名称
   const handleCorrectionNameChange = (id: number, val: string) => {
-    setCorrectionItems(prev => prev.map(item => item.id === id ? { ...item, name: val } : item))
+    setCorrectionItems(prev => prev.map(item => item.id === id && item.name !== val ? { ...item, name: val, nutritionEdited: false } : item))
   }
 
   // 修改纠错项的重量
   const handleCorrectionWeightChange = (id: number, val: string) => {
-    const num = parseInt(val, 10) || 0
+    const parsed = Number(val)
+    const num = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
     setCorrectionItems(prev => prev.map(item => item.id === id ? { ...item, weight: num } : item))
   }
 
@@ -2398,7 +2468,7 @@ function ResultPage() {
           const previousResult: AnalyzeResponse = {
             description,
             insight: healthAdvice,
-            items: buildCorrectionPreviousResultItems(nutritionItems, buildFoodItemNutrients),
+            items: buildAnalyzeResultFromItems(nutritionItems).items,
             pfc_ratio_comment: pfcRatioComment || undefined,
             eating_order_advice: eatingOrderAdvice || undefined,
             absorption_notes: absorptionNotes || undefined,
@@ -2867,7 +2937,7 @@ function ResultPage() {
               >
                 <Text className='card-title'>
                   <Text className='iconfont icon-a-144-lvye'></Text>
-                  AI 饮食分析
+                  {healthAdvice.startsWith('营养点评：') ? '整餐营养点评' : 'AI 饮食分析'}
                 </Text>
                 <View className='insight-toggle-affordance'>
                   <Text className={`insight-toggle-icon ${insightCollapsed ? 'collapsed' : ''}`}>▼</Text>
@@ -2940,6 +3010,7 @@ function ResultPage() {
                 <Text className='section-title'>食物明细</Text>
                 <Text className='section-count'>({nutritionItems.length}种)</Text>
               </View>
+              <Text className='quick-ratio-btn' onClick={() => openFoodLibraryPicker()}>从食物库添加</Text>
               <Text className='quick-ratio-btn' onClick={() => setQuickRatioSheetVisible(true)}>快捷比例</Text>
             </View>
 
@@ -3230,7 +3301,7 @@ function ResultPage() {
         value={selectedMealType}
         title='选择餐次'
         confirmText='保存记录'
-        onChange={setSelectedMealType}
+        onChange={(value) => { mealTypeChosenRef.current = true; setSelectedMealType(value) }}
         onCancel={() => setShowMealSelector(false)}
         onConfirm={handleConfirmMealType}
       />
@@ -3444,7 +3515,6 @@ function ResultPage() {
                       className='correction-input name-input'
                       value={item.name}
                       placeholder='食物名称'
-                      disabled={taskType === 'food_text'}
                       onInput={(e: any) => handleCorrectionNameChange(item.id, e.detail.value)}
                     />
                     <View className='weight-input-wrapper'>
@@ -3452,7 +3522,6 @@ function ResultPage() {
                         className='correction-input weight-input'
                         type='number'
                         value={item.weight.toString()}
-                        disabled={taskType === 'food_text'}
                         onInput={(e: any) => handleCorrectionWeightChange(item.id, e.detail.value)}
                       />
                       <Text className='weight-unit'>g</Text>
@@ -3470,10 +3539,11 @@ function ResultPage() {
             {taskType !== 'food_text' && (
               <View className='add-correction-btn' onClick={handleAddCorrectionItem}>
                 <Text className='iconfont icon-plus'></Text>
-                <Text>添加食物</Text>
+                <Text>填写新食物</Text>
               </View>
             )}
 
+            <View className='add-correction-btn' onClick={() => openFoodLibraryPicker(true)}><Text>从食物库添加</Text></View>
             <View className='additional-context-wrapper'>
               <View className='context-label'>
                 <Text className='iconfont icon-jishiben'></Text>

@@ -178,11 +178,6 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		return nil, err
 	}
 	recordedMealType := normalizeMealType(normalizedInputMealType, recordTime)
-	if normalizedInputMealType == "snack" {
-		if inferred, ok := s.inferMealTypeFromHealthRoutine(ctx, userID, recordTime); ok {
-			recordedMealType = inferred
-		}
-	}
 
 	var entryType *string
 	if input.EntryType != nil && strings.TrimSpace(*input.EntryType) != "" {
@@ -1534,39 +1529,15 @@ func (s *FoodRecordService) inferMealTypeFromHealthRoutine(ctx context.Context, 
 	return inferMealTypeByRoutine(wakeHour, sleepHour, refTime), true
 }
 
-// RecommendMealType 根据用户作息/当前时间推断默认餐次，并结合当天已有记录做顺延。
-// 如果当前推荐餐次（仅限正餐）已在当天存在记录，且与当天最新记录间隔超过 1 小时，
-// 则按 breakfast → lunch → dinner → evening_snack 顺序顺延。
+// RecommendMealType 仅根据录入时间提供六餐次默认值；已有记录不代表下一餐。
 func (s *FoodRecordService) RecommendMealType(ctx context.Context, userID string, dateStr string, refTime *time.Time) (string, string, error) {
 	t := time.Now().In(chinaTZ)
 	if refTime != nil {
 		t = refTime.In(chinaTZ)
 	}
-
-	var baseMeal, generatedBy string
-	if inferred, ok := s.inferMealTypeFromHealthRoutine(ctx, userID, &t); ok {
-		baseMeal = inferred
-		generatedBy = "health_routine"
-	} else {
-		baseMeal = inferDefaultMealTypeFromLocalTime(t)
-		generatedBy = "local_time"
-	}
-
-	date := dateStr
-	if date == "" {
-		date = t.Format("2006-01-02")
-	}
-
-	records, err := s.recordRepo.ListByUser(ctx, userID, date, 0)
-	if err != nil {
-		return baseMeal, generatedBy, nil
-	}
-
-	shifted := shiftMealTypeByExistingRecords(baseMeal, t, records)
-	if shifted != baseMeal {
-		generatedBy = "shifted_by_record"
-	}
-	return shifted, generatedBy, nil
+	meal := inferDefaultMealTypeFromLocalTime(t)
+	logger.Info(ctx, "已按录入时间推荐餐次", slog.String("user_id", userID), slog.String("date", dateStr), slog.String("meal_type", meal))
+	return meal, "local_time", nil
 }
 
 func inferDefaultMealTypeFromLocalTime(t time.Time) string {
@@ -1592,51 +1563,7 @@ func inferDefaultMealTypeFromLocalTime(t time.Time) string {
 	return "evening_snack"
 }
 
+// 保留兼容调用；记录间隔不能改变当前时间所属餐次。
 func shiftMealTypeByExistingRecords(baseMeal string, refTime time.Time, records []domain.FoodRecord) string {
-	mainMeals := []string{"breakfast", "lunch", "dinner"}
-	mainMealSet := map[string]bool{}
-	for _, m := range mainMeals {
-		mainMealSet[m] = true
-	}
-	if !mainMealSet[baseMeal] {
-		return baseMeal
-	}
-
-	var latestRecordTime *time.Time
-	existingMeals := map[string]bool{}
-	for i := range records {
-		if records[i].RecordTime == nil {
-			continue
-		}
-		existingMeals[strings.ToLower(strings.TrimSpace(records[i].MealType))] = true
-		if latestRecordTime == nil || records[i].RecordTime.After(*latestRecordTime) {
-			latestRecordTime = records[i].RecordTime
-		}
-	}
-
-	if latestRecordTime == nil {
-		return baseMeal
-	}
-	if refTime.Sub(*latestRecordTime) <= time.Hour {
-		return baseMeal
-	}
-
-	baseIdx := -1
-	for i, m := range mainMeals {
-		if m == baseMeal {
-			baseIdx = i
-			break
-		}
-	}
-	if baseIdx < 0 {
-		return baseMeal
-	}
-
-	for i := baseIdx + 1; i < len(mainMeals); i++ {
-		next := mainMeals[i]
-		if !existingMeals[next] {
-			return next
-		}
-	}
-	return "evening_snack"
+	return baseMeal
 }

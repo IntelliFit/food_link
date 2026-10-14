@@ -10,7 +10,7 @@ import (
 )
 
 // 点评仅使用已记录的食物和摄入量；缺少模型点评时明确返回营养数据点评。
-func generatedRecordAdvice(record *domain.FoodRecord) (string, string, string, string) {
+func GeneratedRecordAdvice(record *domain.FoodRecord) (string, string, string, string) {
 	protein, carbs, fat := record.TotalProtein, record.TotalCarbs, record.TotalFat
 	energy := protein*4 + carbs*4 + fat*9
 	if energy <= 0 {
@@ -70,6 +70,10 @@ func containsMealWord(name string, words ...string) bool {
 	return false
 }
 
+func generatedRecordAdvice(record *domain.FoodRecord) (string, string, string, string) {
+	return GeneratedRecordAdvice(record)
+}
+
 func assignAdviceIfEmpty(target **string, value string) {
 	if *target == nil || strings.TrimSpace(**target) == "" {
 		*target = &value
@@ -77,7 +81,7 @@ func assignAdviceIfEmpty(target **string, value string) {
 }
 
 func fillGeneratedRecordAdvice(record *domain.FoodRecord) {
-	insight, ratio, order, absorption := generatedRecordAdvice(record)
+	insight, ratio, order, absorption := GeneratedRecordAdvice(record)
 	if record.Insight != nil && strings.HasPrefix(strings.TrimSpace(*record.Insight), "手动记录") {
 		record.Insight = nil
 	}

@@ -23,11 +23,33 @@ export function mealRecordAdvice(record: Pick<FoodRecord, 'items' | 'total_calor
   return {
     title: manual ? '本餐营养点评' : '本餐 AI 点评',
     source: manual ? '依据已记录的营养和实际摄入量' : '识别点评与已记录的摄入量',
-    insight: !record.insight || record.insight.startsWith('手动记录') ? insight : record.insight,
+    insight: manual ? insight : record.insight,
     ratio: record.pfc_ratio_comment || (energy > 0 ? `按供能计算：蛋白质约${Math.round(p)}%、碳水约${Math.round(c)}%、脂肪约${Math.round(f)}%。` : '营养数据不足，暂无法计算供能比例。'),
     ratioAdvice,
     order: record.eating_order_advice || (order.length > 1 ? `可先吃${order.join('，再吃')}。` : '本餐按实际食用顺序、放慢速度进食即可。'),
-    absorption: record.absorption_notes || '点评按实际摄入量计算，营养资料有误时请先修正记录。',
-    context: record.context_advice || '',
+    absorption: record.absorption_notes || (veg && prot ? `本餐包含${veg.name}与${prot.name}，注意搭配并放慢进食速度。` : '点评按实际摄入量计算，营养资料有误时请先修正记录。'),
+    context: record.context_advice || (record.meal_type === 'dinner' || record.meal_type === 'evening_snack' ? '晚间进食注意适量，避免临睡前吃得过饱。' : record.activity_timing === 'post_workout' ? '运动后结合本餐摄入补充水分，蛋白质安排以全天摄入为准。' : '本餐只是全天饮食的一部分，后续餐食结合全天摄入安排。'),
+  }
+}
+
+/** 仅构造本人整餐视图，不创建、合并或重写任何持久化记录。 */
+export function combineMealRecords(records: FoodRecord[]): FoodRecord | null {
+  if (!records.length) return null
+  const first = records[0]
+  return {
+    ...first,
+    id: '',
+    items: records.flatMap(record => record.items || []),
+    total_calories: records.reduce((sum, record) => sum + Number(record.total_calories || 0), 0),
+    total_protein: records.reduce((sum, record) => sum + Number(record.total_protein || 0), 0),
+    total_carbs: records.reduce((sum, record) => sum + Number(record.total_carbs || 0), 0),
+    total_fat: records.reduce((sum, record) => sum + Number(record.total_fat || 0), 0),
+    total_weight_grams: records.reduce((sum, record) => sum + Number(record.total_weight_grams || 0), 0),
+    image_paths: Array.from(new Set(records.flatMap(record => record.image_paths?.length ? record.image_paths : record.image_path ? [record.image_path] : []))),
+    description: records.flatMap(record => record.items || []).map(item => item.name).join('、'),
+    insight: null, pfc_ratio_comment: null, eating_order_advice: null, absorption_notes: null, context_advice: null,
+    source_task_id: null, advice_source: 'nutrition_summary',
+    diet_goal: records.every(record => record.diet_goal === first.diet_goal) ? first.diet_goal : null,
+    activity_timing: records.every(record => record.activity_timing === first.activity_timing) ? first.activity_timing : null,
   }
 }

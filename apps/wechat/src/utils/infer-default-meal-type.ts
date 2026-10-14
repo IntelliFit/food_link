@@ -137,8 +137,8 @@ function normalizeMealTypeToCanonical(value: MealType | string | undefined | nul
 }
 
 /**
- * 优先从后端获取推荐餐次，失败或未登录时回退到本地推断。
- * 后端已结合作息与当天已有记录做顺延推理。
+ * 按当前录入时间提供六餐次默认值；不按已有记录顺延、不覆盖用户手选。
+ * 后端失败或未登录时使用相同本地时段规则。
  */
 export async function getRecommendedMealTypeWithFallback(options?: {
   date?: string
@@ -147,11 +147,11 @@ export async function getRecommendedMealTypeWithFallback(options?: {
   if (getAccessToken()) {
     try {
       const date = options?.date ?? getStoredRecordTargetDate()
-      const result = await getRecommendMealType({ date })
+      const result = await getRecommendMealType({ date, ref_time: new Date().toISOString() })
       return normalizeMealTypeToCanonical(result.meal_type)
     } catch (error) {
       console.warn('后端推荐餐次失败，回退本地推断:', error)
     }
   }
-  return inferDefaultMealTypeFromHealthProfile(options?.profile)
+  return inferDefaultMealTypeFromLocalTime()
 }

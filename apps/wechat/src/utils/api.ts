@@ -224,6 +224,14 @@ export interface UnitNutritionPer100g extends Nutrients {}
 // 食物项接口
 export interface FoodItem {
   itemId?: number
+  intakeRatio?: number
+  intakeGrams?: number
+  manual_source?: FoodRecordItemPayload['manual_source']
+  manual_source_id?: string
+  manual_source_title?: string
+  manual_portion_label?: string
+  image_path?: string
+  image_paths?: string[]
   name: string
   type?: string
   food_type?: string
@@ -594,7 +602,7 @@ export interface FoodRecordItemRow {
   waterMl?: number
   water_ml?: number
   nutrients: Nutrients
-  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food'
+  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom'
   manual_source_id?: string
   manual_source_title?: string
   manual_portion_label?: string
@@ -6255,13 +6263,14 @@ export async function getHealthProfile(): Promise<HealthProfile> {
 }
 
 /**
- * 从后端获取推荐的默认餐次（已结合作息与当天已有记录做顺延）。
+ * 从后端按录入时间获取六餐次默认值。
  * @param params.date 目标日期（YYYY-MM-DD），默认今天
  * @returns Promise<{ meal_type: MealType; generated_by: string }>
  */
-export async function getRecommendMealType(params?: { date?: string }): Promise<{ meal_type: MealType; generated_by: string }> {
+export async function getRecommendMealType(params?: { date?: string; ref_time?: string }): Promise<{ meal_type: MealType; generated_by: string }> {
   try {
-    const query = params?.date ? `?date=${encodeURIComponent(params.date)}` : ''
+    const parts = [params?.date ? `date=${encodeURIComponent(params.date)}` : '', params?.ref_time ? `ref_time=${encodeURIComponent(params.ref_time)}` : ''].filter(Boolean)
+    const query = parts.length ? `?${parts.join('&')}` : ''
     const response = await authenticatedRequest(`/api/food-record/recommend-meal-type${query}`, {
       method: 'GET'
     })

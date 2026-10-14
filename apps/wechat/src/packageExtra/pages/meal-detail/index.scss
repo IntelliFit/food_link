@@ -1,0 +1,10 @@
+.meal-detail-page { height: 100vh; background: #f6faf8; color: #20342d; box-sizing: border-box; padding: 24rpx; }
+.meal-detail-card { padding: 28rpx; margin-bottom: 20rpx; background: #fff; border-radius: 24rpx; display: flex; flex-direction: column; gap: 16rpx; line-height: 1.7; font-size: 28rpx; }
+.meal-detail-title { font-size: 34rpx; font-weight: 600; }
+.meal-detail-source { color: #687b71; font-size: 24rpx; }
+.meal-detail-food, .meal-detail-record { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12rpx; padding: 16rpx 0; border-top: 1rpx solid #e8efeb; }
+.meal-detail-record { color: #008f64; }
+.meal-detail-empty { display: block; padding: 60rpx 24rpx; text-align: center; }
+.meal-detail-spinner { width: 48rpx; height: 48rpx; margin: 120rpx auto; border: 5rpx solid #d4ebe0; border-top-color: #00a878; border-radius: 50%; animation: meal-spin .8s linear infinite; }
+@keyframes meal-spin { to { transform: rotate(360deg); } }
+.meal-detail-page--dark { background: #101c17; color: #e7f3eb; .meal-detail-card { background: #1a2c22; } .meal-detail-food, .meal-detail-record { border-color: #304738; } .meal-detail-source { color: #aec6b9; } .meal-detail-record { color: #63d9ae; } }

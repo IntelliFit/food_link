@@ -2,6 +2,9 @@ import type { FoodItem, FoodRecordItemPayload, Nutrients } from './api'
 
 type PackagedAnalysisMetaSource = {
   name?: string
+  image_path?: string | null
+  image_paths?: string[] | null
+  manual_portion_label?: string
   grossWeight?: number
   grossWeightGrams?: number
   gross_weight_grams?: number
@@ -129,6 +132,9 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
 
   return {
     name: item.name || '未命名食物',
+    image_path: item.image_path || undefined,
+    image_paths: item.image_paths || undefined,
+    manual_portion_label: item.manual_portion_label,
     weight,
     ratio,
     intake,

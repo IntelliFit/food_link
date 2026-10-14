@@ -2,6 +2,12 @@ import type { FoodItem, Nutrients } from '../../../utils/api'
 
 export interface NutritionItem {
   id: number
+  manual_source?: FoodItem['manual_source']
+  manual_source_id?: string
+  manual_source_title?: string
+  manual_portion_label?: string
+  image_path?: string
+  image_paths?: string[]
   sourceItemId?: number
   sourceName?: string
   name: string
@@ -129,8 +135,8 @@ export const convertApiFoodItemsToNutritionItems = (items: FoodItem[]): Nutritio
     )
     const nutrients = normalizeItemNutrients(item.nutrients, waterMl)
     const suggestedRatio = Math.max(0, Math.min(100, Math.round(item.suggestedRatio ?? item.suggested_ratio ?? 100)))
-    const actualRatio = 100
-    const intake = Math.round(item.estimatedWeightGrams * (actualRatio / 100))
+    const actualRatio = Math.max(0, Math.min(100, item.intakeRatio ?? 100))
+    const intake = item.intakeGrams ?? Math.round(item.estimatedWeightGrams * (actualRatio / 100) * 100) / 100
     const packageMatchStatus = item.package_match_status ?? item.packageMatchStatus
     const packageWeightApplied = item.package_weight_applied ?? item.packageWeightApplied
     const packagedCandidates = item.packaged_candidates ?? item.packagedCandidates
@@ -141,6 +147,12 @@ export const convertApiFoodItemsToNutritionItems = (items: FoodItem[]): Nutritio
       sourceItemId: itemId,
       sourceName: item.name,
       name: item.name,
+      manual_source: item.manual_source,
+      manual_source_id: item.manual_source_id,
+      manual_source_title: item.manual_source_title,
+      manual_portion_label: item.manual_portion_label,
+      image_path: item.image_path,
+      image_paths: item.image_paths,
       displayWeight: item.display_weight,
       weight: item.estimatedWeightGrams,
       originalWeight: aiWeight,

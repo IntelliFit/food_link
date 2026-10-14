@@ -27,6 +27,14 @@ export interface ResultCorrectionItem {
   packageWeightReason?: string
   packagedCandidates?: Array<Record<string, unknown>>
   nutritionEdited?: boolean
+  ratio?: number
+  intake?: number
+  manual_source?: FoodItem['manual_source']
+  manual_source_id?: string
+  manual_source_title?: string
+  manual_portion_label?: string
+  image_path?: string
+  image_paths?: string[]
 }
 
 export type CorrectionItemPayload = NonNullable<AnalyzeTaskSubmitParams['correctionItems']>[number]
@@ -60,6 +68,14 @@ export function buildCorrectionPreviousResultItems<T extends ResultCorrectionIte
   return items.map((item) => ({
     itemId: item.sourceItemId ?? item.id,
     name: item.name,
+    intakeRatio: item.ratio,
+    intakeGrams: item.intake,
+    manual_source: item.manual_source,
+    manual_source_id: item.manual_source_id,
+    manual_source_title: item.manual_source_title,
+    manual_portion_label: item.manual_portion_label,
+    image_path: item.image_path,
+    image_paths: item.image_paths,
     estimatedWeightGrams: item.weight,
     originalWeightGrams: item.originalWeight,
     waterMl: item.waterMl,
@@ -92,6 +108,7 @@ export function buildCorrectionItemsPayload<T extends ResultCorrectionItem>(
     const normalizedName = item.name.trim()
 
     return {
+      ...buildCorrectionPreviousResultItems([item], buildNutrients)[0],
       name: normalizedName,
       weight: normalizeCorrectionWeight(item.weight),
       originalWeight: item.originalWeight,
