@@ -2,7 +2,7 @@ import { Canvas, Image, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import * as React from 'react'
 import type { BalancedThemeId } from '../utils/balanced-theme'
-import { BALANCED_SCENES, loadBalancedScenes } from '../utils/balanced-theme-scenes'
+import { BALANCED_SCENES } from '../utils/balanced-theme-scenes'
 import { waterFlowDays, WaterDailyFlow } from './WaterDailyFlow'
 import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
 import { ThemeSceneImage } from './ThemeSceneImage'
@@ -119,14 +119,6 @@ export function ThemeDailyReview({ theme, endDate, days, water, guest, onRecord 
   const appearance = useAppColorSchemeOptional()
   const entries = waterFlowDays(endDate, guest ? [] : days, guest ? [] : water)
   const [selectedDate, setSelectedDate] = React.useState('')
-  const [artReady, setArtReady] = React.useState(false)
-  React.useEffect(() => {
-    let active = true
-    if (theme === 'miniature-world' || theme === 'picturebook-companion') {
-      loadBalancedScenes().then(() => { if (active) setArtReady(true) }).catch(() => {})
-    }
-    return () => { active = false }
-  }, [theme])
   const selected = entries.find(day => day.date === selectedDate) || entries[6]
   const summary = reviewSummary(entries)
   const number = (n: number | null) => n === null ? '—' : String(n)
@@ -138,7 +130,7 @@ export function ThemeDailyReview({ theme, endDate, days, water, guest, onRecord 
   const dates = (film = false, alignChart = false) => <View className={`tr-dates tr-dates--compact${film ? ' tr-film' : ''}`} style={alignChart && summary.count > 0 ? { paddingLeft: `${REVIEW_CHART_INSET.left}px`, paddingRight: `${REVIEW_CHART_INSET.right}px` } : undefined}>{entries.map((day, i) => <View role='button' key={day.date} id={`theme-review-day-${i}`} aria-pressed={selected.date === day.date} aria-label={`${day.date}，${day.calories === null ? '暂无饮食记录' : `${day.calories} 千卡`}，${day.waterMl === null ? '暂无饮水记录' : `饮水 ${day.waterMl} ml`}，查看`}
     className={`tr-day${selected.date === day.date ? ' is-selected' : ''}`} onClick={() => setSelectedDate(day.date)}
   >
-    {film && <View className='tr-film__frame'>{artReady && <Image src={BALANCED_SCENES.picturebookDay} mode='aspectFill' aria-hidden />}</View>}
+    {film && <View className='tr-film__frame'><ThemeSceneImage className='tr-film__image' src={BALANCED_SCENES.picturebookDay} mode='aspectFill' /></View>}
     <Text>{day.date.slice(8)}</Text>
     <View className={`tr-date-dot${day.calories !== null || day.waterMl !== null ? ' is-recorded' : ''}`} aria-hidden />
   </View>)}</View>
@@ -158,7 +150,7 @@ export function ThemeDailyReview({ theme, endDate, days, water, guest, onRecord 
     {theme === 'natural-symbiosis' && <><View className='tr-botanical'>{summaryBlock}{summary.count > 0 && <><View className='tr-rings'><ThemeSceneImage className='tr-rings__wood' src={BALANCED_SCENES.naturalRings} mode='aspectFit' />{compactChart('rings')}<View className='tr-rings__center'><Text>7日</Text><Text>摄入年轮</Text></View></View><Text className='tr-chart-note'>从外圈到内圈，按日期排列</Text></>}</View>{dates()}</>}
     {theme === 'eastern-salon' && <><View className='tr-landscape'><Image src={easternLandscape} mode='aspectFill' aria-hidden />{summaryBlock}{compactChart('river', true)}</View>{dates(false, true)}</>}
     {theme === 'modern-gallery' && <>{summary.count > 0 ? <View className='tr-exhibition'><View>{compactChart('donut')}<Text className='tr-chart-note'>七日摄入占比</Text></View><View>{summaryBlock}</View></View> : summaryBlock}{dates()}</>}
-    {theme === 'miniature-world' && <><View className='tr-diorama'>{artReady && <Image className='tr-scene' src={BALANCED_SCENES.miniatureGarden} mode='aspectFill' aria-hidden />}<View className='tr-diorama__sign'>{summaryBlock}</View></View>{summary.count > 0 && <View className='tr-diorama__river'>{compactChart('river', true)}{dates(false, true)}</View>}{summary.count === 0 && dates()}</>}
+    {theme === 'miniature-world' && <><View className='tr-diorama'><ThemeSceneImage className='tr-scene' src={BALANCED_SCENES.miniatureGarden} mode='aspectFill' /><View className='tr-diorama__sign'>{summaryBlock}</View></View>{summary.count > 0 && <View className='tr-diorama__river'>{compactChart('river', true)}{dates(false, true)}</View>}{summary.count === 0 && dates()}</>}
     {theme === 'picturebook-companion' && <>{summaryBlock}{dates(true)}</>}
     {theme === 'clear-care' && <><View className='tr-care-panel'>{summaryBlock}{compactChart('columns')}{dates(false, true)}</View></>}
     {theme === 'picturebook-companion' ? <View className='tr-story'>{detail}</View> : detail}

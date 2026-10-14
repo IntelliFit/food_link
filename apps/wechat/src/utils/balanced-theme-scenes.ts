@@ -27,12 +27,38 @@ export const BALANCED_SCENES = {
 } as const
 
 let pending: Promise<void> | undefined
+let retryPending: Promise<void> | undefined
+let revision = 0
+let ready = false
+const listeners = new Set<(revision: number, imageError?: boolean) => void>()
+
+export function getBalancedScenesRevision(): number { return revision }
+export function subscribeBalancedScenes(listener: (revision: number, imageError?: boolean) => void): () => void {
+  listeners.add(listener)
+  return () => { listeners.delete(listener) }
+}
+function notifyReady(): void { listeners.forEach(listener => listener(revision)) }
+/** Image failure requests a retry affordance without invalidating the downloaded package. */
+export function reportBalancedSceneImageError(): void { listeners.forEach(listener => listener(revision, true)) }
+
 /** Share one download across all tabs; a failed request remains retryable. */
 export function loadBalancedScenes(): Promise<void> {
   if (!pending) {
-    pending = (require as unknown as AsyncRequire).async('/packageThemeScenes/ready.js')
-      .then(() => undefined)
-      .catch(error => { pending = undefined; throw error })
+    // This utility is shared in root common.js. WeChat require.async accepts
+    // module-relative paths; image resource URLs below remain root-relative.
+    pending = Promise.resolve().then(() => (require as unknown as AsyncRequire).async('./packageThemeScenes/ready.js'))
+      .then(() => { ready = true; notifyReady() })
+      .catch(error => { pending = undefined; ready = false; throw error })
   }
   return pending
+}
+
+/** A package retry also remounts images that previously failed to decode. */
+export function retryBalancedScenes(): Promise<void> {
+  if (!retryPending) {
+    const wasReady = ready
+    revision += 1
+    retryPending = loadBalancedScenes().then(() => { if (wasReady) notifyReady() }).finally(() => { retryPending = undefined })
+  }
+  return retryPending
 }

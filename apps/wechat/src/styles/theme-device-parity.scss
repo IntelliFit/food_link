@@ -106,6 +106,13 @@ $palettes: (
   &.bt-profile-art--loaded .theme-chapter { background: transparent; }
 }
 
+/* Wood-scene headings remain readable before or after an artwork failure. */
+.fl-page-theme-root--balanced.fl-balanced-theme--miniature-world.fl-d {
+  .bt-experience .bt-masthead { color: #392c1d; background: #f7ecd6ed; padding: 16rpx; border-radius: 20rpx; }
+  .bt-experience--stats .theme-chapter, .bt-experience--community .theme-chapter { color: #fff0d8; background: #2b2018dc; padding: 20rpx; border-radius: 20rpx; }
+  .theme-chapter .tc-sign { color: #392c1d; background: #f7ecd6; padding: 8rpx 16rpx; border-radius: 20rpx; }
+}
+
 /* These archive cards intentionally keep paper surfaces in either appearance. */
 @each $theme in eastern-salon, miniature-world, picturebook-companion {
   .fl-page-theme-root--balanced.fl-balanced-theme--#{$theme}.fl-d .profile-page {

@@ -13,7 +13,7 @@ import clarityFood from '../assets/balanced-themes/clarity-food.webp'
 import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
 import easternProfileGold from '../assets/balanced-themes/eastern-profile-gold-v11.webp'
 import waterDrop from '../assets/balanced-themes/water-drop-v6.webp'
-import { BALANCED_SCENES, loadBalancedScenes } from '../utils/balanced-theme-scenes'
+import { BALANCED_SCENES, getBalancedScenesRevision, loadBalancedScenes, retryBalancedScenes, subscribeBalancedScenes } from '../utils/balanced-theme-scenes'
 import './BalancedThemeExperience.scss'
 
 export type BalancedThemeSurface = 'home' | 'stats' | 'community' | 'profile'
@@ -57,20 +57,35 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const [scenesReady, setScenesReady] = React.useState(false)
   const [sceneError, setSceneError] = React.useState(false)
   const [loadedProfileArt, setLoadedProfileArt] = React.useState<string>()
-  const [sceneAttempt, setSceneAttempt] = React.useState(0)
+  const [sceneAttempt, setSceneAttempt] = React.useState(getBalancedScenesRevision)
+  const sceneGeneration = React.useRef(0)
   React.useEffect(() => {
     let active = true
+    sceneGeneration.current += 1
+    let unsubscribe = () => {}
     if (!wellness && theme !== 'clarity-order' && theme !== 'clear-care') {
+      unsubscribe = subscribeBalancedScenes((revision, imageError) => {
+        if (active) {
+          if (imageError) { setSceneError(true); return }
+          setScenesReady(true); setSceneError(false); setSceneAttempt(revision)
+        }
+      })
       loadBalancedScenes().then(() => { if (active) { setScenesReady(true); setSceneError(false) } }).catch(() => { if (active) setSceneError(true) })
     }
-    return () => { active = false }
+    return () => { active = false; sceneGeneration.current += 1; unsubscribe() }
   }, [theme, wellness])
   if (wellness) return children ? <>{children}</> : null
   // Scene clips live in the same lazy subpackage as the artwork. Mounting a video
   // before that package is ready makes the native player fail and retain the still fallback.
   const sceneVideo = scenesReady ? getThemeSceneVideo(theme, surface) : undefined
   const { miniatureGarden, miniatureDesk, miniatureSquare, picturebookDay, picturebookDesk, waterVessel, waterRock, waterHome, waterStats, waterCommunity, waterProfile, naturalLeaves, easternSoup, galleryCollage } = scenesReady ? BALANCED_SCENES : {} as Partial<typeof BALANCED_SCENES>
-  const retryScene = () => { setSceneError(false); setSceneAttempt(attempt => attempt + 1); loadBalancedScenes().then(() => setScenesReady(true)).catch(() => setSceneError(true)) }
+  const retryScene = () => {
+    const generation = sceneGeneration.current
+    setSceneError(false)
+    setLoadedProfileArt(undefined)
+    setSceneAttempt(attempt => attempt + 1)
+    retryBalancedScenes().then(() => { if (generation === sceneGeneration.current) setScenesReady(true) }).catch(() => { if (generation === sceneGeneration.current) setSceneError(true) })
+  }
   const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}>场景未能打开，轻触重试</View>
   const definition = getBalancedThemeDefinition(theme)
   const title = TITLES[theme][SURFACE_INDEX[surface]]
@@ -85,7 +100,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const action = (id: string, text: string, detail: string, icon: string, onClick: () => void) => (
     <View id={`bt-action-${id}`} className={`bt-action bt-action--${id}`} role='button' aria-label={text} hoverClass='bt-action--pressed' onClick={onClick}>
       {theme === 'way-of-water' && <Image className='bt-action__water-drop' src={waterDrop} mode='aspectFit' />}
-      {theme === 'natural-symbiosis' && id === 'record' && scenesReady && <Image className='bt-action__specimen' src={BALANCED_SCENES.naturalDrawer} mode='scaleToFill' aria-hidden />}
+      {theme === 'natural-symbiosis' && id === 'record' && scenesReady && <Image className='bt-action__specimen' src={BALANCED_SCENES.naturalDrawer} mode='scaleToFill' aria-hidden onError={() => setSceneError(true)} />}
       <Text className={`iconfont ${icon} bt-action__icon`} />
       <View className='bt-action__copy'><Text>{text}</Text>{detail && <Text>{detail}</Text>}</View>
       <Text className='iconfont icon-right bt-action__arrow' />
@@ -111,10 +126,13 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       : theme === 'picturebook-companion' ? picturebookDesk
       : theme === 'eastern-salon' ? (surface === 'profile' ? undefined : easternLandscape) : theme === 'way-of-water' ? ({ stats: waterStats, community: waterCommunity, profile: waterProfile } as const)[surface] || waterRock
       : theme === 'modern-gallery' ? galleryCollage : undefined
+    const profileArtKey = `${profileArt}:${sceneAttempt}`
     return <>
-      {profileArt && <Image key={`${profileArt}:${sceneAttempt}`} className={`bt-profile-backdrop bt-profile-backdrop--${theme}`} src={profileArt} mode='widthFix' aria-hidden onLoad={() => setLoadedProfileArt(profileArt)} onError={() => { setLoadedProfileArt(undefined); setSceneError(true) }} />}
-      <View id={`balanced-theme-experience-${surface}`} className={`${rootClass}${surface === 'profile' && loadedProfileArt === profileArt && profileArt ? ' bt-profile-art--loaded' : ''}`}>
+      {profileArt && <Image key={profileArtKey} className={`bt-profile-backdrop bt-profile-backdrop--${theme}`} src={profileArt} mode='widthFix' aria-hidden onLoad={() => setLoadedProfileArt(profileArtKey)} onError={() => { setLoadedProfileArt(undefined); setSceneError(true) }} />}
+      <View id={`balanced-theme-experience-${surface}`} className={`${rootClass}${surface === 'profile' && loadedProfileArt === profileArtKey && profileArt ? ' bt-profile-art--loaded' : ''}`}>
       <ThemeSceneBackground
+        key={sceneAttempt}
+        onPosterError={() => setSceneError(true)}
         className={`bt-scene bt-scene--chapter bt-scene--${surface}`}
         poster={profileArt ? undefined : art}
         src={sceneVideo}
@@ -127,22 +145,22 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       </View>
     </>
   }
-  return <View id='balanced-theme-experience-home' className={rootClass}>{sceneRetry}
+  return <View key={sceneAttempt} id='balanced-theme-experience-home' className={rootClass}>{sceneRetry}
     {(theme === 'clarity-order' || theme === 'clear-care') && <ThemeSceneBackground src={sceneVideo} active={motion.active} />}
     {theme === 'miniature-world' && <>
-      <ThemeSceneBackground poster={miniatureGarden} src={sceneVideo} active={motion.active} />{masthead}{heading}
+      <ThemeSceneBackground poster={miniatureGarden} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
       <View className='bt-garden-sign bt-garden-sign--meals'>{action('meals', '饮食花园', value(home?.mealCount, ' 餐 · 查看记录'), 'icon-foodshop', meals)}</View>
       <View className='bt-garden-sign bt-garden-sign--water'>{action('water', '营养河流', value(home?.waterMl, ' ml · 记录饮水'), 'icon-drink', water)}</View>
       <View className='bt-scene-footer'>{action('record', '拍下这一餐', '记录此刻的生活', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'picturebook-companion' && <>
-      <ThemeSceneBackground poster={picturebookDay} src={sceneVideo} active={motion.active} />{masthead}{heading}
+      <ThemeSceneBackground poster={picturebookDay} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
       <View className='bt-chapter-label bt-chapter-label--morning'><Text>晨光开篇</Text><Text>好好吃早餐，是对自己的温柔。</Text></View>
       <View className='bt-chapter-label bt-chapter-label--noon' role='button' onClick={meals}><Text>午间相遇</Text><Text>{value(home?.mealCount, ' 餐已记下')} · 查看</Text></View>
       <View className='bt-scene-footer'>{action('record', '记录这一餐', '把日常，写成自己的故事', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'way-of-water' && <>
-      <ThemeSceneBackground poster={waterHome || waterVessel} src={sceneVideo} active={motion.active} />{masthead}{heading}
+      <ThemeSceneBackground poster={waterHome || waterVessel} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
       <View className='bt-water-side-verse' aria-hidden><Text>饮食如水</Text><Text>汇于生命的长河</Text><Text>温柔而有力</Text></View>
       <View className='bt-water-console'>
         <View className='bt-water-overview'>
@@ -165,17 +183,17 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       </View>
     </>}
     {theme === 'natural-symbiosis' && <>
-      <ThemeSceneBackground poster={naturalLeaves} src={sceneVideo} active={motion.active} />{masthead}{heading}
+      <ThemeSceneBackground poster={naturalLeaves} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
       <View className='bt-leaf-note bt-leaf-note--meals'>{action('meals', '今日饮食', value(home?.mealCount, ' 餐'), 'icon-foodshop', meals)}</View>
       <View className='bt-leaf-note bt-leaf-note--water'>{action('water', '再来一杯', value(home?.waterMl, ' ml'), 'icon-drink', water)}</View>
       <View className='bt-scene-footer'>{action('record', '种下一餐', '让更好的自己慢慢生长', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'eastern-salon' && <>
-      <ThemeSceneBackground className='bt-eastern-landscape' poster={easternLandscape} src={sceneVideo} active={motion.active} />{masthead}{heading}
-      <View className='bt-scroll'><View className='bt-scroll__plate'>{easternSoup && <Image src={easternSoup} mode='aspectFill' />}<View><Text>一盏清汤</Text><Text>四时皆宜 · 日常有味</Text><Text className='bt-art-caption'>食物灵感</Text></View></View>{summary}<Text className='bt-scroll__verse'>食养身心 · 自有节奏</Text>{action('record', '记一膳', '', 'icon-paizhao-xianxing', record)}</View>
+      <ThemeSceneBackground className='bt-eastern-landscape' poster={easternLandscape} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
+      <View className='bt-scroll'><View className='bt-scroll__plate'>{easternSoup && <Image src={easternSoup} mode='aspectFill' onError={() => setSceneError(true)} />}<View><Text>一盏清汤</Text><Text>四时皆宜 · 日常有味</Text><Text className='bt-art-caption'>食物灵感</Text></View></View>{summary}<Text className='bt-scroll__verse'>食养身心 · 自有节奏</Text>{action('record', '记一膳', '', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'modern-gallery' && <>
-      <ThemeSceneBackground poster={galleryCollage} src={sceneVideo} active={motion.active} />{masthead}{heading}
+      <ThemeSceneBackground poster={galleryCollage} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
       <View className='bt-gallery-caption'><Text>一餐，也是作品。</Text><Text>食物灵感 / 日常的创作</Text></View>
       <View className='bt-gallery-bottom'>{summary}{action('record', '记录这餐', '', 'icon-paizhao-xianxing', record)}</View>
     </>}

@@ -1,8 +1,8 @@
 import * as React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { BalancedThemeExperience } from '../../src/components/BalancedThemeExperience'
 import { BALANCED_THEME_IDS, type BalancedThemeId } from '../../src/utils/balanced-theme'
-import { loadBalancedScenes } from '../../src/utils/balanced-theme-scenes'
+import { loadBalancedScenes, retryBalancedScenes } from '../../src/utils/balanced-theme-scenes'
 import easternProfileGold from '../../src/assets/balanced-themes/eastern-profile-gold-v11.webp'
 
 let mockTheme: BalancedThemeId = 'clarity-order'
@@ -10,10 +10,19 @@ let mockWellness = false
 jest.mock('../../src/assets/balanced-themes/eastern-profile-gold-v11.webp', () => ({ __esModule: true, default: '/eastern-profile-gold.webp' }))
 jest.mock('../../src/components/BalancedThemeContext', () => ({ useBalancedTheme: () => ({ theme: mockTheme }) }))
 jest.mock('../../src/components/InkWellness', () => ({ useInkWellness: () => mockWellness }))
-jest.mock('../../src/utils/balanced-theme-scenes', () => ({
+jest.mock('../../src/utils/balanced-theme-scenes', () => {
+  const loadBalancedScenes = jest.fn().mockResolvedValue(undefined)
+  let revision = 0
+  const listeners = new Set<(revision: number, imageError?: boolean) => void>()
+  return {
   BALANCED_SCENES: { miniatureGarden: '/garden.webp', waterVessel: '/water.webp', miniatureProfile: '/miniature-profile.webp', picturebookProfile: '/picturebook-profile.webp', galleryProfile: '/gallery-profile.webp' },
-  loadBalancedScenes: jest.fn().mockResolvedValue(undefined),
-}))
+    loadBalancedScenes,
+    retryBalancedScenes: () => loadBalancedScenes().then(() => { revision += 1; listeners.forEach(listener => listener(revision)) }),
+    getBalancedScenesRevision: () => revision,
+    subscribeBalancedScenes: (listener: (revision: number, imageError?: boolean) => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    reportBalancedSceneImageError: () => listeners.forEach(listener => listener(revision, true)),
+  }
+})
 const home = { date: '2026-09-28', mealCount: 2, waterMl: 850, calories: 1024, authenticated: true, loading: false }
 beforeEach(() => { mockWellness = false; mockTheme = 'clarity-order'; jest.clearAllMocks(); (loadBalancedScenes as jest.Mock).mockResolvedValue(undefined) })
 
@@ -107,6 +116,21 @@ describe('balanced theme live experiences', () => {
     expect(container.querySelector('.bt-profile-backdrop')).toHaveAttribute('src', easternProfileGold)
     await screen.findByText('场景未能打开，轻触重试')
     expect(container.querySelector('.bt-profile-backdrop')).toHaveAttribute('src', easternProfileGold)
+  })
+  it('requires a fresh decoded portrait after another consumer starts a shared retry', async () => {
+    mockTheme = 'modern-gallery'
+    const { container } = render(<BalancedThemeExperience surface='profile'><button>当前用户资料</button></BalancedThemeExperience>)
+    await waitFor(() => expect(container.querySelector('.bt-profile-backdrop')).toBeInTheDocument())
+    const firstImage = container.querySelector('.bt-profile-backdrop')!
+    const hero = container.querySelector('#balanced-theme-experience-profile')!
+    fireEvent.load(firstImage)
+    expect(hero).toHaveClass('bt-profile-art--loaded')
+    await act(async () => { await retryBalancedScenes() })
+    expect(hero).not.toHaveClass('bt-profile-art--loaded')
+    const nextImage = container.querySelector('.bt-profile-backdrop')!
+    expect(nextImage).not.toBe(firstImage)
+    fireEvent.load(nextImage)
+    expect(hero).toHaveClass('bt-profile-art--loaded')
   })
   it('keeps the real profile actions usable when embedded in a scene or switched to wellness', async () => {
     mockTheme = 'miniature-world'

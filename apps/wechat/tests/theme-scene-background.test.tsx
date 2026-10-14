@@ -4,7 +4,7 @@ import { ThemeSceneBackground } from '../src/components/ThemeSceneBackground'
 
 jest.mock('@tarojs/components', () => ({
   View: ({ children, className }: any) => <div className={className}>{children}</div>,
-  Image: ({ src }: any) => <img alt='scene poster' src={src} />,
+  Image: ({ src, onError }: any) => <img alt='scene poster' src={src} onError={onError} />,
   Video: ({ src, className, autoplay, muted, loop, controls, onTimeUpdate, onError }: any) => <div data-testid='scene-video' className={className} data-src={src} data-autoplay={autoplay} data-muted={muted} data-loop={loop} data-controls={controls}>
     <button onClick={() => onTimeUpdate?.({ detail: { currentTime: 1 } })}>first frame</button>
     <button onClick={onError}>video error</button>
@@ -17,6 +17,13 @@ test('missing or inactive clip keeps original artwork without mounting a player'
   expect(screen.queryByTestId('scene-video')).toBeNull()
   rerender(<ThemeSceneBackground poster='/still.webp' src='/scene.mp4' active={false} />)
   expect(screen.queryByTestId('scene-video')).toBeNull()
+})
+
+test('reports a failed still image to its owner so the scene retry remains available', () => {
+  const reportError = jest.fn()
+  render(<ThemeSceneBackground poster='/failed.webp' active={false} onPosterError={reportError} />)
+  fireEvent.error(screen.getByAltText('scene poster'))
+  expect(reportError).toHaveBeenCalledTimes(1)
 })
 
 test('reveals a silent looping clip only after a decoded frame; hiding releases the player', () => {

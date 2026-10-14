@@ -12,7 +12,7 @@ let mockScheme = 'light'
 jest.mock('../../src/components/BalancedThemeContext', () => ({ useBalancedTheme: () => ({ theme: mockTheme }) }))
 jest.mock('../../src/components/AppColorSchemeContext', () => ({ useAppColorSchemeOptional: () => ({ scheme: mockScheme }) }))
 jest.mock('../../src/utils/theme-navigation-bar', () => ({ applyThemeNavigationBar: jest.fn() }))
-jest.mock('../../src/utils/balanced-theme-scenes', () => ({ BALANCED_SCENES: { naturalPaper: '/paper.webp' }, loadBalancedScenes: jest.fn().mockResolvedValue(undefined) }))
+jest.mock('../../src/utils/balanced-theme-scenes', () => ({ BALANCED_SCENES: { naturalPaper: '/paper.webp' }, loadBalancedScenes: jest.fn().mockResolvedValue(undefined), getBalancedScenesRevision: () => 0, subscribeBalancedScenes: () => () => {}, reportBalancedSceneImageError: jest.fn() }))
 
 const listeners = new Map<string, Set<() => void>>()
 const shows = new Set<() => void>()
