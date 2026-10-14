@@ -2,7 +2,7 @@ import * as React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { BalancedThemeExperience } from '../../src/components/BalancedThemeExperience'
 import { BALANCED_THEME_IDS, type BalancedThemeId } from '../../src/utils/balanced-theme'
-import { loadBalancedScenes, retryBalancedScenes } from '../../src/utils/balanced-theme-scenes'
+import { loadBalancedScenes, reportBalancedSceneImageError, retryBalancedScenes } from '../../src/utils/balanced-theme-scenes'
 import easternProfileGold from '../../src/assets/balanced-themes/eastern-profile-gold-v11.webp'
 
 let mockTheme: BalancedThemeId = 'clarity-order'
@@ -13,20 +13,39 @@ jest.mock('../../src/components/InkWellness', () => ({ useInkWellness: () => moc
 jest.mock('../../src/utils/balanced-theme-scenes', () => {
   const loadBalancedScenes = jest.fn().mockResolvedValue(undefined)
   let revision = 0
-  const listeners = new Set<(revision: number, imageError?: boolean) => void>()
+  const listeners = new Set<(revision: number, imageError?: boolean, detail?: string) => void>()
   return {
   BALANCED_SCENES: { miniatureGarden: '/garden.webp', waterVessel: '/water.webp', miniatureProfile: '/miniature-profile.webp', picturebookProfile: '/picturebook-profile.webp', galleryProfile: '/gallery-profile.webp' },
     loadBalancedScenes,
     retryBalancedScenes: () => loadBalancedScenes().then(() => { revision += 1; listeners.forEach(listener => listener(revision)) }),
     getBalancedScenesRevision: () => revision,
-    subscribeBalancedScenes: (listener: (revision: number, imageError?: boolean) => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
-    reportBalancedSceneImageError: () => listeners.forEach(listener => listener(revision, true)),
+    subscribeBalancedScenes: (listener: (revision: number, imageError?: boolean, detail?: string) => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    reportBalancedSceneImageError: (detail?: string) => listeners.forEach(listener => listener(revision, true, detail)),
   }
 })
 const home = { date: '2026-09-28', mealCount: 2, waterMl: 850, calories: 1024, authenticated: true, loading: false }
 beforeEach(() => { mockWellness = false; mockTheme = 'clarity-order'; jest.clearAllMocks(); (loadBalancedScenes as jest.Mock).mockResolvedValue(undefined) })
 
 describe('balanced theme live experiences', () => {
+  it('shows the native error only in development diagnostics and preserves the retry action', async () => {
+    const globals = globalThis as unknown as { __ENABLE_DEV_DEBUG_UI__?: boolean }
+    const previous = globals.__ENABLE_DEV_DEBUG_UI__
+    globals.__ENABLE_DEV_DEBUG_UI__ = true
+    try {
+      mockTheme = 'miniature-world'
+      const { rerender } = render(<BalancedThemeExperience surface='home' home={home} />)
+      await waitFor(() => expect(screen.queryByText('场景未能打开，轻触重试')).not.toBeInTheDocument())
+      act(() => reportBalancedSceneImageError('组件下载：loadSubpackage: fail'))
+      expect(screen.getByText(/诊断 S3｜组件下载：loadSubpackage: fail/)).toBeInTheDocument()
+      globals.__ENABLE_DEV_DEBUG_UI__ = false
+      rerender(<BalancedThemeExperience surface='home' home={home} />)
+      expect(screen.queryByText(/诊断 S3/)).not.toBeInTheDocument()
+      expect(screen.getByText('场景未能打开，轻触重试')).toBeInTheDocument()
+    } finally {
+      if (previous === undefined) delete globals.__ENABLE_DEV_DEBUG_UI__
+      else globals.__ENABLE_DEV_DEBUG_UI__ = previous
+    }
+  })
   it.each(BALANCED_THEME_IDS)('%s keeps its intended home actions usable', async theme => {
     mockTheme = theme
     const onRecord = jest.fn()

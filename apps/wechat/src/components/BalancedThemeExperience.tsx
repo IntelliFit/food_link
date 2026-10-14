@@ -49,6 +49,7 @@ const PHILOSOPHY = {
 }
 const SURFACE_INDEX = { home: 0, stats: 1, community: 2, profile: 3 } as const
 const SURFACE_NAME = { home: '首页', stats: '分析', community: '圈子', profile: '我的' }
+declare const __ENABLE_DEV_DEBUG_UI__: boolean
 
 /** Scene artwork is decorative. Metrics and actions belong to the live business page. */
 export function BalancedThemeExperience({ surface, home, children, onRecord, onWater, onMeals, onPublish }: Props): React.ReactElement | null {
@@ -57,6 +58,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const motion = useThemeMotion()
   const [scenesReady, setScenesReady] = React.useState(false)
   const [sceneError, setSceneError] = React.useState(false)
+  const [sceneFailure, setSceneFailure] = React.useState('')
   const [loadedProfileArt, setLoadedProfileArt] = React.useState<string>()
   const [sceneAttempt, setSceneAttempt] = React.useState(getBalancedScenesRevision)
   const sceneGeneration = React.useRef(0)
@@ -65,10 +67,10 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     sceneGeneration.current += 1
     let unsubscribe = () => {}
     if (!wellness && theme !== 'clarity-order' && theme !== 'clear-care') {
-      unsubscribe = subscribeBalancedScenes((revision, imageError) => {
+      unsubscribe = subscribeBalancedScenes((revision, imageError, detail) => {
         if (active) {
-          if (imageError) { setSceneError(true); return }
-          setScenesReady(true); setSceneError(false); setSceneAttempt(revision)
+          if (imageError) { setSceneError(true); if (detail) setSceneFailure(detail); return }
+          setScenesReady(true); setSceneError(false); setSceneFailure(''); setSceneAttempt(revision)
         }
       })
       loadBalancedScenes().then(() => { if (active) { setScenesReady(true); setSceneError(false) } }).catch(() => { if (active) setSceneError(true) })
@@ -86,7 +88,9 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     setSceneAttempt(attempt => attempt + 1)
     retryBalancedScenes().then(() => { if (generation === sceneGeneration.current) setScenesReady(true) }).catch(() => { if (generation === sceneGeneration.current) setSceneError(true) })
   }
-  const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}>场景未能打开，轻触重试</View>
+  const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}><Text>场景未能打开，轻触重试</Text>
+    {typeof __ENABLE_DEV_DEBUG_UI__ !== 'undefined' && __ENABLE_DEV_DEBUG_UI__ && <Text style={{ display: 'block', fontSize: '11px', lineHeight: '1.5', whiteSpace: 'normal' }}>诊断 S3｜{sceneFailure || '未收到原生错误详情'}</Text>}
+  </View>
   const definition = getBalancedThemeDefinition(theme)
   const title = TITLES[theme][SURFACE_INDEX[surface]]
   const now = new Date()

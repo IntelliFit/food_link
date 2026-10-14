@@ -57,7 +57,7 @@ test('only this resource package failures request recovery and listener cleanup 
   listener({ subpackage: [{ root: 'packageExtra/' }], errMsg: 'loadSubpackage: fail' })
   expect(owner).not.toHaveBeenCalled()
   listener({ subpackage: [{ root: 'packageThemeScenes/' }], errMsg: 'loadSubpackage: fail' })
-  expect(owner).toHaveBeenLastCalledWith(0, true)
+  expect(owner).toHaveBeenLastCalledWith(0, true, '组件下载：loadSubpackage: fail')
   await resources.retryBalancedScenes()
   expect(owner).toHaveBeenLastCalledWith(1)
   stop()
