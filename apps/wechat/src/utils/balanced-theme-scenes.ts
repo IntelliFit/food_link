@@ -1,5 +1,3 @@
-type AsyncRequire = { async: (path: string) => Promise<unknown> }
-
 const root = '/packageThemeScenes/assets'
 export const BALANCED_SCENES = {
   miniatureGarden: `${root}/miniature-garden-v4.webp`,
@@ -29,36 +27,43 @@ export const BALANCED_SCENES = {
 let pending: Promise<void> | undefined
 let retryPending: Promise<void> | undefined
 let revision = 0
-let ready = false
 const listeners = new Set<(revision: number, imageError?: boolean) => void>()
+type LazyError = { subpackage?: Array<string | { root?: string; name?: string }>; errMsg?: string }
+declare const wx: { onLazyLoadError?: (listener: (event: LazyError) => void) => void; offLazyLoadError?: (listener: (event: LazyError) => void) => void }
+const onLazyError = (event: LazyError) => {
+  if (event.subpackage?.some(pkg => typeof pkg === 'string' ? /packageThemeScenes|theme-scenes/.test(pkg) : pkg.root?.startsWith('packageThemeScenes') || pkg.name === 'theme-scenes')) {
+    console.warn('[theme-scenes] component package unavailable:', event.errMsg || 'unknown error')
+    reportBalancedSceneImageError()
+  }
+}
 
 export function getBalancedScenesRevision(): number { return revision }
 export function subscribeBalancedScenes(listener: (revision: number, imageError?: boolean) => void): () => void {
+  if (!listeners.size && typeof wx !== 'undefined') wx.onLazyLoadError?.(onLazyError)
   listeners.add(listener)
-  return () => { listeners.delete(listener) }
+  return () => {
+    listeners.delete(listener)
+    if (!listeners.size && typeof wx !== 'undefined') wx.offLazyLoadError?.(onLazyError)
+  }
 }
 function notifyReady(): void { listeners.forEach(listener => listener(revision)) }
 /** Image failure requests a retry affordance without invalidating the downloaded package. */
 export function reportBalancedSceneImageError(): void { listeners.forEach(listener => listener(revision, true)) }
 
-/** Share one download across all tabs; a failed request remains retryable. */
+/** Permit rendering; the async native component owns the package download.
+ * Loading JS does not permit a main-package Image to read private artwork. */
 export function loadBalancedScenes(): Promise<void> {
   if (!pending) {
-    // This utility is shared in root common.js. WeChat require.async accepts
-    // module-relative paths; image resource URLs below remain root-relative.
-    pending = Promise.resolve().then(() => (require as unknown as AsyncRequire).async('./packageThemeScenes/ready.js'))
-      .then(() => { ready = true; notifyReady() })
-      .catch(error => { pending = undefined; ready = false; throw error })
+    pending = Promise.resolve().then(notifyReady)
   }
   return pending
 }
 
-/** A package retry also remounts images that previously failed to decode. */
+/** Remount the native async components and images that failed to decode. */
 export function retryBalancedScenes(): Promise<void> {
   if (!retryPending) {
-    const wasReady = ready
     revision += 1
-    retryPending = loadBalancedScenes().then(() => { if (wasReady) notifyReady() }).finally(() => { retryPending = undefined })
+    retryPending = Promise.resolve().then(notifyReady).finally(() => { retryPending = undefined })
   }
   return retryPending
 }

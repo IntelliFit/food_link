@@ -2,6 +2,13 @@ import * as React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { ThemeSceneBackground } from '../src/components/ThemeSceneBackground'
 
+// Emulate the native load/error event boundary; native component behavior is
+// separately exercised against its real Component definition in a VM.
+jest.mock('../src/components/SceneArtwork', () => ({
+  ...jest.requireActual('../src/components/SceneArtwork'),
+  SceneArtwork: ({ src, className, onLoad, onError }: any) => require('react').createElement('img', { src, className, alt: 'scene poster', onLoad, onError }),
+}))
+
 jest.mock('@tarojs/components', () => ({
   View: ({ children, className }: any) => <div className={className}>{children}</div>,
   Image: ({ src, onError }: any) => <img alt='scene poster' src={src} onError={onError} />,
@@ -41,6 +48,13 @@ test('reveals a silent looping clip only after a decoded frame; hiding releases 
   expect(screen.getByAltText('scene poster')).toBeInTheDocument()
   rerender(<ThemeSceneBackground poster='/still.webp' src='/scene.mp4' active />)
   expect(screen.getByTestId('scene-video')).not.toHaveClass('is-playing')
+})
+
+test('packaged clips wait for the native poster instead of treating a JS sentinel as ready', () => {
+  const { container } = render(<ThemeSceneBackground poster='/packageThemeScenes/assets/water-home-v5.webp' src='/packageThemeScenes/assets/water-home-v5.mp4' active />)
+  expect(screen.queryByTestId('scene-video')).toBeNull()
+  fireEvent.load(container.querySelector('img')!)
+  expect(screen.getByTestId('scene-video')).toBeInTheDocument()
 })
 
 test('failed playback falls back to the still and a new source can recover', () => {

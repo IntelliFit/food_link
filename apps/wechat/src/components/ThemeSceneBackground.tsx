@@ -1,6 +1,7 @@
-import { Image, Video, View } from '@tarojs/components'
+import { Video, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import * as React from 'react'
+import { isPackagedScene, SceneArtwork } from './SceneArtwork'
 import './ThemeSceneBackground.scss'
 
 let sceneVideoSequence = 0
@@ -11,12 +12,14 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
   const [playing, setPlaying] = React.useState(false)
   const [progressed, setProgressed] = React.useState(false)
   const [failed, setFailed] = React.useState(false)
+  const [loadedPoster, setLoadedPoster] = React.useState<string>()
+  const packageReady = !isPackagedScene(poster) || loadedPoster === poster
   const [videoId] = React.useState(() => `theme-scene-video-${++sceneVideoSequence}`)
   React.useEffect(() => {
     let cancelled = false
     setPlaybackSrc(undefined)
     setFailed(false)
-    if (!src || !active) return () => { cancelled = true }
+    if (!src || !active || !packageReady) return () => { cancelled = true }
     const getEnv = (Taro as unknown as { getEnv?: () => string }).getEnv
     if (typeof getEnv !== 'function' || getEnv() !== Taro.ENV_TYPE.WEAPP) {
       setPlaybackSrc(src)
@@ -34,7 +37,7 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
       if (!cancelled) setFailed(true)
     }
     return () => { cancelled = true }
-  }, [active, src])
+  }, [active, packageReady, src])
   const play = React.useCallback(() => {
     if (!playbackSrc || !active) return
     Taro.nextTick(() => Taro.createVideoContext(videoId).play())
@@ -50,7 +53,7 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
   const showVideo = Boolean(playbackSrc && active && !failed)
   if (!poster && !showVideo) return null
   return <View className={`${className} bt-scene-background${showVideo ? ' has-video-source' : ''}${playing ? ' has-started' : ''}${progressed ? ' has-progressed' : ''}${failed ? ' has-failed' : ''}`} aria-hidden>
-    {poster && <Image className='bt-scene-background__poster' src={poster} mode='aspectFill' onError={onPosterError} />}
+    {poster && <SceneArtwork key={poster} className='bt-scene-background__poster' src={poster} mode='aspectFill' onLoad={() => setLoadedPoster(poster)} onError={() => { setLoadedPoster(undefined); onPosterError?.() }} />}
     {showVideo && <Video id={videoId} key={playbackSrc} className={`bt-scene-background__video${playing ? ' is-playing' : ''}`}
       src={playbackSrc!} autoplay loop muted controls={false} objectFit='cover' initialTime={initialTime}
       showCenterPlayBtn={false} showPlayBtn={false} showFullscreenBtn={false} showProgress={false}

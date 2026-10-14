@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
 import { createStyleImportPlugin } from 'vite-plugin-style-import'
+import type { Plugin } from 'vite'
 
 import devConfig from './dev'
 import prodConfig from './prod'
@@ -65,6 +66,28 @@ loadTaroEnv()
 const vantIconWoff2Base64 = readFileSync(join(appRoot, 'src/assets/vant-icon/vant-icon.woff2')).toString('base64')
 const vantIconWoffBase64 = readFileSync(join(appRoot, 'src/assets/vant-icon/vant-icon.woff')).toString('base64')
 
+// Taro CLI replaces mini.modifyBuildAssets. Run after its emit hooks instead.
+const themeSceneNativeOwners: Plugin = {
+  name: 'theme-scene-native-async-owners',
+  enforce: 'post',
+  generateBundle: {
+    order: 'post',
+    handler(_options, bundle) {
+      for (const [fileName, asset] of Object.entries(bundle)) {
+        if (asset.type !== 'asset' || !fileName.endsWith('.json')) continue
+        const config = JSON.parse(typeof asset.source === 'string' ? asset.source : Buffer.from(asset.source).toString('utf8'))
+        if (fileName === 'app.json') {
+          if (config.usingComponents) delete config.usingComponents['theme-scene-image']
+        } else if (fileName === 'comp.json' || fileName === 'custom-wrapper.json' || config.usingComponents?.comp) {
+          config.usingComponents = { ...config.usingComponents, 'theme-scene-image': '/packageThemeScenes/components/scene-image/index' }
+          config.componentPlaceholder = { ...config.componentPlaceholder, 'theme-scene-image': 'view' }
+        } else continue
+        asset.source = JSON.stringify(config, null, 2)
+      }
+    },
+  },
+}
+
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
   const apiBaseUrlRelease = process.env.TARO_APP_API_BASE_URL_RELEASE || ''
@@ -118,6 +141,7 @@ export default defineConfig<'vite'>(async (merge) => {
         { from: 'src/assets/pets/clothing', to: 'assets/pets/clothing' },
         { from: 'src/assets/pets/motions', to: 'assets/pets/motions' },
         { from: 'src/packageThemeScenes/assets', to: 'packageThemeScenes/assets' },
+        { from: 'src/packageThemeScenes/components', to: 'packageThemeScenes/components' },
         { from: 'src/packageThemeScenes/ready.js', to: 'packageThemeScenes/ready.js' },
         { from: 'src/packageRecap/assets/recap', to: 'packageRecap/assets/recap' },
         { from: 'src/packageRecap/assets/recap-v5', to: 'packageRecap/assets/recap-v5' },
@@ -150,6 +174,7 @@ export default defineConfig<'vite'>(async (merge) => {
     compiler: {
       type: 'vite',
       vitePlugins: [
+        themeSceneNativeOwners,
         createStyleImportPlugin({
           libs: [
             {
