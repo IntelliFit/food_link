@@ -2,9 +2,20 @@ import type { FoodRecord } from './api'
 
 export type PhotoPosterLabels = 'calories' | 'nutrients'
 
-/** 照片按原比例完整绘制，署名放在照片外。 */
+const PORTRAIT_PHOTO_RATIO = 3 / 4
+const PORTRAIT_PADDING = 16
+const PORTRAIT_HEADER_HEIGHT = 64
+const PORTRAIT_LABEL_HEIGHT = 112
+const SIGNATURE_HEIGHT = 52
+
+/** 竖图使用 3:4 照片区，上下留给贴纸；横图沿用原比例。 */
 export function computePhotoPosterHeight(image: { width: number; height: number }, width: number): number {
-  return Math.round(width * image.height / image.width) + 52
+  if (image.height > image.width) {
+    const photoWidth = width - PORTRAIT_PADDING * 2
+    return PORTRAIT_HEADER_HEIGHT + Math.round(photoWidth / PORTRAIT_PHOTO_RATIO)
+      + PORTRAIT_LABEL_HEIGHT + SIGNATURE_HEIGHT
+  }
+  return Math.round(width * image.height / image.width) + SIGNATURE_HEIGHT
 }
 
 function pill(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
@@ -39,13 +50,32 @@ export function drawPhotoRecordPoster(ctx: CanvasRenderingContext2D, options: {
   qrCodeImage?: { width: number; height: number } | null
 }) {
   const { width: w, height: h, image, record, labels, nickname, qrCodeImage } = options
-  const photoHeight = h - 52
+  const portrait = image.height > image.width
+  const photoX = portrait ? PORTRAIT_PADDING : 0
+  const photoY = portrait ? PORTRAIT_HEADER_HEIGHT : 0
+  const photoWidth = w - photoX * 2
+  const photoHeight = portrait ? Math.round(photoWidth / PORTRAIT_PHOTO_RATIO) : h - SIGNATURE_HEIGHT
+  const footerY = h - SIGNATURE_HEIGHT
   ctx.save()
   ctx.fillStyle = '#fffaf2'
   ctx.fillRect(0, 0, w, h)
-  ctx.drawImage(image as CanvasImageSource, 0, 0, w, photoHeight)
+  if (portrait) {
+    // 居中取景保持比例，避免全屏拍摄的长边继续撑高打卡图。
+    const sourceHeight = Math.min(image.height, image.width / PORTRAIT_PHOTO_RATIO)
+    const sourceWidth = sourceHeight * PORTRAIT_PHOTO_RATIO
+    const sourceX = (image.width - sourceWidth) / 2
+    const sourceY = (image.height - sourceHeight) / 2
+    ctx.save()
+    pill(ctx, photoX, photoY, photoWidth, photoHeight, '#fffaf2')
+    ctx.clip()
+    ctx.drawImage(image as CanvasImageSource, sourceX, sourceY, sourceWidth, sourceHeight,
+      photoX, photoY, photoWidth, photoHeight)
+    ctx.restore()
+  } else {
+    ctx.drawImage(image as CanvasImageSource, 0, 0, photoWidth, photoHeight)
+  }
 
-  // 横图缩小贴纸，仍留出中间区域给食物；不裁图、不拉伸。
+  // 横图缩小贴纸；竖图的标注放在照片外，给食物留出完整取景区。
   const scale = Math.min(1, photoHeight / 280)
   ctx.save()
   ctx.scale(scale, scale)
@@ -83,9 +113,9 @@ export function drawPhotoRecordPoster(ctx: CanvasRenderingContext2D, options: {
   ctx.stroke()
 
   const cardHeight = labels === 'nutrients' ? 88 : 58
-  const y = sh - cardHeight - 16
-  const cardWidth = Math.min(sw - 32, labels === 'nutrients' ? 332 : 214)
-  pill(ctx, 16, y, cardWidth, cardHeight, 'rgba(255, 250, 240, 0.94)')
+  const y = portrait ? photoY + photoHeight + 12 : sh - cardHeight - 16
+  const cardWidth = portrait ? photoWidth : Math.min(sw - 32, labels === 'nutrients' ? 332 : 214)
+  pill(ctx, 16, y, cardWidth, cardHeight, portrait ? '#fff' : 'rgba(255, 250, 240, 0.94)')
   ctx.textAlign = 'left'
   ctx.fillStyle = '#366b50'
   ctx.font = 'bold 27px sans-serif'
@@ -114,10 +144,10 @@ export function drawPhotoRecordPoster(ctx: CanvasRenderingContext2D, options: {
   const name = nickname ? `${nickname}的美食日记` : '我的美食日记'
   let shortName = name
   while (ctx.measureText(shortName).width > w - 76 && shortName.length > 1) shortName = shortName.slice(0, -1)
-  ctx.fillText(shortName === name ? name : `${shortName}…`, 16, photoHeight + 18)
+  ctx.fillText(shortName === name ? name : `${shortName}…`, 16, footerY + 18)
   ctx.fillStyle = '#938674'
   ctx.font = '10px sans-serif'
-  ctx.fillText('食探 · 好好吃饭，好好生活', 16, photoHeight + 36)
-  if (qrCodeImage) ctx.drawImage(qrCodeImage as CanvasImageSource, w - 46, photoHeight + 7, 38, 38)
+  ctx.fillText('食探 · 好好吃饭，好好生活', 16, footerY + 36)
+  if (qrCodeImage) ctx.drawImage(qrCodeImage as CanvasImageSource, w - 46, footerY + 7, 38, 38)
   ctx.restore()
 }
