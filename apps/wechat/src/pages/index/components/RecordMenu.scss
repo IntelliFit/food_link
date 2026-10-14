@@ -9,8 +9,8 @@
   --rm-primary: var(--bt-accent, #397e66);
   --rm-primary-ink: var(--bt-accent-text, #fff);
   --rm-icon-panel: transparent;
-  --rm-radius: var(--bt-radius, 24rpx);
-  --rm-card-radius: var(--bt-control-radius, 12rpx);
+  --rm-radius: 32rpx;
+  --rm-card-radius: 20rpx;
   --rm-font: sans-serif;
   box-sizing: border-box;
   padding: 24rpx 28rpx 28rpx;
@@ -78,7 +78,7 @@
   }
   &.record-menu-theme--miniature-world {
     --rm-font: 'Songti SC', STSong, SimSun, serif;
-    --rm-card-radius: 12rpx;
+    --rm-card-radius: 20rpx;
     .record-menu-grid-card { border-width: 3rpx !important; border-style: double !important; box-shadow: 0 6rpx 0 var(--rm-border) !important; }
     .record-menu-grid-icon-wrap { border-radius: 50%; border: 1rpx solid var(--rm-border); }
     .record-menu-grid-v2 { row-gap: 24rpx; }
@@ -86,9 +86,9 @@
   }
   &.record-menu-theme--picturebook-companion {
     --rm-font: 'Songti SC', STSong, SimSun, serif;
-    --rm-card-radius: 10rpx;
+    --rm-card-radius: 20rpx;
     .record-menu-grid-card { border-width: 2rpx !important; box-shadow: 3rpx 4rpx 0 var(--rm-border) !important; }
-    .record-menu-grid-card:not(.record-menu-grid-card--camera)::after { content: ''; position: absolute; right: 0; top: 0; width: 20rpx; height: 20rpx; background: linear-gradient(45deg, var(--rm-border) 0 50%, var(--rm-panel) 51%); border-radius: 0 8rpx 0 0; pointer-events: none; }
+    .record-menu-grid-card:not(.record-menu-grid-card--camera)::after { content: ''; position: absolute; right: 6rpx; top: 6rpx; width: 14rpx; height: 14rpx; background: linear-gradient(45deg, var(--rm-border) 0 50%, var(--rm-panel) 51%); border-radius: 6rpx; pointer-events: none; }
     .record-menu-list-item-v2 { border-bottom-style: dashed !important; }
     .record-menu-grid-index { font-family: var(--rm-font); }
   }
@@ -114,8 +114,8 @@
   &.record-menu-theme--eastern-salon {
     --rm-panel: #1c1d17; --rm-card: #292a21; --rm-ink: #f0e3c9; --rm-muted: #c2b394;
     --rm-border: #927a50; --rm-primary: #c3a476; --rm-primary-ink: #191913;
-    --rm-font: 'Songti SC', STSong, SimSun, serif; --rm-card-radius: 4rpx;
-    --rm-radius: 8rpx;
+    --rm-font: 'Songti SC', STSong, SimSun, serif; --rm-card-radius: 20rpx;
+    --rm-radius: 32rpx;
     border-style: double !important; border-width: 3rpx !important; box-shadow: inset 0 0 0 6rpx #927a5018 !important;
     .record-menu-themed-heading > text:first-child { font-weight: 500; letter-spacing: 3rpx; }
     .record-menu-grid-card { border-width: 2rpx !important; }
@@ -129,6 +129,11 @@
 
 // Complete the ink treatment for the optional, expanded development section.
 .record-menu-modal .record-menu-content.record-menu-content--ink {
+  border-radius: 32rpx !important;
+  .record-menu-grid-card, .record-menu-grid-icon-wrap,
+  .record-menu-dev-trigger, .record-menu-dev-url-block,
+  .record-menu-dev-items, .record-menu-dev-url-input,
+  .record-menu-dev-url-save { border-radius: 20rpx !important; }
   .record-menu-handle-bar { background: #999; }
   .record-menu-list-item-v2 { border-color: #ccc; }
   .record-menu-dev-toolkit { border-color: #ccc; }

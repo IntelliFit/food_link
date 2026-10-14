@@ -1,0 +1,113 @@
+/* Shared surface geometry. Keep theme paint, page scenes and chart shapes intact. */
+.fl-page-theme-root.fl-page-theme-root--balanced[class*='fl-balanced-theme--'],
+.fl-page-theme-root.fl-page-theme-root--wellness {
+  --ui-round-card: 24rpx;
+  --ui-round-control: 20rpx;
+  --ui-round-image: 24rpx;
+  --ui-round-sheet: 32rpx;
+
+  .main-card, .macro-card, .micros-preview-card,
+  .home-experience-card, .home-calendar-module, .home-nutrition-module,
+  .home-supplements-module, .home-health-profile-prompt,
+  .stats-card, .analysis-card, .health-index-preview-card,
+  .health-index-gate-card, .meal-structure-card, .ai-insight-card,
+  .action-plan-panel, .action-plan-grid .action-section, .action-score-delta,
+  .feed-card, .circle-card, .ranking-banner, .login-tip, .feed-empty,
+  .profile-header-section, .profile-quick-actions, .profile-card,
+  .profile-section, .member-card, .profile-recap-section,
+  .balanced-theme-entry, .balanced-theme-option, .tool-card,
+  .tp-section, .tp-section .profile-section-heading,
+  .theme-profile-sections, .recap-archive-entry,
+  .tr-record, .tr-day, .tr-story, .tr-film__frame,
+  .tr-diorama__sign, .tr-diorama__river,
+  .analysis-option-card, .precision-capture-mode-card,
+  .image-preview-section {
+    border-radius: var(--ui-round-card) !important;
+  }
+
+  .bt-action, .health-next-action-btn, .risk-focus-edit-btn,
+  .analysis-empty-action, .water-quick-btn, .home-login-banner-btn,
+  .feed-search-wrap, .feed-filter-panel, .feed-filter-trigger-combined,
+  .feed-filter-confirm-btn, .feed-publish-btn,
+  .user-days-pill, .user-id-chip, .member-upgrade-btn,
+  .history-link, .precision-video-action,
+  .precision-capture-slot__action,
+  .bt-gallery-caption, .bt-gallery-bottom, .bt-scroll, .bt-chapter-label,
+  .tc-sign, .tc-caption, .health-index-preview-badge {
+    border-radius: var(--ui-round-control) !important;
+  }
+
+  .analysis-tabs-container, .analysis-panel-control,
+  .segmented-control, .segmented-control .segment-item,
+  .analysis-panel-control .segment-item,
+  .analysis-panel-control .segment-item.active {
+    border-radius: var(--ui-round-control) !important;
+  }
+
+  .feed-image, .feed-image-swiper, .feed-image image,
+  .feed-image-swiper image, .bt-clarity-photo, .bt-clarity-photo image,
+  .precision-video-preview-wrap, .precision-capture-slot__preview {
+    border-radius: var(--ui-round-image) !important;
+  }
+
+  .balanced-theme-picker__panel, .home-toolbox__sheet,
+  .help-sheet-content, .onboarding-guide__panel {
+    border-radius: var(--ui-round-sheet) !important;
+  }
+}
+
+@each $theme in eastern-salon, modern-gallery, way-of-water {
+  .fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} {
+    .stats-range-dropdown { border-radius: var(--ui-round-control) !important; }
+  }
+}
+.fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--modern-gallery {
+  .risk-overview-badge, .risk-overview-chip, .risk-score-explain {
+    border-radius: var(--ui-round-control) !important;
+  }
+}
+
+/* Message plaques use the same soft corners; circular water bubbles stay round. */
+@each $theme in clarity-order, eastern-salon, modern-gallery, miniature-world, picturebook-companion, clear-care {
+  .fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} {
+    .social-menu__trigger, .social-menu__label {
+      border-radius: var(--ui-round-control) !important;
+    }
+  }
+}
+@each $theme in clarity-order, eastern-salon, modern-gallery, picturebook-companion {
+  .fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} {
+    .social-menu__ball { border-radius: var(--ui-round-control) !important; }
+  }
+}
+
+/* Raise the old square theme tokens without replacing leaf or circular shapes. */
+@each $theme in clarity-order, eastern-salon, modern-gallery {
+  .fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} {
+    --bt-radius: 24rpx;
+    --bt-control-radius: 20rpx;
+    --bt-toolbox-radius: 24rpx;
+    .profile-page .tp-section__mark, .profile-page .list-icon,
+    .home-toolbox__item, .home-toolbox__item-icon {
+      border-radius: 16rpx !important;
+    }
+  }
+}
+@each $theme in clarity-order, modern-gallery {
+  .fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} {
+    .home-page .month-calendar-cell.is-selected { border-radius: 16rpx !important; }
+    .home-page .date-item.is-selected .date-day-circle { border-radius: 16rpx !important; }
+  }
+}
+.fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--miniature-world {
+  .bt-experience--home .bt-heading { border-radius: 20rpx !important; }
+  .profile-page .list-item { border-radius: 20rpx !important; }
+}
+.fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--picturebook-companion {
+  .theme-chapter--picturebook-companion .tc-title { border-radius: 20rpx !important; }
+}
+
+.fl-page-theme-root.fl-page-theme-root--wellness {
+  .profile-card.list-card, .stats-card.risk-card,
+  .analysis-panel-control .segment-item.active { border-radius: 24rpx !important; }
+}

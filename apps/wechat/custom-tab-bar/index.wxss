@@ -557,7 +557,7 @@
 
 /* 01: an aligned grid key with a centered black base. */
 .custom-tab-bar--balanced.custom-tab-bar--theme-clarity-order {
-  --capture-radius: 12rpx; --capture-surface: #c8ff00; --capture-ink: #111;
+  --capture-radius: 24rpx; --capture-surface: #c8ff00; --capture-ink: #111;
   --capture-label: #111;
   --capture-outline: #111; --capture-border: 3rpx; --capture-shadow: 0 5rpx 0 #111;
 }
@@ -570,27 +570,27 @@
 }
 /* 03: a straight lacquer seal, with an inset gold frame. */
 .custom-tab-bar--balanced.custom-tab-bar--theme-eastern-salon {
-  --capture-width: 88rpx; --capture-radius: 18rpx; --capture-surface: #20231b;
+  --capture-width: 88rpx; --capture-radius: 24rpx; --capture-surface: #20231b;
   --capture-ink: #f2dbab; --capture-outline: #ba9b60; --capture-inner-line: #ba9b60;
   --capture-label: #5f5138;
   --capture-shadow: 0 5rpx 0 #817044;
 }
 /* 04: a red exhibition key, grounded on a blue plinth. */
 .custom-tab-bar--balanced.custom-tab-bar--theme-modern-gallery {
-  --capture-radius: 4rpx; --capture-surface: #b92d22; --capture-ink: #fff;
+  --capture-radius: 24rpx; --capture-surface: #b92d22; --capture-ink: #fff;
   --capture-label: #b92d22;
   --capture-outline: #111; --capture-border: 3rpx; --capture-shadow: 0 6rpx 0 #173eb5;
 }
 /* 05: a turquoise tool set into a wooden frame. */
 .custom-tab-bar--balanced.custom-tab-bar--theme-miniature-world {
-  --capture-width: 98rpx; --capture-radius: 22rpx; --capture-surface: #236c81;
+  --capture-width: 98rpx; --capture-radius: 24rpx; --capture-surface: #236c81;
   --capture-ink: #fff7e8; --capture-outline: #745535; --capture-border: 4rpx;
   --capture-label: #493321;
   --capture-inner-line: #d9bf8e; --capture-shadow: 0 6rpx 0 #745535;
 }
 /* 06: a stitched, upright bookplate. */
 .custom-tab-bar--balanced.custom-tab-bar--theme-picturebook-companion {
-  --capture-radius: 14rpx; --capture-surface: #ecd8b0; --capture-ink: #213731;
+  --capture-radius: 24rpx; --capture-surface: #ecd8b0; --capture-ink: #213731;
   --capture-outline: #6d5139; --capture-inner-line: #8e7350; --capture-inner-style: dashed;
   --capture-label: #eed3a1;
   --capture-shadow: 0 5rpx 0 #6d5139;
