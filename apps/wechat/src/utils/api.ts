@@ -8189,6 +8189,25 @@ export async function bindMarketingQRUser(code: string, visitorId: string): Prom
 export type PublicFoodLibraryType = 'common' | 'campus' | 'merchant'
 export type CanteenScope = 'all' | 'campus' | 'community'
 
+export interface CanteenLocationItem {
+  organization_key: string
+  organization_name: string
+  city: string
+  district: string
+  canteen_key: string
+  canteen_name: string
+  address: string
+  food_count: number
+}
+
+export async function getCanteenLocations(): Promise<CanteenLocationItem[]> {
+  const response = await authenticatedRequest('/api/public-food-library/canteen-locations', { method: 'GET', timeout: 15000 })
+  if (response.statusCode !== 200 || !Array.isArray((response.data as any)?.list)) {
+    throw new Error('暂时无法取得社区与园区地点，请重试')
+  }
+  return (response.data as { list: CanteenLocationItem[] }).list
+}
+
 /** 公共食物库条目 */
 export interface PublicFoodLibraryItem {
   id: string
@@ -8231,6 +8250,10 @@ export interface PublicFoodLibraryItem {
   type: PublicFoodLibraryType
   /** 采集来源/真实目录推导的场所类型，不以旧 common/campus 标签猜测 */
   venue_type?: 'university' | 'community' | 'corporate' | 'office_park' | ''
+  venue_organization_key?: string
+  venue_organization_name?: string
+  venue_canteen_key?: string
+  venue_canteen_name?: string
   like_count: number
   comment_count: number
   avg_rating: number
@@ -8499,6 +8522,8 @@ export interface CreatePublicFoodLibraryRequest {
 export interface PublicFoodLibraryListParams {
   /** 全部食堂、校园、社区/园区/企业；与原条目 type 独立 */
   canteen_scope?: CanteenScope
+  venue_organization_key?: string
+  venue_canteen_key?: string
   city?: string
   /** 搜索菜名、学校/校区/食堂、楼层/窗口及地址 */
   keyword?: string
@@ -8556,6 +8581,8 @@ export async function getPublicFoodLibraryList(
   if (params?.offset !== undefined) q.set('offset', String(params.offset))
   if (params?.type) q.set('type', params.type)
   if (params?.canteen_scope) q.set('canteen_scope', params.canteen_scope)
+  if (params?.venue_organization_key) q.set('venue_organization_key', params.venue_organization_key)
+  if (params?.venue_canteen_key) q.set('venue_canteen_key', params.venue_canteen_key)
   if (params?.is_campus_food !== undefined) q.set('is_campus_food', String(params.is_campus_food))
   if (params?.school_id) q.set('school_id', params.school_id)
   if (params?.campus_id) q.set('campus_id', params.campus_id)
@@ -8572,11 +8599,15 @@ export async function getPublicFoodLibraryList(
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取列表失败')
   }
-  const result = response.data as { list: PublicFoodLibraryItem[]; canteen_scope?: CanteenScope }
+  const result = response.data as { list: PublicFoodLibraryItem[]; canteen_scope?: CanteenScope; venue_organization_key?: string; venue_canteen_key?: string }
   // An older server ignores unknown query parameters: never show all ordinary
   // restaurants as canteens when the matching backend has not been deployed.
   if (params?.canteen_scope && result.canteen_scope !== params.canteen_scope) {
     throw new Error('食堂服务尚未更新，请稍后重试')
+  }
+  if ((params?.venue_organization_key && result.venue_organization_key !== params.venue_organization_key) ||
+      (params?.venue_canteen_key && result.venue_canteen_key !== params.venue_canteen_key)) {
+    throw new Error('食堂地点筛选服务尚未更新，请稍后重试')
   }
   return result
 }

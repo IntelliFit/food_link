@@ -68,7 +68,11 @@ type PublicFoodItem struct {
 	AnalysisStatus     string     `gorm:"column:analysis_status;->" json:"analysis_status,omitempty"`
 	AnalysisError      string     `gorm:"column:analysis_error;->" json:"analysis_error,omitempty"`
 	// Derived from the collection source/directory, never a public-library column.
-	VenueType string `gorm:"column:venue_type;->;-:migration" json:"venue_type,omitempty"`
+	VenueType             string `gorm:"column:venue_type;->;-:migration" json:"venue_type,omitempty"`
+	VenueOrganizationKey  string `gorm:"column:venue_organization_key;->;-:migration" json:"venue_organization_key,omitempty"`
+	VenueOrganizationName string `gorm:"column:venue_organization_name;->;-:migration" json:"venue_organization_name,omitempty"`
+	VenueCanteenKey       string `gorm:"column:venue_canteen_key;->;-:migration" json:"venue_canteen_key,omitempty"`
+	VenueCanteenName      string `gorm:"column:venue_canteen_name;->;-:migration" json:"venue_canteen_name,omitempty"`
 }
 
 func (PublicFoodItem) TableName() string { return "public_food_library" }
@@ -130,6 +134,17 @@ type PublicFoodView struct {
 	Collected       bool   `json:"collected"`
 	Author          Author `json:"author"`
 	RecommendReason string `json:"recommend_reason,omitempty"`
+}
+
+type CanteenLocation struct {
+	OrganizationKey  string `json:"organization_key"`
+	OrganizationName string `json:"organization_name"`
+	City             string `json:"city"`
+	District         string `json:"district"`
+	CanteenKey       string `json:"canteen_key"`
+	CanteenName      string `json:"canteen_name"`
+	Address          string `json:"address"`
+	FoodCount        int    `json:"food_count"`
 }
 
 // PublicFoodMapSpot is a server-side aggregation. A spot may be backed by a

@@ -47,6 +47,21 @@
   .canteen-scope-tabs { display: flex; gap: 8rpx; padding: 8rpx 0 16rpx; }
   .canteen-scope-tab { flex: 1; min-width: 0; margin: 0; padding: 0 8rpx; min-height: 80rpx; display: flex; align-items: center; justify-content: center; font-size: 28rpx; line-height: 40rpx; color: var(--campus-muted); background: transparent; border-radius: 18rpx; white-space: nowrap; }
   .canteen-scope-tab.active { color: var(--campus-accent); background: var(--campus-soft); font-weight: 600; }
+  .community-location-select { margin: 0; padding: 0; background: transparent; justify-content: flex-start; text-align: left; }
+  .community-location-row .campus-school-name { font-size: 32rpx; }
+  .community-picker-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: flex-end; background: rgba(0, 0, 0, .4); }
+  .community-picker-sheet { width: 100%; height: 70vh; max-height: 900rpx; display: flex; flex-direction: column; padding: 20rpx 24rpx calc(20rpx + env(safe-area-inset-bottom)); box-sizing: border-box; border-radius: 28rpx 28rpx 0 0; background: var(--campus-surface); }
+  .community-picker-head { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .community-picker-title { color: var(--campus-ink); font-size: 34rpx; line-height: 48rpx; font-weight: 600; }
+  .community-picker-close { width: 80rpx; height: 80rpx; padding: 0; margin: 0; background: transparent; color: var(--campus-muted); font-size: 44rpx; line-height: 80rpx; }
+  .community-picker-search { flex-shrink: 0; min-height: 80rpx; padding: 0 20rpx; margin: 12rpx 0; background: var(--campus-soft); border-radius: 18rpx; color: var(--campus-ink); font-size: 28rpx; }
+  .community-picker-list { flex: 1; height: 0; min-height: 0; }
+  .community-picker-option { display: flex; flex-direction: column; justify-content: center; width: 100%; min-height: 96rpx; margin: 0; padding: 18rpx 16rpx; border-radius: 12rpx; color: var(--campus-ink); background: transparent; text-align: left; font-size: 30rpx; line-height: 42rpx; }
+  .community-picker-option.active { background: var(--campus-soft); color: var(--campus-accent); }
+  .community-picker-name { font-weight: 600; }
+  .community-picker-caption { color: var(--campus-muted); font-size: 26rpx; line-height: 38rpx; margin-top: 4rpx; }
+  .community-picker-empty { display: flex; flex-direction: column; align-items: center; padding: 48rpx 16rpx; gap: 20rpx; color: var(--campus-muted); font-size: 28rpx; }
+  .community-picker-retry { margin: 0; padding: 8rpx 32rpx; background: var(--campus-soft); color: var(--campus-accent); font-size: 28rpx; }
   .campus-browse-header {
     flex-shrink: 0;
     padding: 12rpx 24rpx 20rpx;

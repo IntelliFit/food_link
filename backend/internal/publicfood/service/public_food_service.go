@@ -441,6 +441,14 @@ func (s *PublicFoodService) enqueueTask(ctx context.Context, taskID, taskType st
 }
 
 func (s *PublicFoodService) List(ctx context.Context, userID string, filter repo.ListFilter) ([]domain.PublicFoodView, error) {
+	filter.VenueOrganizationKey = strings.TrimSpace(filter.VenueOrganizationKey)
+	filter.VenueCanteenKey = strings.TrimSpace(filter.VenueCanteenKey)
+	if !validCanteenLocationKey(filter.VenueOrganizationKey) || !validCanteenLocationKey(filter.VenueCanteenKey) ||
+		((filter.VenueOrganizationKey != "" || filter.VenueCanteenKey != "") && filter.CanteenScope != "community") ||
+		(filter.VenueCanteenKey != "" && filter.VenueOrganizationKey == "") {
+		logger.Warn(ctx, "食堂地点筛选参数无效", slog.String("user_id", userID))
+		return nil, commonerrors.ErrBadRequest
+	}
 	filter.CanteenScope = strings.TrimSpace(filter.CanteenScope)
 	switch filter.CanteenScope {
 	case "", "all", "campus", "community":
