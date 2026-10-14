@@ -1,0 +1,150 @@
+/* Small copy shares a reading face; display titles, values and icons retain their theme. */
+@mixin reading-copy($size) {
+  font-family: var(--fl-reading-font) !important;
+  font-size: $size !important;
+  line-height: 1.6 !important;
+  letter-spacing: 0 !important;
+}
+
+.fl-page-theme-root.fl-page-theme-root--balanced[class*='fl-balanced-theme--'],
+.fl-page-theme-root.fl-page-theme-root--wellness {
+  --fl-reading-font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+  --fl-type-caption: 24rpx;
+  --fl-type-copy: 26rpx;
+  --fl-type-compact: 24rpx;
+
+  .bt-masthead__date, .bt-masthead__edition, .theme-chapter .tc-date,
+  .theme-chapter .tc-marginal, .theme-chapter .tc-water-edition, .date-day-name,
+  .macro-label-horizontal, .nutrition-expand-title,
+  .user-days-pill-text, .user-id-chip-text, .quick-action-text,
+  .credit-overview__label, .credit-overview__meta, .card-validity, .card-tip,
+  .balanced-theme-entry__eyebrow, .balanced-theme-entry__subtitle,
+  .balanced-theme-entry__action, .health-index-preview-badge-text,
+  .health-index-preview-meta, .risk-overview-chip-label,
+  .risk-score-gauge__projected, .risk-score-explain__note,
+  .action-score-delta__note, .stats-page-disclaimer__text,
+  .home-toolbox__item-desc, .home-module-toolbar__water-label,
+  .post-time, .feed-tag-plain, .ranking-week-tag, .ranking-mini-tab,
+  .ranking-mini-name, .ranking-mini-empty, .ranking-column-link,
+  .water-daily-flow__date, .water-feed-tabs__verse,
+  .record-menu-list-desc-v2, .record-menu-dev-trigger-sub,
+  .record-menu-dev-item-desc, .record-menu-dev-url-hint,
+  .record-menu-themed-heading > text:last-child,
+  .social-menu__trigger-label {
+    @include reading-copy(var(--fl-type-caption));
+  }
+
+  .profile-section-hint, .profile-card .list-desc, .card-subtitle,
+  .analysis-guest-notice__description, .health-index-preview-desc,
+  .risk-overview-subtitle, .risk-overview-score-hint,
+  .risk-card-summary, .risk-score-explain__action,
+  .action-plan-item__detail, .water-daily-flow__note,
+  .water-ranking-score-desc, .placeholder-sub, .mode-upgrade-note,
+  .precision-capture-mode-hint, .precision-capture-note,
+  .precision-capture-slot__hint, .precision-video-empty__hint,
+  .bt-action__copy > text:nth-child(2) {
+    @include reading-copy(var(--fl-type-copy));
+  }
+
+  .credit-overview__unit, .macro-target-total,
+  .risk-card-score-unit, .risk-overview-score-unit {
+    @include reading-copy(var(--fl-type-compact));
+  }
+  .card-unit {
+    font-family: var(--fl-reading-font) !important;
+    letter-spacing: 0 !important;
+  }
+
+  .balanced-theme-entry__subtitle, .risk-card-summary {
+    white-space: normal !important;
+    text-overflow: clip;
+  }
+  .health-index-preview-card, .ranking-mini-tabs, .feed-sub-meta-row {
+    flex-wrap: wrap;
+  }
+  .ranking-mini-tabs { height: auto; min-height: 38rpx; }
+}
+
+/* Contrast repairs are limited to known light surfaces, not scene backgrounds. */
+@each $theme in clarity-order, natural-symbiosis, clear-care {
+  .fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--#{$theme}:not(.fl-d) {
+    .profile-card .list-desc, .stats-page-disclaimer__text,
+    .card-subtitle, .health-index-preview-desc { color: #4d5c54 !important; }
+  }
+}
+.fl-page-theme-root.fl-page-theme-root--wellness {
+  .profile-card .list-desc, .stats-page-disclaimer__text,
+  .card-subtitle, .health-index-preview-desc { color: #4d5c54 !important; }
+}
+
+/* Keep the care theme's larger reading scale. */
+.fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--clear-care {
+  --fl-type-caption: 28rpx;
+  --fl-type-copy: 28rpx;
+  --fl-type-compact: 26rpx;
+}
+
+.fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--way-of-water {
+  --fl-water-reading-ink: #c4d9e2;
+  .bt-masthead__edition { font-size: 25rpx !important; }
+
+  .bt-heading__subtitle, .theme-chapter .tc-subtitle,
+  .bt-water-metric__label, .bt-water-side-verse,
+  .bt-water-side-verse text, .home-water-dock__tab,
+  .stats-range-dropdown__label {
+    font-family: var(--fl-reading-font) !important;
+    font-weight: 500;
+    line-height: 1.65 !important;
+    letter-spacing: .5rpx !important;
+  }
+  .bt-water-side-verse, .bt-water-side-verse text,
+  .home-water-dock__collapse { @include reading-copy(24rpx); }
+
+  .bt-masthead__date, .bt-masthead__edition,
+  .bt-heading__subtitle, .theme-chapter .tc-date,
+  .theme-chapter .tc-marginal, .theme-chapter .tc-water-edition,
+  .theme-chapter .tc-subtitle,
+  .bt-water-side-verse text, .bt-water-metric__label {
+    color: #deedf2 !important;
+    font-weight: 500 !important;
+    text-shadow: 0 1rpx 4rpx rgb(3 15 22 / 65%);
+  }
+
+  .profile-section-hint, .profile-card .list-desc,
+  .balanced-theme-entry__eyebrow, .balanced-theme-entry__subtitle,
+  .credit-overview__label, .credit-overview__unit, .credit-overview__meta,
+  .card-subtitle, .risk-card-summary, .risk-score-explain__note,
+  .stats-page-disclaimer__text, .health-index-preview-desc,
+  .water-daily-flow__date, .water-daily-flow__note,
+  .water-ranking-score-desc, .water-feed-tabs__verse,
+  .profile-page .user-id-chip-text, .date-day-name,
+  .stats-range-dropdown__label, .stats-range-dropdown__arrow,
+  .home-toolbox__item-desc, .home-water-dock__collapse {
+    color: var(--fl-water-reading-ink) !important;
+  }
+  .date-item.is-selected .date-day-name { color: #effaff !important; }
+  .water-feed-tabs__verse { min-width: 0; white-space: normal; }
+  .profile-recap-section .recap-archive-entry > text + text {
+    @include reading-copy(24rpx);
+    color: var(--fl-water-reading-ink) !important;
+  }
+
+  /* Markdown owns its inline text too; late page rules must not darken it. */
+  .stats-page .analysis-md-paragraph, .stats-page .analysis-md-list-text,
+  .stats-page .analysis-md-table-cell {
+    @include reading-copy(28rpx);
+    color: #dceef4 !important;
+  }
+  .stats-page .analysis-md-heading { color: #edfaff !important; }
+  .stats-page .analysis-md-heading, .stats-page .analysis-md-strong {
+    font-family: var(--fl-reading-font) !important;
+    font-weight: 600;
+  }
+  .stats-page .analysis-md-paragraph text, .stats-page .analysis-md-list-text text,
+  .stats-page .analysis-md-table-cell text, .stats-page .analysis-md-heading text {
+    color: inherit !important;
+    font-family: inherit !important;
+    line-height: inherit;
+  }
+  .stats-page .analysis-md-strong { color: #edfaff !important; }
+}

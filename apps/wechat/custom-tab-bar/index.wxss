@@ -487,6 +487,28 @@
 }
 .custom-tab-bar .center-item:active .center-icon-wrapper { filter: brightness(.92); }
 
+/* Native navigation does not inherit the page's small-copy typography. */
+.custom-tab-bar.custom-tab-bar .tab-item .tab-text {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 24rpx;
+  font-weight: 500;
+  line-height: 34rpx;
+  letter-spacing: 0;
+}
+.custom-tab-bar.custom-tab-bar .tab-item.center-item .tab-text {
+  height: 34rpx;
+  flex-basis: 34rpx;
+}
+.custom-tab-bar.custom-tab-bar--balanced.custom-tab-bar--theme-clear-care .tab-item .tab-text {
+  font-size: 26rpx;
+}
+.custom-tab-bar.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .tab-item .tab-text {
+  color: #c4d9e2;
+}
+.custom-tab-bar.custom-tab-bar--balanced.custom-tab-bar--theme-way-of-water .tab-item.selected .tab-text {
+  color: #effaff;
+}
+
 /* Draw the camera on a fixed axis instead of counter-rotating a font glyph. */
 .capture-camera {
   position: relative;
