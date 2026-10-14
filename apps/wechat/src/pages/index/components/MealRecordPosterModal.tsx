@@ -230,7 +230,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
           <Text>经典海报</Text><Text className='record-share-style-desc'>保留原来的营养卡片</Text>
         </View>
         {photoSrc && <View className={`record-share-style record-share-style-photo ${effectiveStyle === 'photo' ? 'active' : ''}`} onClick={() => setStyle('photo')}>
-          <Text>原图贴纸</Text><Text className='record-share-style-desc'>完整照片 + 可爱标注</Text>
+          <Text>原图贴纸</Text><Text className='record-share-style-desc'>照片 + 可爱标注</Text>
         </View>}
       </View>
       {effectiveStyle === 'photo' && (

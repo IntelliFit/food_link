@@ -508,6 +508,7 @@ func New(cfg *config.Config) (*App, error) {
 	publicFoodSvc.ConfigureRewardTaskAwarder(membershipSvc)
 	publicFoodSvc.ConfigureBlockChecker(friendSvc)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
+	canteenLocationHandler := publicfoodhandler.NewCanteenLocationHandler(publicFoodSvc)
 	marketingQRRepo := marketingqrrepo.NewMarketingQRRepo(db)
 	marketingQRSvc := marketingqrservice.NewMarketingQRService(marketingQRRepo, storageClient)
 	marketingQRHandler := marketingqrhandler.NewMarketingQRHandler(marketingQRSvc)
@@ -847,6 +848,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Public food library routes
 	engine.GET("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.List)
 	engine.GET("/api/public-food-library/map-spots", authmw.RequireJWT(jwtSvc), publicFoodHandler.ListMapSpots)
+	engine.GET("/api/public-food-library/canteen-locations", authmw.RequireJWT(jwtSvc), canteenLocationHandler.List)
 	engine.POST("/api/food-nutrition-contributions", authmw.RequireJWT(jwtSvc), foodContributionHandler.Submit)
 	engine.GET("/api/food-nutrition-contributions/mine", authmw.RequireJWT(jwtSvc), foodContributionHandler.Mine)
 	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), contentGuard(3), publicFoodHandler.Create)

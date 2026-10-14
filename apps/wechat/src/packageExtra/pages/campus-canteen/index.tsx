@@ -12,6 +12,7 @@ import { withAuth } from "../../../utils/withAuth";
 import {
   getAccessToken,
   getPublicFoodLibraryList,
+  getCanteenLocations,
   getSchoolCampuses,
   getSchoolCanteens,
   getUserProfile,
@@ -24,6 +25,7 @@ import {
   type SchoolCanteenItem,
   type SchoolItem,
   type CanteenScope,
+  type CanteenLocationItem,
 } from "../../../utils/api";
 import "./index.scss";
 import { extraPkgUrl } from "../../../utils/subpackage-extra";
@@ -35,6 +37,7 @@ import CampusPicker from "../../../components/CampusPicker";
 import CanteenPicker from "../../../components/CanteenPicker";
 import FloorPicker from "../../../components/FloorPicker";
 import WindowPicker from "../../../components/WindowPicker";
+import CommunityVenuePicker, { type CommunityOrganization } from "./CommunityVenuePicker";
 import { ArrowDown, ArrowRight, Ellipsis, FilterOutlined, Plus, Search } from "@taroify/icons";
 import "@taroify/icons/style";
 import { campusNutritionState } from "../../../utils/campus-nutrition";
@@ -48,16 +51,17 @@ function normalizeText(value?: string | null): string {
 }
 
 function getLocationText(item: PublicFoodLibraryItem): string {
-  if (item.campus_location_text) return item.campus_location_text;
-  return [
-    item.school_name,
+  const owner = item.venue_organization_name || item.school_name;
+  const canteen = item.venue_canteen_name || item.canteen_name || item.merchant_name;
+  const parts = [
+    owner,
     item.campus_name,
-    item.canteen_name,
+    canteen,
     item.floor,
     item.window_name,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  ].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index);
+  if (owner || canteen) return parts.join(" · ");
+  return item.detail_address || item.merchant_address || item.campus_location_text || parts.join(" · ") || "地点待补充";
 }
 
 function getPriceText(item: PublicFoodLibraryItem): string {
@@ -122,6 +126,14 @@ function CampusCanteenPage() {
   const [sortBy, setSortBy] = useState<SortBy>("hot");
   const [canteenScope, setCanteenScope] = useState<CanteenScope>("all");
   const campusScope = canteenScope === "campus";
+  const communityScope = canteenScope === "community";
+  const [communityLocations, setCommunityLocations] = useState<CanteenLocationItem[]>([]);
+  const [selectedOrganization, setSelectedOrganization] = useState<CommunityOrganization | null>(null);
+  const [selectedCommunityCanteen, setSelectedCommunityCanteen] = useState<CanteenLocationItem | null>(null);
+  const [communityPicker, setCommunityPicker] = useState<'organization' | 'canteen' | null>(null);
+  const [communityDirectoryLoading, setCommunityDirectoryLoading] = useState(false);
+  const [communityDirectoryError, setCommunityDirectoryError] = useState(false);
+  const [communityDirectoryRevision, setCommunityDirectoryRevision] = useState(0);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [appliedSearchKeyword, setAppliedSearchKeyword] = useState("");
   const [selectedSchool, setSelectedSchool] = useState<SchoolItem | null>(null);
@@ -153,7 +165,7 @@ function CampusCanteenPage() {
   const schoolChosenByUser = useRef(false);
   const listRequestId = useRef(0);
   const [listScope, setListScope] = useState("");
-  const scopeKey = [canteenScope, campusScope ? selectedSchool?.id : "", selectedCampus?.id, selectedCanteen?.id,
+  const scopeKey = [canteenScope, communityScope ? selectedOrganization?.key : "", communityScope ? selectedCommunityCanteen?.canteen_key : "", campusScope ? selectedSchool?.id : "", selectedCampus?.id, selectedCanteen?.id,
     selectedWindow?.id, floorName, windowName, sortBy, appliedSearchKeyword].join("|");
   const currentScope = useRef(scopeKey);
   currentScope.current = scopeKey;
@@ -161,7 +173,10 @@ function CampusCanteenPage() {
 
   const fetchReadyCampusItems = useCallback(
     async (keyword = appliedSearchKeyword) => {
-      const directoryFilter = !campusScope ? {} : selectedWindow?.id
+      const directoryFilter = communityScope ? {
+        venue_organization_key: selectedOrganization?.key,
+        venue_canteen_key: selectedCommunityCanteen?.canteen_key,
+      } : !campusScope ? {} : selectedWindow?.id
         ? { window_id: selectedWindow.id }
         : selectedCanteen?.id
         ? { canteen_id: selectedCanteen.id }
@@ -203,6 +218,9 @@ function CampusCanteenPage() {
       appliedSearchKeyword,
       canteenScope,
       campusScope,
+      communityScope,
+      selectedOrganization?.key,
+      selectedCommunityCanteen?.canteen_key,
       floorName,
       selectedSchool,
       selectedCampus,
@@ -337,6 +355,24 @@ function CampusCanteenPage() {
     }, 400);
     return () => clearTimeout(timer);
   }, [searchKeyword, appliedSearchKeyword]);
+
+  useEffect(() => {
+    if (!loggedIn || !communityScope) return;
+    let cancelled = false;
+    const ownerToken = getAccessToken();
+    setCommunityDirectoryLoading(true);
+    setCommunityDirectoryError(false);
+    getCanteenLocations().then((locations) => {
+      if (cancelled || getAccessToken() !== ownerToken) return;
+      setCommunityLocations(locations);
+    }).catch(() => {
+      if (cancelled || getAccessToken() !== ownerToken) return;
+      setCommunityDirectoryError(true);
+    }).finally(() => {
+      if (!cancelled && getAccessToken() === ownerToken) setCommunityDirectoryLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [loggedIn, communityScope, communityDirectoryRevision]);
 
   const handleSearch = (value = searchKeyword) => {
     const kw = value.trim();
@@ -474,6 +510,9 @@ function CampusCanteenPage() {
     schoolChosenByUser.current = true;
     lastRefreshTime.current = 0;
     setCanteenScope(scope);
+    setSelectedOrganization(null);
+    setSelectedCommunityCanteen(null);
+    setCommunityPicker(null);
     setSelectedCampus(null);
     setSelectedCanteen(null);
     setSelectedWindow(null);
@@ -484,6 +523,7 @@ function CampusCanteenPage() {
     // 保留搜索词，切换场所类型仍可查同一道菜；不修改个人学校档案。
   };
   const hasActiveFilters = Boolean(
+    selectedCommunityCanteen ||
     selectedCampus ||
       selectedCanteen ||
       floorName ||
@@ -497,6 +537,7 @@ function CampusCanteenPage() {
     // 重置当前学校内的范围，不清除学校或修改个人档案。
     setSelectedCampus(null);
     setSelectedCanteen(null);
+    setSelectedCommunityCanteen(null);
     setSelectedWindow(null);
     setFloorName("");
     setWindowName("");
@@ -576,8 +617,7 @@ function CampusCanteenPage() {
   const renderCampusCard = (item: PublicFoodLibraryItem) => {
     const nutrition = campusNutritionState(item);
     const photo = item.image_path || item.image_paths?.find(Boolean);
-    const location = [item.canteen_name, item.floor, item.window_name].filter(Boolean).join(" · ")
-      || item.campus_location_text || item.merchant_name || item.detail_address || item.merchant_address || item.campus_name || "地点待补充";
+    const location = getLocationText(item);
     const nutritionText = nutrition.displayNutrition
       ? `${nutrition.estimated || nutrition.pending ? "约 " : ""}${item.total_calories.toFixed(0)} kcal`
       : nutrition.failed ? "营养待重试" : "营养待更新";
@@ -647,6 +687,16 @@ function CampusCanteenPage() {
               {selectedSchool ? <Plus /> : <Ellipsis />}
             </Button>
           </View>
+          )}
+          {communityScope && (
+            <View className='campus-school-row community-location-row'>
+              <Button id='community-organization-select' className='campus-school-select community-location-select' ariaLabel='选择社区或园区' onClick={() => setCommunityPicker('organization')}>
+                <Text className='campus-school-name'>{selectedOrganization?.name || '选择社区 / 园区'}</Text><ArrowDown className='campus-chevron' />
+              </Button>
+              <Button id='community-canteen-select' className='campus-area-button' ariaLabel='选择社区内食堂' onClick={() => setCommunityPicker(selectedOrganization ? 'canteen' : 'organization')}>
+                <Text>{selectedCommunityCanteen?.canteen_name || '全部食堂'}</Text><ArrowDown className='campus-chevron' />
+              </Button>
+            </View>
           )}
           <View className='campus-browse-search'>
             <View className='search-input-wrap'>
@@ -746,10 +796,11 @@ function CampusCanteenPage() {
 
               <View className='campus-results-header'>
                 <View className='campus-results-copy'>
-                  <Text className='campus-results-title'>{selectedCanteen?.name || (canteenScope === "community" ? "社区与园区菜品" : campusScope ? "校园菜品" : "食堂菜品")}</Text>
+                  <Text className='campus-results-title'>{selectedCommunityCanteen?.canteen_name || selectedCanteen?.name || (communityScope ? selectedOrganization?.name || "社区与园区菜品" : campusScope ? "校园菜品" : "食堂菜品")}</Text>
                   {campusScope && selectedSchool && <Text className='campus-results-location'>
                     {[selectedSchool.name, selectedCampus?.name, floorName, windowName].filter(Boolean).join(" · ")}
                   </Text>}
+                  {communityScope && selectedOrganization && <Text className='campus-results-location'>{[selectedOrganization.city, selectedOrganization.district].filter(Boolean).join(' · ')}</Text>}
                 </View>
                 {loading && visibleList.length > 0 && <View className='campus-refresh-indicator'><View className='loading-spinner-md' /></View>}
                 <Button className='campus-more-button' ariaLabel='菜品更多操作' onClick={() => void openMore()}><Ellipsis /></Button>
@@ -815,6 +866,15 @@ function CampusCanteenPage() {
           </View>
         </ScrollView>
 
+        <CommunityVenuePicker mode={communityPicker} organization={selectedOrganization} canteen={selectedCommunityCanteen} locations={communityLocations} loading={communityDirectoryLoading} error={communityDirectoryError}
+          onClose={() => setCommunityPicker(null)} onRetry={() => setCommunityDirectoryRevision((value) => value + 1)}
+          onOrganization={(organization) => {
+            setSelectedOrganization(organization); setSelectedCommunityCanteen(null); setFloorName(''); setWindowName(''); setSelectedWindow(null); setCommunityPicker(null); lastRefreshTime.current = 0;
+          }}
+          onCanteen={(canteen) => {
+            setSelectedCommunityCanteen(canteen); setFloorName(''); setWindowName(''); setSelectedWindow(null); setCommunityPicker(null); lastRefreshTime.current = 0;
+          }}
+        />
         <SchoolPicker
           visible={showSchoolPicker}
           value={selectedSchool?.id}

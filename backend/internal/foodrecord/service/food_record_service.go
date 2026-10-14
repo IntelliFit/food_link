@@ -153,6 +153,10 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		input.ImagePath = &first
 	}
 	input.Items = normalizeFoodItems(input.Items)
+	if err := domain.ValidateFoodItemsForRecording(input.Items); err != nil {
+		logger.Warn(ctx, "拦截无效饮食记录", slog.String("user_id", userID), slog.Int("item_count", len(input.Items)), logger.Err(err))
+		return nil, &commonerrors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+	}
 	var aiGeneratedNutrition bool
 	input.Items, aiGeneratedNutrition = reconcileAIGeneratedFoodItems(input.Items)
 	if aiGeneratedNutrition {

@@ -151,22 +151,24 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetString(authmw.ContextUserIDKey)
 	filter := repo.ListFilter{
-		City:         c.Query("city"),
-		Keyword:      c.Query("keyword"),
-		MerchantName: c.Query("merchant_name"),
-		SortBy:       c.DefaultQuery("sort_by", "latest"),
-		Limit:        intQuery(c, "limit", 20),
-		Offset:       intQuery(c, "offset", 0),
-		Type:         c.Query("type"),
-		CanteenScope: c.Query("canteen_scope"),
-		SchoolID:     c.Query("school_id"),
-		CampusID:     c.Query("campus_id"),
-		CanteenID:    c.Query("canteen_id"),
-		WindowID:     c.Query("window_id"),
-		SchoolName:   c.Query("school_name"),
-		CanteenName:  c.Query("canteen_name"),
-		Floor:        c.Query("floor"),
-		WindowName:   c.Query("window_name"),
+		City:                 c.Query("city"),
+		Keyword:              c.Query("keyword"),
+		MerchantName:         c.Query("merchant_name"),
+		SortBy:               c.DefaultQuery("sort_by", "latest"),
+		Limit:                intQuery(c, "limit", 20),
+		Offset:               intQuery(c, "offset", 0),
+		Type:                 c.Query("type"),
+		CanteenScope:         c.Query("canteen_scope"),
+		VenueOrganizationKey: c.Query("venue_organization_key"),
+		VenueCanteenKey:      c.Query("venue_canteen_key"),
+		SchoolID:             c.Query("school_id"),
+		CampusID:             c.Query("campus_id"),
+		CanteenID:            c.Query("canteen_id"),
+		WindowID:             c.Query("window_id"),
+		SchoolName:           c.Query("school_name"),
+		CanteenName:          c.Query("canteen_name"),
+		Floor:                c.Query("floor"),
+		WindowName:           c.Query("window_name"),
 	}
 	if raw := c.Query("suitable_for_fat_loss"); raw != "" {
 		if v, err := strconv.ParseBool(raw); err == nil {
@@ -219,6 +221,12 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 	result := gin.H{"list": items}
 	if filter.CanteenScope != "" {
 		result["canteen_scope"] = strings.TrimSpace(filter.CanteenScope)
+	}
+	if filter.VenueOrganizationKey != "" {
+		result["venue_organization_key"] = strings.TrimSpace(filter.VenueOrganizationKey)
+	}
+	if filter.VenueCanteenKey != "" {
+		result["venue_canteen_key"] = strings.TrimSpace(filter.VenueCanteenKey)
 	}
 	response.Success(c, result)
 }

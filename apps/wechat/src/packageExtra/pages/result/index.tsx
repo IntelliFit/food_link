@@ -1,6 +1,7 @@
 import { View, Text, Image, ScrollView, Slider, Input, Textarea } from '@tarojs/components'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
+import { getResultRecordError } from './record-validation'
 import {
   AnalyzeResponse,
   MealType,
@@ -570,6 +571,7 @@ function ResultPage() {
   const [imagePath, setImagePath] = useState<string>('') // Keep for compatibility/fallback logic
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
+  const [invalidAnalysisError, setInvalidAnalysisError] = useState('')
   const originalItemsRef = useRef<NutritionItem[]>([])
   const weightAdjustedRef = useRef(false)
   const nutritionAdjustedRef = useRef(false)
@@ -858,6 +860,7 @@ function ResultPage() {
     setUncertaintyNotes(normalizePrecisionStringList(result.uncertaintyNotes))
 
     const items = convertApiFoodItemsToNutritionItems(result.items || [])
+    setInvalidAnalysisError(getResultRecordError(items))
     setNutritionItems(items)
     setCorrectionItems(items)
     originalItemsRef.current = JSON.parse(JSON.stringify(items))
@@ -1998,6 +2001,11 @@ function ResultPage() {
   }
 
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
+    const validationError = getResultRecordError(nutritionItems)
+    if (validationError) {
+      Taro.showToast({ title: validationError, icon: 'none' })
+      return
+    }
     if (!requireAllowedRecordDate(recordDate)) return
     // 避免用户快速连续点击导致重复保存
     if (saving) return
@@ -2223,6 +2231,11 @@ function ResultPage() {
 
   // 收藏食物（保存为可复用模板）
   const handleSaveAsRecipe = () => {
+    const validationError = getResultRecordError(nutritionItems)
+    if (validationError) {
+      Taro.showToast({ title: validationError, icon: 'none' })
+      return
+    }
 	if (savedRecipeId) {
 		Taro.showToast({ title: '该餐食已收藏', icon: 'none' })
 		return
@@ -2596,6 +2609,25 @@ function ResultPage() {
   }
 
   const pendingPackagedChoiceCount = nutritionItems.filter(isPackagedChoicePending).length
+
+  if (invalidAnalysisError) {
+    return (
+      <View className='result-invalid-state'>
+        <View className='result-invalid-icon'><Text>!</Text></View>
+        <Text className='result-invalid-title'>这次分析没有得到有效结果</Text>
+        <Text className='result-invalid-description'>{invalidAnalysisError}</Text>
+        <Text className='result-invalid-note'>这份结果不会被记录，也不会计入摄入。</Text>
+        <View
+          className='result-invalid-retry'
+          onClick={() => Taro.redirectTo({
+            url: taskType === 'food_text'
+              ? `${extraPkgUrl('/pages/record-text/index')}?text=${encodeURIComponent(textRecordInput)}&date=${recordDate}`
+              : extraPkgUrl('/pages/analyze/index'),
+          })}
+        ><Text>重新分析</Text></View>
+      </View>
+    )
+  }
 
   return (
     <View className={`result-page ${scheme === 'dark' ? 'result-page--dark' : ''}`}>

@@ -1627,17 +1627,28 @@ func TestAnalyzeService_AnalyzeUsesSingleLLMRequestForMultipleImages(t *testing.
 
 func TestAnalyzeService_AnalyzeText(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "text test", "items": []any{}}}
-	qwenClient := &mockLLMClient{result: map[string]any{"description": "text test", "items": []any{}}}
+	nutrients := map[string]any{"calories": 518.0, "protein": 9.3, "carbs": 0.0, "fat": 53.0}
+	for _, key := range preciseMicronutrientKeys {
+		nutrients[key] = 1.0
+	}
+	qwenClient := &mockLLMClient{result: map[string]any{"description": "text test", "items": []any{map[string]any{"name": "五花肉", "estimatedWeightGrams": 0.0, "nutrients": nutrients}}}}
 	svc := NewAnalyzeService(doubaoClient, doubaoClient, nil)
 	svc.ConfigureDashScopeLLMClient(qwenClient)
 	ctx := context.Background()
 
-	result, err := svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "一碗米饭"})
+	result, err := svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "200g五花肉"})
 	require.NoError(t, err)
 	assert.Equal(t, "text test", result["description"])
+	assert.Equal(t, 200.0, numberFromAny(toItems(result["items"])[0]["estimatedWeightGrams"]))
 	assert.Equal(t, true, mapFromAny(result["precise_micronutrients"])["requested"])
 	assert.Equal(t, 1, qwenClient.calls)
 	assert.Equal(t, 0, doubaoClient.calls)
+	qwenClient.result = map[string]any{"items": []any{}}
+	_, err = svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "200g五花肉"})
+	require.Error(t, err, "空结果不能标记为成功")
+	qwenClient.result = map[string]any{"items": []any{map[string]any{"name": "五花肉", "estimatedWeightGrams": 0.0, "nutrients": map[string]any{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}}}}
+	_, err = svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "200g五花肉"})
+	require.Error(t, err, "有名字但全零的结果不能标记为成功")
 }
 
 func TestAnalyzeService_AnalyzeTextRequiresConfiguredTextModel(t *testing.T) {

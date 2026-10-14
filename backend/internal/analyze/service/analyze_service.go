@@ -1207,6 +1207,10 @@ func ValidateResolvedNutritionItems(items []map[string]any) error {
 		if !boolFromAny(item["is_unresolved"]) &&
 			!strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", item["resolve_status"])), "unresolved") &&
 			!strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source"])), "unresolved") {
+			n := mapFromAny(item["nutrients"])
+			if err := foodrecorddomain.ValidateFoodNutritionValues(stringFromAny(item["name"]), nutritionWeightFromItem(item), numberFromAny(n["calories"]), numberFromAny(n["protein"]), numberFromAny(n["carbs"]), numberFromAny(n["fat"])); err != nil {
+				return err
+			}
 			continue
 		}
 		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
@@ -2337,7 +2341,7 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 	if len(compactTags) > 0 {
 		tags = strings.Join(compactTags, "\n")
 	}
-	return fmt.Sprintf(`请作为专业营养师分析这段用户饮食文字，只返回 JSON。
+	prompt := fmt.Sprintf(`请作为专业营养师分析这段用户饮食文字，只返回 JSON。
 
 用户原始输入：
 %s
@@ -2377,6 +2381,11 @@ JSON:
   "context_advice":"",
   "uncertaintyNotes":[]
 }`, strings.TrimSpace(input.Text), tags, contextLine, modeLine)
+	prompt += "\n每项 nutrients 必须同时给出完整微量营养字段（按该项实际克数的总量）：" + strings.Join(preciseMicronutrientKeys, ",") + "。每个字段使用非负数字，合理估算并说明假设；不得用全零或缺字段充当分析完成。纯水等确实无相应营养的字段可以为0。必须给出有效重量和基础营养，无法分析时明确返回错误，禁止生成零重量占位项。"
+	if isFastExecutionMode(executionMode) {
+		prompt += "\n快速模式：直接给出紧凑JSON，每项仍必须包含完整基础营养和微量营养；insight/context_advice各不超过24字，不输出长篇说明。"
+	}
+	return prompt
 }
 
 func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
@@ -5258,6 +5267,10 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	} else {
 		client = s.doubaoClient
 	}
+	if isFastExecutionMode(executionMode) && s.dashscopeClient != nil {
+		client = s.dashscopeClient
+		provider, model = "qwen", fastTextModel
+	}
 	start := time.Now()
 	ctx, span := apm.StartSpan(ctx, "analysis.food_text",
 		attribute.String("analysis.user_id", userID),
@@ -5275,7 +5288,17 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		attribute.String("analysis.execution_mode", executionMode),
 	)
 	parsed, err := analyzeWithJSONParseRetry(ctx, "food_text", provider, model, func(callCtx context.Context) (map[string]any, error) {
-		return client.Analyze(callCtx, prompt, "")
+		var raw map[string]any
+		var callErr error
+		if isFastExecutionMode(executionMode) {
+			raw, callErr = newAnalyzeWithImagesWithoutThinkingModelCall(client, prompt, nil, model)(callCtx)
+		} else {
+			raw, callErr = client.Analyze(callCtx, prompt, "")
+		}
+		if callErr != nil {
+			return nil, callErr
+		}
+		return normalizeAndValidateTextResult(raw, input)
 	})
 	if err != nil {
 		metrics.ObserveFoodAnalysis("text", provider, model, "llm_error", time.Since(start), -1)
@@ -5294,6 +5317,11 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "finalize"))
 		return nil, err
 	}
+	if err := ValidateResolvedNutritionItems(toItems(result["items"])); err != nil {
+		logger.Warn(ctx, "文字食物分析结果无效", slog.String("user_id", userID), slog.String("model", model), logger.Err(err))
+		return nil, err
+	}
+	result["model_name"] = model
 	apm.AddEvent(ctx, "文字食物识别结果收尾完成",
 		attribute.String("analysis.provider", provider),
 		attribute.String("analysis.model", model),
@@ -5924,10 +5952,17 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	timings["nutrition_resolution"] = observeVisionPhase(ctx, executionMode, "nutrition_resolution", phaseStart)
 	phaseStart = time.Now()
 	if input.PreciseMicronutrients {
-		items, err := s.ApplyUserRequestedMicronutrientsToResolvedItems(postprocessCtx, toItems(resp["items"]), fullNutritionContext(input))
+		items := toItems(resp["items"])
+		var err error
+		if strings.TrimSpace(input.Text) == "" || !textMicronutrientsComplete(items) {
+			items, err = s.ApplyUserRequestedMicronutrientsToResolvedItems(postprocessCtx, items, fullNutritionContext(input))
+		}
 		if err != nil {
 			resp["precise_micronutrients"] = map[string]any{"requested": true, "status": "failed", "reason": err.Error()}
 			logger.Warn(ctx, "精准微量营养补全失败，保留基础营养结果", logger.Err(err), slog.String("analysis_engine", engine))
+			if strings.TrimSpace(input.Text) != "" {
+				return nil, fmt.Errorf("文字食物微量营养未能完整分析，请重试: %w", err)
+			}
 		} else {
 			resp["items"] = items
 			resp["precise_micronutrients"] = map[string]any{"requested": true, "status": "completed", "item_count": len(items)}

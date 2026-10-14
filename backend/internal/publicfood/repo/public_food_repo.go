@@ -30,29 +30,31 @@ func NewPublicFoodRepo(db *gorm.DB) *PublicFoodRepo {
 }
 
 type ListFilter struct {
-	City               string
-	Keyword            string
-	HasLocation        *bool
-	SuitableForFatLoss *bool
-	MerchantName       string
-	MinCalories        *float64
-	MaxCalories        *float64
-	SortBy             string
-	Limit              int
-	Offset             int
-	Type               string
-	CanteenScope       string
-	IsCampusFood       *bool
-	SchoolID           string
-	CampusID           string
-	CanteenID          string
-	WindowID           string
-	SchoolName         string
-	CanteenName        string
-	Floor              string
-	WindowName         string
-	IsCampusHighlight  *bool
-	ViewerUserID       string
+	City                 string
+	Keyword              string
+	HasLocation          *bool
+	SuitableForFatLoss   *bool
+	MerchantName         string
+	MinCalories          *float64
+	MaxCalories          *float64
+	SortBy               string
+	Limit                int
+	Offset               int
+	Type                 string
+	CanteenScope         string
+	VenueOrganizationKey string
+	VenueCanteenKey      string
+	IsCampusFood         *bool
+	SchoolID             string
+	CampusID             string
+	CanteenID            string
+	WindowID             string
+	SchoolName           string
+	CanteenName          string
+	Floor                string
+	WindowName           string
+	IsCampusHighlight    *bool
+	ViewerUserID         string
 }
 
 type CampusDirectoryRef struct {
@@ -212,19 +214,20 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 		Where(validPublishedCampusNutritionSQL("p"))
 	q = visiblePublicFoodToViewer(q, "p.user_id", f.ViewerUserID)
 	if f.CanteenScope != "" {
-		q = q.Joins("LEFT JOIN campus_food_catalog_items venue_item ON venue_item.id = p.id").
-			Joins("LEFT JOIN campus_food_collection_batches venue_batch ON venue_batch.id = venue_item.batch_id").
-			Joins("LEFT JOIN schools venue_school ON venue_school.id = p.school_id AND venue_school.status = 'active'").
-			Select(projection + ", " + canteenVenueTypeSQL + " AS venue_type")
-		switch f.CanteenScope {
-		case "all":
-			q = q.Where("(" + canteenVenueTypeSQL + ") <> '' OR p.type = 'campus' OR p.is_campus_food = true")
-		case "campus":
-			q = q.Where("("+canteenVenueTypeSQL+") = ?", "university")
-		case "community":
-			q = q.Where("("+canteenVenueTypeSQL+") IN ?", []string{"community", "corporate", "office_park"})
-		default:
-			return nil, fmt.Errorf("invalid canteen scope: %q", f.CanteenScope)
+		var scopeErr error
+		q, scopeErr = withCanteenScope(q, f.CanteenScope)
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+		q = q.Select(projection + ", " + canteenVenueTypeSQL + " AS venue_type")
+		if f.CanteenScope == "community" {
+			q = q.Select(projection + ", " + canteenVenueTypeSQL + " AS venue_type, " + canteenOrganizationSQL + " AS venue_organization_name, " + canteenOrganizationKeySQL + " AS venue_organization_key, " + canteenNameSQL + " AS venue_canteen_name, " + canteenKeySQL + " AS venue_canteen_key")
+			if f.VenueOrganizationKey != "" {
+				q = q.Where("("+canteenOrganizationKeySQL+") = ?", f.VenueOrganizationKey)
+			}
+			if f.VenueCanteenKey != "" {
+				q = q.Where("("+canteenKeySQL+") = ?", f.VenueCanteenKey)
+			}
 		}
 	}
 	if f.City != "" {
