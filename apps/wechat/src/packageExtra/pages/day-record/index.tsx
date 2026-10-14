@@ -24,6 +24,7 @@ import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { getCurrentPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
 import { claimSharePosterRewardQuietly } from '../../../utils/share-reward'
 import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
+import { mealRecordAdvice } from '../../../utils/meal-record-advice'
 
 /** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
 function formatNumber(value: number): string {
@@ -295,7 +296,7 @@ function DayRecordPage() {
 
   const openRecordDetail = (recordId: string) => {
     Taro.navigateTo({
-      url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(recordId)}`
+      url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(recordId)}&owned=1`
     })
   }
 
@@ -665,6 +666,24 @@ function DayRecordPage() {
           </View>
         ) : records.length > 0 ? (
           <View className='day-record-list'>
+            {Array.from(new Set(records.map(record => record.mealType))).map(mealType => {
+              const entries = records.filter(record => record.mealType === mealType)
+              const advice = mealRecordAdvice({
+                items: entries.flatMap(entry => entry.record.items),
+                total_calories: entries.reduce((sum, entry) => sum + entry.totalCalorie, 0),
+                total_protein: entries.reduce((sum, entry) => sum + entry.totalProtein, 0),
+                total_carbs: entries.reduce((sum, entry) => sum + entry.totalCarbs, 0),
+                total_fat: entries.reduce((sum, entry) => sum + entry.totalFat, 0),
+              })
+              return (
+                <View className='day-meal-advice' key={mealType}>
+                  <Text className='day-meal-advice-title'>{MEAL_TYPE_NAMES[mealType]} · 整餐营养点评</Text>
+                  <Text className='day-meal-advice-body'>{advice.insight}</Text>
+                  <Text className='day-meal-advice-body'>{advice.ratio}</Text>
+                  <Text className='day-meal-advice-note'>{entries.length > 1 ? `合并本餐 ${entries.length} 条记录计算。` : ''}点下方餐食卡片查看完整点评。</Text>
+                </View>
+              )
+            })}
             {records.map((meal) => (
               <View
                 key={meal.id}

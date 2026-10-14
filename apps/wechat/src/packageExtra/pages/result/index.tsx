@@ -1286,11 +1286,11 @@ function ResultPage() {
   }, [mealSuggestionContext, nutritionItems.length])
 
   const fallbackPfcRatioText = useMemo(() => {
-    const total = nutritionStats.protein + nutritionStats.carbs + nutritionStats.fat
+    const total = nutritionStats.protein * 4 + nutritionStats.carbs * 4 + nutritionStats.fat * 9
     if (total <= 0) return '本餐营养比例暂无法判断，建议结合实际食用量记录后再观察。'
-    const proteinPercent = Math.round((nutritionStats.protein / total) * 100)
-    const carbsPercent = Math.round((nutritionStats.carbs / total) * 100)
-    const fatPercent = Math.round((nutritionStats.fat / total) * 100)
+    const proteinPercent = Math.round((nutritionStats.protein * 4 / total) * 100)
+    const carbsPercent = Math.round((nutritionStats.carbs * 4 / total) * 100)
+    const fatPercent = Math.round((nutritionStats.fat * 9 / total) * 100)
     const notes: string[] = []
     if (carbsPercent >= 55) {
       const carbTargets = mealSuggestionContext.hasSweetDrink ? '主食或甜饮' : '主食部分'
@@ -2039,8 +2039,8 @@ function ResultPage() {
           diet_goal: dietGoal,
           activity_timing: activityTiming,
           eating_mood: eatingMood || undefined,
-          pfc_ratio_comment: pfcRatioComment ?? undefined,
-          absorption_notes: absorptionNotes ?? undefined,
+          pfc_ratio_comment: pfcRatioDisplayText || undefined,
+          absorption_notes: absorptionDisplayText || undefined,
           context_advice: contextAdvice ?? undefined,
           source_task_id: sourceTaskId,
           entry_type: taskType === 'food_text' ? 'food_text' : 'food_image',

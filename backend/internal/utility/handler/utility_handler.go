@@ -2,13 +2,16 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"strconv"
 	"strings"
 
 	authmw "food_link/backend/internal/auth"
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/utility/domain"
 	"food_link/backend/internal/utility/repo"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -210,6 +213,7 @@ func (h *UtilityHandler) ManualFoodCustomList(c *gin.Context) {
 
 // POST /api/manual-food/custom
 func (h *UtilityHandler) ManualFoodCustomSave(c *gin.Context) {
+	logger.Info(c.Request.Context(), "接收自定义食物保存请求", slog.String("user_id", c.GetString(authmw.ContextUserIDKey)))
 	var body struct {
 		ID                 string         `json:"id"`
 		Title              string         `json:"title"`
@@ -250,7 +254,26 @@ func (h *UtilityHandler) ManualFoodCustomSave(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "自定义食物保存请求完成", slog.String("user_id", c.GetString(authmw.ContextUserIDKey)), slog.String("food_id", item.ID))
 	response.Success(c, gin.H{"item": item})
+}
+
+func (h *UtilityHandler) ManualFoodCustomDelete(c *gin.Context) {
+	ctx, userID, id := c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("id")
+	logger.Info(ctx, "接收自定义食物删除请求", slog.String("user_id", userID), slog.String("food_id", id))
+	deleter, ok := h.manualFoodSvc.(interface {
+		DeleteCustomFood(context.Context, string, string) error
+	})
+	if !ok {
+		response.Error(c, commonerrors.ErrInternal)
+		return
+	}
+	if err := deleter.DeleteCustomFood(ctx, userID, id); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(ctx, "自定义食物删除请求完成", slog.String("user_id", userID), slog.String("food_id", id))
+	response.Success(c, gin.H{"deleted": true})
 }
 
 func parsePositiveInt(value string, fallback int) int {

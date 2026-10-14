@@ -1337,6 +1337,40 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   opacity: 0.72;
 }
 
+.custom-item-manage {
+  flex: 0 0 auto;
+  padding: 20rpx 12rpx;
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+.custom-photo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin: 12rpx 0 24rpx;
+}
+
+.custom-photo-thumb {
+  position: relative;
+  width: 104rpx;
+  height: 104rpx;
+  image { width: 100%; height: 100%; border-radius: 16rpx; }
+}
+
+.custom-photo-delete {
+  position: absolute;
+  right: -8rpx;
+  top: -8rpx;
+  width: 40rpx;
+  height: 40rpx;
+  text-align: center;
+  line-height: 40rpx;
+  border-radius: 50%;
+  color: #fff;
+  background: #64748b;
+}
+
 .selected-drawer-mask {
   position: fixed;
   left: 0;

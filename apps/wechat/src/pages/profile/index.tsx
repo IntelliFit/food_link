@@ -579,6 +579,7 @@ function ProfilePage() {
             if (
               key.startsWith('comment_draft_') ||
               key.startsWith('temp_comments_') ||
+              // 同时覆盖自定义商品及按账号保存的旧商品删除标记。
               key.startsWith('record_manual_custom_foods_v1:') ||
               key.startsWith('home_experience_config_v1:') ||
               key.startsWith('home_experience_config_v2:') ||
