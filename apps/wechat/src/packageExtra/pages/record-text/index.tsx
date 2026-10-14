@@ -9,6 +9,7 @@ import {
   type CanonicalMealType,
   type MembershipStatus,
   type AnalysisEngine,
+  type ExecutionMode,
 } from '../../../utils/api'
 import {
   getRecommendedMealTypeWithFallback,
@@ -50,6 +51,7 @@ const ACTIVITY_TIMINGS = [
 ]
 
 const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
+const TEXT_MODE_STORAGE_KEY = 'textAnalyzeExecutionMode'
 
 const readSuggestRatioPreference = (): boolean => {
   const saved = Taro.getStorageSync(SUGGEST_RATIO_STORAGE_KEY)
@@ -60,12 +62,15 @@ const readSuggestRatioPreference = (): boolean => {
 
 function RecordTextPage() {
   const mealTypeChosenRef = useRef(false)
-  const [foodText, setFoodText] = useState('')
+  const [foodText, setFoodText] = useState(() => String(Taro.getCurrentInstance().router?.params?.text || ''))
   const [foodAmount, setFoodAmount] = useState('')
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
   const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>('ai_direct')
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => Taro.getStorageSync(TEXT_MODE_STORAGE_KEY) === 'standard' ? 'standard' : 'fast')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const submitLock = useRef(false)
   const [loading, setLoading] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
@@ -112,6 +117,7 @@ function RecordTextPage() {
   const commonFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
 
   const handleSubmit = async () => {
+    if (submitLock.current || loading) return
     const trimmed = foodText.trim()
     if (!trimmed) {
       Taro.showToast({ title: '请输入食物描述', icon: 'none' })
@@ -132,33 +138,22 @@ function RecordTextPage() {
       return
     }
 
-    // 配额兜底（与按钮禁用一致，防止并发）
-    try {
-      const membership = await getMyMembership()
-      setMembershipStatus(membership)
-      if (isFoodAnalysisCreditExhausted(membership)) {
-        setCreditSheet({
-          visible: true,
-          status: membership,
-          message: getFoodAnalysisCreditBlockMessage(membership),
-        })
-        return
-      }
-    } catch {
-      // 继续执行
-    }
-
     let inputText = trimmed
     if (foodAmount.trim()) inputText += `\n数量：${foodAmount.trim()}`
 
+    submitLock.current = true
     setLoading(true)
-    Taro.showLoading({ title: '提交任务中...', mask: true })
+    Taro.showLoading({ title: '', mask: true })
 
     try {
       // 避免沿用上一次拍照分析残留在 storage 中的图，loading 与结果页需与「文字记录」一致
       Taro.removeStorageSync('analyzeImagePath')
       Taro.removeStorageSync('analyzeImagePaths')
       Taro.setStorageSync('analyzeTextInput', inputText)
+      Taro.setStorageSync('analyzeMealType', selectedMeal)
+      Taro.setStorageSync('analyzeDietGoal', dietGoal)
+      Taro.setStorageSync('analyzeActivityTiming', activityTiming)
+      Taro.setStorageSync('analyzeExecutionMode', executionMode)
       const { task_id } = await submitTextAnalyzeTask({
         text: inputText,
         date: getStoredRecordTargetDate(),
@@ -168,10 +163,11 @@ function RecordTextPage() {
         suggest_ratio_enabled: readSuggestRatioPreference(),
         analysis_engine: analysisEngine,
         precise_micronutrients: true,
+        execution_mode: executionMode,
       })
       Taro.hideLoading()
       Taro.navigateTo({
-        url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${task_id}&task_type=food_text`
+        url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${task_id}&task_type=food_text&execution_mode=${executionMode}&analysis_engine=${analysisEngine}`
       })
     } catch (e: any) {
       Taro.hideLoading()
@@ -192,6 +188,7 @@ function RecordTextPage() {
         Taro.showToast({ title: errMsg, icon: 'none' })
       }
     } finally {
+      submitLock.current = false
       setLoading(false)
     }
   }
@@ -250,13 +247,28 @@ function RecordTextPage() {
         </View>
       )}
       <ScrollView className='content-scroll' scrollY>
+        <View className='text-mode-section'>
+          <View className='text-mode-switch'>
+            {([{ value: 'fast', label: '快速', description: '快速模型 · 日常记录' }, { value: 'standard', label: '普通', description: '详细分析 · 复杂餐食' }] as const).map(mode => (
+              <View
+                key={mode.value}
+                className={`text-mode-option text-mode-option--${mode.value} ${executionMode === mode.value ? 'active' : ''}`}
+                onClick={() => { setExecutionMode(mode.value); Taro.setStorageSync(TEXT_MODE_STORAGE_KEY, mode.value) }}
+              >
+                <Text className='text-mode-label'>{mode.label}</Text>
+                <Text className='text-mode-description'>{mode.description}</Text>
+              </View>
+            ))}
+          </View>
+          <Text className='text-mode-note'>两种模式均包含基础营养与微量营养素估算</Text>
+        </View>
         {/* 输入区域 */}
         <View className='input-section'>
-          <Text className='section-title'>描述您的饮食</Text>
+          <Text className='section-title'>吃了什么？</Text>
           <View className='input-card'>
             <Textarea
               className='food-textarea'
-              placeholder='今天吃了什么？例如：&#10;• 一碗红烧牛肉面&#10;• 一个苹果'
+              placeholder='例如：200g五花肉、一碗米饭、两个鸡蛋'
               placeholderClass='textarea-placeholder'
               value={foodText}
               onInput={(e) => setFoodText(e.detail.value)}
@@ -283,6 +295,11 @@ function RecordTextPage() {
           </View>
         </View>
 
+        <View className='text-advanced-toggle' onClick={() => setShowAdvanced(value => !value)}>
+          <Text>{showAdvanced ? '收起更多选项' : '更多选项'}</Text>
+          <Text>{showAdvanced ? '−' : '＋'}</Text>
+        </View>
+        {showAdvanced && <View>
         {/* 份量补充 */}
         <View className='input-section'>
           <Text className='section-title'>补充份量（可选）</Text>
@@ -314,8 +331,9 @@ function RecordTextPage() {
               </View>
             ))}
           </View>
-          <Text className='text-engine-note'>默认使用速度最快的 AI 估算；另外两种数据库方式会慢一些，但命中兼容数据时结果更稳定，微量元素通常也更准确。</Text>
+          <Text className='text-engine-note'>AI 估算无需等待数据库校准；选择数据库校准可能增加等待时间。</Text>
         </View>
+        </View>}
 
         {/* 餐次选择 */}
         <View className='input-section'>
@@ -334,6 +352,7 @@ function RecordTextPage() {
           </View>
         </View>
 
+        {showAdvanced && <View>
         {/* 饮食目标 */}
         <View className='input-section'>
           <Text className='section-title'>饮食目标</Text>
@@ -366,6 +385,7 @@ function RecordTextPage() {
           </View>
         </View>
 
+        </View>}
         <View className='bottom-space' />
       </ScrollView>
 
@@ -375,7 +395,7 @@ function RecordTextPage() {
           className={`submit-btn ${!foodText.trim() || loading || isQuotaExhausted ? 'disabled' : ''}`}
           onClick={handleSubmit}
         >
-          <Text>{loading ? '分析中...' : isQuotaExhausted ? '积分不足，暂不可分析' : '开始分析 · 2 积分'}</Text>
+          {loading ? <View className='text-submit-spinner' /> : <Text>{isQuotaExhausted ? '积分不足，暂不可分析' : `${executionMode === 'fast' ? '快速分析' : '开始分析'} · 2 积分`}</Text>}
         </View>
       </View>
       <CreditShortageSheet

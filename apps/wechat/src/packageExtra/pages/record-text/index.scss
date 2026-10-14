@@ -1,3 +1,19 @@
+.text-mode-section { margin-bottom: 32rpx; }
+.text-mode-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
+.text-mode-option {
+  padding: 24rpx;
+  border: 2rpx solid #e2e8f0;
+  border-radius: 24rpx;
+  background: #fff;
+  &.active { background: #e9fbf3; border-color: #00bc7d; box-shadow: 0 4rpx 16rpx rgba(0, 188, 125, .08); }
+}
+.text-mode-label { display: block; font-size: 32rpx; font-weight: 700; color: #1f2937; }
+.text-mode-option.active .text-mode-label { color: #00875a; }
+.text-mode-description { display: block; margin-top: 8rpx; font-size: 23rpx; color: #64748b; }
+.text-mode-note { display: block; margin-top: 16rpx; font-size: 22rpx; color: #64748b; }
+.text-advanced-toggle { display: flex; justify-content: space-between; padding: 4rpx 8rpx 28rpx; color: #64748b; font-size: 26rpx; }
+.text-submit-spinner { width: 32rpx; height: 32rpx; border: 4rpx solid rgba(255, 255, 255, .4); border-top-color: #fff; border-radius: 50%; animation: record-text-quota-spin .8s linear infinite; }
+
 .record-text-page {
   min-height: 100vh;
   background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 50%, #f9fafb 100%);
