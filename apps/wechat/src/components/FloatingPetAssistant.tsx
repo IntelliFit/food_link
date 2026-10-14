@@ -88,12 +88,13 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   const travelVehicle = useRef(vehicle)
   const displayedVehicle = phase === 'running' || phase === 'returning' ? travelVehicle.current : vehicle
   const appearanceKey = `${pet?.id}:${companionSprite || pet?.builtin_avatar_id || pet?.pixel_avatar_url}`
-  const transportOwner = useRef({ appearance: appearanceKey, mounted: visible, generation: 0 })
+  const transportMounted = visible && refinedMotion
+  const transportOwner = useRef({ appearance: appearanceKey, mounted: transportMounted, generation: 0 })
   const transportReady = useRef('')
   const pendingDock = useRef<boolean | null>(null)
   const pendingReturn = useRef(false)
-  if (transportOwner.current.appearance !== appearanceKey || transportOwner.current.mounted !== visible) {
-    transportOwner.current = { appearance: appearanceKey, mounted: visible, generation: transportOwner.current.generation + 1 }
+  if (transportOwner.current.appearance !== appearanceKey || transportOwner.current.mounted !== transportMounted) {
+    transportOwner.current = { appearance: appearanceKey, mounted: transportMounted, generation: transportOwner.current.generation + 1 }
     transportReady.current = ''; pendingDock.current = null; pendingReturn.current = false
   }
   const transportOwnerKey = `${appearanceKey}:${transportOwner.current.generation}`
@@ -132,6 +133,14 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     phaseRef.current = next
     setPhase(next)
   }, [])
+
+  const previousMotionMode = useRef(refinedMotion)
+  useEffect(() => {
+    if (previousMotionMode.current === refinedMotion) return
+    previousMotionMode.current = refinedMotion
+    clearTimers()
+    changePhase(manualDockedRef.current ? 'docked' : 'playing')
+  }, [changePhase, clearTimers, refinedMotion])
 
   const finishTrip = useCallback((expected: 'running' | 'returning') => {
     if (phaseRef.current !== expected) return

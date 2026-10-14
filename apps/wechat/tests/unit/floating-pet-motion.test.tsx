@@ -233,6 +233,33 @@ test('a failed appearance can be revisited with fresh riding geometry', () => {
   expect((container.querySelector('.pet-assistant-transport') as HTMLElement).style.width).toBe(size)
 })
 
+test('returning from wellness waits for its newly mounted transport owner', () => {
+  const renderPet = () => <FloatingPetAssistant companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={jest.fn()} />
+  const { container, rerender } = render(renderPet())
+  mockWellness = true
+  rerender(renderPet())
+  mockDelayReady = true; mockWellness = false
+  rerender(renderPet())
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
+  act(() => mockRigReady?.())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
+})
+
+test('switching modes cancels the previous journey timers', () => {
+  const ref = React.createRef<any>()
+  const renderPet = () => <FloatingPetAssistant ref={ref} companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={jest.fn()} />
+  const { container, rerender } = render(renderPet())
+  act(() => ref.current.onPageScroll(20))
+  advance(400)
+  mockWellness = true; rerender(renderPet())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
+  advance(5000)
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
+  mockWellness = false; rerender(renderPet())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
+})
+
 jest.mock('../../src/components/PetRigActor', () => ({ PetRigActor: ({ rig, vehicle, action, active, visible, onReady, onUnavailable }: any) => {
   const React = require('react')
   if (onReady) mockRigReady = onReady
