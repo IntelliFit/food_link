@@ -31,12 +31,12 @@ export function PetTransportPicker({ pet, sprite, account, active, canSave }: {
     <View className='journey-section-heading'><Text>出行工具</Text><Button id='journey-motion-toggle' className='journey-button journey-transport__motion-toggle' disabled={!active} onClick={() => setPaused(value => !value)} aria-label={paused ? '继续试骑动作' : '暂停试骑动作'}>{paused ? '继续动作' : '暂停动作'}</Button></View>
     <View className='journey-transport__stage'>
       <View className='journey-transport__sun' />
-      <View className='journey-transport__actor'><PetTransportActor key={`${pet.id}:${sprite}:${preview}:${trial}`} pet={pet} sprite={sprite} vehicle={preview} size={144} active={active && !paused} showGround onUnavailable={() => { setUnavailable(true); setNotice('这套动作暂不可用，已保留原形象。点工具重试，或先选散步。') }} /></View>
+      <View className='journey-transport__actor'><PetTransportActor key={`${pet.id}:${sprite}:${trial}`} pet={pet} sprite={sprite} vehicle={preview} size={144} active={active && !paused} showGround onUnavailable={() => { setUnavailable(true); setNotice('这套动作暂不可用，已保留原形象。点工具重试，或先选散步。') }} /></View>
       <View className='journey-transport__caption'><Text>{pet.name} · {selected.name}</Text><Text>{selected.description}</Text></View>
     </View>
     <View className='journey-transport__choices'>{PET_TRANSPORTS.map(item => {
       const available = capabilities.includes(item.id)
-      return <Button hoverClass='journey-button--pressed' hoverStartTime={20} hoverStayTime={80} id={`journey-transport-${item.id}`} key={item.id} className={`journey-button journey-transport__choice${preview === item.id ? ' is-selected' : ''}`} disabled={!available || !active} onClick={() => { setPreview(item.id); setUnavailable(false); setTrial(value => value + 1); setNotice('') }}>
+      return <Button hoverClass='journey-button--pressed' hoverStartTime={20} hoverStayTime={80} id={`journey-transport-${item.id}`} key={item.id} className={`journey-button journey-transport__choice${preview === item.id ? ' is-selected' : ''}`} disabled={!available || !active} onClick={() => { setPreview(item.id); if (unavailable) setTrial(value => value + 1); setUnavailable(false); setNotice('') }}>
         <PetEntryIcon name={item.id} /><Text>{item.name}</Text><Text>{!available ? '当前形象待适配' : saved === item.id ? '正在使用' : '试一试'}</Text>
       </Button>
     })}</View>

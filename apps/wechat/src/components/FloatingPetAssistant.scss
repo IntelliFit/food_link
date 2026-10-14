@@ -544,6 +544,8 @@
   .pet-assistant-ride__wheel { animation-duration: 400ms; }
 }
 .pet-assistant--refined-motion .pet-assistant-transport { position: absolute; top: 0; left: -8rpx; width: 200rpx; height: 220rpx; }
+.pet-assistant--refined-motion .pet-assistant-transport.is-standby,
+.pet-assistant--refined-motion .pet-assistant-traveler.is-standby { visibility: hidden; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .pet-assistant--refined-motion .has-ride-pose .pet-assistant-ride__pedal,
   .pet-assistant--refined-motion .has-ride-pose .pet-assistant-ride__wheel { animation: none !important; }
@@ -635,7 +637,9 @@
   .pet-assistant-ground { opacity: .5; background: #8baeb738; }
 }
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--running {
+  animation-name: pet-refined-depart;
   transform: translateX(210rpx);
+  &.is-roaming-near { animation-name: pet-refined-depart-near; }
 }
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--docked { transform: translateX(116rpx); transition: none; }
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--returning {
@@ -643,6 +647,8 @@
   &.is-roaming-near { animation-name: pet-refined-arrive-near; }
 }
 @keyframes pet-refined-arrive { from { transform: translateX(210rpx); } to { transform: translateX(0); } }
+@keyframes pet-refined-depart { from { transform: translateX(0); } to { transform: translateX(210rpx); } }
+@keyframes pet-refined-depart-near { from { transform: translateX(-28rpx); } to { transform: translateX(210rpx); } }
 .fl-page-theme-root--balanced.fl-balanced-theme--way-of-water .pet-assistant--refined-motion .pet-assistant-float {
   bottom: calc(690rpx + env(safe-area-inset-bottom)) !important;
 }

@@ -1,4 +1,6 @@
 .pet-actor { position: relative; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.pet-actor__rig { position: absolute; inset: 0; }
+.pet-actor__rig.is-standby { visibility: hidden; pointer-events: none; }
 .pet-actor__frame { width: 100%; height: 100%; overflow: hidden; }
 .pet-actor__sheet { display: block; width: 400%; height: 100%; max-width: none; }
 .pet-actor--jianwen .pet-actor__sheet { height: 200%; }

@@ -171,3 +171,16 @@ test('a failed trial cannot be confirmed; changing tool or retrying creates a fr
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'skateboard')
   expect(container.querySelector('.pet-rig__source')).toHaveAttribute('src', ORIGINAL_COMPANION_SRC)
 })
+
+test('normal transport trials reuse the preview while a failed retry creates a fresh owner', () => {
+  const { container } = render(<PetTransportPicker pet={pet} sprite={ORIGINAL_COMPANION_SRC} account='a' active canSave={() => true} />)
+  const first = container.querySelector('.pet-rig')!
+  fireEvent.click(container.querySelector('#journey-transport-scooter')!)
+  expect(container.querySelector('.pet-rig')).toBe(first)
+  fireEvent.click(container.querySelector('#journey-transport-skateboard')!)
+  expect(container.querySelector('.pet-rig')).toBe(first)
+  fireEvent.error(container.querySelector('.pet-rig__source')!)
+  fireEvent.click(container.querySelector('#journey-transport-skateboard')!)
+  expect(container.querySelector('.pet-rig')).not.toBe(first)
+  expect(Taro.setStorageSync).not.toHaveBeenCalled()
+})

@@ -3,6 +3,7 @@ import Taro from '@tarojs/taro'
 import { PetRigActor } from '../../src/components/PetRigActor'
 import { PET_RIGS } from '../../src/utils/pet-rig'
 import { drawPetRig } from '../../src/utils/pet-rig-render'
+import { PetActor } from '../../src/components/PetActor'
 
 jest.mock('../../src/utils/pet-rig-render', () => ({ drawPetRig: jest.fn() }))
 const draw = drawPetRig as jest.Mock
@@ -10,7 +11,7 @@ let node: any, image: any, hide: () => void, show: () => void
 let original: Record<string, unknown>
 beforeEach(() => {
   jest.useFakeTimers(); jest.clearAllMocks()
-  original = Object.fromEntries(['createSelectorQuery', 'onAppHide', 'onAppShow', 'offAppHide', 'offAppShow'].map(key => [key, Taro[key]]))
+  original = Object.fromEntries(['createSelectorQuery', 'nextTick', 'onAppHide', 'onAppShow', 'offAppHide', 'offAppShow'].map(key => [key, Taro[key]]))
   image = { onload: null, onerror: null }
   Object.defineProperty(image, 'src', { set: () => image.onload?.() })
   node = { width: 0, height: 0, getContext: () => ({ translate: jest.fn(), scale: jest.fn() }), createImage: jest.fn(() => {
@@ -20,6 +21,7 @@ beforeEach(() => {
     return extra
   }), requestAnimationFrame: jest.fn(() => node.requestAnimationFrame.mock.calls.length), cancelAnimationFrame: jest.fn() }
   Object.assign(Taro, {
+    nextTick: jest.fn(callback => callback()),
     createSelectorQuery: jest.fn(() => ({ select: () => ({ fields: () => ({ exec: (callback: any) => callback([{ node, width: 100, height: 110 }]) }) }) })),
     onAppHide: jest.fn(callback => { hide = callback }), onAppShow: jest.fn(callback => { show = callback }), offAppHide: jest.fn(), offAppShow: jest.fn(),
   })
@@ -67,6 +69,32 @@ test('changing tool starts its own cycle while retaining the already loaded iden
   expect(image.onload).toBeNull()
   expect(Taro.offAppHide).toHaveBeenCalledWith(hide)
   expect(Taro.offAppShow).toHaveBeenCalledWith(show)
+})
+
+test('idle and gestures preserve a warmed canvas and do not reload approved artwork', () => {
+  const pet = { builtin_avatar_id: 'jianwen-01', name: '健文' }
+  const { container, rerender } = render(<PetActor pet={pet} action='idle' />)
+  ready()
+  const canvas = container.querySelector('canvas')!
+  const loads = node.createImage.mock.calls.length
+  expect(container.querySelector('.pet-actor__rig')).toHaveClass('is-standby')
+  for (const action of ['walk', 'blink', 'idle', 'jump', 'idle'] as const) {
+    rerender(<PetActor pet={pet} action={action} />)
+    expect(container.querySelector('canvas')).toBe(canvas)
+    expect(node.createImage).toHaveBeenCalledTimes(loads)
+  }
+})
+
+test('transport readiness is reported after the first paint and again after a tool change', () => {
+  const onReady = jest.fn(() => { expect(draw).toHaveBeenCalled() })
+  const { rerender } = render(<PetRigActor rig={PET_RIGS.guigui} vehicle='bicycle' active={false} onReady={onReady} />)
+  expect(onReady).not.toHaveBeenCalled()
+  ready()
+  expect(onReady).toHaveBeenCalledTimes(1)
+  const loads = node.createImage.mock.calls.length
+  rerender(<PetRigActor rig={PET_RIGS.guigui} vehicle='scooter' active={false} onReady={onReady} />)
+  expect(onReady).toHaveBeenCalledTimes(2)
+  expect(node.createImage).toHaveBeenCalledTimes(loads)
 })
 test('reduced motion draws a stable pose and never starts an animation clock', () => {
   const media = { matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn() }

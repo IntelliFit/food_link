@@ -11,18 +11,25 @@ type MiniCanvas = HTMLCanvasElement & { createImage: () => HTMLImageElement; req
 let canvasSerial = 0
 
 /** One clock drives both the character's joints and the tool's pedals. No frame-by-frame React updates. */
-export function PetRigActor({ rig, vehicle, action = 'idle', active = true, showGround = false, onUnavailable }: {
-  rig: PetRig; vehicle?: PetTransportId; action?: PetMotionAction; active?: boolean; showGround?: boolean; onUnavailable?: () => void
+export function PetRigActor({ rig, vehicle, action = 'idle', active = true, showGround = false, onReady, onUnavailable }: {
+  rig: PetRig; vehicle?: PetTransportId; action?: PetMotionAction; active?: boolean; showGround?: boolean; onReady?: () => void; onUnavailable?: () => void
 }) {
   const [id] = useState(() => `pet-rig-${++canvasSerial}`)
   const [ready, setReady] = useState(false)
-  const options = useRef({ vehicle, action, active, showGround, onUnavailable })
-  options.current = { vehicle, action, active, showGround, onUnavailable }
+  const options = useRef({ vehicle, action, active, showGround, onReady, onUnavailable })
+  options.current = { vehicle, action, active, showGround, onReady, onUnavailable }
   const paint = useRef<((reset?: boolean) => void) | null>(null)
+  const paintedRig = useRef<PetRig>()
   const pageHidden = useRef(false)
   Taro.useDidHide(() => { pageHidden.current = true; paint.current?.() })
   Taro.useDidShow(() => { pageHidden.current = false; paint.current?.() })
-  useEffect(() => { paint.current?.(true) }, [vehicle, action, showGround])
+  useEffect(() => {
+    paint.current?.(true)
+    if (!ready || paintedRig.current !== rig) return
+    let current = true
+    Taro.nextTick(() => { if (current) options.current.onReady?.() })
+    return () => { current = false }
+  }, [vehicle, action, showGround, ready, rig])
   useEffect(() => { paint.current?.() }, [active])
   useEffect(() => {
     let disposed = false, hidden = false, frame = 0, clock = 0, last = 0, timer: ReturnType<typeof setTimeout> | undefined
@@ -83,7 +90,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, show
             stop(); if (reset) clock = 0; draw()
             if (!disposed && !hidden && !pageHidden.current && options.current.active && !reduce && (options.current.vehicle || options.current.action !== 'idle')) frame = canvas!.requestAnimationFrame(tick)
           }
-          setReady(true); paint.current(true)
+          paint.current(true); paintedRig.current = rig; setReady(true)
         }
         const sources = [image, ...(armImage ? [armImage] : [])]
         let loaded = 0
@@ -94,7 +101,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, show
     }
     timer = setTimeout(connect, 30)
     return () => {
-      disposed = true; clearTimeout(timer); stop(); paint.current = null
+      disposed = true; clearTimeout(timer); stop(); paint.current = null; paintedRig.current = undefined
       if (image) { image.onload = null; image.onerror = null }
       if (armImage) { armImage.onload = null; armImage.onerror = null }
       media?.removeEventListener?.('change', motionPreference)

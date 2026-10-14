@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import Taro from '@tarojs/taro'
+import { useEffect } from 'react'
 import PetHomePage from '../../src/packageExtra/pages/pet-home/index'
 import { customizePetPixelAvatar, getPetSummary, selectPetAppearance, type PetProfile } from '../../src/utils/api'
 import { chooseImageWithPrivacy } from '../../src/utils/weapp-privacy'
@@ -25,6 +26,7 @@ const petB = { ...petA, id: 'pet-b', name: '伙伴乙' } as PetProfile
 const preferenceKey = (user: string) => `${HOME_COMPANION_PREFERENCE_KEY}:${user}`
 let store: Map<string, any>
 let show: (() => void) | undefined
+const showCallbacks = new Set<() => void>()
 let pull: (() => void) | undefined
 const copy = <T,>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value))
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
@@ -35,14 +37,18 @@ function profileEvents() { return (Taro.eventCenter.trigger as jest.Mock).mock.c
 async function switchToB() { store.set('user_id', userB); (getPetSummary as jest.Mock).mockResolvedValue({ pet: petB }); await act(async () => { show?.(); await Promise.resolve(); await Promise.resolve() }) }
 
 beforeEach(() => {
-  jest.clearAllMocks(); show = undefined; pull = undefined
+  jest.clearAllMocks(); showCallbacks.clear(); pull = undefined
+  show = () => { for (const callback of [...showCallbacks]) callback() }
   ;[getPetSummary, customizePetPixelAvatar, selectPetAppearance, chooseImageWithPrivacy, Taro.showModal].forEach(mock => (mock as jest.Mock).mockReset())
   store = new Map<string, any>([
     ['user_id', userA],
     [preferenceKey(userA), { selected: 'original', enabledOriginal: true }],
     [preferenceKey(userB), { selected: 'jianwen', enabledOriginal: true }],
   ])
-  ;(Taro.useDidShow as jest.Mock).mockImplementation(callback => { show = callback })
+  // Page and mounted canvas actors all receive the same show event.
+  ;(Taro.useDidShow as jest.Mock).mockImplementation(function useDidShowMock(callback: () => void) {
+    useEffect(() => { showCallbacks.add(callback); return () => { showCallbacks.delete(callback) } }, [callback])
+  })
   ;(Taro.usePullDownRefresh as jest.Mock).mockImplementation(callback => { pull = callback })
   Taro.stopPullDownRefresh = jest.fn().mockResolvedValue(undefined)
   ;(Taro.getStorageSync as jest.Mock).mockImplementation(key => copy(store.get(key) || ''))

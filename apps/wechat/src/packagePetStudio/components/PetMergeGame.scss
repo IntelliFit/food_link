@@ -10,8 +10,8 @@
   &__primary { color: #fff; background: #397556; font-weight: 600; }
   &__secondary { background: #e9efdf; color: #39634c; }
   &__quiet { background: transparent; font-size: 25px; color: #6d7969; }
-  &__scene { position: relative; height: 300px; overflow: hidden; border-radius: 32px; background: #dce8d4; margin-bottom: 26px; }
-  &__backdrop { position: absolute; width: 100%; height: 100%; }
+  &__scene { position: relative; overflow: hidden; border-radius: 32px; background: #dce8d4; margin-bottom: 26px; }
+  &__backdrop { display: block; width: 100%; height: auto; }
   &__scene-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(242, 246, 223, .24), rgba(248, 245, 226, .9)); }
   &__actor { position: absolute; left: 24px; bottom: 26px; }
   &__scene-copy { position: absolute; left: 224px; right: 26px; top: 96px; }

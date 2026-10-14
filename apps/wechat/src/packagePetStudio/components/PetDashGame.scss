@@ -9,8 +9,8 @@
 .pet-dash__hud > view { flex: 1; border-radius: 20rpx; padding: 18rpx 8rpx; text-align: center; background: #fffaf0; border: 1rpx solid #e6d9bf; }
 .pet-dash__hud text { display: block; font-size: 38rpx; font-weight: 700; }
 .pet-dash__hud text:last-child { font-size: 21rpx; color: #8a7e64; font-weight: 400; margin-top: 5rpx; }
-.pet-dash__world { position: relative; height: 460rpx; overflow: hidden; border-radius: 28rpx; border: 2rpx solid #c6dac2; }
-.pet-dash__scene { position: absolute; inset: 0; background-size: auto 100%; background-repeat: no-repeat; }
+.pet-dash__world { position: relative; height: 0; padding-top: 56.25%; overflow: hidden; border-radius: 28rpx; border: 2rpx solid #c6dac2; background: #d1e4dc; }
+.pet-dash__scene { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pet-dash__jump-mark { position: absolute; top: 49%; bottom: 12%; left: 28.59%; width: 3rpx; background: #ffd985c9; box-shadow: 0 0 12rpx #ffdc8d; z-index: 1; }
 .pet-dash__jump-mark text { position: absolute; top: -35rpx; left: -48rpx; width: 96rpx; font-size: 19rpx; text-align: center; border-radius: 9rpx; background: #fff3d5ec; color: #866128; padding: 4rpx 0; }
 .pet-dash__world.is-fever { border-color: #dfae4e; box-shadow: 0 0 25rpx #e2b35445; }

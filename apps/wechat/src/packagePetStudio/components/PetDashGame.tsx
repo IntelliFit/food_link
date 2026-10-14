@@ -1,4 +1,4 @@
-import { Button, Text, View } from '@tarojs/components'
+import { Button, Image, Text, View } from '@tarojs/components'
 import Taro, { useDidHide } from '@tarojs/taro'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PetActor } from '../../components/PetActor'
@@ -92,7 +92,7 @@ export function PetDashGame({ active, pet, accountId, startLevel = 1, quickStart
     <View className='pet-dash__header'><Button id='adventure-exit' className='pet-dash__back' disabled={blocked} onClick={() => { dispatch('pause'); session.current = null; onExit() }}>返回</Button><View><Text>追风快跑</Text><Text>第 {level.id} 关 · {level.name}</Text></View><Button id='adventure-back' className='pet-dash__back' disabled={!playing} onClick={() => dispatch('pause')}>暂停</Button></View>
     <View className='pet-dash__hud'><View><Text>{state.score}</Text><Text>本局得分</Text></View><View><Text>{Math.ceil((DASH_DURATION_MS - state.elapsedMs) / 1000)}s</Text><Text>到家倒计时</Text></View><View><Text>{state.hearts}/3</Text><Text>容错机会</Text></View></View>
     <View id='adventure-world' className={`pet-dash__world${state.feverRemainingMs > 0 ? ' is-fever' : ''}${state.status === 'paused' ? ' is-paused' : ''}`} data-state={state.status} data-distance={state.distance} data-score={state.score} data-hearts={state.hearts} data-jump={state.jumpRemainingMs} data-successful-jumps={state.successfulJumps} data-remaining={DASH_DURATION_MS - state.elapsedMs} catchMove={playing} onClick={() => { if (playing) dispatch('jump') }}>
-      <View className='pet-dash__scene' style={{ backgroundImage: 'url(/packagePetStudio/assets/dash-stage-v1.jpg)', backgroundPosition: `${state.distance / 3}% center` }} />
+      <Image className='pet-dash__scene' src='/packagePetStudio/assets/dash-stage-v1.jpg' mode='aspectFit' aria-hidden />
       <View className='pet-dash__jump-mark'><Text>到线起跳</Text></View>
       <View className='pet-dash__world-top'><Text>{state.feverRemainingMs > 0 ? '双倍时刻 ×2' : `跳准蓄力 ${state.feverCharge}/3`}</Text><Text>{state.combo > 1 ? `${state.combo} 连击` : '点屏幕也能跳'}</Text></View>
       {state.obstacles.filter(item => item.distance - state.distance > -10 && item.distance - state.distance < 60).map(item => <View className={`pet-dash__obstacle${item.cleared ? ' is-cleared' : ''}`} key={item.id} data-distance={item.distance} style={{ left: `${22 + (item.distance - state.distance) * 1.55}%` }}><Prop type={item.type} />{item.collectible && !item.resolved && <Prop type='badge' className='pet-dash__prize' />}</View>)}
