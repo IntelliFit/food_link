@@ -89,7 +89,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
     retryBalancedScenes().then(() => { if (generation === sceneGeneration.current) setScenesReady(true) }).catch(() => { if (generation === sceneGeneration.current) setSceneError(true) })
   }
   const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}><Text>场景未能打开，轻触重试</Text>
-    {typeof __ENABLE_DEV_DEBUG_UI__ !== 'undefined' && __ENABLE_DEV_DEBUG_UI__ && <Text style={{ display: 'block', fontSize: '11px', lineHeight: '1.5', whiteSpace: 'normal' }}>诊断 S3｜{sceneFailure || '未收到原生错误详情'}</Text>}
+    {typeof __ENABLE_DEV_DEBUG_UI__ !== 'undefined' && __ENABLE_DEV_DEBUG_UI__ && <Text style={{ display: 'block', fontSize: '11px', lineHeight: '1.5', whiteSpace: 'normal' }}>诊断 S4｜{sceneFailure || '未收到原生错误详情'}</Text>}
   </View>
   const definition = getBalancedThemeDefinition(theme)
   const title = TITLES[theme][SURFACE_INDEX[surface]]

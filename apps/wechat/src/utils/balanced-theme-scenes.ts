@@ -1,27 +1,29 @@
 const root = '/packageThemeScenes/assets'
+const natureRoot = '/packageThemeScenesNature/assets'
+const galleryRoot = '/packageThemeScenesGallery/assets'
 export const BALANCED_SCENES = {
-  miniatureGarden: `${root}/miniature-garden-v4.webp`,
-  miniatureDesk: `${root}/miniature-desk-v4.webp`,
-  miniatureProfile: `${root}/miniature-profile-v10.webp`,
-  miniatureSquare: `${root}/miniature-square-v4.webp`,
-  picturebookDay: `${root}/picturebook-day-v4.webp`,
-  picturebookDesk: `${root}/picturebook-desk-v4.webp`,
-  picturebookProfile: `${root}/picturebook-profile-v10.webp`,
-  waterVessel: `${root}/water-vessel-v4.webp`,
-  waterRock: `${root}/water-rock-v6.webp`,
-  waterHome: `${root}/water-home-v5.webp`,
-  waterStats: `${root}/water-stats-v5.webp`,
-  waterCommunity: `${root}/water-community-v5.webp`,
-  waterProfile: `${root}/water-profile-v5.webp`,
-  naturalLeaves: `${root}/natural-leaves-v4.webp`,
-  naturalRings: `${root}/natural-rings-v8.webp`,
-  naturalDrawer: `${root}/natural-drawer-v8.webp`,
-  naturalPaper: `${root}/natural-paper-v8.webp`,
-  motionBranch: `${root}/motion-branch-v9.webp`,
-  motionCloud: `${root}/motion-cloud-v9.webp`,
-  easternSoup: `${root}/eastern-soup-v4.webp`,
-  galleryCollage: `${root}/gallery-collage-v4.webp`,
-  galleryProfile: `${root}/gallery-profile-v10.webp`,
+  miniatureGarden: `${galleryRoot}/miniature-garden-v4.jpg`,
+  miniatureDesk: `${galleryRoot}/miniature-desk-v4.jpg`,
+  miniatureProfile: `${galleryRoot}/miniature-profile-v10.jpg`,
+  miniatureSquare: `${galleryRoot}/miniature-square-v4.jpg`,
+  picturebookDay: `${natureRoot}/picturebook-day-v4.jpg`,
+  picturebookDesk: `${natureRoot}/picturebook-desk-v4.jpg`,
+  picturebookProfile: `${natureRoot}/picturebook-profile-v10.jpg`,
+  waterVessel: `${root}/water-vessel-v4.jpg`,
+  waterRock: `${root}/water-rock-v6.jpg`,
+  waterHome: `${root}/water-home-v5.jpg`,
+  waterStats: `${root}/water-stats-v5.jpg`,
+  waterCommunity: `${root}/water-community-v5.jpg`,
+  waterProfile: `${root}/water-profile-v5.jpg`,
+  naturalLeaves: `${natureRoot}/natural-leaves-v4.jpg`,
+  naturalRings: `${natureRoot}/natural-rings-v8.png`,
+  naturalDrawer: `${natureRoot}/natural-drawer-v8.jpg`,
+  naturalPaper: `${natureRoot}/natural-paper-v8.jpg`,
+  motionBranch: `${root}/motion-branch-v9.png`,
+  motionCloud: `${root}/motion-cloud-v9.png`,
+  easternSoup: `${root}/eastern-soup-v4.jpg`,
+  galleryCollage: `${galleryRoot}/gallery-collage-v4.jpg`,
+  galleryProfile: `${galleryRoot}/gallery-profile-v10.jpg`,
 } as const
 
 let pending: Promise<void> | undefined
@@ -31,7 +33,7 @@ const listeners = new Set<(revision: number, imageError?: boolean, detail?: stri
 type LazyError = { subpackage?: Array<string | { root?: string; name?: string }>; errMsg?: string }
 declare const wx: { onLazyLoadError?: (listener: (event: LazyError) => void) => void; offLazyLoadError?: (listener: (event: LazyError) => void) => void }
 const onLazyError = (event: LazyError) => {
-  if (event.subpackage?.some(pkg => typeof pkg === 'string' ? /packageThemeScenes|theme-scenes/.test(pkg) : pkg.root?.startsWith('packageThemeScenes') || pkg.name === 'theme-scenes')) {
+  if (event.subpackage?.some(pkg => typeof pkg === 'string' ? /packageThemeScenes|theme-scenes/.test(pkg) : pkg.root?.startsWith('packageThemeScenes') || pkg.name?.startsWith('theme-scenes'))) {
     console.warn('[theme-scenes] component package unavailable:', event.errMsg || 'unknown error')
     reportBalancedSceneImageError(`组件下载：${event.errMsg || '未返回原因'}`)
   }

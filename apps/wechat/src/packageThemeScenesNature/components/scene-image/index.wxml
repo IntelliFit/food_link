@@ -1,0 +1,7 @@
+<image wx:if="{{asset === 'natural-drawer-v8.jpg'}}" class="sceneclass" src="/packageThemeScenesNature/assets/natural-drawer-v8.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'natural-leaves-v4.jpg'}}" class="sceneclass" src="/packageThemeScenesNature/assets/natural-leaves-v4.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'natural-paper-v8.jpg'}}" class="sceneclass" src="/packageThemeScenesNature/assets/natural-paper-v8.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'natural-rings-v8.png'}}" class="sceneclass" src="/packageThemeScenesNature/assets/natural-rings-v8.png" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'picturebook-day-v4.jpg'}}" class="sceneclass" src="/packageThemeScenesNature/assets/picturebook-day-v4.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'picturebook-desk-v4.jpg'}}" class="sceneclass" src="/packageThemeScenesNature/assets/picturebook-desk-v4.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'picturebook-profile-v10.jpg'}}" class="sceneclass" src="/packageThemeScenesNature/assets/picturebook-profile-v10.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />

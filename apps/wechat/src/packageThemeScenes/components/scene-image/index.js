@@ -1,4 +1,5 @@
-/* The image must be rendered by a component in its own resource package. */
+/* JPEG/PNG files must be rendered by a component in their own resource package. */
+const resourceRoot = 'packageThemeScenes';
 Component({
   options: { virtualHost: true, styleIsolation: 'apply-shared' },
   externalClasses: ['sceneclass'],
@@ -12,9 +13,9 @@ Component({
       console.warn('[theme-scenes] image unavailable:', this.properties.asset, event.detail.errMsg);
       try {
         const asset = this.properties.asset;
-        if (/^[a-z0-9-]+\.webp$/.test(asset)) {
+        if (/^[a-z0-9-]+\.(jpg|png)$/.test(asset)) {
           wx.getFileSystemManager().access({
-            path: `packageThemeScenes/assets/${asset}`,
+            path: `${resourceRoot}/assets/${asset}`,
             success: () => console.info('[theme-scenes] packaged file available:', asset),
             fail: error => console.warn('[theme-scenes] packaged file unavailable:', asset, error.errMsg),
           });

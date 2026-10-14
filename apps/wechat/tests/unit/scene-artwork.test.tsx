@@ -1,12 +1,16 @@
 import { SceneArtwork } from '../../src/components/SceneArtwork'
 
-test('packaged artwork renders a native resource owner and forwards decode/error events', () => {
+test.each([
+  ['/packageThemeScenes/assets/water-home-v5.jpg', 'theme-scene-image', 'water-home-v5.jpg'],
+  ['/packageThemeScenesNature/assets/natural-rings-v8.png', 'theme-scene-nature-image', 'natural-rings-v8.png'],
+  ['/packageThemeScenesGallery/assets/gallery-profile-v10.jpg', 'theme-scene-gallery-image', 'gallery-profile-v10.jpg'],
+])('packaged artwork %s renders its native owner and forwards decode/error events', (src, owner, asset) => {
   const loaded = jest.fn()
   const failed = jest.fn()
   // A jsdom custom element cannot dispatch WeChat native component events.
-  const component = SceneArtwork({ src: '/packageThemeScenes/assets/gallery-profile-v10.webp', className: 'portrait', mode: 'widthFix', onLoad: loaded, onError: failed })
-  expect(component.type).toBe('theme-scene-image')
-  expect(component.props.asset).toBe('gallery-profile-v10.webp')
+  const component = SceneArtwork({ src, className: 'portrait', mode: 'widthFix', onLoad: loaded, onError: failed })
+  expect(component.type).toBe(owner)
+  expect(component.props.asset).toBe(asset)
   expect(component.props.sceneclass).toBe('portrait')
   expect(component.props.mode).toBe('widthFix')
   expect(component.props.src).toBeUndefined()

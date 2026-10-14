@@ -51,7 +51,7 @@ test('reveals a silent looping clip only after a decoded frame; hiding releases 
 })
 
 test('packaged clips wait for the native poster instead of treating a JS sentinel as ready', () => {
-  const { container } = render(<ThemeSceneBackground poster='/packageThemeScenes/assets/water-home-v5.webp' src='/packageThemeScenes/assets/water-home-v5.mp4' active />)
+  const { container } = render(<ThemeSceneBackground poster='/packageThemeScenes/assets/water-home-v5.jpg' src='/packageThemeScenes/assets/water-home-v5.mp4' active />)
   expect(screen.queryByTestId('scene-video')).toBeNull()
   fireEvent.load(container.querySelector('img')!)
   expect(screen.getByTestId('scene-video')).toBeInTheDocument()

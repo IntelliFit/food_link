@@ -85,11 +85,17 @@ export default defineAppConfig({
   // 否则会出现“应用仍是浅色态，但原生页面背景先变黑”的半黑半白混合态。
   darkmode: false,
   // Build-time native template discovery; the plugin declares async owners.
-  usingComponents: { 'theme-scene-image': './packageThemeScenes/components/scene-image/index' },
+  usingComponents: {
+    'theme-scene-image': './packageThemeScenes/components/scene-image/index',
+    'theme-scene-nature-image': './packageThemeScenesNature/components/scene-image/index',
+    'theme-scene-gallery-image': './packageThemeScenesGallery/components/scene-image/index',
+  },
   pages: mainPages,
   subpackages: [
     { root: 'packagePetStudio', name: 'pet-studio', pages: ['pages/index/index', 'pages/kitchen/index', 'pages/adventure/index'] },
     { root: 'packageThemeScenes', name: 'theme-scenes', pages: ['pages/index/index'] },
+    { root: 'packageThemeScenesNature', name: 'theme-scenes-nature', pages: ['pages/index/index'] },
+    { root: 'packageThemeScenesGallery', name: 'theme-scenes-gallery', pages: ['pages/index/index'] },
     {
       root: 'packageExtra',
       name: 'extra',

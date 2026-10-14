@@ -1,0 +1,6 @@
+<image wx:if="{{asset === 'gallery-collage-v4.jpg'}}" class="sceneclass" src="/packageThemeScenesGallery/assets/gallery-collage-v4.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'gallery-profile-v10.jpg'}}" class="sceneclass" src="/packageThemeScenesGallery/assets/gallery-profile-v10.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'miniature-desk-v4.jpg'}}" class="sceneclass" src="/packageThemeScenesGallery/assets/miniature-desk-v4.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'miniature-garden-v4.jpg'}}" class="sceneclass" src="/packageThemeScenesGallery/assets/miniature-garden-v4.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'miniature-profile-v10.jpg'}}" class="sceneclass" src="/packageThemeScenesGallery/assets/miniature-profile-v10.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />
+<image wx:if="{{asset === 'miniature-square-v4.jpg'}}" class="sceneclass" src="/packageThemeScenesGallery/assets/miniature-square-v4.jpg" mode="{{mode}}" aria-hidden="true" bindload="onLoad" binderror="onError" />

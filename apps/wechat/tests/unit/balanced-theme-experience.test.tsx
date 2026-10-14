@@ -36,10 +36,10 @@ describe('balanced theme live experiences', () => {
       const { rerender } = render(<BalancedThemeExperience surface='home' home={home} />)
       await waitFor(() => expect(screen.queryByText('场景未能打开，轻触重试')).not.toBeInTheDocument())
       act(() => reportBalancedSceneImageError('组件下载：loadSubpackage: fail'))
-      expect(screen.getByText(/诊断 S3｜组件下载：loadSubpackage: fail/)).toBeInTheDocument()
+      expect(screen.getByText(/诊断 S4｜组件下载：loadSubpackage: fail/)).toBeInTheDocument()
       globals.__ENABLE_DEV_DEBUG_UI__ = false
       rerender(<BalancedThemeExperience surface='home' home={home} />)
-      expect(screen.queryByText(/诊断 S3/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/诊断 S4/)).not.toBeInTheDocument()
       expect(screen.getByText('场景未能打开，轻触重试')).toBeInTheDocument()
     } finally {
       if (previous === undefined) delete globals.__ENABLE_DEV_DEBUG_UI__
