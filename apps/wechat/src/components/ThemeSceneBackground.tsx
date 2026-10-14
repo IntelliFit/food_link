@@ -7,7 +7,7 @@ import './ThemeSceneBackground.scss'
 let sceneVideoSequence = 0
 
 /** A rendered scene clip replaces its still image; no effects are overlaid on the artwork. */
-export function ThemeSceneBackground({ poster, src, active, className = 'bt-scene', initialTime = 0, onPosterError }: { poster?: string; src?: string; active: boolean; className?: string; initialTime?: number; onPosterError?: () => void }) {
+export function ThemeSceneBackground({ poster, src, active, className = 'bt-scene', initialTime = 0, onPosterOwnerReady, onPosterLoad, onPosterError }: { poster?: string; src?: string; active: boolean; className?: string; initialTime?: number; onPosterOwnerReady?: () => void; onPosterLoad?: () => void; onPosterError?: (detail: string) => void }) {
   const [playbackSrc, setPlaybackSrc] = React.useState<string>()
   const [playing, setPlaying] = React.useState(false)
   const [progressed, setProgressed] = React.useState(false)
@@ -53,7 +53,7 @@ export function ThemeSceneBackground({ poster, src, active, className = 'bt-scen
   const showVideo = Boolean(playbackSrc && active && !failed)
   if (!poster && !showVideo) return null
   return <View className={`${className} bt-scene-background${showVideo ? ' has-video-source' : ''}${playing ? ' has-started' : ''}${progressed ? ' has-progressed' : ''}${failed ? ' has-failed' : ''}`} aria-hidden>
-    {poster && <SceneArtwork key={poster} className='bt-scene-background__poster' src={poster} mode='aspectFill' onLoad={() => setLoadedPoster(poster)} onError={() => { setLoadedPoster(undefined); onPosterError?.() }} />}
+    {poster && <SceneArtwork key={poster} className='bt-scene-background__poster' src={poster} mode='aspectFill' onOwnerReady={onPosterOwnerReady} onLoad={() => { setLoadedPoster(poster); onPosterLoad?.() }} onError={detail => { setLoadedPoster(undefined); onPosterError?.(detail) }} />}
     {showVideo && <Video id={videoId} key={playbackSrc} className={`bt-scene-background__video${playing ? ' is-playing' : ''}`}
       src={playbackSrc!} autoplay loop muted controls={false} objectFit='cover' initialTime={initialTime}
       showCenterPlayBtn={false} showPlayBtn={false} showFullscreenBtn={false} showProgress={false}

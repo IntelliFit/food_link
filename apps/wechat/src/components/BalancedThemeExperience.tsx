@@ -6,6 +6,7 @@ import { useBalancedTheme } from './BalancedThemeContext'
 import { ThemeChapterHeader } from './ThemeChapterHeader'
 import { ThemeSceneBackground } from './ThemeSceneBackground'
 import { SceneArtwork } from './SceneArtwork'
+import { useThemeSceneScope } from './ThemeSceneScope'
 import { useThemeMotion } from './ThemeMotion'
 import { getThemeSceneVideo } from '../utils/theme-scene-videos'
 import { getBalancedThemeDefinition } from '../utils/balanced-theme'
@@ -49,6 +50,18 @@ const PHILOSOPHY = {
 }
 const SURFACE_INDEX = { home: 0, stats: 1, community: 2, profile: 3 } as const
 const SURFACE_NAME = { home: '首页', stats: '分析', community: '圈子', profile: '我的' }
+
+function expectedSceneAssets(theme: keyof typeof TITLES, surface: BalancedThemeSurface): string[] {
+  const s = BALANCED_SCENES
+  const assets = theme === 'natural-symbiosis'
+    ? (surface === 'home' ? [s.naturalLeaves, s.naturalDrawer] : surface === 'profile' ? [s.naturalLeaves] : [])
+    : theme === 'eastern-salon' ? (surface === 'home' ? [s.easternSoup] : [])
+    : theme === 'modern-gallery' ? [surface === 'profile' ? s.galleryProfile : s.galleryCollage]
+    : theme === 'miniature-world' ? [surface === 'profile' ? s.miniatureProfile : surface === 'community' ? s.miniatureSquare : s.miniatureGarden]
+    : theme === 'picturebook-companion' ? [surface === 'profile' ? s.picturebookProfile : surface === 'home' ? s.picturebookDay : s.picturebookDesk]
+    : theme === 'way-of-water' ? [{ home: s.waterHome, stats: s.waterStats, community: s.waterCommunity, profile: s.waterProfile }[surface]] : []
+  return assets.filter(Boolean)
+}
 declare const __ENABLE_DEV_DEBUG_UI__: boolean
 
 /** Scene artwork is decorative. Metrics and actions belong to the live business page. */
@@ -56,40 +69,93 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const wellness = useInkWellness()
   const { theme } = useBalancedTheme()
   const motion = useThemeMotion()
+  const scope = useThemeSceneScope()
+  const expectedAssets = React.useMemo(() => expectedSceneAssets(theme, surface), [theme, surface])
   const [scenesReady, setScenesReady] = React.useState(false)
-  const [sceneError, setSceneError] = React.useState(false)
-  const [sceneFailure, setSceneFailure] = React.useState('')
   const [loadedProfileArt, setLoadedProfileArt] = React.useState<string>()
   const [sceneAttempt, setSceneAttempt] = React.useState(getBalancedScenesRevision)
-  const sceneGeneration = React.useRef(0)
+  const identity = `${scope}:${theme}:${surface}:${wellness}:${sceneAttempt}`
+  const current = React.useRef({ identity, active: true, phases: new Map<string, 'ready' | 'loaded' | 'error'>(), errors: new Map<string, string>() })
+  // Initialize before native cached-load callbacks, never in a passive effect.
+  if (current.current.identity !== identity) current.current = { identity, active: true, phases: new Map(), errors: new Map() }
+  const attempt = current.current
+  const [failure, setFailure] = React.useState({ identity, detail: '' })
+  const sceneFailure = failure.identity === identity ? failure.detail : ''
+  const sceneError = Boolean(sceneFailure)
+  const refreshFailure = () => {
+    if (current.current === attempt && attempt.active) setFailure({ identity, detail: Array.from(attempt.errors.values())[0] || '' })
+  }
+  const markError = (asset: string, detail: string) => {
+    if (current.current !== attempt || !attempt.active) return
+    attempt.phases.set(asset, 'error'); attempt.errors.set(asset, detail.slice(0, 180)); refreshFailure()
+  }
+  const markScene = (asset: string | undefined, phase: 'ready' | 'loaded', ledgerKey = asset) => {
+    if (!asset || current.current !== attempt || !attempt.active) return false
+    attempt.errors.delete(`package:${asset.split('/')[1]}`)
+    if (phase !== 'ready' || attempt.phases.get(ledgerKey!) !== 'loaded') attempt.phases.set(ledgerKey!, phase)
+    if (phase === 'loaded') attempt.errors.delete(ledgerKey!)
+    refreshFailure()
+    return true
+  }
+  const posterCallbacks = (asset?: string) => ({
+    onPosterOwnerReady: () => { markScene(asset, 'ready') },
+    onPosterLoad: () => { markScene(asset, 'loaded') },
+    onPosterError: (detail: string) => markError(asset || 'poster', detail),
+  })
   React.useEffect(() => {
     let active = true
-    sceneGeneration.current += 1
+    attempt.active = true
     let unsubscribe = () => {}
     if (!wellness && theme !== 'clarity-order' && theme !== 'clear-care') {
-      unsubscribe = subscribeBalancedScenes((revision, imageError, detail) => {
+      unsubscribe = subscribeBalancedScenes((revision, imageError, detail, progress) => {
         if (active) {
-          if (imageError) { setSceneError(true); if (detail) setSceneFailure(detail); return }
-          setScenesReady(true); setSceneError(false); setSceneFailure(''); setSceneAttempt(revision)
+          if (progress) {
+            if ('packageRoot' in progress) {
+              if (expectedAssets.some(asset => asset.startsWith(`/${progress.packageRoot}/`) && attempt.phases.get(asset) !== 'loaded')) markError(`package:${progress.packageRoot}`, detail || '组件下载失败')
+              return
+            }
+            // Main images use this instance's callbacks, including failures.
+            if (!progress.owner || progress.scope !== scope) return
+            const supplemental: string[] = theme === 'natural-symbiosis' ? [BALANCED_SCENES.naturalPaper, BALANCED_SCENES.naturalRings, BALANCED_SCENES.naturalDrawer]
+              : theme === 'picturebook-companion' ? [BALANCED_SCENES.picturebookDay] : theme === 'miniature-world' ? [BALANCED_SCENES.miniatureGarden] : []
+            if (!expectedAssets.includes(progress.asset) && !supplemental.includes(progress.asset)) return
+            const ledgerKey = `${progress.owner}:${progress.asset}`
+            if (progress.phase === 'disposed') { attempt.errors.delete(ledgerKey); attempt.phases.delete(ledgerKey); refreshFailure() }
+            else if (progress.phase === 'error') markError(ledgerKey, detail || '图片未能打开')
+            else markScene(progress.asset, progress.phase, ledgerKey)
+            return
+          }
+          if (imageError) return // Unidentified legacy errors cannot identify this page's failed asset.
+          setScenesReady(true); setSceneAttempt(revision)
         }
       })
-      loadBalancedScenes().then(() => { if (active) { setScenesReady(true); setSceneError(false) } }).catch(() => { if (active) setSceneError(true) })
+      loadBalancedScenes().then(() => { if (active) setScenesReady(true) }).catch(() => { if (active) markError('render', '场景组件未能就绪') })
     }
-    return () => { active = false; sceneGeneration.current += 1; unsubscribe() }
-  }, [theme, wellness])
+    return () => { active = false; attempt.active = false; unsubscribe() }
+  }, [theme, wellness, surface, expectedAssets, scope, attempt])
+  React.useEffect(() => {
+    if (wellness || !scenesReady || !expectedAssets.length) return
+    const timer = setTimeout(() => {
+      for (const asset of expectedAssets) {
+        const phase = attempt.phases.get(asset)
+        if (phase === 'loaded' || phase === 'error') continue
+        const name = asset.split('/').pop()
+        markError(asset, `${phase === 'ready' ? '图片等待超时' : '组件仍为占位'} ${name}：20 秒内未收到图片结果`)
+      }
+    }, 20000)
+    return () => clearTimeout(timer)
+  }, [expectedAssets, attempt, scenesReady, wellness])
   if (wellness) return children ? <>{children}</> : null
   // ThemeSceneBackground waits for its native poster before reading a clip.
   const sceneVideo = scenesReady ? getThemeSceneVideo(theme, surface) : undefined
   const { miniatureGarden, miniatureDesk, miniatureSquare, picturebookDay, picturebookDesk, waterVessel, waterRock, waterHome, waterStats, waterCommunity, waterProfile, naturalLeaves, easternSoup, galleryCollage } = scenesReady ? BALANCED_SCENES : {} as Partial<typeof BALANCED_SCENES>
   const retryScene = () => {
-    const generation = sceneGeneration.current
-    setSceneError(false)
+    attempt.errors.clear(); refreshFailure()
     setLoadedProfileArt(undefined)
-    setSceneAttempt(attempt => attempt + 1)
-    retryBalancedScenes().then(() => { if (generation === sceneGeneration.current) setScenesReady(true) }).catch(() => { if (generation === sceneGeneration.current) setSceneError(true) })
+    retryBalancedScenes().then(() => { if (current.current === attempt && attempt.active) setScenesReady(true) }).catch(() => { markError('render', '场景组件重试失败') })
   }
   const sceneRetry = sceneError && <View className='bt-scene-retry' role='button' onClick={retryScene}><Text>场景未能打开，轻触重试</Text>
-    {typeof __ENABLE_DEV_DEBUG_UI__ !== 'undefined' && __ENABLE_DEV_DEBUG_UI__ && <Text style={{ display: 'block', fontSize: '11px', lineHeight: '1.5', whiteSpace: 'normal' }}>诊断 S4｜{sceneFailure || '未收到原生错误详情'}</Text>}
+    {typeof __ENABLE_DEV_DEBUG_UI__ !== 'undefined' && __ENABLE_DEV_DEBUG_UI__ && <Text style={{ display: 'block', fontSize: '11px', lineHeight: '1.5', whiteSpace: 'normal' }}>诊断 S5｜{sceneFailure || '未收到原生错误详情'}</Text>}
   </View>
   const definition = getBalancedThemeDefinition(theme)
   const title = TITLES[theme][SURFACE_INDEX[surface]]
@@ -104,7 +170,7 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   const action = (id: string, text: string, detail: string, icon: string, onClick: () => void) => (
     <View id={`bt-action-${id}`} className={`bt-action bt-action--${id}`} role='button' aria-label={text} hoverClass='bt-action--pressed' onClick={onClick}>
       {theme === 'way-of-water' && <Image className='bt-action__water-drop' src={waterDrop} mode='aspectFit' />}
-      {theme === 'natural-symbiosis' && id === 'record' && scenesReady && <SceneArtwork className='bt-action__specimen' src={BALANCED_SCENES.naturalDrawer} mode='scaleToFill' onError={() => setSceneError(true)} />}
+      {theme === 'natural-symbiosis' && id === 'record' && scenesReady && <SceneArtwork className='bt-action__specimen' src={BALANCED_SCENES.naturalDrawer} mode='scaleToFill' onOwnerReady={() => markScene(BALANCED_SCENES.naturalDrawer, 'ready')} onLoad={() => markScene(BALANCED_SCENES.naturalDrawer, 'loaded')} onError={detail => markError(BALANCED_SCENES.naturalDrawer, detail)} />}
       <Text className={`iconfont ${icon} bt-action__icon`} />
       <View className='bt-action__copy'><Text>{text}</Text>{detail && <Text>{detail}</Text>}</View>
       <Text className='iconfont icon-right bt-action__arrow' />
@@ -130,13 +196,13 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       : theme === 'picturebook-companion' ? picturebookDesk
       : theme === 'eastern-salon' ? (surface === 'profile' ? undefined : easternLandscape) : theme === 'way-of-water' ? ({ stats: waterStats, community: waterCommunity, profile: waterProfile } as const)[surface] || waterRock
       : theme === 'modern-gallery' ? galleryCollage : undefined
-    const profileArtKey = `${profileArt}:${sceneAttempt}`
+    const profileArtKey = `${profileArt}:${identity}`
     return <>
-      {profileArt && <SceneArtwork key={profileArtKey} className={`bt-profile-backdrop bt-profile-backdrop--${theme}`} src={profileArt} mode='widthFix' onLoad={() => setLoadedProfileArt(profileArtKey)} onError={() => { setLoadedProfileArt(undefined); setSceneError(true) }} />}
+      {profileArt && <SceneArtwork key={profileArtKey} className={`bt-profile-backdrop bt-profile-backdrop--${theme}`} src={profileArt} mode='widthFix' onOwnerReady={() => markScene(profileArt, 'ready')} onLoad={() => { if (markScene(profileArt, 'loaded')) setLoadedProfileArt(profileArtKey) }} onError={detail => { if (current.current === attempt && attempt.active) { setLoadedProfileArt(undefined); markError(profileArt, detail) } }} />}
       <View id={`balanced-theme-experience-${surface}`} className={`${rootClass}${surface === 'profile' && loadedProfileArt === profileArtKey && profileArt ? ' bt-profile-art--loaded' : ''}`}>
       <ThemeSceneBackground
         key={sceneAttempt}
-        onPosterError={() => setSceneError(true)}
+        {...posterCallbacks(art)}
         className={`bt-scene bt-scene--chapter bt-scene--${surface}`}
         poster={profileArt ? undefined : art}
         src={sceneVideo}
@@ -152,19 +218,19 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
   return <View key={sceneAttempt} id='balanced-theme-experience-home' className={rootClass}>{sceneRetry}
     {(theme === 'clarity-order' || theme === 'clear-care') && <ThemeSceneBackground src={sceneVideo} active={motion.active} />}
     {theme === 'miniature-world' && <>
-      <ThemeSceneBackground poster={miniatureGarden} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
+      <ThemeSceneBackground poster={miniatureGarden} src={sceneVideo} active={motion.active} {...posterCallbacks(miniatureGarden)} />{masthead}{heading}
       <View className='bt-garden-sign bt-garden-sign--meals'>{action('meals', '饮食花园', value(home?.mealCount, ' 餐 · 查看记录'), 'icon-foodshop', meals)}</View>
       <View className='bt-garden-sign bt-garden-sign--water'>{action('water', '营养河流', value(home?.waterMl, ' ml · 记录饮水'), 'icon-drink', water)}</View>
       <View className='bt-scene-footer'>{action('record', '拍下这一餐', '记录此刻的生活', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'picturebook-companion' && <>
-      <ThemeSceneBackground poster={picturebookDay} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
+      <ThemeSceneBackground poster={picturebookDay} src={sceneVideo} active={motion.active} {...posterCallbacks(picturebookDay)} />{masthead}{heading}
       <View className='bt-chapter-label bt-chapter-label--morning'><Text>晨光开篇</Text><Text>好好吃早餐，是对自己的温柔。</Text></View>
       <View className='bt-chapter-label bt-chapter-label--noon' role='button' onClick={meals}><Text>午间相遇</Text><Text>{value(home?.mealCount, ' 餐已记下')} · 查看</Text></View>
       <View className='bt-scene-footer'>{action('record', '记录这一餐', '把日常，写成自己的故事', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'way-of-water' && <>
-      <ThemeSceneBackground poster={waterHome || waterVessel} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
+      <ThemeSceneBackground poster={waterHome || waterVessel} src={sceneVideo} active={motion.active} {...posterCallbacks(waterHome || waterVessel)} />{masthead}{heading}
       <View className='bt-water-side-verse' aria-hidden><Text>饮食如水</Text><Text>汇于生命的长河</Text><Text>温柔而有力</Text></View>
       <View className='bt-water-console'>
         <View className='bt-water-overview'>
@@ -187,17 +253,17 @@ export function BalancedThemeExperience({ surface, home, children, onRecord, onW
       </View>
     </>}
     {theme === 'natural-symbiosis' && <>
-      <ThemeSceneBackground poster={naturalLeaves} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
+      <ThemeSceneBackground poster={naturalLeaves} src={sceneVideo} active={motion.active} {...posterCallbacks(naturalLeaves)} />{masthead}{heading}
       <View className='bt-leaf-note bt-leaf-note--meals'>{action('meals', '今日饮食', value(home?.mealCount, ' 餐'), 'icon-foodshop', meals)}</View>
       <View className='bt-leaf-note bt-leaf-note--water'>{action('water', '再来一杯', value(home?.waterMl, ' ml'), 'icon-drink', water)}</View>
       <View className='bt-scene-footer'>{action('record', '种下一餐', '让更好的自己慢慢生长', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'eastern-salon' && <>
-      <ThemeSceneBackground className='bt-eastern-landscape' poster={easternLandscape} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
-      <View className='bt-scroll'><View className='bt-scroll__plate'>{easternSoup && <SceneArtwork className='bt-scroll__soup' src={easternSoup} mode='aspectFill' onError={() => setSceneError(true)} />}<View><Text>一盏清汤</Text><Text>四时皆宜 · 日常有味</Text><Text className='bt-art-caption'>食物灵感</Text></View></View>{summary}<Text className='bt-scroll__verse'>食养身心 · 自有节奏</Text>{action('record', '记一膳', '', 'icon-paizhao-xianxing', record)}</View>
+      <ThemeSceneBackground className='bt-eastern-landscape' poster={easternLandscape} src={sceneVideo} active={motion.active} {...posterCallbacks(easternLandscape)} />{masthead}{heading}
+      <View className='bt-scroll'><View className='bt-scroll__plate'>{easternSoup && <SceneArtwork className='bt-scroll__soup' src={easternSoup} mode='aspectFill' onOwnerReady={() => markScene(easternSoup, 'ready')} onLoad={() => markScene(easternSoup, 'loaded')} onError={detail => markError(easternSoup, detail)} />}<View><Text>一盏清汤</Text><Text>四时皆宜 · 日常有味</Text><Text className='bt-art-caption'>食物灵感</Text></View></View>{summary}<Text className='bt-scroll__verse'>食养身心 · 自有节奏</Text>{action('record', '记一膳', '', 'icon-paizhao-xianxing', record)}</View>
     </>}
     {theme === 'modern-gallery' && <>
-      <ThemeSceneBackground poster={galleryCollage} src={sceneVideo} active={motion.active} onPosterError={() => setSceneError(true)} />{masthead}{heading}
+      <ThemeSceneBackground poster={galleryCollage} src={sceneVideo} active={motion.active} {...posterCallbacks(galleryCollage)} />{masthead}{heading}
       <View className='bt-gallery-caption'><Text>一餐，也是作品。</Text><Text>食物灵感 / 日常的创作</Text></View>
       <View className='bt-gallery-bottom'>{summary}{action('record', '记录这餐', '', 'icon-paizhao-xianxing', record)}</View>
     </>}

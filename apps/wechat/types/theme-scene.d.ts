@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from 'react'
 
-type SceneImageAttributes = HTMLAttributes<HTMLElement> & { asset: string; sceneclass: string; mode?: string }
+type SceneImageAttributes = HTMLAttributes<HTMLElement> & { asset: string; sceneclass: string; mode?: string; onOwnerready?: () => void }
 
 declare global {
   namespace JSX {

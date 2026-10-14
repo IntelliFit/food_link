@@ -5,7 +5,7 @@ import { ThemeDailyReview, reviewSummary } from '../../src/components/ThemeDaily
 import { waterFlowDays } from '../../src/components/WaterDailyFlow'
 import { BALANCED_THEME_IDS } from '../../src/utils/balanced-theme'
 
-jest.mock('../../src/utils/balanced-theme-scenes', () => ({ BALANCED_SCENES: {}, loadBalancedScenes: jest.fn().mockResolvedValue(undefined), getBalancedScenesRevision: () => 0, subscribeBalancedScenes: () => () => {}, reportBalancedSceneImageError: jest.fn() }))
+jest.mock('../../src/utils/balanced-theme-scenes', () => ({ BALANCED_SCENES: {}, loadBalancedScenes: jest.fn().mockResolvedValue(undefined), getBalancedScenesRevision: () => 0, subscribeBalancedScenes: () => () => {}, reportBalancedSceneImageError: jest.fn(), reportBalancedSceneProgress: jest.fn() }))
 
 const entries = [{ date: '2026-09-22', calories: 1000 }, { date: '2026-09-24', calories: 2000 }]
 const canvasContext = { scale: jest.fn(), beginPath: jest.fn(), arc: jest.fn(), stroke: jest.fn(), fill: jest.fn(), fillText: jest.fn(), moveTo: jest.fn(), lineTo: jest.fn(), bezierCurveTo: jest.fn(), fillRect: jest.fn() }

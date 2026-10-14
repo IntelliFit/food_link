@@ -22,6 +22,8 @@ test.each(roots)('native artwork in %s resolves its own resources and forwards i
   expect(paths.map(path => path.split('/').pop()).sort()).toEqual(readdirSync(resolve(__dirname, `../../src/${root}/assets`)).filter(path => /\.(jpg|png)$/.test(path)).sort())
   expect(template).not.toMatch(/src="[^\"]*\{\{/)
   const detail = { width: 720, height: 1280 }
+  component.lifetimes.attached.call(instance)
+  expect(triggerEvent).toHaveBeenLastCalledWith('ownerready', { asset })
   component.methods.onLoad.call(instance, { detail })
   expect(triggerEvent).toHaveBeenLastCalledWith('load', detail)
   component.methods.onError.call(instance, { detail: { errMsg: 'image decode failed' } })

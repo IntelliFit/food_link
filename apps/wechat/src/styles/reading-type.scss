@@ -1,14 +1,16 @@
 /* Small copy shares a reading face; display titles, values and icons retain their theme. */
+$reading-font: -apple-system, BlinkMacSystemFont, 'Noto Sans CJK SC', 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
 @mixin reading-copy($size) {
-  font-family: var(--fl-reading-font) !important;
+  font-family: $reading-font !important;
+  font-family: var(--fl-reading-font, #{$reading-font}) !important;
   font-size: $size !important;
   line-height: 1.6 !important;
   letter-spacing: 0 !important;
 }
 
-.fl-page-theme-root.fl-page-theme-root--balanced[class*='fl-balanced-theme--'],
+.fl-page-theme-root.fl-page-theme-root--balanced,
 .fl-page-theme-root.fl-page-theme-root--wellness {
-  --fl-reading-font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+  --fl-reading-font: #{$reading-font};
   --fl-type-caption: 24rpx;
   --fl-type-copy: 26rpx;
   --fl-type-compact: 24rpx;
@@ -16,6 +18,7 @@
   .bt-masthead__date, .bt-masthead__edition, .theme-chapter .tc-date,
   .theme-chapter .tc-marginal, .theme-chapter .tc-water-edition, .date-day-name,
   .macro-label-horizontal, .nutrition-expand-title,
+  .date-calendar-title__text, .card-label, .target-edit-text,
   .user-days-pill-text, .user-id-chip-text, .quick-action-text,
   .credit-overview__label, .credit-overview__meta, .card-validity, .card-tip,
   .balanced-theme-entry__eyebrow, .balanced-theme-entry__subtitle,
@@ -51,7 +54,7 @@
     @include reading-copy(var(--fl-type-compact));
   }
   .card-unit {
-    font-family: var(--fl-reading-font) !important;
+    font-family: var(--fl-reading-font, #{$reading-font}) !important;
     letter-spacing: 0 !important;
   }
 
@@ -63,6 +66,10 @@
     flex-wrap: wrap;
   }
   .ranking-mini-tabs { height: auto; min-height: 38rpx; }
+  .greeting-compact-label, .macro-current-value-inline, .date-num-text {
+    font-family: $reading-font !important;
+    font-family: var(--fl-reading-font, #{$reading-font}) !important;
+  }
 }
 
 /* Contrast repairs are limited to known light surfaces, not scene backgrounds. */
@@ -92,7 +99,7 @@
   .bt-water-metric__label, .bt-water-side-verse,
   .bt-water-side-verse text, .home-water-dock__tab,
   .stats-range-dropdown__label {
-    font-family: var(--fl-reading-font) !important;
+    font-family: var(--fl-reading-font, #{$reading-font}) !important;
     font-weight: 500;
     line-height: 1.65 !important;
     letter-spacing: .5rpx !important;
@@ -137,7 +144,7 @@
   }
   .stats-page .analysis-md-heading { color: #edfaff !important; }
   .stats-page .analysis-md-heading, .stats-page .analysis-md-strong {
-    font-family: var(--fl-reading-font) !important;
+    font-family: var(--fl-reading-font, #{$reading-font}) !important;
     font-weight: 600;
   }
   .stats-page .analysis-md-paragraph text, .stats-page .analysis-md-list-text text,

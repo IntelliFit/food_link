@@ -44,7 +44,60 @@ $palettes: (
       .analysis-md-table-header { background: var(--bt-surface-muted); }
       .analysis-md-underline { text-decoration-color: var(--bt-accent); }
     }
+    .date-selector-section, .date-calendar-toolbar {
+      color: var(--bt-text); border-color: var(--bt-border);
+    }
+    .date-calendar-title, .date-calendar-title__text, .date-calendar-title__indicator,
+    .date-calendar-nav { color: var(--bt-accent); }
+    .date-item.is-selected, .month-calendar-cell.is-selected {
+      color: var(--bt-accent-text) !important;
+      background: var(--bt-accent) !important;
+      border-color: var(--bt-border) !important;
+      box-shadow: none;
+    }
+    .date-item.is-selected .date-day-name,
+    .date-item.is-selected .date-num-text,
+    .month-calendar-cell.is-selected .month-calendar-day {
+      color: var(--bt-accent-text) !important;
+    }
+    .date-item.is-selected .date-day-circle {
+      background: transparent !important; border-color: var(--bt-border) !important;
+    }
   }
+}
+
+/* Functional panels stay level; the gallery keeps its deliberate tilted layout. */
+@each $theme in clarity-order, natural-symbiosis, eastern-salon, miniature-world, picturebook-companion, clear-care, way-of-water {
+  .fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--#{$theme} {
+    .home-module-frame:not(.is-dragging), .home-calendar-module, .date-selector-section,
+    .date-list, .date-item, .month-calendar-cell,
+    .stats-card, .feed-card, .ranking-banner, .profile-section,
+    .profile-header-section, .balanced-theme-entry,
+    .home-login-banner, .stats-guest-card, .home-health-profile-prompt,
+    .bt-action, .bt-garden-sign, .bt-heading, .bt-chapter-label, .tc-sign {
+      transform: none !important;
+    }
+    .home-module-frame, .home-module-frame:nth-child(odd), .home-module-frame:nth-child(even) {
+      margin-left: 0; margin-right: 0;
+    }
+    .date-list { align-items: stretch; gap: 8rpx; }
+    .date-item { flex: 1 1 0; min-width: 0; width: auto; }
+    .date-item.is-selected, .month-calendar-cell.is-selected {
+      border-radius: var(--ui-round-control, 20rpx) !important;
+    }
+    .date-item.is-selected .date-day-name,
+    .date-item.is-selected .date-num-text,
+    .month-calendar-cell.is-selected .month-calendar-day {
+      color: var(--bt-accent-text) !important;
+    }
+  }
+}
+
+.fl-page-theme-root--balanced.fl-balanced-theme--picturebook-companion:not(.fl-d) {
+  .greeting-section--compact .greeting-compact-label { color: #263746 !important; }
+}
+.fl-page-theme-root.fl-page-theme-root--balanced.fl-balanced-theme--way-of-water {
+  .date-item:not(.is-selected) .date-day-circle.is-empty .date-num-text { color: #d8f0f6 !important; }
 }
 
 /* Pale identity materials keep their own ink even inside a dark page. */

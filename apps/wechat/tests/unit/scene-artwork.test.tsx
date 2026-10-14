@@ -14,6 +14,7 @@ test.each([
   expect(component.props.sceneclass).toBe('portrait')
   expect(component.props.mode).toBe('widthFix')
   expect(component.props.src).toBeUndefined()
+  component.props.onOwnerready()
   component.props.onLoad()
   component.props.onError()
   expect(loaded).toHaveBeenCalledTimes(1)

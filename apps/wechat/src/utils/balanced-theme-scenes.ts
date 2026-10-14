@@ -29,18 +29,25 @@ export const BALANCED_SCENES = {
 let pending: Promise<void> | undefined
 let retryPending: Promise<void> | undefined
 let revision = 0
-const listeners = new Set<(revision: number, imageError?: boolean, detail?: string) => void>()
+export type BalancedSceneProgress = { asset: string; phase: 'ready' | 'loaded' | 'error' | 'disposed'; scope?: string; owner?: string } | { packageRoot: string; phase: 'error' }
+type SceneListener = (revision: number, imageError?: boolean, detail?: string, progress?: BalancedSceneProgress) => void
+const listeners = new Set<SceneListener>()
 type LazyError = { subpackage?: Array<string | { root?: string; name?: string }>; errMsg?: string }
 declare const wx: { onLazyLoadError?: (listener: (event: LazyError) => void) => void; offLazyLoadError?: (listener: (event: LazyError) => void) => void }
 const onLazyError = (event: LazyError) => {
-  if (event.subpackage?.some(pkg => typeof pkg === 'string' ? /packageThemeScenes|theme-scenes/.test(pkg) : pkg.root?.startsWith('packageThemeScenes') || pkg.name?.startsWith('theme-scenes'))) {
-    console.warn('[theme-scenes] component package unavailable:', event.errMsg || 'unknown error')
-    reportBalancedSceneImageError(`组件下载：${event.errMsg || '未返回原因'}`)
+  const names = { 'theme-scenes': 'packageThemeScenes', 'theme-scenes-nature': 'packageThemeScenesNature', 'theme-scenes-gallery': 'packageThemeScenesGallery' } as const
+  for (const pkg of event.subpackage || []) {
+    const name = typeof pkg === 'string' ? pkg : pkg.root || pkg.name || ''
+    const normalized = name.replace(/^\//, '').replace(/\/$/, '')
+    const packageRoot = names[normalized as keyof typeof names] || normalized
+    if (!Object.values(names).includes(packageRoot as typeof names[keyof typeof names])) continue
+    console.warn('[theme-scenes] component package unavailable:', packageRoot, event.errMsg || 'unknown error')
+    listeners.forEach(listener => listener(revision, true, `组件下载：${event.errMsg || '未返回原因'}`.slice(0, 180), { packageRoot, phase: 'error' }))
   }
 }
 
 export function getBalancedScenesRevision(): number { return revision }
-export function subscribeBalancedScenes(listener: (revision: number, imageError?: boolean, detail?: string) => void): () => void {
+export function subscribeBalancedScenes(listener: SceneListener): () => void {
   if (!listeners.size && typeof wx !== 'undefined') wx.onLazyLoadError?.(onLazyError)
   listeners.add(listener)
   return () => {
@@ -50,8 +57,11 @@ export function subscribeBalancedScenes(listener: (revision: number, imageError?
 }
 function notifyReady(): void { listeners.forEach(listener => listener(revision)) }
 /** Image failure requests a retry affordance without invalidating the downloaded package. */
-export function reportBalancedSceneImageError(detail?: string): void {
-  listeners.forEach(listener => detail ? listener(revision, true, detail.slice(0, 180)) : listener(revision, true))
+export function reportBalancedSceneImageError(detail?: string, asset?: string, scope?: string, owner?: string): void {
+  listeners.forEach(listener => asset ? listener(revision, true, detail?.slice(0, 180), { asset, phase: 'error', ...(scope ? { scope } : {}), ...(owner ? { owner } : {}) }) : detail ? listener(revision, true, detail.slice(0, 180)) : listener(revision, true))
+}
+export function reportBalancedSceneProgress(asset: string, phase: 'ready' | 'loaded' | 'disposed', scope?: string, owner?: string): void {
+  listeners.forEach(listener => listener(revision, false, undefined, { asset, phase, ...(scope ? { scope } : {}), ...(owner ? { owner } : {}) }))
 }
 
 /** Permit rendering; the async native component owns the package download.

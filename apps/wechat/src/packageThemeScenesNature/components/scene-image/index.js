@@ -7,6 +7,9 @@ Component({
     asset: { type: String, value: '' },
     mode: { type: String, value: 'scaleToFill' },
   },
+  lifetimes: {
+    attached() { this.triggerEvent('ownerready', { asset: this.properties.asset }); },
+  },
   methods: {
     onLoad(event) { this.triggerEvent('load', event.detail); },
     onError(event) {
