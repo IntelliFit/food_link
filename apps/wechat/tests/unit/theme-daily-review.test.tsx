@@ -44,6 +44,18 @@ it('does not draw a river connecting across a missing day', async () => {
   expect(canvasContext.arc).toHaveBeenCalledTimes(2)
 })
 
+it('keeps water-only days selectable without plotting an empty food week', () => {
+  const record = jest.fn()
+  const { container } = render(<ThemeDailyReview theme='clarity-order' endDate='2026-09-28' water={[{ date: '2026-09-22', total: 650 }, { date: '2026-09-28', total: 900 }]} onRecord={record} />)
+  expect(container.querySelector('canvas')).not.toBeInTheDocument()
+  expect(screen.getByText('900 ml')).toBeInTheDocument()
+  fireEvent.click(container.querySelector('#theme-review-day-0')!)
+  expect(screen.getByText('650 ml')).toBeInTheDocument()
+  expect(screen.queryByText('0 千卡')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '去记录今天' }))
+  expect(record).toHaveBeenCalledTimes(1)
+})
+
 it('keeps a tiny nonzero gallery segment smaller than a full circle', async () => {
   render(<ThemeDailyReview theme='modern-gallery' endDate='2026-09-28' days={[{ date: '2026-09-22', calories: 1 }, { date: '2026-09-24', calories: 2000 }]} onRecord={jest.fn()} />)
   await act(async () => { jest.advanceTimersByTime(200) })

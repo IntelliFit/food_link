@@ -6,6 +6,7 @@ import { BALANCED_SCENES, loadBalancedScenes } from '../utils/balanced-theme-sce
 import { waterFlowDays, WaterDailyFlow } from './WaterDailyFlow'
 import easternLandscape from '../assets/balanced-themes/eastern-landscape.webp'
 import { ThemeSceneImage } from './ThemeSceneImage'
+import { useAppColorSchemeOptional } from './AppColorSchemeContext'
 import './theme-reviews.scss'
 
 type Props = {
@@ -18,6 +19,8 @@ type Props = {
 }
 type Day = ReturnType<typeof waterFlowDays>[number]
 type ChartKind = 'columns' | 'rings' | 'river' | 'donut' | 'water'
+// Canvas drawing and compact date buttons use the same CSS pixel domain.
+const REVIEW_CHART_INSET = { left: 36, right: 12 }
 
 /** A missing day has no plotted value; it must never become a zero or a connecting line. */
 export function reviewSummary(days: Day[]) {
@@ -25,7 +28,7 @@ export function reviewSummary(days: Day[]) {
   return { count: known.length, average: known.length ? Math.round(known.reduce((sum, day) => sum + Number(day.calories), 0) / known.length) : null }
 }
 
-function ReviewChart({ days, kind, selected, dark = false }: { days: Day[]; kind: ChartKind; selected: string; dark?: boolean }) {
+function ReviewChart({ days, kind, selected, dark = false, showDateLabels = true }: { days: Day[]; kind: ChartKind; selected: string; dark?: boolean; showDateLabels?: boolean }) {
   const signature = JSON.stringify(days)
   React.useEffect(() => {
     let cancelled = false
@@ -63,12 +66,14 @@ function ReviewChart({ days, kind, selected, dark = false }: { days: Day[]; kind
           if (kind === 'donut') angle += length
         })
       } else {
-        const left = 36, right = width - 12, top = 22, bottom = height - 28
+        const left = REVIEW_CHART_INSET.left, right = width - REVIEW_CHART_INSET.right, top = 22, bottom = height - (showDateLabels ? 28 : 12)
         const ceiling = Math.max(500, Math.ceil(max / 500) * 500)
         const step = (right - left) / 7
         const x = (i: number) => left + step * (i + .5)
         const y = (value: number) => bottom - value / ceiling * (bottom - top)
-        ctx.font = '10px sans-serif'; ctx.fillStyle = quiet; ctx.lineWidth = .5
+        ctx.font = `${showDateLabels ? 10 : 11}px sans-serif`
+        ctx.fillStyle = showDateLabels ? quiet : dark ? '#c0d0c4' : '#657367'
+        ctx.lineWidth = .5
         for (let i = 0; i <= 2; i++) {
           const py = y(ceiling * i / 2)
           ctx.strokeStyle = quiet; ctx.globalAlpha = .4; ctx.beginPath(); ctx.moveTo(left, py); ctx.lineTo(right, py); ctx.stroke(); ctx.globalAlpha = 1
@@ -96,18 +101,21 @@ function ReviewChart({ days, kind, selected, dark = false }: { days: Day[]; kind
             ctx.beginPath(); ctx.arc(x(i), y(day.calories), day.date === selected ? 5 : 3, 0, Math.PI * 2); ctx.fill()
           })
         }
-        ctx.fillStyle = dark ? '#c5d6d9' : '#3c4942'
-        entries.forEach((day, i) => { ctx.fillText(day.date.slice(8), x(i) - 6, height - 7) })
+        if (showDateLabels) {
+          ctx.fillStyle = dark ? '#c5d6d9' : '#3c4942'
+          entries.forEach((day, i) => { ctx.fillText(day.date.slice(8), x(i) - 6, height - 7) })
+        }
       }
     })
     const timer = setTimeout(draw, 180)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [signature, kind, selected, dark])
+  }, [signature, kind, selected, dark, showDateLabels])
   return <Canvas type='2d' id='theme-review-chart' className={`tr-chart tr-chart--${kind}`} aria-label='最近七日已记录的饮食摄入，单位千卡；没有记录的日期留空。具体数值可在日期按钮中查看。' />
 }
 
 /** Each theme owns its composition, while calendar normalization and business actions stay shared. */
 export function ThemeDailyReview({ theme, endDate, days, water, guest, onRecord }: Props) {
+  const appearance = useAppColorSchemeOptional()
   const entries = waterFlowDays(endDate, guest ? [] : days, guest ? [] : water)
   const [selectedDate, setSelectedDate] = React.useState('')
   const [artReady, setArtReady] = React.useState(false)
@@ -123,18 +131,36 @@ export function ThemeDailyReview({ theme, endDate, days, water, guest, onRecord 
   const number = (n: number | null) => n === null ? '—' : String(n)
   const range = `${entries[0].date.slice(5).replace('-', '.')} — ${entries[6].date.slice(5).replace('-', '.')}`
   const average = <View className='tr-average'><Text>已记录日平均摄入</Text><View><Text>{number(summary.average)}</Text><Text>千卡</Text></View><Text>{summary.count ? `根据 ${summary.count} 天饮食记录计算` : '记录一餐，开始了解自己的节奏'}</Text></View>
-  const dates = (film = false) => <View className={film ? 'tr-film' : 'tr-dates'}>{entries.map((day, i) => <View role='button' key={day.date} id={`theme-review-day-${i}`} aria-pressed={selected.date === day.date} aria-label={`${day.date}，${day.calories === null ? '暂无饮食记录' : `${day.calories} 千卡`}，查看`}
+  const dates = (film = false, compact = false) => <View className={film ? 'tr-film' : `tr-dates${compact ? ' tr-dates--compact' : ''}`} style={compact && summary.count > 0 ? { paddingLeft: `${REVIEW_CHART_INSET.left}px`, paddingRight: `${REVIEW_CHART_INSET.right}px` } : undefined}>{entries.map((day, i) => <View role='button' key={day.date} id={`theme-review-day-${i}`} aria-pressed={selected.date === day.date} aria-label={`${day.date}，${day.calories === null ? '暂无饮食记录' : `${day.calories} 千卡`}，${compact ? `${day.waterMl === null ? '暂无饮水记录' : `饮水 ${day.waterMl} ml`}，` : ''}查看`}
     className={`tr-day${selected.date === day.date ? ' is-selected' : ''}`} onClick={() => setSelectedDate(day.date)}
   >
     {film && <View className='tr-film__frame'>{artReady && <Image src={BALANCED_SCENES.picturebookDay} mode='aspectFill' aria-hidden />}<Text>{day.calories === null ? '留白' : '已记'}</Text></View>}
-    <Text>{day.date.slice(5).replace('-', '.')}</Text>{!film && <Text>{number(day.calories)}</Text>}
+    <Text>{compact ? day.date.slice(8) : day.date.slice(5).replace('-', '.')}</Text>
+    {compact ? <View className={`tr-date-dot${day.calories !== null || day.waterMl !== null ? ' is-recorded' : ''}`} aria-hidden /> : !film && <Text>{number(day.calories)}</Text>}
   </View>)}</View>
   const detail = <View className='tr-detail' aria-live='polite'><View><Text>{selected.date.slice(5).replace('-', ' / ')}</Text><Text>这一天的记录</Text></View><View><Text>饮食摄入</Text><Text>{selected.calories === null ? '暂无记录' : `${selected.calories} 千卡`}</Text></View><View><Text>饮水</Text><Text>{selected.waterMl === null ? '暂无记录' : `${selected.waterMl} ml`}</Text></View></View>
   const chart = (kind: ChartKind, dark = false) => <ReviewChart days={entries} kind={kind} selected={selected.date} dark={dark} />
   const caption = <Text className='tr-caption'>近七日 · {range} · 轻触日期查看详情</Text>
   if (theme === 'way-of-water') return <View className='theme-review theme-review--way-of-water'><WaterDailyFlow endDate={endDate} days={days} water={water} guest={guest} onRecord={onRecord} />{chart('water', true)}<Text className='tr-caption'>饮食摄入 · 千卡 · 未记录的日期留空</Text></View>
-  return <View id='theme-daily-review' className={`theme-review theme-review--${theme}`}>
-    {theme === 'clarity-order' && <><View className='tr-editorial-title'><Text>07 / DAILY</Text><Text>记录，让变化可见。</Text></View>{average}{chart('columns')}{caption}{dates()}{detail}</>}
+  return <View id='theme-daily-review' className={`theme-review theme-review--${theme}${theme === 'clarity-order' ? ' theme-review--compact' : ''}`}>
+    {theme === 'clarity-order' && <>
+      <View className='tr-compact-header'><Text className='tr-compact-title'>近7天回顾</Text><Text className='tr-compact-range'>{range}</Text></View>
+      {summary.count > 0 ? <>
+        <View className='tr-compact-summary' aria-label={`日均摄入按 ${summary.count} 天已记录饮食计算`}>
+          <View><Text className='tr-compact-label'>已记录日均摄入</Text><View className='tr-compact-average'><Text>{number(summary.average)}</Text><Text>千卡</Text></View></View>
+          <Text className='tr-compact-count'>{summary.count} 天饮食记录</Text>
+        </View>
+        <ReviewChart days={entries} kind='columns' selected={selected.date} dark={appearance?.scheme === 'dark'} showDateLabels={false} />
+      </> : <View className='tr-compact-empty'><Text>暂无饮食记录</Text><Text>选一天查看饮水，记录饮食后会显示趋势。</Text></View>}
+      {dates(false, true)}
+      <View className='tr-compact-detail' aria-live='polite'>
+        <View className='tr-compact-detail-header'><Text>{selected.date.slice(5).replace('-', ' / ')}</Text><Text>当天记录</Text></View>
+        <View className='tr-compact-metrics'>
+          <View><Text>饮食摄入</Text><Text>{selected.calories === null ? '暂无记录' : `${selected.calories} 千卡`}</Text></View>
+          <View><Text>饮水</Text><Text>{selected.waterMl === null ? '暂无记录' : `${selected.waterMl} ml`}</Text></View>
+        </View>
+      </View>
+    </>}
     {theme === 'natural-symbiosis' && <>{caption}<View className='tr-botanical'><View className='tr-rings'><ThemeSceneImage className='tr-rings__wood' src={BALANCED_SCENES.naturalRings} mode='aspectFit' />{chart('rings')}<View className='tr-rings__center'><Text>{summary.count}</Text><Text>天已记录</Text></View></View><Text className='tr-botanical__note'>一日一圈{ '\n' }慢慢生长</Text></View><Text className='tr-caption'>由外到内对应七日，最长弧线为七日最高摄入；未记录处留白。</Text>{dates()}{detail}{average}</>}
     {theme === 'eastern-salon' && <><View className='tr-landscape'><Image src={easternLandscape} mode='aspectFill' aria-hidden /><View className='tr-landscape__title'><Text>以食为线 · 见山河</Text><Text>每日摄入 / 千卡</Text></View>{chart('river')}</View>{caption}{dates()}{detail}<Text className='tr-verse'>一餐一饮，自有节序。</Text></>}
     {theme === 'modern-gallery' && <><View className='tr-exhibition'><View>{chart('donut')}<Text className='tr-caption'>七日摄入分布 · 按日期</Text></View>{average}</View>{caption}{dates()}{detail}<Text className='tr-gallery-note'>日常，也是作品。</Text></>}

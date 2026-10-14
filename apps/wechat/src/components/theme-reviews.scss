@@ -26,6 +26,52 @@
   .tr-average > view text:first-child { font-weight: 800; }
   .tr-day.is-selected, .tr-record { background: #c8ff00; color: #111; border-color: #111; }
 }
+
+/* One overview, one date selector and one day's metrics for the order theme. */
+.theme-review.theme-review--clarity-order.theme-review--compact {
+  padding: 28rpx;
+  border: 1rpx solid var(--bt-border);
+  border-radius: 24rpx;
+  background: var(--bt-surface);
+  --tr-reading-ink: #111;
+  --tr-reading-muted: #555e57;
+  color: var(--tr-reading-ink);
+  .tr-compact-header { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: 8rpx 20rpx; }
+  .tr-compact-title { font-size: 30rpx; font-weight: 700; line-height: 1.5; }
+  .tr-compact-range, .tr-compact-label, .tr-compact-count,
+  .tr-compact-detail-header, .tr-compact-metrics > view > text:first-child {
+    font-size: 24rpx; line-height: 1.6; color: var(--tr-reading-muted);
+    font-family: var(--fl-reading-font, sans-serif);
+  }
+  .tr-compact-summary { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 14rpx; margin-top: 28rpx; }
+  .tr-compact-label { display: block; }
+  .tr-compact-average { display: flex; align-items: baseline; gap: 10rpx; margin-top: 4rpx; }
+  .tr-compact-average > text:first-child { font-size: 60rpx; font-weight: 800; line-height: 1.25; }
+  .tr-compact-average > text + text { font-size: 24rpx; }
+  .tr-compact-count { padding: 8rpx 14rpx; border-radius: 16rpx; background: var(--bt-surface-muted); }
+  .tr-chart { display: block; position: relative; height: 240rpx; margin-top: 8rpx; }
+  .tr-compact-empty { display: flex; flex-direction: column; gap: 8rpx; padding: 28rpx 0 14rpx; }
+  .tr-compact-empty > text:first-child { font-size: 28rpx; font-weight: 600; line-height: 1.5; }
+  .tr-compact-empty > text + text { font: 24rpx/1.6 var(--fl-reading-font, sans-serif); color: var(--tr-reading-muted); }
+  .tr-dates--compact { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); padding: 16rpx 0 22rpx; gap: 0; box-sizing: border-box; }
+  .tr-dates--compact .tr-day { display: flex; min-height: 100rpx; flex-direction: column; align-items: center; justify-content: center; gap: 10rpx; margin: 0 4rpx; padding: 10rpx 2rpx; border: 0; border-radius: 20rpx; }
+  .tr-dates--compact .tr-day > text { font: 500 26rpx/1.4 var(--fl-reading-font, sans-serif); }
+  .tr-dates--compact .tr-day.is-selected { background: #c8ff00; color: #111; border: 0; }
+  .tr-date-dot { width: 8rpx; height: 8rpx; border: 1rpx solid #9ca59b; border-radius: 50%; box-sizing: border-box; }
+  .tr-date-dot.is-recorded { background: currentColor; border-color: currentColor; }
+  .tr-compact-detail { border-top: 1rpx solid var(--bt-border); padding-top: 20rpx; }
+  .tr-compact-detail-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12rpx; margin-bottom: 12rpx; }
+  .tr-compact-detail-header > text:first-child { font-weight: 600; color: var(--tr-reading-ink); }
+  .tr-compact-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
+  .tr-compact-metrics text { display: block; }
+  .tr-compact-metrics > view > text + text { font-size: 28rpx; line-height: 1.6; margin-top: 4rpx; overflow-wrap: anywhere; }
+  .tr-record { min-height: 88rpx; box-sizing: border-box; margin-top: 24rpx; padding: 18rpx 22rpx; font-size: 28rpx; }
+}
+.fl-d .theme-review.theme-review--clarity-order.theme-review--compact {
+  background: #15251e; border-color: #4a6154;
+  --bt-border: #4a6154; --bt-surface-muted: #203b2b;
+  --tr-reading-ink: #edf5ee; --tr-reading-muted: #c0d0c4;
+}
 .theme-review--natural-symbiosis {
   .tr-botanical { position: relative; }
   .tr-rings { width: 100%; position: relative; }
