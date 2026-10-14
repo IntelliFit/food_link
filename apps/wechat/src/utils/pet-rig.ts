@@ -87,6 +87,26 @@ export interface RigPose {
   armLocal: [Bone, Bone]; projectedArms: boolean; legLocal: [Bone, Bone]; projectedLegs: boolean
   contacts: ['deck' | 'heel' | 'sole' | 'toe' | 'air', 'deck' | 'heel' | 'sole' | 'toe' | 'air']
 }
+
+/** Move one skeleton between its original standing pose and the prepared ride. */
+export function boardingPose(rig: PetRig, ride: RigPose, weight: number): RigPose {
+  const t = ease(Math.max(0, Math.min(1, weight)))
+  if (t === 1) return ride
+  const project = (point: Point, sourceHipX = rig.hip.x): Point => p(100 + (point.x - sourceHipX) * ride.scale, ride.floor + (point.y - rig.floor) * ride.scale)
+  const bones = (from: RigPose['arms'], to: RigPose['arms'], arms = false): RigPose['arms'] => from.map((bone, i) => {
+    const cell = arms ? Math.floor(bone[0].x / rig.frame[2]) * rig.frame[2] : 0
+    const shiftX = arms && rig.shoulders ? rig.shoulders[i].x - (bone[0].x - cell) : 0
+    const shiftY = arms && rig.shoulders ? rig.shoulders[i].y - bone[0].y : 0
+    return bone.map((point, j) => lerp(project(p(point.x + shiftX, point.y + shiftY), rig.hip.x + cell), to[i][j], t))
+  }) as RigPose['arms']
+  const pairs = (from: [number, number], to: [number, number]): [number, number] => from.map((n, i) => n + (to[i] - n) * t) as [number, number]
+  return { ...ride, hip: lerp(project(rig.hip), ride.hip, t), angle: ride.angle * t,
+    bodyWidth: 1 + (ride.bodyWidth - 1) * t, bodySkew: ride.bodySkew * t,
+    legs: bones(rig.legs, ride.legs), arms: bones(rig.arms, ride.arms, true), projectedLegs: true,
+    footAngles: pairs([0, 0], ride.footAngles), footHeading: pairs([0, 0], ride.footHeading), footDepth: pairs([0, 0], ride.footDepth),
+    armDepth: ride.armDepth.map((bone, i) => bone.map(n => (i ? 1 : -1) * (1 - t) + n * t)) as RigPose['armDepth'],
+  }
+}
 export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action: PetMotionAction, elapsed: number): RigPose {
   const cycling = vehicle === 'bicycle' || !vehicle && action === 'ride'
   const walking = action === 'walk' && (!vehicle || vehicle === 'walk')

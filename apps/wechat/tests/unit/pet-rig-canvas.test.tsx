@@ -22,7 +22,7 @@ beforeEach(() => {
   original = Object.fromEntries(['createSelectorQuery', 'nextTick', 'onAppHide', 'onAppShow', 'offAppHide', 'offAppShow'].map(key => [key, Taro[key]]))
   image = { onload: null, onerror: null }
   Object.defineProperty(image, 'src', { set: () => image.onload?.() })
-  ctx = { translate: jest.fn(), scale: jest.fn(), clearRect: jest.fn(), save: jest.fn(), restore: jest.fn() }
+  ctx = { globalAlpha: 1, drawImage: jest.fn(), translate: jest.fn(), scale: jest.fn(), clearRect: jest.fn(), save: jest.fn(), restore: jest.fn() }
   node = { width: 0, height: 0, getContext: () => ctx, createImage: jest.fn(() => {
     if (!node.createImage.mock.calls.length || node.createImage.mock.calls.length === 1) return image
     const extra: any = { onload: null, onerror: null }
@@ -39,6 +39,7 @@ afterEach(() => { Object.assign(Taro, original); jest.restoreAllMocks(); jest.us
 const ready = () => act(() => { jest.advanceTimersByTime(40) })
 const latestPose = () => draw.mock.calls[draw.mock.calls.length - 1][3]
 const tick = (timestamp: number) => act(() => { const calls = node.requestAnimationFrame.mock.calls; calls[calls.length - 1][0](timestamp) })
+const fade = (ms: number) => act(() => { jest.advanceTimersByTime(ms) })
 
 test('low frame rates retain the walking cadence while long stalls do not fast-forward', () => {
   render(<PetRigActor rig={PET_RIGS.guigui} action='walk' />)
@@ -148,6 +149,76 @@ test('return direction flips pixels in the same canvas without changing its cloc
   expect(latestPose().phase).toBe(phase)
   expect(ctx.translate).toHaveBeenCalledWith(200, 0)
   expect(ctx.scale).toHaveBeenCalledWith(-1, 1)
+})
+
+test('boarding paints the original standing frame before gradually revealing the ride in one canvas', () => {
+  const onPresented = jest.fn(), onHandoffComplete = jest.fn(), alphas: number[] = []
+  draw.mockImplementation((...args) => { alphas.push(args[7]) })
+  const { container, rerender } = render(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' active={false} visible={false} />)
+  ready()
+  const canvas = container.querySelector('canvas'), loads = node.createImage.mock.calls.length
+  rerender(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' active={false} handoff='boarding' onPresented={onPresented} onHandoffComplete={onHandoffComplete} />)
+  expect(alphas[alphas.length - 1]).toBe(0)
+  expect(ctx.drawImage).toHaveBeenCalledWith(image, ...PET_RIGS.jianwen.frame, expect.any(Number), expect.any(Number), expect.any(Number), expect.any(Number))
+  const standingPaints = ctx.drawImage.mock.calls.filter(call => call[0] === image).length
+  expect(onPresented).not.toHaveBeenCalled()
+  fade(16); expect(onPresented).toHaveBeenCalledTimes(1)
+  fade(144); expect(alphas[alphas.length - 1]).toBeCloseTo(.5)
+  expect(ctx.globalAlpha).toBe(1)
+  expect(ctx.drawImage.mock.calls.filter(call => call[0] === image)).toHaveLength(standingPaints)
+  expect(onHandoffComplete).not.toHaveBeenCalled()
+  fade(160); expect(alphas[alphas.length - 1]).toBe(1)
+  expect(onHandoffComplete).toHaveBeenCalledTimes(1)
+  expect(container.querySelector('canvas')).toBe(canvas)
+  expect(node.createImage).toHaveBeenCalledTimes(loads)
+  expect(latestPose().phase).toBe(0)
+  draw.mockReset()
+})
+
+test('alighting gradually removes the vehicle while keeping original standing pixels in the same canvas', () => {
+  const alphas: number[] = [], complete = jest.fn()
+  draw.mockImplementation((...args) => { alphas.push(args[7]) })
+  const { rerender } = render(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' />)
+  ready(); tick(100); tick(200)
+  const phase = latestPose().phase
+  rerender(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' active={false} facing='left' handoff='alighting' onHandoffComplete={complete} />)
+  expect(alphas[alphas.length - 1]).toBe(1)
+  fade(160); expect(alphas[alphas.length - 1]).toBeCloseTo(.5)
+  fade(160); expect(alphas[alphas.length - 1]).toBe(0)
+  expect(complete).toHaveBeenCalledTimes(1)
+  expect(latestPose().phase).toBe(phase)
+  expect(ctx.drawImage).toHaveBeenLastCalledWith(image, ...PET_RIGS.jianwen.frame, expect.any(Number), expect.any(Number), expect.any(Number), expect.any(Number))
+  draw.mockReset()
+})
+
+test('a delayed native commit holds the original standing frame until the DOM release is acknowledged', () => {
+  const callbacks: Array<() => void> = [], alphas: number[] = [], presented = jest.fn()
+  const { rerender } = render(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' active={false} visible={false} />)
+  ready()
+  draw.mockImplementation((...args) => { alphas.push(args[7]) })
+  ;(Taro.nextTick as jest.Mock).mockImplementation(callback => callbacks.push(callback))
+  const actor = (ack: boolean) => <PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' active={false} handoff='boarding' handoffAcknowledged={ack} onPresented={presented} />
+  rerender(actor(false)); fade(400)
+  expect(alphas.every(alpha => alpha === 0)).toBe(true)
+  act(() => callbacks.splice(0).forEach(callback => callback()))
+  expect(presented).toHaveBeenCalledTimes(1)
+  rerender(actor(true)); fade(100)
+  expect(alphas[alphas.length - 1]).toBe(0)
+  act(() => callbacks.splice(0).forEach(callback => callback()))
+  fade(160)
+  expect(alphas[alphas.length - 1]).toBeCloseTo(.5)
+  draw.mockReset()
+})
+
+test('Guigui retains the selected original scarf in the standing half of the handoff', () => {
+  const { rerender } = render(<PetRigActor rig={PET_RIGS.guigui} vehicle='bicycle' standingScarf='cozy-scarf' active={false} visible={false} />)
+  ready()
+  const scarf = node.createImage.mock.results[node.createImage.mock.results.length - 1].value
+  scarf.width = 200; scarf.height = 100
+  rerender(<PetRigActor rig={PET_RIGS.guigui} vehicle='bicycle' standingScarf='cozy-scarf' active={false} handoff='boarding' />)
+  expect(ctx.drawImage).toHaveBeenLastCalledWith(scarf, expect.any(Number), expect.any(Number), expect.any(Number), expect.any(Number))
+  const args = ctx.drawImage.mock.calls[ctx.drawImage.mock.calls.length - 1]
+  expect(args[3] / args[4]).toBeCloseTo(2)
 })
 test('reduced motion draws a stable pose and never starts an animation clock', () => {
   const media = { matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn() }

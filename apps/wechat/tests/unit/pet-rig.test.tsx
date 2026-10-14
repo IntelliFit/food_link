@@ -1,5 +1,5 @@
 import { fireEvent, render } from '@testing-library/react'
-import { PET_RIGS, bend, distance, petRig, rigPose, shoeProjection } from '../../src/utils/pet-rig'
+import { PET_RIGS, bend, boardingPose, distance, petRig, rigPose, shoeProjection } from '../../src/utils/pet-rig'
 import { PetTransportPicker } from '../../src/packagePetStudio/components/PetTransportPicker'
 import Taro from '@tarojs/taro'
 import { ORIGINAL_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
@@ -13,6 +13,24 @@ const kneeBendsForward = (pose: ReturnType<typeof rigPose>, i: number) => {
   const [hip, knee, ankle] = pose.legs[i]
   return (ankle.x - hip.x) * (knee.y - hip.y) - (ankle.y - hip.y) * (knee.x - hip.x)
 }
+
+test.each(Object.keys(PET_RIGS))('%s uses one continuous skeleton during its boarding handoff', key => {
+  const rig = PET_RIGS[key]
+  for (const vehicle of ['bicycle', 'scooter', 'skateboard'] as const) {
+    const ride = rigPose(rig, vehicle, 'ride', 0), stand = boardingPose(rig, ride, 0), mid = boardingPose(rig, ride, .5)
+    expect(boardingPose(rig, ride, 1)).toBe(ride)
+    expect(mid.hip.x).toBeCloseTo((stand.hip.x + ride.hip.x) / 2)
+    expect(mid.hip.y).toBeCloseTo((stand.hip.y + ride.hip.y) / 2)
+    expect(mid.floor).toBe(ride.floor)
+    expect(mid.scale).toBe(ride.scale)
+    expect(stand.hip.x).toBe(100)
+    expect(stand.hip.y).toBeCloseTo(ride.floor + (rig.hip.y - rig.floor) * ride.scale)
+    expect(stand.legs[0][2].x).toBeCloseTo(100 + (rig.legs[0][2].x - rig.hip.x) * ride.scale)
+    expect(stand.legs[0][2].y).toBeCloseTo(ride.floor + (rig.legs[0][2].y - rig.floor) * ride.scale)
+    expect(mid.projectedLegs).toBe(true)
+    for (const bone of [...mid.arms, ...mid.legs]) for (const point of bone) { expect(Number.isFinite(point.x)).toBe(true); expect(Number.isFinite(point.y)).toBe(true) }
+  }
+})
 
 test('nickname cannot change the approved source or unlock another photo character', () => {
   expect(petRig({ name: '鬼鬼', builtin_avatar_id: 'jianwen-01' })?.key).toBe('jianwen')

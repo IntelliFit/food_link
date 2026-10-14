@@ -11,6 +11,8 @@ import { PetTransportActor } from './PetTransportActor'
 import { defaultPetTransport, petTransportAppearance, petTransportCapabilities } from '../utils/pet-transport'
 import { PET_TRANSPORT_CHANGED, readPetTransport } from '../utils/pet-transport-storage'
 import { floatingPetLayout } from '../utils/pet-floating-layout'
+import { ORIGINAL_COMPANION_SRC } from '../utils/pet-companion-preference'
+import { PET_LOADOUT_CHANGED, readPetLoadout } from '../utils/pet-loadout'
 import { getCompanionSprite, PetCompanionSprite } from './PetCompanionSprite'
 import { PetChatContent } from './PetChatContent'
 import { useInkWellness } from './InkWellness'
@@ -23,7 +25,8 @@ import {
 } from '../utils/pet-play-reward'
 import './FloatingPetAssistant.scss'
 
-type Phase = 'playing' | 'running' | 'docked' | 'returning'
+type Phase = 'playing' | 'boarding' | 'running' | 'docked' | 'returning' | 'alighting'
+const RIDE_HANDOFF_MS = 320
 const DOCK_WITH_RIDE_MS = 980
 const RETURN_TO_DESK_MS = 1800
 
@@ -51,8 +54,13 @@ interface Props {
 export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props>(function FloatingPetAssistant({
   pet, mood, state, suppressed = false, dark = false, companionSpriteOverride, reminder, onReminderPress, onReminderShown, onChatOpenChange,
 }, ref) {
-  const refinedMotion = !useInkWellness()
+  const wellness = useInkWellness()
+  // Both home modes use the prepared native actor; the legacy CSS vehicle
+  // appeared fully formed as soon as scrolling changed the phase.
+  const refinedMotion = true
   const [phase, setPhase] = useState<Phase>('playing')
+  const [boardingPresented, setBoardingPresented] = useState(false)
+  const [restingFacing, setRestingFacing] = useState<'left' | 'right'>('right')
   const [roamFar, setRoamFar] = useState(true)
   const [walking, setWalking] = useState(false)
   const [idleAction, setIdleAction] = useState<'idle' | 'blink' | 'wave' | 'kick' | 'look'>('wave')
@@ -79,15 +87,18 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   const windowHeightRef = useRef(0)
   const playLockedUntil = useRef(0)
   const tripStarted = useRef(0)
+  const tripGeneration = useRef(0)
+  const renderedTrip = tripGeneration.current
   const visible = active && !suppressed
   const companionSprite = companionSpriteOverride || getCompanionSprite(pet)
+  const standingScarf = pet?.id && companionSprite === ORIGINAL_COMPANION_SRC ? readPetLoadout(pet.id, companionSprite)?.scarf : undefined
   const fallbackVehicle = defaultPetTransport(pet, companionSprite)
   const storedVehicle = refinedMotion && pet?.id ? readPetTransport(pet.id, petTransportAppearance(pet, companionSprite), fallbackVehicle)?.vehicle : undefined
   const vehicle = storedVehicle && petTransportCapabilities(pet, companionSprite).includes(storedVehicle) ? storedVehicle : fallbackVehicle
   const currentVehicle = useRef(vehicle); currentVehicle.current = vehicle
   const travelVehicle = useRef(vehicle)
-  const displayedVehicle = phase === 'running' || phase === 'returning' ? travelVehicle.current : vehicle
-  const appearanceKey = `${pet?.id}:${companionSprite || pet?.builtin_avatar_id || pet?.pixel_avatar_url}`
+  const displayedVehicle = phase === 'boarding' || phase === 'running' || phase === 'returning' || phase === 'alighting' ? travelVehicle.current : vehicle
+  const appearanceKey = `${pet?.id}:${companionSprite || pet?.builtin_avatar_id || pet?.pixel_avatar_url}:${standingScarf || ''}`
   const transportMounted = visible && refinedMotion
   const transportOwner = useRef({ appearance: appearanceKey, mounted: transportMounted, generation: 0 })
   const transportReady = useRef('')
@@ -103,8 +114,10 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   const hasRidePose = refinedMotion && displayedVehicle === 'bicycle' && Boolean(petMotionAtlas(pet, companionSprite))
   const layout = floatingPetLayout(pet, companionSprite, displayedVehicle, windowWidth, failedTransport === transportOwnerKey)
   const traveling = phase === 'running' || phase === 'returning'
+  const handoff = phase === 'boarding' || phase === 'alighting' ? phase : undefined
+  const transportVisible = visible && !chatOpen && (traveling || Boolean(handoff))
   const travelVisible = visible && !chatOpen && traveling
-  const restingVisible = visible && !chatOpen && phase === 'playing'
+  const restingVisible = visible && !chatOpen && (phase === 'playing' || phase === 'boarding' && !boardingPresented)
   const motionBurst = refinedMotion ? playBurst : 0
   useEffect(() => {
     const resize = () => { const info = Taro.getWindowInfo?.() || Taro.getSystemInfoSync(); if (info.windowWidth > 0) setWindowWidth(info.windowWidth) }
@@ -115,7 +128,8 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     if (!refinedMotion) return undefined
     const changed = () => refreshTransport(value => value + 1)
     Taro.eventCenter.on(PET_TRANSPORT_CHANGED, changed)
-    return () => { Taro.eventCenter.off(PET_TRANSPORT_CHANGED, changed) }
+    Taro.eventCenter.on(PET_LOADOUT_CHANGED, changed)
+    return () => { Taro.eventCenter.off(PET_TRANSPORT_CHANGED, changed); Taro.eventCenter.off(PET_LOADOUT_CHANGED, changed) }
   }, [refinedMotion])
 
   const clearTimers = useCallback(() => {
@@ -128,8 +142,10 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   }, [])
 
   const changePhase = useCallback((next: Phase) => {
-    if (next === 'running' || next === 'returning') travelVehicle.current = currentVehicle.current
+    if (next === 'boarding' || next === 'returning' || next === 'running' && phaseRef.current !== 'boarding') travelVehicle.current = currentVehicle.current
+    if (next === 'boarding') { setRestingFacing('right'); setWelcoming(false); setBoardingPresented(false); setWalking(false); setIdleAction('idle') }
     tripStarted.current = Date.now()
+    tripGeneration.current += 1
     phaseRef.current = next
     setPhase(next)
   }, [])
@@ -142,12 +158,27 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     changePhase(manualDockedRef.current ? 'docked' : 'playing')
   }, [changePhase, clearTimers, refinedMotion])
 
+  const finishHandoff = useCallback((expected: 'boarding' | 'alighting') => {
+    if (phaseRef.current !== expected) return
+    if (settleTimer.current) clearTimeout(settleTimer.current)
+    settleTimer.current = null
+    if (expected === 'alighting') setRestingFacing('left')
+    changePhase(expected === 'boarding' ? 'running' : 'playing')
+    if (expected === 'boarding') settleTimer.current = setTimeout(() => {
+      if (phaseRef.current === 'running') changePhase('docked')
+      settleTimer.current = null
+    }, DOCK_WITH_RIDE_MS + 600)
+  }, [changePhase])
+
   const finishTrip = useCallback((expected: 'running' | 'returning') => {
     if (phaseRef.current !== expected) return
     if (settleTimer.current) clearTimeout(settleTimer.current)
     settleTimer.current = null
-    changePhase(expected === 'running' ? 'docked' : 'playing')
-  }, [changePhase])
+    if (expected === 'returning' && refinedMotion && travelVehicle.current !== 'walk' && failedTransport !== transportOwnerKey) {
+      changePhase('alighting')
+      settleTimer.current = setTimeout(() => finishHandoff('alighting'), RIDE_HANDOFF_MS + 600)
+    } else changePhase(expected === 'running' ? 'docked' : 'playing')
+  }, [changePhase, finishHandoff, refinedMotion, failedTransport, transportOwnerKey])
 
   const finishFromView = (event: { target?: { id?: string } }, expected: 'running' | 'returning') => {
     if (event.target?.id !== 'home-floating-pet') return
@@ -192,23 +223,32 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
 
   const dock = useCallback((returnAutomatically: boolean) => {
     // Let a return finish before scroll events can request another departure.
-    if (phaseRef.current === 'returning') return
+    if (phaseRef.current === 'returning' || phaseRef.current === 'alighting') return
     // Continuous scrolling extends the peek, without restarting the run-in.
     if (returnTimer.current) clearTimeout(returnTimer.current)
     returnTimer.current = null
     if (!returnAutomatically) manualDockedRef.current = true
     if (refinedMotion && transportReady.current !== currentTransportKey.current) { pendingDock.current = returnAutomatically; return }
-    if (phaseRef.current !== 'docked' && phaseRef.current !== 'running') {
+    if (phaseRef.current !== 'docked' && phaseRef.current !== 'running' && phaseRef.current !== 'boarding') {
       if (settleTimer.current) clearTimeout(settleTimer.current)
-      changePhase('running')
-      settleTimer.current = setTimeout(() => finishTrip('running'), DOCK_WITH_RIDE_MS + (refinedMotion ? 600 : 0))
+      if (refinedMotion && currentVehicle.current !== 'walk' && failedTransport !== transportOwnerKey) {
+        changePhase('boarding')
+        // Never start an unseen ride if the native presentation callback stalls.
+        settleTimer.current = setTimeout(() => {
+          if (phaseRef.current !== 'boarding') return
+          clearTimers(); manualDockedRef.current = false; changePhase('playing')
+        }, 2000)
+      } else {
+        changePhase('running')
+        settleTimer.current = setTimeout(() => finishTrip('running'), DOCK_WITH_RIDE_MS + (refinedMotion ? 600 : 0))
+      }
     }
     if (returnAutomatically && !manualDockedRef.current) {
       returnTimer.current = setTimeout(() => {
         startReturnToDesk()
-      }, 2800)
+      }, 2800 + (refinedMotion ? RIDE_HANDOFF_MS : 0))
     }
-  }, [changePhase, finishTrip, startReturnToDesk, refinedMotion, transportKey])
+  }, [changePhase, finishTrip, finishHandoff, startReturnToDesk, refinedMotion, transportKey, failedTransport, transportOwnerKey])
 
   const restoreToDesk = useCallback(() => {
     clearTimers()
@@ -347,9 +387,9 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     maxHeight: `${Math.max(0, windowHeightRef.current - keyboardHeight - 24)}px`,
   } : undefined
   return (
-    <View className={`pet-assistant ${dark ? 'pet-assistant--dark' : ''}${refinedMotion ? ' pet-assistant--refined-motion' : ''}`}>
+    <View className={`pet-assistant ${dark ? 'pet-assistant--dark' : ''}${wellness ? ' pet-assistant--wellness' : ''}${refinedMotion ? ' pet-assistant--refined-motion' : ''}`}>
       {visible ? (
-        <View id='home-floating-pet' className={`pet-assistant-float pet-assistant-float--${phase}${chatOpen ? ' is-chat-open' : ''} ${welcoming ? 'is-welcoming' : ''} ${roamFar ? 'is-roaming-far' : 'is-roaming-near'} ${walking ? 'is-walking' : `is-${idleAction}`} ${companionSprite || hasRidePose ? 'has-full-body' : ''} ${hasRidePose ? 'has-ride-pose' : ''}`} aria-hidden={chatOpen} onTransitionEnd={event => finishFromView(event, 'running')} onAnimationEnd={event => finishFromView(event, 'returning')}>
+        <View id='home-floating-pet' data-trip={process.env.NODE_ENV === 'development' ? renderedTrip : undefined} data-presented={process.env.NODE_ENV === 'development' ? boardingPresented : undefined} className={`pet-assistant-float pet-assistant-float--${phase}${chatOpen ? ' is-chat-open' : ''} ${welcoming ? 'is-welcoming' : ''} ${roamFar ? 'is-roaming-far' : 'is-roaming-near'} ${walking ? 'is-walking' : `is-${idleAction}`} ${companionSprite || hasRidePose ? 'has-full-body' : ''} ${hasRidePose ? 'has-ride-pose' : ''}`} aria-hidden={chatOpen} onTransitionEnd={event => finishFromView(event, 'running')} onAnimationEnd={event => finishFromView(event, 'returning')}>
           {phase === 'playing' && reminder ? (
             <View id={reminder.tone === 'messages' ? 'home-pet-message-reminder' : 'home-pet-analyze-reminder'} className='pet-assistant-reminder' role='button' onClick={onReminderPress}>
               <Text>{reminder.text}</Text>
@@ -384,11 +424,11 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
           ) : null}
           {phase === 'playing' ? <View className='pet-assistant-tuck' role='button' aria-label='暂时收起宠物' onClick={() => dock(false)}><Text>›</Text></View> : null}
           <View id='pet-assistant-open' className='pet-assistant-companion' role='button' aria-label={`和${pet?.name || '宠物'}聊聊`} onClick={() => openChat()}>
-            {refinedMotion && <View className={`pet-assistant-transport${traveling ? '' : ' is-standby'}`} style={{ left: `${layout.left}px`, top: `${layout.top}px`, width: `${layout.transportSize}px`, height: `${layout.transportSize * 1.1}px` }} aria-hidden={!travelVisible}><PetTransportActor key={transportOwnerKey} pet={pet} sprite={companionSprite} vehicle={displayedVehicle} size={layout.transportSize} active={travelVisible} visible={travelVisible} facing={phase === 'returning' ? 'left' : 'right'} onUnavailable={() => setFailedTransport(transportOwnerKey)} onReady={() => { if (currentTransportKey.current !== transportKey) return; transportReady.current = transportKey; if (!visible || chatOpen) return; if (pendingReturn.current) { pendingReturn.current = false; startReturnToDesk() } else if (pendingDock.current !== null) { const auto = pendingDock.current; pendingDock.current = null; dock(auto) } }} /></View>}
-            <View className={`pet-assistant-traveler${refinedMotion && (phase === 'running' || phase === 'returning') ? ' is-standby' : ''}`} aria-hidden={refinedMotion && (phase === 'running' || phase === 'returning')}>
+            {refinedMotion && <View className={`pet-assistant-transport${transportVisible ? '' : ' is-standby'}`} style={{ left: `${layout.left}px`, top: `${layout.top}px`, width: `${layout.transportSize}px`, height: `${layout.transportSize * 1.1}px` }} aria-hidden={!transportVisible}><PetTransportActor key={transportOwnerKey} pet={pet} sprite={companionSprite} vehicle={displayedVehicle} size={layout.transportSize} active={travelVisible} visible={transportVisible} facing={phase === 'returning' || phase === 'alighting' ? 'left' : 'right'} standingScarf={standingScarf} handoff={handoff} handoffId={renderedTrip} handoffAcknowledged={phase !== 'boarding' || boardingPresented} handoffMs={RIDE_HANDOFF_MS} onPresented={() => { if (currentTransportKey.current === transportKey && tripGeneration.current === renderedTrip && phaseRef.current === 'boarding' && visible && !chatOpen) setBoardingPresented(true) }} onHandoffComplete={() => { if (currentTransportKey.current === transportKey && tripGeneration.current === renderedTrip && handoff && visible && !chatOpen) finishHandoff(handoff) }} onUnavailable={() => setFailedTransport(transportOwnerKey)} onReady={() => { if (currentTransportKey.current !== transportKey) return; transportReady.current = transportKey; if (!visible || chatOpen) return; if (pendingReturn.current) { pendingReturn.current = false; startReturnToDesk() } else if (pendingDock.current !== null) { const auto = pendingDock.current; pendingDock.current = null; dock(auto) } }} /></View>}
+            <View className={`pet-assistant-traveler${refinedMotion && !restingVisible ? ' is-standby' : ''}`} aria-hidden={refinedMotion && !restingVisible}>
               <View className='pet-assistant-facing'>
                 <View className='pet-assistant-look'>
-                  {refinedMotion ? <PetActor pet={pet} size={layout.standingSize} active={restingVisible} visible={restingVisible} facing={walking && !roamFar ? 'left' : 'right'} spriteOverride={companionSprite} coasting action={walking ? 'walk' : idleAction === 'look' ? 'observe' : idleAction === 'blink' ? 'blink' : idleAction === 'wave' ? 'wave' : 'idle'} /> : companionSprite ? (
+                  {refinedMotion ? <PetActor pet={pet} size={layout.standingSize} active={restingVisible} visible={restingVisible} facing={walking ? !roamFar ? 'left' : 'right' : restingFacing} spriteOverride={companionSprite} coasting action={walking ? 'walk' : idleAction === 'look' ? 'observe' : idleAction === 'blink' ? 'blink' : idleAction === 'wave' ? 'wave' : 'idle'} /> : companionSprite ? (
                     <PetCompanionSprite key={refinedMotion ? playBurst : undefined} src={companionSprite} name={pet?.name} refined={refinedMotion} pose={phase === 'playing' && !walking ? idleAction : 'idle'} />
                   ) : (
                     <PetAvatar pet={pet} animal={pet ? undefined : 'cat'} size={68} mood={mood} state={state} motion={!refinedMotion && phase === 'playing' && !walking ? 'companion' : 'static'} />

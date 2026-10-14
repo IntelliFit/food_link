@@ -101,10 +101,11 @@ function armLayerClip(ctx: CanvasRenderingContext2D, rig: PetRig, pose: RigPose,
   if (visible) ctx.clip()
   return visible
 }
-export function drawPetRig(ctx: CanvasRenderingContext2D, image: CanvasImageSource, rig: PetRig, pose: RigPose, vehicle?: PetTransportId, ground = false, armImage?: CanvasImageSource) {
+export function drawPetRig(ctx: CanvasRenderingContext2D, image: CanvasImageSource, rig: PetRig, pose: RigPose, vehicle?: PetTransportId, ground = false, armImage?: CanvasImageSource, vehicleAlpha = 1) {
   ctx.clearRect(0, 0, 200, 220)
   if (ground) line(ctx, { x: 5, y: pose.floor + 2 }, { x: 195, y: pose.floor + 2 }, '#b8ba9a', .8)
   ctx.save(); ctx.translate(100, pose.floor + 1); ctx.scale(1, .15); disc(ctx, 0, 0, 39, 'rgba(51,62,43,.12)'); ctx.restore()
+  ctx.save(); ctx.globalAlpha *= vehicleAlpha
   if (vehicle === 'bicycle') {
     wheel(ctx, 49, 167, 24, pose.phase); wheel(ctx, 153, 167, 24, pose.phase)
     const rear = { x: 49, y: 167 }, front = { x: 153, y: 167 }, head = { x: pose.grip.x + 6, y: pose.seat.y + 8 }
@@ -127,11 +128,12 @@ export function drawPetRig(ctx: CanvasRenderingContext2D, image: CanvasImageSour
       line(ctx, { x: pose.farGrip.x - 4, y: pose.farGrip.y - 1 }, { x: pose.grip.x + 4, y: pose.grip.y + 1 }, '#334b40', 3.4)
     }
   }
+  ctx.restore()
   const limbs = (kind: 'legs' | 'arms', side: number, layer?: 'front' | 'back') => {
     ctx.save()
     const holding = kind === 'arms' && (vehicle === 'scooter' || vehicle === 'bicycle' || !vehicle && pose.action === 'ride') && Boolean(rig.gripHand || armImage && rig.armSource?.grip)
     if (layer && !holding && !armLayerClip(ctx, rig, pose, side, layer === 'front')) { ctx.restore(); return }
-    if (vehicle === 'bicycle' && side === 0) ctx.globalAlpha = .72
+    if (vehicle === 'bicycle' && side === 0) ctx.globalAlpha *= .72
     const src = rig[kind][side], dest = pose[kind][side], width = kind === 'legs' ? rig.legWidth : rig.armWidth
     if (kind === 'legs') {
       segment(ctx, image, src[0], src[1], dest[0], dest[1], width, pose.scale, width / 2, false, pose.projectedLegs)

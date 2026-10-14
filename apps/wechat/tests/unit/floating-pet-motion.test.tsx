@@ -9,6 +9,9 @@ import { PET_TRANSPORT_CHANGED, petTransportStorageKey } from '../../src/utils/p
 let mockWellness = false
 let mockDelayReady = false
 let mockRigReady: (() => void) | undefined
+let mockDelayHandoff = false
+let mockPresented: (() => void) | undefined
+let mockHandoffComplete: (() => void) | undefined
 jest.mock('../../src/components/InkWellness', () => ({ useInkWellness: () => mockWellness }))
 jest.mock('../../src/utils/api', () => ({ getAccessToken: () => 'test-token' }))
 jest.mock('../../src/utils/withAuth', () => ({ redirectToLogin: jest.fn() }))
@@ -29,6 +32,7 @@ beforeEach(() => {
   ;(Taro.eventCenter.off as jest.Mock).mockImplementation((event, callback) => listeners.get(event)?.delete(callback))
   mockWellness = false
   mockDelayReady = false; mockRigReady = undefined
+  mockDelayHandoff = false; mockPresented = undefined; mockHandoffComplete = undefined
   jest.useFakeTimers()
   // Page visibility callbacks fire after mount in WeChat, not during React render.
   ;(useDidShow as jest.Mock).mockImplementation(() => undefined)
@@ -80,12 +84,16 @@ test('manual docking leaves a working recall button and does not return automati
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
 })
 
-test('wellness retains its existing movement cycle', () => {
+test('wellness uses the same native ride handoff without the instant CSS vehicle', () => {
   mockWellness = true
+  mockDelayHandoff = true
   const { container } = mount()
-  expect(container.querySelector('.pet-assistant--refined-motion')).toBeNull()
-  advance(1200)
-  expect(container.querySelector('#home-floating-pet')).toHaveClass('is-walking')
+  expect(container.querySelector('.pet-assistant--wellness')).toHaveClass('pet-assistant--refined-motion')
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--boarding')
+  expect(container.querySelector('.pet-assistant-ride')).toBeNull()
+  act(() => mockPresented?.()); act(() => mockHandoffComplete?.())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
 })
 
 test('a photo with no measured seated anchors uses its own walk and no borrowed bicycle or limbs', () => {
@@ -156,7 +164,7 @@ test('automatic recall uses the latest prepared vehicle rather than the departur
   act(() => { for (const callback of listeners.get(PET_TRANSPORT_CHANGED) || []) callback() })
   advance(980); fireEvent.transitionEnd(container.querySelector('#home-floating-pet')!)
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'scooter')
-  advance(1820)
+  advance(2140)
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--returning')
   expect(container.querySelector('.pet-transport-actor')).toHaveAttribute('data-vehicle', 'scooter')
 })
@@ -233,21 +241,21 @@ test('a failed appearance can be revisited with fresh riding geometry', () => {
   expect((container.querySelector('.pet-assistant-transport') as HTMLElement).style.width).toBe(size)
 })
 
-test('returning from wellness waits for its newly mounted transport owner', () => {
+test('switching home modes retains the prepared transport instead of cold mounting a different animation', () => {
   const onChatOpenChange = jest.fn()
   const renderPet = () => <FloatingPetAssistant companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={onChatOpenChange} />
   const { container, rerender } = render(renderPet())
+  const transport = container.querySelector('.pet-assistant-transport .pet-rig')
   mockWellness = true
   rerender(renderPet())
   mockDelayReady = true; mockWellness = false
   rerender(renderPet())
   fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
-  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
-  act(() => mockRigReady?.())
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
+  expect(container.querySelector('.pet-assistant-transport .pet-rig')).toBe(transport)
 })
 
-test('switching modes cancels the previous journey timers', () => {
+test('switching home modes keeps the same journey and its automatic recall', () => {
   const ref = React.createRef<any>()
   const onChatOpenChange = jest.fn()
   const renderPet = () => <FloatingPetAssistant ref={ref} companionSpriteOverride={JIANWEN_COMPANION_SRC} onChatOpenChange={onChatOpenChange} />
@@ -256,16 +264,70 @@ test('switching modes cancels the previous journey timers', () => {
   advance(400)
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
   mockWellness = true; rerender(renderPet())
-  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
-  advance(5000)
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
+  advance(5600)
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
   mockWellness = false; rerender(renderPet())
   expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
 })
 
-jest.mock('../../src/components/PetRigActor', () => ({ PetRigActor: ({ rig, vehicle, action, active, visible, onReady, onUnavailable }: any) => {
+test('a prepared but not presented ride keeps standing visible and never starts moving', () => {
+  mockDelayHandoff = true
+  const { container } = mount()
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--boarding')
+  expect(container.querySelector('#home-floating-pet')).not.toHaveClass('is-welcoming')
+  expect(container.querySelector('.pet-assistant-traveler')).not.toHaveClass('is-standby')
+  act(() => mockPresented?.())
+  expect(container.querySelector('.pet-assistant-traveler')).toHaveClass('is-standby')
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--boarding')
+  act(() => mockHandoffComplete?.())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
+})
+
+test('missing presentation cancels the departure instead of flashing an unseen vehicle into motion', () => {
+  mockDelayHandoff = true
+  const { container } = mount()
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  const oldComplete = mockHandoffComplete
+  advance(2100)
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
+  act(() => oldComplete?.())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
+})
+
+test('a callback from a cancelled boarding cannot start a later boarding attempt', () => {
+  mockDelayHandoff = true
+  const { container } = mount()
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  const oldComplete = mockHandoffComplete
+  advance(2100)
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  act(() => oldComplete?.())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--boarding')
+  act(() => mockHandoffComplete?.())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--running')
+})
+
+test('returning retains the ride until the native alighting handoff finishes', () => {
+  const { container } = mount()
+  fireEvent.click(screen.getByRole('button', { name: '暂时收起宠物' }))
+  advance(980); fireEvent.transitionEnd(container.querySelector('#home-floating-pet')!)
+  fireEvent.click(screen.getByRole('button', { name: '叫回宠物' }))
+  mockDelayHandoff = true
+  advance(1800); fireEvent.animationEnd(container.querySelector('#home-floating-pet')!)
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--alighting')
+  expect(container.querySelector('.pet-assistant-traveler')).toHaveClass('is-standby')
+  act(() => mockHandoffComplete?.())
+  expect(container.querySelector('#home-floating-pet')).toHaveClass('pet-assistant-float--playing')
+  expect(container.querySelector('.pet-assistant-traveler .pet-actor')).toHaveStyle({ transform: 'scaleX(-1)' })
+})
+
+jest.mock('../../src/components/PetRigActor', () => ({ PetRigActor: ({ rig, vehicle, action, active, visible, handoff, onPresented, onHandoffComplete, onReady, onUnavailable }: any) => {
   const React = require('react')
   if (onReady) mockRigReady = onReady
+  if (handoff) { mockPresented = onPresented; mockHandoffComplete = onHandoffComplete }
   React.useLayoutEffect(() => { if (!mockDelayReady) onReady?.() }, [rig, vehicle])
+  React.useLayoutEffect(() => { if (handoff && !mockDelayHandoff) { onPresented?.(); onHandoffComplete?.() } }, [handoff])
   return React.createElement('div', { className: `pet-rig${active ? '' : ' is-paused'}`, 'data-source': rig.src, 'data-motion': vehicle || action, 'data-visible': String(visible) }, React.createElement('img', { className: 'pet-rig__source', src: rig.src, onError: onUnavailable }))
 } }))

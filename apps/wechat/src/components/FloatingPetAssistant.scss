@@ -617,6 +617,8 @@
 
 /* Balanced companions stay in a small safe lane instead of repeatedly crossing the page. */
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--playing,
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--boarding,
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--alighting,
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--running,
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--returning,
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--docked {
@@ -624,7 +626,9 @@
   right: 20rpx;
   bottom: calc(290rpx + env(safe-area-inset-bottom));
 }
-.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--playing {
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--playing,
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--boarding,
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--alighting {
   transform: translateX(0);
   transition: transform 1800ms cubic-bezier(.42, 0, .58, 1);
   &.is-roaming-near { transform: translateX(-28rpx); }
@@ -637,6 +641,14 @@
   .pet-assistant-toy { animation: none; opacity: 0; }
   &.is-kick .pet-assistant-toy { animation: pet-refined-ball 1.2s ease-out; }
   .pet-assistant-ground { opacity: .5; background: #8baeb738; }
+}
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--alighting {
+  transition: none;
+  .pet-assistant-companion { transform: none; }
+}
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--boarding .pet-assistant-companion,
+.pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--alighting .pet-assistant-companion {
+  animation: none; opacity: 1; transform: none;
 }
 .pet-assistant--refined-motion .pet-assistant-float.pet-assistant-float--running {
   animation: none;
