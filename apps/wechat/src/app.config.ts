@@ -37,6 +37,7 @@ const extraSubpackagePages = [
   'pages/nutrition-plans/index',
   'pages/day-record/index',
   'pages/record-detail/index',
+  'pages/meal-detail/index',
   'pages/food-library/index',
   'pages/food-library-detail/index',
   'pages/marketing-landing/index',

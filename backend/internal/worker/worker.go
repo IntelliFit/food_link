@@ -1459,7 +1459,8 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 
 	input := analyzeInputFromTask(task)
 	applyLatestInputsToAnalyzeInput(&input, latestInputs)
-	input.CorrectionItems = correctionItems
+	input.CorrectionItems = applyScopedCorrectionNames(correctionItems, input.AdditionalContext)
+	correctionItems = input.CorrectionItems
 	if len(input.PreviousResult) == 0 {
 		input.PreviousResult = mapFromAny(firstNonNil(task.Payload["previousResult"], latestInputs["previousResult"]))
 	}
@@ -1473,27 +1474,10 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 	standardMode := "standard"
 	input.ExecutionMode = &standardMode
 
-	var result map[string]any
-	var err error
-	sourceType := firstNonEmptyString(task.Payload, "source_type")
-	if sourceType == "" {
-		sourceType = firstNonEmptyString(latestInputs, "source_type")
-	}
-	if strings.EqualFold(sourceType, "text") || strings.TrimSpace(input.Text) != "" {
-		if strings.TrimSpace(input.Text) == "" {
-			return true, fmt.Errorf("correction text task missing text input")
-		}
-		result, err = r.analyze.AnalyzeText(ctx, task.UserID, input)
-	} else {
-		if input.ImageURL == "" && len(input.ImageURLs) == 0 {
-			return true, fmt.Errorf("correction image task missing image input")
-		}
-		result, err = r.analyze.Analyze(ctx, task.UserID, input)
-	}
+	result, err := r.resolveScopedCorrection(ctx, task.UserID, input, contextOverrides)
 	if err != nil {
 		return true, err
 	}
-	result = applyCorrectionPostProcessingToResult(result, correctionItems, extractItems(input.PreviousResult["items"]), contextOverrides)
 	result["correctionApplied"] = true
 	if sessionID != "" {
 		result["precisionSessionId"] = sessionID

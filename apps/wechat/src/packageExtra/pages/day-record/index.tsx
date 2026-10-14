@@ -676,11 +676,11 @@ function DayRecordPage() {
                 total_fat: entries.reduce((sum, entry) => sum + entry.totalFat, 0),
               })
               return (
-                <View className='day-meal-advice' key={mealType}>
+                <View className='day-meal-advice' key={mealType} onClick={() => Taro.navigateTo({ url: `${extraPkgUrl('/pages/meal-detail/index')}?date=${encodeURIComponent(selectedDate)}&meal_type=${encodeURIComponent(mealType)}` })}>
                   <Text className='day-meal-advice-title'>{MEAL_TYPE_NAMES[mealType]} · 整餐营养点评</Text>
                   <Text className='day-meal-advice-body'>{advice.insight}</Text>
                   <Text className='day-meal-advice-body'>{advice.ratio}</Text>
-                  <Text className='day-meal-advice-note'>{entries.length > 1 ? `合并本餐 ${entries.length} 条记录计算。` : ''}点下方餐食卡片查看完整点评。</Text>
+                  <Text className='day-meal-advice-note'>{entries.length > 1 ? `合并本餐 ${entries.length} 条记录计算。` : ''}查看整餐完整点评 ›</Text>
                 </View>
               )
             })}

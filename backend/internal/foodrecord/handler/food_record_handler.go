@@ -16,6 +16,7 @@ import (
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/internal/foodrecord/service"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -189,6 +190,7 @@ func (h *FoodRecordHandler) EntryDistribution(c *gin.Context) {
 func (h *FoodRecordHandler) RecommendMealType(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	date := c.Query("date")
+	logger.Info(c.Request.Context(), "收到默认餐次推荐请求", slog.String("user_id", userID), slog.String("date", date))
 	refTimeStr := c.Query("ref_time")
 	var refTime *time.Time
 	if refTimeStr != "" {
@@ -205,6 +207,7 @@ func (h *FoodRecordHandler) RecommendMealType(c *gin.Context) {
 		"meal_type":    mealType,
 		"generated_by": generatedBy,
 	})
+	logger.Info(c.Request.Context(), "默认餐次推荐请求完成", slog.String("user_id", userID), slog.String("meal_type", mealType), slog.String("generated_by", generatedBy))
 }
 
 // GET /api/food-record/:record_id

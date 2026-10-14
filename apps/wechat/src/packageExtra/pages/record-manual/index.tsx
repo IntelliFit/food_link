@@ -3,7 +3,6 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
-  getHealthProfile,
   imageToBase64,
   saveFoodRecord,
   deleteManualCustomFood,
@@ -46,6 +45,7 @@ import {
   practicalManualFoodDefaultWeight,
   selectedManualFoodAmountText,
 } from '../../../utils/manual-food-serving'
+import { FOOD_LIBRARY_PICKED_EVENT } from '../../../utils/food-library-picker'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -508,6 +508,8 @@ function buildNutrientsFromWeight(
 function RecordManualPage() {
   const { scheme } = useAppColorScheme()
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
+  const pickerMode = Taro.getCurrentInstance().router?.params?.picker === '1'
+  const mealTypeChosenRef = useRef(false)
   const [selectedMeal, setSelectedMeal] = useState<CanonicalMealType>(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
@@ -577,23 +579,11 @@ function RecordManualPage() {
       setCustomItems(storedCustomItems)
     }
     const params = Taro.getCurrentInstance().router?.params
-    persistRecordTargetDate(String(params?.date || ''))
-    const storedMeal = Taro.getStorageSync('analyzeMealType')
-    const matchedMeal = typeof storedMeal === 'string'
-      ? MEALS.find((meal) => meal.id === storedMeal)
-      : undefined
-    if (matchedMeal) {
-      setSelectedMeal(matchedMeal.id)
-    } else {
-      void (async () => {
-        try {
-          const profile = getAccessToken() ? await getHealthProfile() : null
-          const mealType = await getRecommendedMealTypeWithFallback({ profile })
-          setSelectedMeal(mealType)
-        } catch {
-          setSelectedMeal(inferDefaultMealTypeFromLocalTime())
-        }
-      })()
+    if (!pickerMode) {
+      persistRecordTargetDate(String(params?.date || ''))
+      void getRecommendedMealTypeWithFallback().then(meal => {
+        if (!mealTypeChosenRef.current) setSelectedMeal(meal)
+      }).catch(() => {})
     }
     const quickSource = String(Taro.getStorageSync('campus_quick_record_source') || '')
     if (quickSource === 'campus_canteen' || quickSource === 'public_food_library') {
@@ -1206,6 +1196,34 @@ function RecordManualPage() {
       Taro.showToast({ title: '请先添加食物', icon: 'none' })
       return
     }
+    if (pickerMode) {
+      const channel = Taro.getCurrentInstance().page?.getOpenerEventChannel?.()
+      if (!channel) {
+        Taro.showToast({ title: '请返回原餐重新选择', icon: 'none' })
+        return
+      }
+      const prepared = selectedItems.map(item => {
+        const entered = parseFloat(item.weightInput)
+        const weight = Number.isFinite(entered) && entered > 0 ? weightFromDisplayInput(item, entered) : item.weight
+        return {
+          name: item.title, weight, ratio: 100, intake: weight,
+          nutrients: nutrientsForPayload(buildNutrientsFromWeight(item, weight)),
+          manual_source: item.source, manual_source_id: item.id,
+          manual_source_title: item.title, manual_portion_label: item.portionLabel,
+          image_path: item.imagePath || undefined,
+          image_paths: item.imagePath ? [item.imagePath] : undefined,
+        }
+      })
+      mealSaveLock.current = true
+      try {
+        channel.emit(FOOD_LIBRARY_PICKED_EVENT, prepared)
+        await Taro.navigateBack()
+      } catch {
+        mealSaveLock.current = false
+        Taro.showToast({ title: '返回失败，请重试', icon: 'none' })
+      }
+      return
+    }
     if (!getAccessToken()) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/login/index') })
       return
@@ -1450,7 +1468,7 @@ function RecordManualPage() {
         <View className='workspace-card'>
           <View className='workspace-header'>
             <View>
-              <Text className='workspace-title'>单餐工作台</Text>
+              <Text className='workspace-title'>{pickerMode ? '给本餐添加食物' : '单餐工作台'}</Text>
               <Text className='workspace-subtitle'>{statsText}</Text>
             </View>
             <View className='workspace-calories'>
@@ -1459,18 +1477,18 @@ function RecordManualPage() {
             </View>
           </View>
 
-          <View className='meal-grid'>
+          {!pickerMode && <View className='meal-grid'>
             {MEALS.map((meal) => (
               <View
                 key={meal.id}
                 className={`meal-item ${selectedMeal === meal.id ? 'active' : ''}`}
-                onClick={() => setSelectedMeal(meal.id)}
+                onClick={() => { mealTypeChosenRef.current = true; setSelectedMeal(meal.id) }}
               >
                 <Text className={`iconfont ${meal.icon} meal-icon`} />
                 <Text className='meal-name'>{meal.name}</Text>
               </View>
             ))}
-          </View>
+          </View>}
 
           <View className='search-bar primary'>
             <Text className='iconfont icon-sousuo search-icon' />
@@ -1728,7 +1746,7 @@ function RecordManualPage() {
           </View>
         </View>
 
-        {selectedItems.length > 0 && (
+        {!pickerMode && selectedItems.length > 0 && (
           <View className='config-card'>
             <View className='config-section'>
               <Text className='section-title'>饮食目标</Text>
@@ -1779,7 +1797,7 @@ function RecordManualPage() {
             className={`save-btn ${saving ? 'loading' : ''}`}
             onClick={() => setShowSelectedDrawer(true)}
           >
-            <Text>选好了，核对本餐</Text>
+            <Text>{pickerMode ? '选好了，核对添加' : '选好了，核对本餐'}</Text>
           </View>
         </View>
       )}
@@ -1790,7 +1808,7 @@ function RecordManualPage() {
             <View className='selected-drawer-handle' />
             <View className='selected-drawer-header'>
               <View>
-                <Text className='selected-drawer-title'>核对本餐 · {MEALS.find(meal => meal.id === selectedMeal)?.name || '本餐'}</Text>
+                <Text className='selected-drawer-title'>{pickerMode ? '核对要添加的食物' : `核对本餐 · ${MEALS.find(meal => meal.id === selectedMeal)?.name || '本餐'}`}</Text>
                 <Text className='selected-drawer-subtitle'>
                   {selectedItems.length} 项 · {Math.round(totalNutrients.calories)} kcal
                 </Text>
@@ -1828,7 +1846,7 @@ function RecordManualPage() {
                 className={`selected-drawer-primary ${saving ? 'loading' : ''}`}
                 onClick={handleSave}
               >
-                {saving ? <View className='custom-image-btn-spinner' /> : <Text>确认提交本餐</Text>}
+                {saving ? <View className='custom-image-btn-spinner' /> : <Text>{pickerMode ? '确认添加到本餐' : '确认提交本餐'}</Text>}
               </View>
             </View>
           </View>

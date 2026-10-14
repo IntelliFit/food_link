@@ -1,5 +1,5 @@
 import { View, Text, Textarea, ScrollView } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
@@ -59,6 +59,7 @@ const readSuggestRatioPreference = (): boolean => {
 }
 
 function RecordTextPage() {
+  const mealTypeChosenRef = useRef(false)
   const [foodText, setFoodText] = useState('')
   const [foodAmount, setFoodAmount] = useState('')
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
@@ -101,9 +102,9 @@ function RecordTextPage() {
       try {
         const profile = getAccessToken() ? await getHealthProfile() : null
         const inferredMealType = await getRecommendedMealTypeWithFallback({ profile })
-        setSelectedMeal(inferredMealType)
+        if (!mealTypeChosenRef.current) setSelectedMeal(inferredMealType)
       } catch {
-        setSelectedMeal(inferDefaultMealTypeFromLocalTime())
+        if (!mealTypeChosenRef.current) setSelectedMeal(inferDefaultMealTypeFromLocalTime())
       }
     })()
   }, [])
@@ -324,7 +325,7 @@ function RecordTextPage() {
               <View
                 key={meal.id}
                 className={`meal-item ${selectedMeal === meal.id ? 'active' : ''}`}
-                onClick={() => setSelectedMeal(meal.id)}
+                onClick={() => { mealTypeChosenRef.current = true; setSelectedMeal(meal.id) }}
               >
                 <Text className={`iconfont ${meal.icon} meal-icon`} />
                 <Text className='meal-name'>{meal.name}</Text>
