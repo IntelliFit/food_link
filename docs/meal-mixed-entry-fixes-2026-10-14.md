@@ -64,3 +64,13 @@
 官方 `auto` 再次成功并确认原 AppID 后，探针仍在运行时初始化被断开（Connection closed）；无真实点击/PNG。用户随后明确“不用调试了，调试我来”，已停止自动化，不再重试；本管理器启动的 watch 已 Release，微信开发者工具与用户其它进程保留。
 
 TypeScript、相关 ESLint、Go 编译/vet/gofmt 已通过。代码提交、后端与微信上传状态将在本文件追加准确回执；本机有原本其它未提交的打卡竖图改动，不属于此次发布。
+
+### 本轮交付回执
+
+- 实现代码已推送：dev `6da6f905c45616c46715c4a55b4602220ba9bfdb`；main `25ae4b54b2b9a27f6c41423e69e1379693d6ddfd`。根工作区仍 dev；main 在现有干净发布检出 cherry-pick 同一组，未夹带打卡竖图或另一个正在进行的零值识别修复。
+- 体验后端通过标准 `npm run push-docker-ccr` 使用原远端 Docker 发布；镜像 `sha256:b79ba628c450c15d9502a4cd53f7b9e95d85d45c3fcbf0f63d265e5891aec046`。dev Deployment generation 213，3 Ready、0 重启，新餐次与按项纠错标志、health 200 核实。main 源代码同步完成；正式后端仍观察 generation 176，本轮没有发布 main 云端。
+- 新微信包已一次生产编译，版本仍 4.6.12，源码主包 2012.8KB 导致内部 1900KB 预算 exit 1，保留原失败记录；2048KB 分包硬限检查通过，未调高项目预算、未隐藏报错。准备上传说明为“餐次、混合录入与纠错保留 6da6f905”。
+- **此次新包没有上传成功**：官方 CLI 虽 exit 0，但准备阶段明确返回“需要重新登录（code 10）”，没有上传回执/成功标志，不能据退出码认定上传完成；没有重传或把旧 2ef9ce9b 体验包当本次新包。原干净产物位于 `.local-state/releases/20261007-submission-save-fixes/source-dev/apps/wechat/dist`。
+- 用户两次明确不要调试、由本人验收。已停止自动化/登录配合请求及上传重试，不再要求用户开启端口或操作账号。不将 UI 描述或静态检查说成手机交互通过。
+- 本轮管理器 watch 已 Release；后来发现其它任务 `text-food-zero-fix-20261014` 的 watch，未取得它的停止权限、未停止。发布器及自有 SSH 隧道已退出，临时 Docker 凭据与发布锁已移除。
+- D:/cache/agent-tests/meal-mixed-fixes-20261014 当前约 17.1MiB（脚本、日志、回执和小缓存）；复用干净源码 dist 4,878,318B，净增约11KB。共享 Go/Git/watch 缓存增量未单测。保留交接证据，验收后可手动仅清此任务的 node-compile-cache；未清理用户文件或上轮被自动审批拒绝的缓存。
