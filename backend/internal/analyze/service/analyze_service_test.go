@@ -1649,6 +1649,36 @@ func TestAnalyzeService_AnalyzeText(t *testing.T) {
 	qwenClient.result = map[string]any{"items": []any{map[string]any{"name": "五花肉", "estimatedWeightGrams": 0.0, "nutrients": map[string]any{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}}}}
 	_, err = svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "200g五花肉"})
 	require.Error(t, err, "有名字但全零的结果不能标记为成功")
+	t.Run("数据库入口先解析名称重量", func(t *testing.T) {
+		parsed, parseErr := normalizeAndValidateTextResult(map[string]any{"items": []any{map[string]any{"name": "五花肉", "estimatedWeightGrams": 200.0}}}, AnalyzeInput{Text: "200克五花肉", AnalysisEngine: "db_first"})
+		require.NoError(t, parseErr, "数据库入口不能要求模型返回提示词禁止的营养数据")
+		assert.Equal(t, 200.0, numberFromAny(toItems(parsed["items"])[0]["estimatedWeightGrams"]))
+		// Production corrections add one dish through AnalyzeText(db_first).
+		// The parser intentionally supplies no nutrition; only the final result
+		// must contain database macros and the complete micronutrient profile.
+		client := &mockLLMClient{result: map[string]any{"items": []any{map[string]any{"name": "炒菠菜", "type": "normal", "estimatedWeightGrams": 50.0, "ediblePortionRatio": 100.0}}}}
+		correctionService := NewAnalyzeService(nil, client, nil)
+		resolver := newFakeAnalyzeNutritionResolver()
+		resolver.ordinaryFoods["炒菠菜"] = foodrecorddomain.FoodNutrition{ID: "spinach", CanonicalName: "炒菠菜", NormalizedName: "炒菠菜", KcalPer100g: 68, ProteinPer100g: 2.6, CarbsPer100g: 4.2, FatPer100g: 4.5, IsActive: true}
+		correctionService.ConfigureNutritionResolver(resolver)
+		unit := map[string]any{fallbackNutritionSourceKey: "qwen_generated", "calories": 68.0, "protein": 2.6, "carbs": 4.2, "fat": 4.5}
+		for _, key := range preciseMicronutrientKeys {
+			unit[key] = 1.0
+		}
+		correctionService.ConfigureNutritionFallbackEstimator(&fakeNutritionFallbackEstimator{rows: map[int]map[string]any{0: unit}})
+		mode := "standard"
+		result, analyzeErr := correctionService.AnalyzeText(ctx, "", AnalyzeInput{Text: "炒菠菜，当前可食重量 50.00 克。只分析这一个食物，返回一个食物项。", AnalysisEngine: "db_first", ModelName: "gemini-3.7-flash", ExecutionMode: &mode})
+		require.NoError(t, analyzeErr)
+		assert.Contains(t, client.prompt, "不要输出营养值")
+		assert.Equal(t, 1, client.calls, "遵守DB解析协议不能导致重复重试")
+		items := toItems(result["items"])
+		require.Len(t, items, 1)
+		assert.Equal(t, 50.0, numberFromAny(items[0]["estimatedWeightGrams"]))
+		assert.Equal(t, 34.0, numberFromAny(mapFromAny(items[0]["nutrients"])["calories"]))
+		assert.Equal(t, "completed", mapFromAny(result["precise_micronutrients"])["status"])
+		require.NoError(t, ValidateResolvedNutritionItems(items))
+	})
+
 }
 
 func TestAnalyzeService_AnalyzeTextRequiresConfiguredTextModel(t *testing.T) {

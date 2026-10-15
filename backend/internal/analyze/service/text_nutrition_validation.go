@@ -78,6 +78,15 @@ func normalizeAndValidateTextResult(parsed map[string]any, input AnalyzeInput) (
 				item["needs_user_confirmation"] = false
 			}
 		}
+		// DB-first parses names and portions before the nutrition resolver runs.
+		// Its prompt deliberately forbids model nutrition. Finalized results and
+		// recording still require complete valid nutrition.
+		if !analysisEngineProducesNutrition(input.AnalysisEngine) {
+			if strings.TrimSpace(name) == "" || weight <= 0 || math.IsNaN(weight) || math.IsInf(weight, 0) {
+				return nil, &LLMJSONParseError{Err: fmt.Errorf("文字食物分析缺少有效名称或份量")}
+			}
+			continue
+		}
 		nutrients := mapFromAny(item["nutrients"])
 		values := make([]float64, 0, 4)
 		for _, key := range []string{"calories", "protein", "carbs", "fat"} {

@@ -21,6 +21,10 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 		return nil, fmt.Errorf("纠错需要完整原餐和有效食物清单")
 	}
 	result := copyAnyMap(input.PreviousResult)
+	resolvedTargets, err := r.resolveScopedCorrectionTargets(ctx, input, previous)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]map[string]any, 0, len(input.CorrectionItems))
 	used := map[int]bool{}
 	recalculated := 0
@@ -43,21 +47,11 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 		explicitNutrition, _ := explicitCorrectionNutritionEdited(correction)
 		var next map[string]any
 		if renamed && !explicitNutrition {
-			targetInput := input
-			targetInput.Text = fmt.Sprintf("%s，当前可食重量 %.2f 克。只分析这一个食物，返回一个食物项。", name, weight)
-			targetInput.ImageURL, targetInput.ImageURLs = "", nil
-			targetInput.PreviousResult, targetInput.CorrectionItems = nil, nil
-			targetInput.AdditionalContext = ""
-			targetInput.SuggestRatioEnabled = false
-			resolved, err := r.analyze.AnalyzeText(ctx, userID, targetInput)
-			if err != nil {
-				return nil, err
+			target, ok := resolvedTargets[correctionIndex]
+			if !ok {
+				return nil, fmt.Errorf("更正项营养未能完整补全，请重试")
 			}
-			targets := extractItems(resolved["items"])
-			if len(targets) != 1 {
-				return nil, fmt.Errorf("请为更正项填写一个具体食物名称")
-			}
-			next = scaleScopedItem(targets[0], weight)
+			next = scaleScopedItem(target, weight)
 			next["name"] = name
 			recalculated++
 		} else if original != nil && !renamed {
@@ -140,6 +134,73 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 	result["context_advice"] = "更正后按最终食物与实际摄入量汇总；未修改食物的营养保持原值。"
 	logger.Info(ctx, "结构化纠错已合并并保留未修改食物", slog.Int("item_count", len(items)), slog.Int("recalculated_count", recalculated))
 	return result, nil
+}
+
+// The correction form already supplies authoritative names and edible grams.
+// Resolve only new/renamed targets together; do not reparse them through a
+// separate text-model request for every dish or re-estimate untouched items.
+func (r *Runner) resolveScopedCorrectionTargets(ctx context.Context, input analyzeservice.AnalyzeInput, previous []map[string]any) (map[int]map[string]any, error) {
+	indices := []int{}
+	targets := []map[string]any{}
+	seen := map[int]bool{}
+	for index, correction := range input.CorrectionItems {
+		name := strings.TrimSpace(firstNonEmptyString(correction, "name"))
+		weight, valid := firstPositiveFloat(correction, "weight", "estimatedWeightGrams")
+		if name == "" || !valid || weight > 100000 || math.IsNaN(weight) || math.IsInf(weight, 0) {
+			return nil, fmt.Errorf("请填写有效食物名称和重量")
+		}
+		originalIndex := scopedPreviousIndex(correction, previous)
+		if originalIndex >= 0 {
+			if seen[originalIndex] {
+				return nil, fmt.Errorf("纠错清单包含重复食物标识")
+			}
+			seen[originalIndex] = true
+		}
+		renamed := originalIndex < 0 || normalizeScopedName(name) != normalizeScopedName(firstNonEmptyString(previous[originalIndex], "name"))
+		explicitNutrition, _ := explicitCorrectionNutritionEdited(correction)
+		if !renamed || explicitNutrition {
+			continue
+		}
+		target := map[string]any{"name": name, "type": "normal", "estimatedWeightGrams": weight, "grossWeightGrams": weight, "ediblePortionRatio": 100.0, "weight_method": "user_explicit_weight", "needs_user_confirmation": false}
+		for _, key := range []string{"type", "foodState", "weightBasis", "basisEvidence"} {
+			if value, ok := correction[key]; ok {
+				target[key] = value
+			}
+		}
+		indices, targets = append(indices, index), append(targets, target)
+	}
+	out := map[int]map[string]any{}
+	if len(targets) == 0 {
+		return out, nil
+	}
+	const targetContext = "用户已确认本次更正清单的食物名称及当前可食克数，仅补全这些新增或改名项的营养，保留完整微量营养；禁止改变食物或份量。"
+	var resolved []map[string]any
+	var err error
+	if enricher, ok := r.analyze.(interface {
+		ApplyUserRequestedMicronutrientsToResolvedItems(context.Context, []map[string]any, string) ([]map[string]any, error)
+	}); ok {
+		resolved = r.analyze.ApplyDBFirstToItems(ctx, targets, targetContext)
+		resolved, err = enricher.ApplyUserRequestedMicronutrientsToResolvedItems(ctx, resolved, targetContext)
+	} else {
+		resolved, err = r.analyze.ApplyDBFirstToItemsWithPreciseMicronutrients(ctx, targets, targetContext)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(resolved) != len(targets) {
+		return nil, fmt.Errorf("更正项营养未能完整补全，请重试")
+	}
+	if err := analyzeservice.ValidateResolvedNutritionItems(resolved); err != nil {
+		return nil, err
+	}
+	if err := analyzeservice.ValidatePreciseMicronutrientItems(resolved); err != nil {
+		return nil, err
+	}
+	for index, item := range resolved {
+		out[indices[index]] = item
+	}
+	logger.Info(ctx, "纠错新增和改名食物已批量补全营养", slog.Int("item_count", len(resolved)))
+	return out, nil
 }
 
 // 常见明确改名语句只作用于被点名的项；其它说明不会触发整餐重估。

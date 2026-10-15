@@ -6,6 +6,9 @@ import "strings"
 func SanitizeAIUpstreamErrorMessage(message string) string {
 	message = strings.TrimSpace(message)
 	lower := strings.ToLower(message)
+	if strings.Contains(lower, "parse llm json failed") {
+		return "本次食物分析结果不完整，请重试或修改食物描述"
+	}
 	if strings.Contains(lower, "model not found") ||
 		strings.Contains(lower, "model_not_found") ||
 		strings.Contains(lower, "unknown model") {
