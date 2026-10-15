@@ -3,9 +3,9 @@ import { useEffect, useRef } from 'react'
 import { useBalancedTheme } from './BalancedThemeContext'
 import { useAppColorScheme } from './AppColorSchemeContext'
 import type { HomeExperienceMode } from '../utils/home-experience'
-import './HomeModeSwitch.scss'
+import './ProfileModeSwitch.scss'
 
-export function HomeModeSwitch({ mode, onChange, hidden = false }: {
+export function ProfileModeSwitch({ mode, onChange, hidden = false }: {
   mode: HomeExperienceMode; onChange: (mode: HomeExperienceMode) => void; hidden?: boolean
 }) {
   const { theme } = useBalancedTheme(), { scheme } = useAppColorScheme()
@@ -35,8 +35,8 @@ export function HomeModeSwitch({ mode, onChange, hidden = false }: {
   }
   const style = mode === 'wellness' ? 'ink-wellness' : theme
   return <View
-    id='home-mode-toggle'
-    className={`home-mode-float home-mode-float--${style}${scheme === 'dark' && mode !== 'wellness' ? ' is-dark' : ''}`}
+    id='profile-mode-switch'
+    className={`profile-mode-switch profile-mode-switch--${style}${scheme === 'dark' && mode !== 'wellness' ? ' is-dark' : ''}`}
     role='group'
     aria-label='饮食模式'
     catchMove
@@ -46,18 +46,17 @@ export function HomeModeSwitch({ mode, onChange, hidden = false }: {
     onTouchEnd={touchEnd}
     onTouchCancel={event => { event.stopPropagation(); start.current = undefined; ignoreGestureClick.current = true }}
   >
-    <View className={`home-mode-float__track${mode === 'wellness' ? ' is-wellness' : ''}`}>
-      <View className='home-mode-float__thumb' aria-hidden />
+    <View className={`profile-mode-switch__track${mode === 'wellness' ? ' is-wellness' : ''}`}>
+      <View className='profile-mode-switch__thumb' aria-hidden />
       {(['balanced', 'wellness'] as const).map(value => <View
         key={value}
-        id={`home-mode-${value}`}
-        className={`home-mode-float__option${value === mode ? ' is-selected' : ''}`}
+        id={`profile-mode-${value}`}
+        className={`profile-mode-switch__option${value === mode ? ' is-selected' : ''}`}
         role='button'
         aria-pressed={value === mode}
         aria-label={`${value === 'balanced' ? '均衡' : '养生'}模式${value === mode ? '，当前已选' : ''}`}
         onClick={event => { event.stopPropagation(); if (!ignoreGestureClick.current) choose(value) }}
       >
-        <Text className='home-mode-float__symbol' aria-hidden>{value === 'balanced' ? '◉' : '☯'}</Text>
         <Text>{value === 'balanced' ? '均衡' : '养生'}</Text>
       </View>)}
     </View>

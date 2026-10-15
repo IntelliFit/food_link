@@ -969,3 +969,15 @@
 .profile-section-chevron { flex-shrink: 0; width: 13rpx; height: 13rpx; margin: 0 10rpx 7rpx 24rpx; border-right: 3rpx solid #84928d; border-bottom: 3rpx solid #84928d; transform: rotate(45deg); transition: transform .2s ease; }
 .profile-section-chevron.is-expanded { transform: rotate(225deg); margin-bottom: 0; }
 @media (prefers-reduced-motion: reduce) { .profile-section-chevron { transition: none; } }
+// This setting belongs to the profile, outside the theme's decorative header.
+.profile-mode-card {
+  margin: 24rpx 24rpx; padding: 24rpx; border-radius: 28rpx;
+  background: var(--bt-surface, #fffef8); color: var(--bt-text, #263e33);
+  border: 1rpx solid var(--bt-border, #d4ddd3);
+  &__row { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+  &__title { font-size: 30rpx; font-weight: 600; }
+  &__hint { display: block; margin-top: 20rpx; font-size: 25rpx; line-height: 1.6; color: var(--bt-muted, #66715f); }
+}
+.profile-page--dark .profile-mode-card { background: var(--bt-surface, #1c2b24); color: var(--bt-text, #edf3e7); }
+.profile-page.ink-page .profile-mode-card { background: #f7f7f0; color: #252a23; border-color: #bfc2b5; }
+.profile-page.ink-page .profile-mode-card__hint { color: #5c6653; }

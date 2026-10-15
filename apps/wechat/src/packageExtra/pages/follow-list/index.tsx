@@ -1,3 +1,4 @@
+import { withModeIntroduction } from '../../../components/ModeIntroductionGate'
 import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { useState, useEffect, useCallback } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
@@ -16,7 +17,7 @@ import './index.scss'
 
 type ListType = 'followers' | 'following'
 
-export default function FollowListPage() {
+function FollowListPage() {
   const { scheme } = useAppColorScheme()
   const router = useRouter()
 
@@ -153,3 +154,5 @@ export default function FollowListPage() {
     </FlPageThemeRoot>
   )
 }
+
+export default withModeIntroduction(FollowListPage)

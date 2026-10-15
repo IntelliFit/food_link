@@ -18,6 +18,8 @@ import {
 import { extraPkgUrl, normalizeRedirectUrlForSubpackage, MAIN_TAB_ROUTES } from '../../../utils/subpackage-extra'
 import { isPublicPage } from '../../../utils/withAuth'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import { ModeIntroductionGate } from '../../../components/ModeIntroductionGate'
+import { getModeIntroductionSession } from '../../../utils/mode-introduction'
 import { cleanupGeneratedUserFiles } from '../../../utils/weapp-user-files'
 import { NewUserOnboardingModals } from '../../../components/NewUserOnboardingModals'
 import { processChooseAvatarSelection, ensureAvatarUploadedForSave, getInitialRegistrationAvatar } from '../../../utils/new-user-profile-form'
@@ -159,6 +161,10 @@ export default function LoginPage() {
     const [showDebugLoginPanel, setShowDebugLoginPanel] = useState(false)
     /** 当前登录链路是否已完成首次健康档案 */
     const [pendingOnboardingCompleted, setPendingOnboardingCompleted] = useState(true)
+    const [showModeIntroduction, setShowModeIntroduction] = useState(false)
+    const authContinuationRef = useRef(false)
+    const introductionSessionRef = useRef<ReturnType<typeof getModeIntroductionSession> | null>(null)
+    const authContinuationTimers = useRef(new Set<ReturnType<typeof setTimeout>>())
     /** 是否已同意用户协议与隐私政策 */
     const [agreed, setAgreed] = useState(false)
 
@@ -225,6 +231,8 @@ export default function LoginPage() {
     }, [loading, logLoginStage, showPhoneBindModal, showProfileForm])
 
     useEffect(() => () => {
+        authContinuationTimers.current.forEach(timer => clearTimeout(timer))
+        authContinuationTimers.current.clear()
         if (loadingReleaseTimerRef.current !== null) {
             window.clearTimeout(loadingReleaseTimerRef.current)
             loadingReleaseTimerRef.current = null
@@ -305,13 +313,13 @@ export default function LoginPage() {
         if (target) {
             const tabPath = target.split('?')[0]
             if (MAIN_TAB_ROUTES.has(tabPath)) {
-                Taro.switchTab({ url: tabPath })
+                await Taro.switchTab({ url: tabPath })
             } else {
-                Taro.redirectTo({ url: target })
+                await Taro.redirectTo({ url: target })
             }
             return
         }
-        Taro.switchTab({ url: '/pages/index/index' })
+        await Taro.switchTab({ url: '/pages/index/index' })
     }
 
     // 拉取后端公开配置，用于控制测试注册入口
@@ -429,21 +437,49 @@ export default function LoginPage() {
         }
     }
 
-    const continueAfterAuthGates = async (onboardingCompleted: boolean) => {
+    const continueAfterAuthGates = async (onboardingCompleted: boolean, expectedSession = getModeIntroductionSession()) => {
+        if (authContinuationRef.current) return
+        const current = getModeIntroductionSession()
+        if (!current.userId || !current.token || current.userId !== expectedSession.userId || current.token !== expectedSession.token) return
+        const pages = Taro.getCurrentPages()
+        const currentRoute = pages[pages.length - 1]?.route
+        if (currentRoute && `/${currentRoute}` !== extraPkgUrl('/pages/login/index')) return
+        authContinuationRef.current = true
+        try {
         console.log('[invite-debug][login] continueAfterAuthGates', {
             onboardingCompleted,
             inviteCode,
             hasInviteCode: Boolean(inviteCode),
         })
         await acceptInviteAfterAuthenticated('afterProfileReadyBeforeNextGate', true)
+        const latest = getModeIntroductionSession()
+        if (latest.userId !== expectedSession.userId || latest.token !== expectedSession.token) return
+        if (latest.required) {
+            introductionSessionRef.current = latest
+            setPendingOnboardingCompleted(onboardingCompleted)
+            setShowModeIntroduction(true)
+            return
+        }
         if (!onboardingCompleted) {
             console.log('[invite-debug][login] 未完成健康档案，先跳转 health-profile，好友申请已在资料就绪后处理', {
                 inviteCode,
             })
-            Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
+            await Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
             return
         }
         await finishLoginFlow()
+        } catch (error) {
+            await showLoginErrorToast(error, '暂时无法打开下一步，请重试')
+        } finally { authContinuationRef.current = false }
+    }
+
+    const scheduleAuthContinuation = (onboardingCompleted: boolean, delay: number) => {
+        const session = getModeIntroductionSession()
+        const timer = setTimeout(() => {
+            authContinuationTimers.current.delete(timer)
+            void continueAfterAuthGates(onboardingCompleted, session)
+        }, delay)
+        authContinuationTimers.current.add(timer)
     }
 
     /** 手机号快捷登录：一次取得会话凭证和手机号授权，避免登录后再次打断用户。 */
@@ -518,7 +554,7 @@ export default function LoginPage() {
         if (!phoneCode) {
             setShowPhoneBindModal(false)
             Taro.showToast({ title: '未授权手机号', icon: 'none' })
-            setTimeout(() => { void continueAfterAuthGates(pendingOnboardingCompleted) }, 800)
+            scheduleAuthContinuation(pendingOnboardingCompleted, 800)
             return
         }
         try {
@@ -529,7 +565,7 @@ export default function LoginPage() {
             Taro.hideLoading()
             Taro.showToast({ title: '绑定成功', icon: 'success' })
             setShowPhoneBindModal(false)
-            setTimeout(() => { void continueAfterAuthGates(pendingOnboardingCompleted) }, 1000)
+            scheduleAuthContinuation(pendingOnboardingCompleted, 1000)
         } catch (err: any) {
             Taro.hideLoading()
             await showLoginErrorToast(err, '绑定失败')
@@ -538,6 +574,12 @@ export default function LoginPage() {
 
     // 登录成功后的处理
     const handleLoginSuccess = async (loginData: LoginResponse, wxNickname?: string, wxAvatarUrl?: string) => {
+        const owner = getModeIntroductionSession()
+        if (!owner.token || owner.userId !== String(loginData.user_id || '').trim()) return
+        const stillOwner = () => {
+            const active = getModeIntroductionSession()
+            return active.userId === owner.userId && active.token === owner.token
+        }
         console.log('[invite-debug][login] handleLoginSuccess 开始', {
             userId: loginData.user_id,
             hasPhoneNumber: Boolean(loginData.purePhoneNumber || loginData.phoneNumber),
@@ -554,6 +596,7 @@ export default function LoginPage() {
         // 获取用户信息 check 是否完善
         try {
             const apiUserInfo = await getUserProfile()
+            if (!stillOwner()) { releaseLoginLoading('session-changed'); return }
             if (apiUserInfo.create_time) {
                 Taro.setStorageSync('userRegisterTime', apiUserInfo.create_time)
             }
@@ -568,6 +611,7 @@ export default function LoginPage() {
             Taro.setStorageSync('userInfo', userInfo)
             Taro.setStorageSync('isLoggedIn', true)
             await showNewUserTrialModalIfNeeded(loginData.user_id, apiUserInfo.create_time)
+            if (!stillOwner()) { releaseLoginLoading('session-changed'); return }
 
             Taro.showToast({
                 title: '登录成功',
@@ -600,7 +644,7 @@ export default function LoginPage() {
                 // 库中已有手机号则直接返回；否则弹出授权手机号弹窗
                 if (loginData.purePhoneNumber) {
                     console.log('[invite-debug][login] 已有手机号，准备继续登录后流程', { inviteCode })
-                    setTimeout(() => { void continueAfterAuthGates(onboardingCompleted) }, 1500)
+                    scheduleAuthContinuation(onboardingCompleted, 1500)
                 } else {
                     console.log('[invite-debug][login] 缺少手机号，先弹手机号绑定，邀请码处理继续延后', { inviteCode })
                     setShowPhoneBindModal(true)
@@ -608,6 +652,7 @@ export default function LoginPage() {
             }
 
         } catch (error) {
+            if (!stillOwner()) { releaseLoginLoading('session-changed'); return }
             console.error('获取用户信息失败', error)
             // 登录成功不代表资料读取成功。请求失败时绝不能把老用户当成资料缺失，
             // 否则默认昵称会通过“完善资料”保存回服务端，覆盖用户原昵称。
@@ -632,7 +677,7 @@ export default function LoginPage() {
             }
 
             if (loginPhoneNumber) {
-                setTimeout(() => { void continueAfterAuthGates(true) }, 800)
+                scheduleAuthContinuation(true, 800)
             } else {
                 setShowPhoneBindModal(true)
             }
@@ -676,14 +721,21 @@ export default function LoginPage() {
             return
         }
 
+        const owner = getModeIntroductionSession()
         Taro.showLoading({ title: '保存中...' })
         try {
             const avatarToSave = await ensureAvatarUploadedForSave(tempAvatar)
+            const beforeSave = getModeIntroductionSession()
+            if (beforeSave.userId !== owner.userId || beforeSave.token !== owner.token) { Taro.hideLoading(); return }
             await updateUserInfo({
                 nickname: tempNickname,
                 avatar: avatarToSave
             })
+            const afterSave = getModeIntroductionSession()
+            if (afterSave.userId !== owner.userId || afterSave.token !== owner.token) { Taro.hideLoading(); return }
             await acceptInviteAfterAuthenticated('profileSavedAfterUpdateUserInfo')
+            const afterInvite = getModeIntroductionSession()
+            if (afterInvite.userId !== owner.userId || afterInvite.token !== owner.token) { Taro.hideLoading(); return }
 
             // 更新本地 storage
             const currentUser = Taro.getStorageSync('userInfo') || {}
@@ -695,7 +747,12 @@ export default function LoginPage() {
             Taro.showToast({ title: '保存成功', icon: 'success' })
 
             setShowProfileForm(false)
-            setTimeout(() => {
+            const timer = setTimeout(() => {
+                authContinuationTimers.current.delete(timer)
+                const active = getModeIntroductionSession()
+                if (active.userId !== owner.userId || active.token !== owner.token) return
+                const pages = Taro.getCurrentPages()
+                if (pages.length && `/${pages[pages.length - 1].route}` !== extraPkgUrl('/pages/login/index')) return
                 const hasPhone = String(Taro.getStorageSync('phoneNumber') || '').trim().length > 0
                 console.log('[invite-debug][login] 完善头像昵称保存后继续流程', {
                     hasPhone,
@@ -703,17 +760,25 @@ export default function LoginPage() {
                     inviteCode,
                 })
                 if (hasPhone) {
-                    void continueAfterAuthGates(pendingOnboardingCompleted)
+                    void continueAfterAuthGates(pendingOnboardingCompleted, owner)
                     return
                 }
                 setShowPhoneBindModal(true)
             }, 1500)
+            authContinuationTimers.current.add(timer)
 
         } catch (err: any) {
             Taro.hideLoading()
             await showLoginErrorToast(err, '保存失败')
         }
     }
+
+    if (showModeIntroduction) return <FlPageThemeRoot><ModeIntroductionGate onCompleted={() => {
+        const expected = introductionSessionRef.current
+        setShowModeIntroduction(false)
+        if (expected) void continueAfterAuthGates(pendingOnboardingCompleted, expected)
+    }}
+    /></FlPageThemeRoot>
 
     return (
         <FlPageThemeRoot>

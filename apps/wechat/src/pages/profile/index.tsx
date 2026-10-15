@@ -30,6 +30,8 @@ import { BalancedThemeEntry, BalancedThemePicker } from '../../components/Balanc
 import { cleanupGeneratedUserFiles } from '../../utils/weapp-user-files'
 import { clearAllOnboardingGuides } from '../../utils/onboarding-guide-storage'
 import { clearRecentConsoleLogs } from '../../utils/console-log-buffer'
+import { ProfileModeSwitch } from '../../components/ProfileModeSwitch'
+import { useHomeExperienceMode } from '../../components/useHomeExperienceMode'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -95,6 +97,7 @@ function ProfileListIcon({ name }: { name: string }) {
 
 function ProfilePage() {
   const ink = useInkWellness()
+  const { mode, changeMode } = useHomeExperienceMode()
   const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({})
   const [showBalancedThemePicker, setShowBalancedThemePicker] = React.useState(false)
   const { scheme } = useAppColorScheme()
@@ -506,7 +509,7 @@ function ProfilePage() {
   const handleClearCache = () => {
     Taro.showModal({
       title: '提示',
-      content: '确定要清除缓存吗？首页、识别记录和朋友圈的缓存将重新加载，宠物成长、收藏、衣装和游戏成绩会保留。',
+      content: '确定要清除缓存吗？首页、识别记录和朋友圈的缓存将重新加载，默认模式、宠物成长、收藏、衣装和游戏成绩会保留。',
       success: async (res) => {
         if (!res.confirm) return
         try {
@@ -577,9 +580,7 @@ function ProfilePage() {
             if (
               key.startsWith('comment_draft_') ||
               key.startsWith('temp_comments_') ||
-              key.startsWith('record_manual_custom_foods_v1:') ||
-              key.startsWith('home_experience_config_v1:') ||
-              key.startsWith('home_experience_config_v2:')
+              key.startsWith('record_manual_custom_foods_v1:')
             ) {
               try { Taro.removeStorageSync(key) } catch (_) {}
             }
@@ -603,7 +604,7 @@ function ProfilePage() {
   const handleLogout = () => {
     Taro.showModal({
       title: '提示',
-      content: '确定要退出登录吗？退出后将清除所有本地数据。',
+      content: '确定要退出登录吗？下次登录将继续使用已选择的默认模式。',
       success: (res) => {
         if (res.confirm) {
           try {
@@ -712,6 +713,16 @@ function ProfilePage() {
       </View>
 
       </BalancedThemeExperience>
+      {isLoggedIn && <View id='profile-default-mode' className='profile-mode-card'>
+        <View className='profile-mode-card__row'>
+          <Text className='profile-mode-card__title'>默认模式</Text>
+          <ProfileModeSwitch mode={mode} onChange={next => {
+            if (changeMode(next)) Taro.showToast({ title: next === 'wellness' ? '已切换至养生模式' : '已切换至均衡模式', icon: 'none' })
+          }}
+          />
+        </View>
+        <Text className='profile-mode-card__hint'>左右滑动切换，下次登录继续沿用；已有记录保持不变。</Text>
+      </View>}
       {!ink && <BalancedThemeEntry onOpen={() => setShowBalancedThemePicker(true)} />}
 
       {/* 会员卡片（仅登录后展示） */}

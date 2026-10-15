@@ -367,8 +367,15 @@ Component({
           const communityFilterDrawerOpen = readStorageFlag('community_filter_drawer_visible')
           const homePosterModalOpen = readStorageFlag('home_poster_modal_visible')
           const statsRiskDetailOpen = readStorageFlag('stats_risk_detail_visible')
+          const userId = String(wx.getStorageSync('user_id') || '').trim()
+          const introduction = wx.getStorageSync('mode_introduction_completed_v1:' + userId)
+          const modeConfig = wx.getStorageSync('home_experience_config_v2:' + userId)
+          const validMode = modeConfig && (modeConfig.mode === 'balanced' || modeConfig.mode === 'wellness')
+          const introductionPending = Boolean(userId && wx.getStorageSync('access_token') &&
+            !(introduction && introduction.version === 1 && introduction.completed === true && validMode))
 
           const shouldHide =
+            introductionPending ||
             (currentPath === '/pages/community/index' && (communityCommentOpen || communityFilterDrawerOpen)) ||
             (currentPath === '/pages/index/index' && homePosterModalOpen) ||
             (currentPath === '/pages/stats/index' && statsRiskDetailOpen)

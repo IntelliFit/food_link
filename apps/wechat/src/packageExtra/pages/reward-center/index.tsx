@@ -1,3 +1,4 @@
+import { withModeIntroduction } from '../../../components/ModeIntroductionGate'
 import { View, Text } from '@tarojs/components'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { useEffect, useState } from 'react'
@@ -329,4 +330,4 @@ function rewardActivationNote(reward: VoucherItem): string {
   return '未启用前奖励不会计入当前余额'
 }
 
-export default RewardCenterPage
+export default withModeIntroduction(RewardCenterPage)

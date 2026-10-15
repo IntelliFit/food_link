@@ -34,6 +34,10 @@ test('the actual clear-cache action removes reloadable caches while preserving e
   }
   preserved.set('pet_kitchen_best_v1:user-a', { version: 1, levels: { '1': { score: 900, stars: 3, served: 8 } } })
   preserved.set('user_id', 'user-a')
+  for (const account of ['user-a', 'user-b']) {
+    preserved.set(`home_experience_config_v2:${account}`, { version: 2, mode: account === 'user-a' ? 'wellness' : 'balanced' })
+    preserved.set(`mode_introduction_completed_v1:${account}`, { version: 1, completed: true })
+  }
   for (const [key, value] of preserved) store.set(key, value)
   const caches = ['home_dashboard_local_cache', 'community_feed_cache', 'analyzeResult', 'comment_draft_post-one']
   for (const key of caches) store.set(key, 'stale cache')

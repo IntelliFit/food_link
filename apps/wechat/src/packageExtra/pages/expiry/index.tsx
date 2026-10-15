@@ -1,3 +1,4 @@
+import { withModeIntroduction } from '../../../components/ModeIntroductionGate'
 import { View, Text, ScrollView, Button } from '@tarojs/components'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
@@ -37,7 +38,7 @@ function groupItems(items: FoodExpiryItem[]) {
   return { urgent, fresh, processed }
 }
 
-export default function ExpiryPage() {
+function ExpiryPage() {
   const { scheme } = useAppColorScheme()
   const [loading, setLoading] = useState(true)
   const [fetchFailed, setFetchFailed] = useState(false)
@@ -284,3 +285,5 @@ export default function ExpiryPage() {
     </FlPageThemeRoot>
   )
 }
+
+export default withModeIntroduction(ExpiryPage)

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useState } from 'react'
-import { HomeModeSwitch } from '../../src/components/HomeModeSwitch'
+import { ProfileModeSwitch } from '../../src/components/ProfileModeSwitch'
 import { useHomeExperienceMode } from '../../src/components/useHomeExperienceMode'
 import { BALANCED_THEME_IDS, type BalancedThemeId } from '../../src/utils/balanced-theme'
 import { HOME_EXPERIENCE_MODE_EVENT, type HomeExperienceMode } from '../../src/utils/home-experience'
@@ -16,19 +16,19 @@ beforeEach(() => {
   mockTheme = 'clarity-order'; mockScheme = 'light'
 })
 
-test.each(BALANCED_THEME_IDS)('%s keeps its own floating skin and selected balanced segment', theme => {
+test.each(BALANCED_THEME_IDS)('%s keeps its own profile skin and selected balanced segment', theme => {
   mockTheme = theme
   const change = jest.fn()
-  const { container, rerender } = render(<HomeModeSwitch mode='balanced' onChange={change} />)
-  expect(container.firstChild).toHaveClass(`home-mode-float--${theme}`)
+  const { container, rerender } = render(<ProfileModeSwitch mode='balanced' onChange={change} />)
+  expect(container.firstChild).toHaveClass(`profile-mode-switch--${theme}`)
   expect(screen.getByRole('button', { name: '均衡模式，当前已选' })).toHaveAttribute('aria-pressed', 'true')
   fireEvent.click(screen.getByRole('button', { name: '均衡模式，当前已选' }))
   expect(change).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: '养生模式' }))
   expect(change).toHaveBeenCalledWith('wellness')
-  rerender(<HomeModeSwitch mode='wellness' onChange={change} />)
-  expect(container.firstChild).toHaveClass('home-mode-float--ink-wellness')
-  expect(container.querySelector('.home-mode-float__track')).toHaveClass('is-wellness')
+  rerender(<ProfileModeSwitch mode='wellness' onChange={change} />)
+  expect(container.firstChild).toHaveClass('profile-mode-switch--ink-wellness')
+  expect(container.querySelector('.profile-mode-switch__track')).toHaveClass('is-wellness')
   fireEvent.click(screen.getByRole('button', { name: '均衡模式' }))
   expect(change).toHaveBeenLastCalledWith('balanced')
   expect(mockTheme).toBe(theme)
@@ -36,11 +36,11 @@ test.each(BALANCED_THEME_IDS)('%s keeps its own floating skin and selected balan
 
 test('dark skin applies only to balanced; dialogs remove the whole control', () => {
   mockScheme = 'dark'; mockTheme = 'way-of-water'
-  const { container, rerender } = render(<HomeModeSwitch mode='balanced' onChange={jest.fn()} />)
+  const { container, rerender } = render(<ProfileModeSwitch mode='balanced' onChange={jest.fn()} />)
   expect(container.firstChild).toHaveClass('is-dark')
-  rerender(<HomeModeSwitch mode='wellness' onChange={jest.fn()} />)
+  rerender(<ProfileModeSwitch mode='wellness' onChange={jest.fn()} />)
   expect(container.firstChild).not.toHaveClass('is-dark')
-  rerender(<HomeModeSwitch mode='wellness' onChange={jest.fn()} hidden />)
+  rerender(<ProfileModeSwitch mode='wellness' onChange={jest.fn()} hidden />)
   expect(screen.queryByRole('group', { name: '饮食模式' })).not.toBeInTheDocument()
 })
 
@@ -48,7 +48,7 @@ test.each<[HomeExperienceMode, number, number, HomeExperienceMode]>([
   ['balanced', 0, 60, 'wellness'], ['wellness', 60, 0, 'balanced'],
 ])('horizontal swipe selects %s target once without a synthetic click or parent pet gesture', (mode, from, to, target) => {
   const change = jest.fn(), parent = jest.fn()
-  render(<div onClick={parent} onTouchStart={parent} onTouchMove={parent} onTouchEnd={parent}><HomeModeSwitch mode={mode} onChange={change} /></div>)
+  render(<div onClick={parent} onTouchStart={parent} onTouchMove={parent} onTouchEnd={parent}><ProfileModeSwitch mode={mode} onChange={change} /></div>)
   const group = screen.getByRole('group', { name: '饮食模式' })
   fireEvent.touchStart(group, { touches: [{ clientX: from, clientY: 10 }] })
   fireEvent.touchMove(group, { touches: [{ clientX: to, clientY: 12 }] })
@@ -61,7 +61,7 @@ test.each<[HomeExperienceMode, number, number, HomeExperienceMode]>([
 
 test('vertical scrolling and cancelled touches never change modes', () => {
   const change = jest.fn()
-  render(<HomeModeSwitch mode='balanced' onChange={change} />)
+  render(<ProfileModeSwitch mode='balanced' onChange={change} />)
   const group = screen.getByRole('group', { name: '饮食模式' })
   fireEvent.touchStart(group, { touches: [{ clientX: 10, clientY: 10 }] })
   fireEvent.touchEnd(group, { changedTouches: [{ clientX: 30, clientY: 80 }] })
@@ -78,7 +78,7 @@ test('a delayed native tap cannot undo a swipe after the parent changes mode; th
   const change = jest.fn()
   function Controlled() {
     const [mode, setMode] = useState<HomeExperienceMode>('balanced')
-    return <HomeModeSwitch mode={mode} onChange={next => { change(next); setMode(next) }} />
+    return <ProfileModeSwitch mode={mode} onChange={next => { change(next); setMode(next) }} />
   }
   render(<Controlled />)
   const group = screen.getByRole('group', { name: '饮食模式' })

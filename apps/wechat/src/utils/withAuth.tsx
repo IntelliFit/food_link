@@ -1,6 +1,7 @@
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useCallback } from 'react'
 import { FlPageThemeRoot } from '../components/FlPageThemeRoot'
+import { ModeIntroductionGate } from '../components/ModeIntroductionGate'
 import { useAppColorScheme } from '../components/AppColorSchemeContext'
 import { getAccessToken } from './api'
 import { extraPkgUrl } from './subpackage-extra'
@@ -194,7 +195,7 @@ export function withAuth<P extends object>(
     if (options?.public || isAuthenticated) {
       return (
         <FlPageThemeRoot>
-          <WrappedComponent {...props} />
+          <ModeIntroductionGate><WrappedComponent {...props} /></ModeIntroductionGate>
         </FlPageThemeRoot>
       )
     }

@@ -1,3 +1,4 @@
+import { withModeIntroduction } from '../../../components/ModeIntroductionGate'
 import { View, Text, Image, Button, Input, Canvas } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useRouter, useReachBottom } from '@tarojs/taro'
@@ -77,7 +78,7 @@ const MEAL_NAMES: Record<string, string> = {
   snack: '午加餐',
 }
 
-export default function ProfileSettingsPage() {
+function ProfileSettingsPage() {
   const { scheme, toggleScheme } = useAppColorScheme()
   const router = useRouter()
 
@@ -1397,3 +1398,5 @@ export default function ProfileSettingsPage() {
     </FlPageThemeRoot>
   )
 }
+
+export default withModeIntroduction(ProfileSettingsPage)
