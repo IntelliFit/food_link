@@ -81,6 +81,9 @@ func TestNutritionReuseContractDoesNotReverseNegatedPortionInstructions(t *testi
 	}
 	require.Equal(t, "skinless", nutritionSkinState("带皮鸭腿，皮不吃"))
 	require.Equal(t, "skinless", nutritionSkinState("鸭腿不准备吃皮"))
+	item := map[string]any{"name": "鸭腿", "foodState": "熟、去皮去骨", "weightBasis": "as_served"}
+	food := &foodrecorddomain.FoodNutrition{CanonicalName: "鸭腿", FoodState: "cooked", WeightBasis: "cooked", StateTags: []string{"with_skin", "boneless"}}
+	require.Equal(t, "skin_conflict", nutritionReuseRejection(item, food), "模型把皮骨说明放在状态字段时也必须保留约束")
 }
 
 func TestPrecisionNutritionRegressionPreserves95gAndRejectsLegacyDuck(t *testing.T) {

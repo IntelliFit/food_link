@@ -94,7 +94,7 @@ func nutritionComparableBasis(basis, state string) string {
 
 func nutritionItemEvidence(item map[string]any) string {
 	parts := make([]string, 0, 10)
-	for _, key := range []string{"name", "item_hint", "basisEvidence", "basis_evidence", "recognitionEvidence", "weightEvidence", "ediblePortionReason", "skinState", "boneState", "preparationMethod"} {
+	for _, key := range []string{"name", "foodState", "food_state", "weightBasis", "weight_basis", "item_hint", "basisEvidence", "basis_evidence", "recognitionEvidence", "weightEvidence", "ediblePortionReason", "skinState", "boneState", "preparationMethod"} {
 		if value := stringFromAny(item[key]); value != "" {
 			parts = append(parts, value)
 		}
