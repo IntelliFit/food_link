@@ -13,7 +13,6 @@ describe('pet navigation', () => {
     const { container } = render(
       <GreetingSection
         mode='balanced'
-        onModeToggle={jest.fn()}
         petAvatar={<span>宠物头像</span>}
         onPetPress={openPetChat}
       />,

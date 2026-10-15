@@ -87,10 +87,9 @@ import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from '../../utils/fo
 import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
 import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
-import {
-  getStoredHomeExperienceConfig,
-  saveHomeExperienceConfig,
-} from '../../utils/home-experience'
+import type { HomeExperienceMode } from '../../utils/home-experience'
+import { HomeModeSwitch } from '../../components/HomeModeSwitch'
+import { useHomeExperienceMode } from '../../components/useHomeExperienceMode'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -922,7 +921,7 @@ const MACRO_CONFIGS: Array<{
 function IndexPage() {
   const { scheme } = useAppColorScheme()
   const socialInbox = useSocialInbox()
-  const [homeExperienceConfig, setHomeExperienceConfig] = React.useState(getStoredHomeExperienceConfig)
+  const { mode: homeMode, changeMode: changeHomeMode } = useHomeExperienceMode()
   const [homeModuleLayout, setHomeModuleLayout] = React.useState<HomeModuleLayout>(readHomeModuleLayout)
   const [homeModulesEditing, setHomeModulesEditing] = React.useState(false)
   const [showHomeToolbox, setShowHomeToolbox] = React.useState(false)
@@ -3158,15 +3157,13 @@ function IndexPage() {
     })
   }
 
-  const handleHomeExperienceModeToggle = React.useCallback(() => {
-    const nextMode = homeExperienceConfig.mode === 'wellness' ? 'balanced' : 'wellness'
-    const saved = saveHomeExperienceConfig({ version: 2, mode: nextMode })
-    setHomeExperienceConfig(saved)
+  const handleHomeExperienceModeChange = React.useCallback((nextMode: HomeExperienceMode) => {
+    if (!changeHomeMode(nextMode)) return
     Taro.showToast({
       title: nextMode === 'wellness' ? '已切换至养生模式' : '已切换至均衡模式',
       icon: 'none',
     })
-  }, [homeExperienceConfig.mode])
+  }, [changeHomeMode])
 
   const visibleHomeModuleIds = React.useMemo(
     () => homeModuleLayout.order.filter((id) => !homeModuleLayout.hidden.includes(id)),
@@ -3335,11 +3332,11 @@ function IndexPage() {
     Taro.showToast({ title: '已恢复默认布局', icon: 'none' })
   }, [])
 
-  const isWellnessMode = homeExperienceConfig.mode === 'wellness'
+  const isWellnessMode = homeMode === 'wellness'
 
   return (
     <View
-      className={`home-page home-page--mode-${homeExperienceConfig.mode} ${scheme === 'dark' && !isWellnessMode ? 'home-page--dark' : ''} ${homePageScrollLocked ? 'home-page--modal-open' : ''}`}
+      className={`home-page has-floating-mode-switch home-page--mode-${homeMode} ${scheme === 'dark' && !isWellnessMode ? 'home-page--dark' : ''} ${homePageScrollLocked ? 'home-page--modal-open' : ''}`}
       onClick={homeModulesEditing ? finishHomeModuleEditing : undefined}
       onTouchStart={(event) => {
         const touch = (event as ITouchEvent).touches?.[0]
@@ -3412,8 +3409,8 @@ function IndexPage() {
         />
 
         <View
-          key={homeExperienceConfig.mode}
-          className={`home-experience-stage home-module-list home-experience-stage--${homeExperienceConfig.mode}`}
+          key={homeMode}
+          className={`home-experience-stage home-module-list home-experience-stage--${homeMode}`}
         >
 
         {visibleHomeModuleIds.includes('greeting') && (
@@ -3424,11 +3421,10 @@ function IndexPage() {
               date={selectedDate}
               onTarget={openTargetEditor}
               onSharePress={handleShareDailySummary}
-              mode={homeExperienceConfig.mode}
-              onModeToggle={handleHomeExperienceModeToggle}
+              mode={homeMode}
               petReminder={petHidden ? petReminder : undefined}
               onPetReminderPress={handlePetAnalyzeReminderPress}
-              compact={homeExperienceConfig.mode === 'balanced'}
+              compact={homeMode === 'balanced'}
             />
           </HomeModuleFrame>
         )}
@@ -4023,6 +4019,12 @@ function IndexPage() {
         {/* 底部留白 */}
         <View className='bottom-spacer' />
       </View>
+
+      <HomeModeSwitch
+        mode={homeMode}
+        onChange={handleHomeExperienceModeChange}
+        hidden={homeModulesEditing || showHomeToolbox || showTargetEditor || showWeightEditor || showWaterEditor || showRecordMenu || showHomeOnboardingGuide || showDailyPosterModal || showRecordPosterModal || showRecordEditModal || mealRecordsDialogVisible || mealActionSheetVisible || petChatOpen}
+      />
 
       <HomeToolboxSheet
         visible={showHomeToolbox}

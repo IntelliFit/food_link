@@ -12,7 +12,6 @@ interface GreetingSectionProps {
   date?: string
   onTarget?: () => void
   mode: HomeExperienceMode
-  onModeToggle: () => void
   petAvatar?: ReactNode
   onPetPress?: () => void
   petReminder?: {
@@ -24,23 +23,15 @@ interface GreetingSectionProps {
   compact?: boolean
 }
 
-export function GreetingSection({ current, target, date, onTarget, mode, onModeToggle, petAvatar, onPetPress, petReminder, onPetReminderPress, compact = false }: GreetingSectionProps) {
+export function GreetingSection({ current, target, date, onTarget, mode, petAvatar, onPetPress, petReminder, onPetReminderPress, compact = false }: GreetingSectionProps) {
   const { text, iconClass } = getGreeting()
   const isWellness = mode === 'wellness'
 
-  if (isWellness) return <InkHomeHero current={current} target={target} date={date} onTarget={onTarget} onModeToggle={onModeToggle} reminder={petReminder?.text} onReminder={onPetReminderPress} />
+  if (isWellness) return <InkHomeHero current={current} target={target} date={date} onTarget={onTarget} reminder={petReminder?.text} onReminder={onPetReminderPress} />
 
   if (compact && !petReminder) return (
     <View className='greeting-section greeting-section--compact'>
       <Text className='greeting-compact-label'>今日健康概览</Text>
-      <View
-        id='home-mode-toggle'
-        className={`greeting-mode-toggle greeting-mode-toggle--${mode}`}
-        onClick={onModeToggle}
-      >
-        <Text className='greeting-mode-toggle__label'>均衡</Text>
-        <Text className='greeting-mode-toggle__switch'>⇄</Text>
-      </View>
     </View>
   )
 
@@ -73,14 +64,6 @@ export function GreetingSection({ current, target, date, onTarget, mode, onModeT
             <Text className='greeting-subtitle'>{isWellness ? '三餐有节，起居有常' : '今天也要健康饮食哦'}</Text>
           </View>
         )}
-      </View>
-      <View
-        id='home-mode-toggle'
-        className={`greeting-mode-toggle greeting-mode-toggle--${mode}`}
-        onClick={onModeToggle}
-      >
-        <Text className='greeting-mode-toggle__label'>{isWellness ? '养生' : '均衡'}</Text>
-        <Text className='greeting-mode-toggle__switch'>⇄</Text>
       </View>
     </View>
   )

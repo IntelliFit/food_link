@@ -1,0 +1,102 @@
+.home-mode-float {
+  --mode-paper: #fffef8;
+  --mode-ink: #263e33;
+  --mode-line: #d4ddd3;
+  --mode-active: #263e33;
+  --mode-active-ink: #fffef8;
+  position: fixed;
+  z-index: 950;
+  left: 24rpx;
+  bottom: calc(158rpx + env(safe-area-inset-bottom));
+  width: 292rpx;
+  padding: 6rpx;
+  box-sizing: border-box;
+  border: 2rpx solid var(--mode-line);
+  border-radius: 52rpx;
+  background: var(--mode-paper);
+  color: var(--mode-ink);
+  box-shadow: 0 8rpx 28rpx rgba(23, 43, 34, .16);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  transform: none;
+  .home-mode-float__track { position: relative; display: flex; border-radius: inherit; }
+  .home-mode-float__thumb {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 50%;
+    box-sizing: border-box; border: 2rpx solid transparent; border-radius: inherit;
+    background: var(--mode-active); box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, .1);
+    pointer-events: none; transition: transform 200ms cubic-bezier(.2, .75, .25, 1);
+  }
+  .home-mode-float__track.is-wellness .home-mode-float__thumb { transform: translateX(100%); }
+  .home-mode-float__option {
+    position: relative; z-index: 1; display: flex; align-items: center; justify-content: center;
+    flex: 1; min-width: 0; height: 88rpx; min-height: 44px; gap: 8rpx;
+    font-size: 28rpx; line-height: 1; font-weight: 600; white-space: nowrap;
+    color: var(--mode-ink); border-radius: inherit;
+    &.is-selected { color: var(--mode-active-ink); }
+    &:focus-visible { outline: 4rpx solid var(--mode-active); outline-offset: 4rpx; }
+  }
+  .home-mode-float__symbol { font-size: 24rpx; font-weight: 400; line-height: 1; }
+  &.is-dark { --mode-paper: #18251f; --mode-ink: #ecf1e9; --mode-line: #7e9e8d; }
+}
+
+// Nine independent material treatments. Only the indicator moves; labels stay level.
+.home-mode-float--clarity-order {
+  --mode-ink: #171917; --mode-line: #171917; --mode-active: #c8ff00; --mode-active-ink: #171917;
+  border-radius: 20rpx; box-shadow: 0 5rpx 0 #171917;
+  background-image: repeating-linear-gradient(90deg, transparent 0, transparent 34rpx, rgba(100, 100, 100, .08) 35rpx, transparent 36rpx);
+  &.is-dark { --mode-paper: #151815; --mode-line: #c8ff00; --mode-ink: #f7f7f3; box-shadow: 0 5rpx 0 #657c16; }
+}
+.home-mode-float--natural-symbiosis {
+  --mode-paper: #f9f6e9; --mode-ink: #315840; --mode-line: #96ad8f; --mode-active: #376b4d;
+  border-radius: 46rpx 28rpx 46rpx 28rpx;
+  background-image: repeating-linear-gradient(25deg, transparent 0, transparent 7rpx, rgba(88, 119, 72, .035) 8rpx, transparent 9rpx);
+  .home-mode-float__thumb { border-radius: 38rpx 20rpx 38rpx 20rpx; }
+}
+.home-mode-float--eastern-salon {
+  --mode-paper: #f8f4e9; --mode-ink: #34342d; --mode-line: #a3936e; --mode-active: #292b24;
+  border: 4rpx double var(--mode-line); border-radius: 26rpx;
+  box-shadow: 0 5rpx 16rpx rgba(70, 54, 26, .14);
+  .home-mode-float__thumb { border-color: #bcab80; }
+  .home-mode-float__option { font-family: 'Songti SC', SimSun, serif; letter-spacing: 2rpx; }
+  &.is-dark { --mode-paper: #24241e; --mode-ink: #f4e6c8; --mode-line: #a89362; }
+}
+.home-mode-float--modern-gallery {
+  --mode-paper: #fffcf1; --mode-ink: #161616; --mode-line: #161616; --mode-active: #ce2f1e;
+  border-width: 3rpx; border-radius: 22rpx; box-shadow: 6rpx 6rpx 0 #173eb5;
+  .home-mode-float__thumb { border-color: #161616; box-shadow: 0 3rpx 0 #f5bf26; }
+  &.is-dark { --mode-paper: #242421; --mode-line: #f8eed2; --mode-ink: #fff8e6; }
+}
+.home-mode-float--miniature-world {
+  --mode-paper: #f8edcf; --mode-ink: #4f3a27; --mode-line: #ad8a5c; --mode-active: #287992;
+  border-radius: 28rpx; box-shadow: 0 7rpx 0 #9b7449, 0 12rpx 20rpx rgba(65, 43, 22, .18);
+  .home-mode-float__thumb { border-color: #9dc6cc; box-shadow: inset 0 3rpx 0 rgba(255, 255, 255, .25), 0 3rpx 0 #245463; }
+  &.is-dark { --mode-paper: #372b21; --mode-line: #bfa178; --mode-ink: #f8edcf; }
+}
+.home-mode-float--picturebook-companion {
+  --mode-paper: #f8ecd6; --mode-ink: #664b37; --mode-line: #b89b76; --mode-active: #a75536;
+  border-style: dashed; border-radius: 26rpx 40rpx 28rpx 34rpx;
+  box-shadow: 0 5rpx 14rpx rgba(86, 53, 31, .18);
+  .home-mode-float__thumb { border: 2rpx dashed #f3cbb2; border-radius: 20rpx 32rpx 22rpx 28rpx; }
+  &.is-dark { --mode-paper: #302c2a; --mode-line: #c4ab8d; --mode-ink: #f8ecd6; }
+}
+.home-mode-float--clear-care {
+  --mode-paper: #fff; --mode-ink: #005b38; --mode-line: #005b38; --mode-active: #005b38;
+  width: 308rpx; border-width: 4rpx; border-radius: 30rpx;
+  .home-mode-float__option { height: 96rpx; font-size: 32rpx; font-weight: 700; }
+  &.is-dark { --mode-paper: #101f19; --mode-ink: #f9ffe9; --mode-line: #f5d45f; --mode-active: #f5d45f; --mode-active-ink: #18251b; }
+}
+.home-mode-float--way-of-water {
+  --mode-paper: #102a36; --mode-ink: #e0f2f4; --mode-line: #739ca7; --mode-active: #32667a;
+  border-radius: 58rpx; background-image: linear-gradient(150deg, rgba(126, 191, 211, .2), transparent 65%);
+  box-shadow: inset 0 2rpx 0 rgba(223, 251, 255, .15), 0 6rpx 26rpx rgba(0, 29, 45, .34);
+  .home-mode-float__thumb { border-color: #8bbdca; box-shadow: inset 0 2rpx 8rpx rgba(185, 238, 250, .22), 0 0 10rpx rgba(122, 218, 239, .2); }
+  &.is-dark { --mode-paper: #102a36; --mode-ink: #e0f2f4; --mode-line: #739ca7; }
+}
+.home-mode-float--ink-wellness {
+  --mode-paper: #f7f7f0; --mode-ink: #30332d; --mode-line: #a9aba0; --mode-active: #20221e;
+  border-radius: 52rpx; box-shadow: 0 5rpx 20rpx rgba(30, 32, 27, .13);
+  .home-mode-float__track { box-shadow: inset 0 0 0 1rpx #d6d6ca; }
+  .home-mode-float__thumb { border-color: #44483d; }
+}
+
+.home-page.has-floating-mode-switch > .page-content { padding-bottom: calc(296rpx + env(safe-area-inset-bottom)); }
+@media (prefers-reduced-motion: reduce) { .home-mode-float .home-mode-float__thumb { transition: none; } }

@@ -31,14 +31,14 @@ export function InkMasthead({ title, subtitle, compact = false }: { title?: stri
   </View>
 }
 
-export function InkHomeHero({ current, target, date, onModeToggle, onTarget, reminder, onReminder }: {
-  current?: number; target?: number; date?: string; onModeToggle: () => void; onTarget?: () => void; reminder?: string; onReminder?: () => void
+export function InkHomeHero({ current, target, date, onTarget, reminder, onReminder }: {
+  current?: number; target?: number; date?: string; onTarget?: () => void; reminder?: string; onReminder?: () => void
 }) {
   const known = Number.isFinite(current) && Number.isFinite(target)
   const remaining = known ? Number(target) - Number(current) : 0
   return <View className='ink-home-hero'>
     <Image className='ink-home-hero__art' src={landscape} mode='scaleToFill' aria-hidden />
-    <View className='ink-brand'><Text className='ink-brand__name'>食探</Text><View id='home-mode-toggle' className='ink-mode-switch' role='button' aria-label='养生模式，点击切换均衡' onClick={onModeToggle}><Text>养生</Text><Image src={taiji} mode='aspectFit' /></View></View>
+    <View className='ink-brand'><Text className='ink-brand__name'>食探</Text><Text className='ink-brand__mode'>养生</Text><Image src={taiji} className='ink-brand__taiji' mode='aspectFit' aria-hidden /></View>
     <Text className='ink-home-hero__title'>一餐一饮，{ '\n' }皆有平衡</Text>
     <Text className='ink-home-hero__date'>{date?.replace(/-/g, ' · ')}</Text>
     <Text className='ink-home-hero__verse'>饮食有节，动静相宜</Text>

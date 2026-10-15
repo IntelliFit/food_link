@@ -11,19 +11,17 @@ beforeEach(() => jest.useFakeTimers())
 afterEach(() => jest.useRealTimers())
 
 test('missing intake stays unknown; known zero is not treated as missing', () => {
-  const toggle = jest.fn()
-  const { rerender } = render(<InkHomeHero onModeToggle={toggle} />)
+  const { rerender } = render(<InkHomeHero />)
   expect(screen.getAllByText('—')).toHaveLength(2)
-  rerender(<InkHomeHero current={0} target={1800} onModeToggle={toggle} />)
+  rerender(<InkHomeHero current={0} target={1800} />)
   expect(screen.getByText('0')).toBeInTheDocument()
   expect(screen.getByText('1,800')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: '养生模式，点击切换均衡' }))
-  expect(toggle).toHaveBeenCalledTimes(1)
+  expect(screen.queryByRole('button', { name: /养生模式/ })).not.toBeInTheDocument()
 })
 
 test('over-target intake keeps its meaning and opens the existing target editor', () => {
   const target = jest.fn()
-  render(<InkHomeHero current={2100} target={1800} onModeToggle={jest.fn()} onTarget={target} />)
+  render(<InkHomeHero current={2100} target={1800} onTarget={target} />)
   expect(screen.getByText('超出目标 · 千卡')).toBeInTheDocument()
   expect(screen.getByText('300')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '查看和修改饮食目标' }))
