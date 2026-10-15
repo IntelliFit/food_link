@@ -86,12 +86,18 @@ export default defineAppConfig({
   darkmode: false,
   // Build-time native template discovery; the plugin declares async owners.
   usingComponents: {
+    'mode-intro-a': './packageModeIntroA/components/media/index',
+    'mode-intro-b': './packageModeIntroB/components/media/index',
+    'mode-intro-c': './packageModeIntroC/components/media/index',
     'theme-scene-image': './packageThemeScenes/components/scene-image/index',
     'theme-scene-nature-image': './packageThemeScenesNature/components/scene-image/index',
     'theme-scene-gallery-image': './packageThemeScenesGallery/components/scene-image/index',
   },
   pages: mainPages,
   subpackages: [
+    { root: 'packageModeIntroA', name: 'mode-intro-a', pages: ['pages/index/index'] },
+    { root: 'packageModeIntroB', name: 'mode-intro-b', pages: ['pages/index/index'] },
+    { root: 'packageModeIntroC', name: 'mode-intro-c', pages: ['pages/index/index'] },
     { root: 'packagePetStudio', name: 'pet-studio', pages: ['pages/index/index', 'pages/kitchen/index', 'pages/adventure/index'] },
     { root: 'packageThemeScenes', name: 'theme-scenes', pages: ['pages/index/index'] },
     { root: 'packageThemeScenesNature', name: 'theme-scenes-nature', pages: ['pages/index/index'] },

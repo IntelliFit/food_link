@@ -5,6 +5,8 @@ import { ModeIntroduction } from '../../src/components/ModeIntroduction'
 import { ModeIntroductionGate } from '../../src/components/ModeIntroductionGate'
 import { MODE_INTRODUCTION_PREFIX } from '../../src/utils/mode-introduction'
 
+jest.mock('../../src/components/ModeIntroMedia', () => ({ ModeIntroMedia: ({ chapter, paused, onEnded }: any) => <div data-testid='chapter-media' data-chapter={chapter.chapter} data-paused={String(paused)}><button aria-label='结束本章' onClick={onEnded} /></div> }))
+
 jest.mock('@tarojs/components', () => {
   const React = require('react')
   return {
@@ -37,30 +39,43 @@ beforeEach(() => {
   ;(useDidShow as jest.Mock).mockImplementation(fn => React.useEffect(() => { shows.add(fn); return () => { shows.delete(fn) } }, [fn]))
 })
 const next = () => fireEvent.click(document.querySelector('#mode-introduction-next')!)
+const toChoices = () => { for (let i = 0; i < 9; i++) next() }
 
-test('each mode gets a detailed introduction; final confirmation requires an explicit choice and commits once', async () => {
+test('nine independent chapters precede nine explicit choices, without saving previews', async () => {
   const save = jest.fn(() => true)
   render(<ModeIntroduction onConfirm={save} />)
-  expect(screen.getByText('八种主题，同一份记录')).toBeInTheDocument()
-  expect(screen.getByText(/喜欢明确数字与目标/)).toBeInTheDocument()
-  next()
-  expect(screen.getByText('纸墨之间，记录一餐一饮')).toBeInTheDocument()
-  expect(screen.getByText(/喜欢东方审美/)).toBeInTheDocument()
+  for (let i = 0; i < 9; i++) {
+    expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-chapter', String(i))
+    fireEvent.click(screen.getByRole('button', { name: '暂停动画' }))
+    expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-paused', 'true')
+    next()
+  }
   expect(save).not.toHaveBeenCalled()
-  next()
-  expect(screen.getByRole('button', { name: '设为默认，开始记录' })).toBeDisabled()
-  fireEvent.click(screen.getByRole('button', { name: '选择养生模式' }))
+  expect(Taro.setStorageSync).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: '选定主题，开启食探' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: '选择养生模式·阴阳主题' }))
   expect(save).not.toHaveBeenCalled()
   await act(async () => { next(); next() })
   expect(save).toHaveBeenCalledTimes(1)
-  expect(save).toHaveBeenCalledWith('wellness')
+  expect(save).toHaveBeenCalledWith({ mode: 'wellness' })
+})
+
+test('replaying the introduction clears an unconfirmed selection', () => {
+  const save = jest.fn()
+  render(<ModeIntroduction onConfirm={save} />)
+  toChoices()
+  fireEvent.click(screen.getByRole('button', { name: '选择养生模式·阴阳主题' }))
+  fireEvent.click(screen.getByRole('button', { name: '重新观看全部介绍' }))
+  toChoices()
+  expect(screen.getByRole('button', { name: '选定主题，开启食探' })).toBeDisabled()
+  expect(save).not.toHaveBeenCalled()
 })
 
 test('failed persistence keeps the choice screen visible and allows retry', async () => {
   const save = jest.fn().mockReturnValueOnce(false).mockReturnValue(true)
   render(<ModeIntroduction onConfirm={save} />)
-  next(); next()
-  fireEvent.click(screen.getByRole('button', { name: '选择均衡模式' }))
+  toChoices()
+  fireEvent.click(screen.getByRole('button', { name: '选择澄明秩序' }))
   await act(async () => { next() })
   expect(screen.getByRole('alert')).toHaveTextContent('未能保存')
   await act(async () => { next() })
@@ -74,8 +89,8 @@ test('resumed choice reopens the original route and query before business hooks 
   function Content() { React.useEffect(mounted, []); return <span>已有首页</span> }
   const first = render(<ModeIntroductionGate><Content /></ModeIntroductionGate>)
   expect(mounted).not.toHaveBeenCalled()
-  next(); next()
-  fireEvent.click(screen.getByRole('button', { name: '选择均衡模式' }))
+  toChoices()
+  fireEvent.click(screen.getByRole('button', { name: '选择澄明秩序' }))
   await act(async () => { next() })
   expect(Taro.reLaunch).toHaveBeenCalledWith({ url: '/packageExtra/pages/reward-center/index?from=%E9%A6%96%E9%A1%B5%26%E6%88%91%E7%9A%84&date=2026-10-15' })
   expect(mounted).not.toHaveBeenCalled()
@@ -92,7 +107,7 @@ test('resumed choice reopens the original route and query before business hooks 
 test('failed page reopening keeps business content gated and retries without losing the saved choice', async () => {
   ;(Taro.reLaunch as jest.Mock).mockRejectedValueOnce(new Error('navigation failed'))
   render(<ModeIntroductionGate><span>业务页面</span></ModeIntroductionGate>)
-  next(); next(); fireEvent.click(screen.getByRole('button', { name: '选择养生模式' }))
+  toChoices(); fireEvent.click(screen.getByRole('button', { name: '选择养生模式·阴阳主题' }))
   await act(async () => { next() })
   expect(screen.getByRole('alert')).toHaveTextContent('已保存，但页面未能打开')
   expect(store['home_experience_config_v2:a'].mode).toBe('wellness')
@@ -107,7 +122,7 @@ test('completion in another gate does not late-mount a hidden pending page; only
   const current = render(<ModeIntroductionGate><span>当前业务页面</span></ModeIntroductionGate>)
   ;(Taro.reLaunch as jest.Mock).mockRejectedValueOnce(new Error('navigation failed'))
   const currentNext = () => fireEvent.click(current.container.querySelector('#mode-introduction-next')!)
-  currentNext(); currentNext()
+  for (let i = 0; i < 9; i++) currentNext()
   fireEvent.click(current.container.querySelector('#mode-introduction-wellness')!)
   await act(async () => { currentNext() })
   expect(previous.container.querySelector('#mode-introduction')).toBeInTheDocument()
@@ -123,7 +138,7 @@ test('completion in another gate does not late-mount a hidden pending page; only
 test.each(['renewed-token', 'completed-account'])('a previously blocked page still needs fresh lifecycle after %s', async change => {
   ;(Taro.reLaunch as jest.Mock).mockRejectedValueOnce(new Error('navigation failed'))
   render(<ModeIntroductionGate><span>仅原生初始化后显示</span></ModeIntroductionGate>)
-  next(); next(); fireEvent.click(screen.getByRole('button', { name: '选择均衡模式' }))
+  toChoices(); fireEvent.click(screen.getByRole('button', { name: '选择澄明秩序' }))
   await act(async () => { next() })
   store.access_token = 'renewed-session'
   if (change === 'completed-account') {
@@ -152,7 +167,7 @@ test('guest entry is untouched; changing to a fresh account on show resumes its 
 test('login continuation runs once after choice, with completion stored before the next auth gate', async () => {
   const complete = jest.fn(() => { expect(store[`${MODE_INTRODUCTION_PREFIX}a`]?.completed).toBe(true) })
   render(<ModeIntroductionGate onCompleted={complete} />)
-  next(); next(); fireEvent.click(screen.getByRole('button', { name: '选择养生模式' }))
+  toChoices(); fireEvent.click(screen.getByRole('button', { name: '选择养生模式·阴阳主题' }))
   await act(async () => { next() })
   act(() => { [...shows].forEach(fn => fn()) })
   expect(complete).toHaveBeenCalledTimes(1)

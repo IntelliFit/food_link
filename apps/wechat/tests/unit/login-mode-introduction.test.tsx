@@ -23,13 +23,15 @@ jest.mock('../../src/utils/weapp-user-files', () => ({ cleanupGeneratedUserFiles
 jest.mock('../../src/utils/static-asset-cdn-url', () => ({ DEFAULT_AVATAR_URL: 'https://example.test/default.png', LOGIN_LOGO_URL: 'https://example.test/logo.png' }))
 jest.mock('@taroify/core', () => ({ Button: ({ children, onClick }: any) => <button onClick={onClick}>{children}</button> }))
 jest.mock('@taroify/core/button/style', () => ({}))
+jest.mock('../../src/components/ModeIntroMedia', () => ({ ModeIntroMedia: () => null }))
+
 jest.mock('@tarojs/components', () => {
   const React = require('react')
   return {
     View: ({ children, ...props }: any) => React.createElement('div', props, children),
     Text: ({ children, ...props }: any) => React.createElement('span', props, children),
     Image: () => null, Input: () => null, PageMeta: () => null,
-    Button: ({ children, onGetPhoneNumber, onClick, disabled, id }: any) => React.createElement('button', { id, disabled, onClick: onGetPhoneNumber ? () => onGetPhoneNumber({ detail: { code: 'phone-code' } }) : onClick }, children),
+    Button: ({ children, onGetPhoneNumber, onClick, disabled, id, loading: _loading, ...props }: any) => React.createElement('button', { ...props, id, disabled, onClick: onGetPhoneNumber ? () => onGetPhoneNumber({ detail: { code: 'phone-code' } }) : onClick }, children),
     ScrollView: ({ children }: any) => React.createElement('div', {}, children),
     SwiperItem: ({ children }: any) => React.createElement('div', {}, children),
     Swiper: ({ children, current }: any) => React.createElement('div', {}, React.Children.toArray(children)[current]),
@@ -67,9 +69,8 @@ async function logIn() {
 }
 async function continueTimer() { await act(async () => { jest.advanceTimersByTime(1600) }) }
 async function choose() {
-  fireEvent.click(document.querySelector('#mode-introduction-next')!)
-  fireEvent.click(document.querySelector('#mode-introduction-next')!)
-  fireEvent.click(screen.getByRole('button', { name: '选择养生模式' }))
+  for (let i = 0; i < 9; i++) fireEvent.click(document.querySelector('#mode-introduction-next')!)
+  fireEvent.click(screen.getByRole('button', { name: '选择养生模式·阴阳主题' }))
   await act(async () => { fireEvent.click(document.querySelector('#mode-introduction-next')!) })
 }
 

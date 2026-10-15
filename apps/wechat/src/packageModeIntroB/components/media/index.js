@@ -1,0 +1,1 @@
+Component(require('../../../mode-introduction/native-media.js')('packageModeIntroB', {"04-modern-gallery-v1": {"bytes": 335105, "revision": "0f04346737b8"}, "05-miniature-world-v1": {"bytes": 225499, "revision": "dc857b2498dd"}, "06-picturebook-companion-v1": {"bytes": 219624, "revision": "d3d297f49b3c"}}));

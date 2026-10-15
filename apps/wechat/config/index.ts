@@ -18,6 +18,7 @@ function readPackageVersion(): string {
 
 const packageVersion = readPackageVersion()
 const themeSceneAssets = JSON.parse(readFileSync(join(appRoot, 'src/theme-scene-assets.json'), 'utf8')).assets as Array<{ packageRoot: string; file: string }>
+const modeIntroAssets = JSON.parse(readFileSync(join(appRoot, 'src/mode-introduction-assets.json'), 'utf8')).items as Array<{ packageRoot: string; file: string }>
 
 function parseEnvFile(filePath: string): Record<string, string> {
   if (!existsSync(filePath)) return {}
@@ -72,6 +73,9 @@ const themeSceneComponents = {
   'theme-scene-image': '/packageThemeScenes/components/scene-image/index',
   'theme-scene-nature-image': '/packageThemeScenesNature/components/scene-image/index',
   'theme-scene-gallery-image': '/packageThemeScenesGallery/components/scene-image/index',
+  'mode-intro-a': '/packageModeIntroA/components/media/index',
+  'mode-intro-b': '/packageModeIntroB/components/media/index',
+  'mode-intro-c': '/packageModeIntroC/components/media/index',
 }
 const themeSceneNativeOwners: Plugin = {
   name: 'theme-scene-native-async-owners',
@@ -145,6 +149,11 @@ export default defineConfig<'vite'>(async (merge) => {
     },
     copy: {
       patterns: [
+        ...modeIntroAssets.flatMap(({ packageRoot, file }) => ['jpg', 'mp4'].map(extension => ({
+          from: `src/${packageRoot}/assets/${file}.${extension}`, to: `${packageRoot}/assets/${file}.${extension}`,
+        }))),
+        ...['A', 'B', 'C'].map(suffix => ({ from: `src/packageModeIntro${suffix}/components`, to: `packageModeIntro${suffix}/components` })),
+        { from: 'src/utils/native-mode-intro-media.js', to: 'mode-introduction/native-media.js' },
         { from: 'src/packagePetStudio/assets', to: 'packagePetStudio/assets' },
         { from: 'src/assets/pets/clothing', to: 'assets/pets/clothing' },
         { from: 'src/assets/pets/motions', to: 'assets/pets/motions' },

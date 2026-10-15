@@ -1,6 +1,8 @@
 import Taro from '@tarojs/taro'
 
 export const BALANCED_THEME_STORAGE_KEY = 'balanced_visual_theme_v1'
+export const BALANCED_THEME_EVENT = 'fl_balanced_theme_changed'
+export function getBalancedThemeStorageKey(userId: string): string { return `${BALANCED_THEME_STORAGE_KEY}:${userId}` }
 
 export const BALANCED_THEME_IDS = [
   'clarity-order',
@@ -130,7 +132,13 @@ export function getBalancedThemeDefinition(id: BalancedThemeId): BalancedThemeDe
 
 export function getStoredBalancedTheme(): BalancedThemeId {
   try {
-    const value = Taro.getStorageSync(BALANCED_THEME_STORAGE_KEY)
+    let value = Taro.getStorageSync(BALANCED_THEME_STORAGE_KEY)
+    const userId = String(Taro.getStorageSync('user_id') || '').trim()
+    const accountTheme = userId ? Taro.getStorageSync(getBalancedThemeStorageKey(userId)) : undefined
+    if (isBalancedThemeId(accountTheme)) {
+      if (value !== accountTheme) { try { Taro.setStorageSync(BALANCED_THEME_STORAGE_KEY, accountTheme) } catch { /* A readable account choice survives a failed native mirror write. */ } }
+      value = accountTheme
+    }
     return isBalancedThemeId(value) ? value : DEFAULT_BALANCED_THEME
   } catch {
     return DEFAULT_BALANCED_THEME
@@ -140,6 +148,8 @@ export function getStoredBalancedTheme(): BalancedThemeId {
 export function setStoredBalancedTheme(theme: BalancedThemeId): void {
   try {
     Taro.setStorageSync(BALANCED_THEME_STORAGE_KEY, theme)
+    const userId = String(Taro.getStorageSync('user_id') || '').trim()
+    if (userId) Taro.setStorageSync(getBalancedThemeStorageKey(userId), theme)
   } catch {
     /* ignore storage errors */
   }

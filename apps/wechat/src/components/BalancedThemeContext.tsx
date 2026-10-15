@@ -4,9 +4,10 @@ import {
   type BalancedThemeId,
   getStoredBalancedTheme,
   setStoredBalancedTheme,
+  BALANCED_THEME_EVENT,
 } from '../utils/balanced-theme'
 
-export const BALANCED_THEME_EVENT = 'fl_balanced_theme_changed'
+export { BALANCED_THEME_EVENT } from '../utils/balanced-theme'
 
 type BalancedThemeContextValue = {
   theme: BalancedThemeId

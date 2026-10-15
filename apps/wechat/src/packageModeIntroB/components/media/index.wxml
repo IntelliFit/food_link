@@ -1,0 +1,3 @@
+<image wx:if="{{asset === '04-modern-gallery-v1'}}" class="sceneclass" src="/packageModeIntroB/assets/04-modern-gallery-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
+<image wx:if="{{asset === '05-miniature-world-v1'}}" class="sceneclass" src="/packageModeIntroB/assets/05-miniature-world-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
+<image wx:if="{{asset === '06-picturebook-companion-v1'}}" class="sceneclass" src="/packageModeIntroB/assets/06-picturebook-companion-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />

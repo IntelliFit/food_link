@@ -1,5 +1,7 @@
 import Taro from '@tarojs/taro'
 import { saveHomeExperienceConfig, type HomeExperienceMode } from './home-experience'
+import { BALANCED_THEME_EVENT, BALANCED_THEME_STORAGE_KEY, getBalancedThemeStorageKey, isBalancedThemeId } from './balanced-theme'
+import type { ModeIntroductionChoice } from './mode-introduction-chapters'
 
 export const MODE_INTRODUCTION_PREFIX = 'mode_introduction_completed_v1:'
 
@@ -15,23 +17,31 @@ export function getModeIntroductionSession() {
 }
 
 /** Confirm once for this authenticated account; defaults and previews never complete the introduction. */
-export function completeModeIntroduction(mode: HomeExperienceMode, session: { userId: string; token: string }): boolean {
+export function completeModeIntroduction(choice: ModeIntroductionChoice | HomeExperienceMode, session: { userId: string; token: string }): boolean {
+  const mode = typeof choice === 'string' ? choice : choice.mode
+  if (mode !== 'balanced' && mode !== 'wellness') return false
+  const theme = typeof choice === 'object' && choice.mode === 'balanced' ? choice.theme : undefined
+  if (typeof choice === 'object' && choice.mode === 'balanced' && !isBalancedThemeId(theme)) return false
   const current = getModeIntroductionSession()
   if (!session.userId || !session.token || current.userId !== session.userId || current.token !== session.token) return false
   const configKey = `home_experience_config_v2:${session.userId}`, introKey = `${MODE_INTRODUCTION_PREFIX}${session.userId}`
-  const previousConfig = Taro.getStorageSync(configKey), previousIntro = Taro.getStorageSync(introKey)
+  const writes: Array<[string, unknown]> = [[configKey, { version: 2, mode }]]
+  if (theme) writes.push([getBalancedThemeStorageKey(session.userId), theme], [BALANCED_THEME_STORAGE_KEY, theme])
+  writes.push([introKey, { version: 1, completed: true }])
+  const previous: Array<[string, unknown]> = []
   try {
-    Taro.setStorageSync(configKey, { version: 2, mode })
-    Taro.setStorageSync(introKey, { version: 1, completed: true })
+    for (const [key] of writes) previous.push([key, Taro.getStorageSync(key)])
+    for (const [key, value] of writes) Taro.setStorageSync(key, value)
     const persisted = getModeIntroductionSession()
-    if (Taro.getStorageSync(configKey)?.mode !== mode || persisted.required || persisted.userId !== session.userId || persisted.token !== session.token) throw new Error('Mode preference not persisted')
+    if (Taro.getStorageSync(configKey)?.mode !== mode || persisted.required || persisted.userId !== session.userId || persisted.token !== session.token || (theme && (Taro.getStorageSync(getBalancedThemeStorageKey(session.userId)) !== theme || Taro.getStorageSync(BALANCED_THEME_STORAGE_KEY) !== theme))) throw new Error('Mode preference not persisted')
   } catch {
-    for (const [key, value] of [[configKey, previousConfig], [introKey, previousIntro]] as const) {
+    for (const [key, value] of previous.reverse()) {
       try { if (value === undefined || value === null || value === '') Taro.removeStorageSync(key); else Taro.setStorageSync(key, value) } catch { /* Keep the introduction pending if storage is unavailable. */ }
     }
     return false
   }
   // Commit visible consumers only after both durable values were written.
+  if (theme) { try { Taro.eventCenter.trigger(BALANCED_THEME_EVENT, { theme }) } catch { /* The durable choice remains valid. */ } }
   saveHomeExperienceConfig({ version: 2, mode })
   return true
 }
