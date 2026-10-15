@@ -120,6 +120,25 @@ test('completion in another gate does not late-mount a hidden pending page; only
   expect(screen.queryByText('下层任务页面')).not.toBeInTheDocument()
 })
 
+test.each(['renewed-token', 'completed-account'])('a previously blocked page still needs fresh lifecycle after %s', async change => {
+  ;(Taro.reLaunch as jest.Mock).mockRejectedValueOnce(new Error('navigation failed'))
+  render(<ModeIntroductionGate><span>仅原生初始化后显示</span></ModeIntroductionGate>)
+  next(); next(); fireEvent.click(screen.getByRole('button', { name: '选择均衡模式' }))
+  await act(async () => { next() })
+  store.access_token = 'renewed-session'
+  if (change === 'completed-account') {
+    store.user_id = 'b'
+    store[`${MODE_INTRODUCTION_PREFIX}b`] = { version: 1, completed: true }
+    store['home_experience_config_v2:b'] = { version: 2, mode: 'wellness' }
+  }
+  act(() => { listeners.forEach(callbacks => callbacks.forEach(fn => fn())) })
+  expect(screen.queryByText('仅原生初始化后显示')).not.toBeInTheDocument()
+  expect(Taro.reLaunch).toHaveBeenCalledTimes(1)
+  await act(async () => { [...shows].forEach(fn => fn()) })
+  expect(Taro.reLaunch).toHaveBeenCalledTimes(2)
+  expect(screen.queryByText('仅原生初始化后显示')).not.toBeInTheDocument()
+})
+
 test('guest entry is untouched; changing to a fresh account on show resumes its own introduction', () => {
   delete store.access_token
   render(<ModeIntroductionGate><span>访客首页</span></ModeIntroductionGate>)

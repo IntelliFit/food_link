@@ -17,6 +17,8 @@ export function ModeIntroductionGate({ children, onCompleted }: PropsWithChildre
   const [session, setSession] = useState(getModeIntroductionSession)
   const sessionRef = useRef(session)
   sessionRef.current = session
+  const hasContinuation = useRef(Boolean(onCompleted))
+  hasContinuation.current = Boolean(onCompleted)
   const notified = useRef(false)
   const reopening = useRef<{ userId: string; token: string } | null>(null)
   const sync = useCallback(() => {
@@ -27,7 +29,7 @@ export function ModeIntroductionGate({ children, onCompleted }: PropsWithChildre
     setSession(previous => {
       const sameOwner = previous.userId === next.userId && previous.token === next.token
       // A hidden pending page also missed onLoad. Wait for its own onShow to reopen it.
-      if (sameOwner && previous.required && !next.required) return previous
+      if (!hasContinuation.current && previous.required && !next.required) return sameOwner ? previous : { ...next, required: true }
       return sameOwner && previous.required === next.required ? previous : next
     })
   }, [])
@@ -38,7 +40,8 @@ export function ModeIntroductionGate({ children, onCompleted }: PropsWithChildre
   }, [sync])
   useDidShow(() => {
     const next = getModeIntroductionSession(), previous = sessionRef.current
-    if (!onCompleted && !reopening.current && previous.required && !next.required && previous.userId === next.userId && previous.token === next.token) {
+    if (reopening.current && (reopening.current.userId !== next.userId || reopening.current.token !== next.token)) reopening.current = null
+    if (!onCompleted && !reopening.current && previous.required && !next.required) {
       reopening.current = next
       void reopenCurrentPage().catch(() => {
         reopening.current = null
