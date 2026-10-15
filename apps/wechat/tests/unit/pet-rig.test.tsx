@@ -104,7 +104,7 @@ test.each(Object.keys(PET_RIGS))('%s scooter keeps a planted foot, pushes along 
   const rig = PET_RIGS[key], stages = new Set<string>()
   const rest = rigPose(rig, 'scooter', 'ride', 0)
   let lastX = Infinity
-  for (let ms = 0; ms < 3200; ms += 10) {
+  for (let ms = 0; ms < 1800; ms += 10) {
     const pose = rigPose(rig, 'scooter', 'ride', ms)
     stages.add(pose.stage)
     expect(pose.legs[1][2].x).toBeCloseTo(105, 5)
@@ -155,26 +155,62 @@ test.each(Object.keys(PET_RIGS))('%s scooter keeps a planted foot, pushes along 
     for (const i of [0, 1]) expect(kneeBendsForward(pose, i)).toBeLessThanOrEqual(.001)
     for (const i of [0, 1]) for (const part of [0, 1]) expect(distance(pose.legLocal[i][part], pose.legLocal[i][part + 1])).toBeCloseTo(distance(rig.legs[i][part], rig.legs[i][part + 1]) * pose.scale, 5)
   }
-  expect([...stages]).toEqual(['滑行', '落脚', '蹬地', '提脚', '收脚'])
-  expect(rigPose(rig, 'scooter', 'ride', 0).legs).toEqual(rigPose(rig, 'scooter', 'ride', 3200).legs)
+  expect([...stages]).toEqual(['落脚', '蹬地', '提脚', '收脚', '滑行'])
+  expect(rigPose(rig, 'scooter', 'ride', 0).legs).toEqual(rigPose(rig, 'scooter', 'ride', 1800).legs)
 })
 test.each(Object.keys(PET_RIGS))('%s board has a distinct two-foot stance, planted front foot and grounded push', key => {
   const rig = PET_RIGS[key], cruising = rigPose(rig, 'skateboard', 'ride', 0)
   expect(cruising.legs[1][2].x).toBeGreaterThan(cruising.hip.x)
   expect(cruising.legs[0][2].x).toBeLessThan(cruising.hip.x)
   expect(cruising.footHeading[1]).toBeCloseTo(-Math.PI / 2)
-  expect(rigPose(rig, 'skateboard', 'ride', .65 * 3400).footHeading[1]).toBeCloseTo(0)
-  expect(rigPose(rig, 'skateboard', 'ride', .99 * 3400).footHeading[1]).toBeLessThan(-1.5)
+  expect(rigPose(rig, 'skateboard', 'ride', .22 * 2000).footHeading[1]).toBeCloseTo(0)
+  expect(rigPose(rig, 'skateboard', 'ride', .99 * 2000).footHeading[1]).toBeLessThan(-1.5)
   expect(cruising.arms[1][2].x).not.toBeCloseTo(rigPose(rig, 'scooter', 'ride', 0).grip.x)
-  for (let ms = 0; ms < 3400; ms += 10) {
+  for (let ms = 0; ms < 2000; ms += 10) {
     const pose = rigPose(rig, 'skateboard', 'ride', ms)
     expect(distance(pose.legs[1][2], cruising.legs[1][2])).toBeLessThan(1e-10)
     if (pose.stage === '蹬地') expect(soleBottom(rig, pose, 0)).toBeCloseTo(pose.floor, 5)
     for (const i of [0, 1]) expect(kneeBendsForward(pose, i)).toBeLessThanOrEqual(.001)
     for (const i of [0, 1]) for (const part of [0, 1]) expect(distance(pose.legLocal[i][part], pose.legLocal[i][part + 1])).toBeCloseTo(distance(rig.legs[i][part], rig.legs[i][part + 1]) * pose.scale, 5)
   }
-  expect(rigPose(rig, 'skateboard', 'ride', 3399).legs[0][2].x).toBeCloseTo(cruising.legs[0][2].x, 2)
+  expect(rigPose(rig, 'skateboard', 'ride', 1999).legs[0][2].x).toBeCloseTo(cruising.legs[0][2].x, 2)
 })
+test.each(Object.keys(PET_RIGS))('%s visibly kicks and recovers during its first home departure on each board', key => {
+  const rig = PET_RIGS[key]
+  for (const vehicle of ['scooter', 'skateboard'] as const) {
+    const start = rigPose(rig, vehicle, 'ride', 0), stages = new Set<string>()
+    let maxLift = 0
+    for (let ms = 0; ms < 980; ms += 10) {
+      const pose = rigPose(rig, vehicle, 'ride', ms)
+      stages.add(pose.stage)
+      maxLift = Math.max(maxLift, start.legs[0][2].y - pose.legs[0][2].y)
+      expect(distance(pose.legs[1][2], start.legs[1][2])).toBeLessThan(1e-10)
+      if (pose.stage === '蹬地') expect(soleBottom(rig, pose, 0)).toBeCloseTo(pose.floor, 5)
+    }
+    for (const stage of ['落脚', '蹬地', '提脚', '收脚']) expect(stages.has(stage)).toBe(true)
+    expect(maxLift).toBeGreaterThan(start.radius)
+  }
+  const cruise = rigPose(rig, 'skateboard', 'ride', 1500), push = rigPose(rig, 'skateboard', 'ride', 500)
+  expect(push.hip.x).toBeGreaterThan(cruise.hip.x)
+  expect(push.hip.x).toBeLessThan(push.legs[1][2].x)
+})
+
+test.each(Object.keys(PET_RIGS))('%s crosses kick contacts and its coasting loop without snapping', key => {
+  const rig = PET_RIGS[key]
+  for (const vehicle of ['scooter', 'skateboard'] as const) {
+    const cycle = vehicle === 'scooter' ? 1800 : 2000
+    for (const phase of [0, .1, .12, .30, .40, .50]) {
+      const before = rigPose(rig, vehicle, 'ride', (phase - 1e-6) * cycle)
+      const after = rigPose(rig, vehicle, 'ride', (phase + 1e-6) * cycle)
+      expect(distance(before.hip, after.hip)).toBeLessThan(.01)
+      for (const side of [0, 1]) for (const joint of [0, 1, 2]) {
+        expect(distance(before.legs[side][joint], after.legs[side][joint])).toBeLessThan(.01)
+        expect(distance(before.arms[side][joint], after.arms[side][joint])).toBeLessThan(.01)
+      }
+    }
+  }
+})
+
 test.each(Object.keys(PET_RIGS))('%s walks with grounded support, lifted swing and opposing arms without limb stretching', key => {
   const rig = PET_RIGS[key]
   let lifted = false
@@ -241,7 +277,7 @@ test.each(Object.keys(PET_RIGS))('%s shoulders visibly drive smooth arm swings a
     return Math.atan2(w.x - e.x, w.y - e.y) - Math.atan2(e.x - s.x, e.y - s.y)
   }
   expect(elbowFlex(forward)).toBeGreaterThan(elbowFlex(back) + .20)
-  const cruise = rigPose(rig, 'skateboard', 'ride', 0), push = rigPose(rig, 'skateboard', 'ride', 3400 * .70)
+  const cruise = rigPose(rig, 'skateboard', 'ride', 0), push = rigPose(rig, 'skateboard', 'ride', 2000 * .24)
   expect(push.armLocal[0][1].x).toBeGreaterThan(cruise.armLocal[0][1].x)
   expect(push.armLocal[1][1].x).toBeLessThan(cruise.armLocal[1][1].x)
 })

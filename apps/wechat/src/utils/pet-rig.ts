@@ -153,8 +153,11 @@ export function boardingPose(rig: PetRig, ride: RigPose, weight: number): RigPos
 export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action: PetMotionAction, elapsed: number): RigPose {
   const cycling = vehicle === 'bicycle' || !vehicle && action === 'ride'
   const walking = action === 'walk' && (!vehicle || vehicle === 'walk')
-  const cycle = cycling ? 1600 : vehicle === 'scooter' ? 3200 : vehicle === 'skateboard' ? 3400 : walking ? 1800 : 1400
+  const cycle = cycling ? 1600 : vehicle === 'scooter' ? 1800 : vehicle === 'skateboard' ? 2000 : walking ? 1800 : 1400
   const phase = ((elapsed % cycle) + cycle) % cycle / cycle
+  // Push first, then coast. A long opening coast hid the entire kick during
+  // the home's first 980 ms departure. Feet, balance and arms share this beat.
+  const push = phase < .5 ? Math.sin(phase * Math.PI * 2) ** 2 : 0
   const scale = (vehicle ? 163 : 184) / (rig.floor - rig.top)
   const lengths = rig.legs.map(b => [distance(b[0], b[1]) * scale, distance(b[1], b[2]) * scale])
   const total = Math.min(...lengths.map(([a, b]) => a + b))
@@ -239,50 +242,47 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
       const reach = (lengths[i][0] + lengths[i][1]) * .997
       restingHip.y = Math.max(restingHip.y, contactHeight(foot, rig.legs[i][0], reach, restingHip.x, board ? .82 : .42, bodySkew, .035))
     }
-    const pushWeight = phase >= .42 ? Math.sin((phase - .42) / .58 * Math.PI) ** 2 : 0
-    bodyWidth = board ? .82 - pushWeight * .10 : .42
+    bodyWidth = board ? .82 - push * .10 : .42
     if (board) {
       // Pivot towards the nose before pushing, then return to the transverse
       // cruising stance after the rear foot has recovered onto the deck.
-      const pivot = phase < .34 ? 0 : phase < .46 ? ease((phase - .34) / .12)
-        : phase < .88 ? 1 : 1 - ease((phase - .88) / .12)
+      const pivot = phase < .1 ? ease(phase / .1) : phase < .4 ? 1 : 1 - ease(Math.min(1, (phase - .4) / .1))
       footHeading[0] = footHeading[1] = -Math.PI / 2 * (1 - pivot)
     }
     // Kick under the pelvis/support heel, then extend back and flex to recover.
     const restingWidth = board ? .82 : .42, camera = Math.sqrt(1 - restingWidth ** 2)
     const contactX = (board ? 100 : 102) + (rig.legs[0][0].x - rig.hip.x) * scale * restingWidth + total * .12 * camera
-    const contact = p(contactX, 188 - footDepth[0]), finish = p(contactX - total * .35 * camera, 188 - footDepth[0])
-    const lifted = p(finish.x + total * .08, deck - Math.min(16, total * .30))
+    const contact = p(contactX, 188 - footDepth[0]), finish = p(contactX - total * (board ? .52 : .45) * camera, 188 - footDepth[0])
+    const lifted = p(finish.x + total * .08, deck - Math.min(board ? 18 : 16, total * (board ? .38 : .35)))
     contacts[1] = 'deck'
-    // Start in a readable cruising pose, then make one deliberate push and coast.
-    if (phase < .42) { feet = [glide, support]; contacts[0] = 'deck'; stage = '滑行' }
-    else if (phase < .54) {
-      const t = (phase - .42) / .12, foot = lerp(glide, contact, ease(t))
-      foot.y -= Math.sin(t * Math.PI) ** 2 * Math.min(14, total * .25)
+    // The opening pose is still two feet on the deck, so boarding stays continuous.
+    if (phase < .12) {
+      const t = phase / .12, foot = lerp(glide, contact, ease(t))
+      foot.y -= Math.sin(t * Math.PI) ** 2 * Math.min(14, total * .30)
       footAngles[0] = -.18 * Math.sin(t * Math.PI) ** 2
       feet = [foot, support]; contacts[0] = 'air'; stage = '落脚'
-    } else if (phase < .74) {
-      const t = (phase - .54) / .20
+    } else if (phase < .30) {
+      const t = (phase - .12) / .18
       feet = [grounded(0, lerp(contact, finish, ease(t)).x, 191, .30 * ease(t)), support]
       contacts[0] = t > .45 ? 'toe' : 'sole'; stage = '蹬地'
-    } else if (phase < .86) {
-      const t = ease((phase - .74) / .12)
+    } else if (phase < .40) {
+      const t = ease((phase - .30) / .10)
       feet = [lerp(grounded(0, finish.x, 191, .30), lifted, t), support]
       footAngles[0] = .30 * (1 - t) - .20 * t
       contacts[0] = 'air'; stage = '提脚'
-    } else {
-      const t = ease((phase - .86) / .14)
+    } else if (phase < .50) {
+      const t = ease((phase - .40) / .10)
       feet = [lerp(lifted, glide, t), support]; footAngles[0] = -.20 * (1 - t)
       contacts[0] = 'air'; stage = '收脚'
-    }
-    hip = p((board ? 100 : 102) + pushWeight * (board ? Math.min(2, total * .03) : -Math.min(3, total * .05)), -Infinity)
+    } else { feet = [glide, support]; contacts[0] = 'deck'; stage = '滑行' }
+    hip = p((board ? 100 : 102) + push * (board ? spread * .4 : -Math.min(3, total * .05)), -Infinity)
     const shoulderHeight = rig.arms.reduce((sum, arm, i) => sum + (rig.shoulders?.[i]?.y || arm[0].y), 0) / 2
     const leanScale = Math.min(1, total / Math.max(1, (rig.hip.y - shoulderHeight) * scale))
-    angle = .035 + pushWeight * (board ? .065 : .09) * leanScale
+    angle = .035 + push * (board ? .065 : .09) * leanScale
     // Lower the pelvis only as much as a grounded push requires. Keep the planted
     // foot exact; clamping an ankle makes it float above the ground/deck.
     for (const [i, foot] of feet.entries()) {
-      const reach = (lengths[i][0] + lengths[i][1]) * (.997 - pushWeight * .032)
+      const reach = (lengths[i][0] + lengths[i][1]) * (.997 - push * .032)
       hip.y = Math.max(hip.y, contactHeight(foot, rig.legs[i][0], reach, hip.x, bodyWidth, bodySkew, angle))
     }
   } else if (walking) {
@@ -356,9 +356,8 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
       const targetX = left <= right ? Math.max(left, Math.min(right, hip.x)) : (left + right) / 2
       hip.x += (targetX - hip.x) * .35
       hip.y = -Infinity
-      const pushWeight = phase < .42 ? 0 : Math.sin((phase - .42) / .58 * Math.PI) ** 2
       for (const [i, foot] of feet.entries()) {
-        const reach = (lengths[i][0] + lengths[i][1]) * (.997 - pushWeight * .032)
+        const reach = (lengths[i][0] + lengths[i][1]) * (.997 - push * .032)
         hip.y = Math.max(hip.y, contactHeight(foot, rig.legs[i][0], reach, hip.x, bodyWidth, bodySkew, angle))
       }
       if (distance(previous, hip) < 1e-7) break
@@ -397,7 +396,6 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
   const gripLength = Math.min(...armLengths.map(([upper, lower]) => upper + lower))
   const grip = p((shoulders[0].x + shoulders[1].x) / 2 + gripLength * .68 * forwardProjection, Math.max(shoulders[0].y, shoulders[1].y) + gripLength * .35)
   const farGrip = p(grip.x - 3, grip.y)
-  const push = phase < .42 ? 0 : Math.sin((phase - .42) / .58 * Math.PI) ** 2
   const projectedArms = cycling || walking || vehicle === 'skateboard' || vehicle === 'scooter'
   const armLocal: [Bone, Bone] = [bone([0, 0], [0, 0], [0, 0]), bone([0, 0], [0, 0], [0, 0])]
   const armDepth: RigPose['armDepth'] = [[-1, -1, -1], [1, 1, 1]]
@@ -429,8 +427,8 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
       // Free arms counterbalance the rear-leg push. They never imitate a grip,
       // and the two shoulders lead in opposite directions during weight transfer.
       const sway = Math.sin(phase * Math.PI * 2) * .035
-      const swing = i ? -.08 - push * .34 + sway : .04 + push * .32 - sway
-      return projectArm(i, swingArm(p(0, 0), upper, lower, swing, .18 + push * .16))
+      const swing = i ? -.08 - push * .45 + sway : .04 + push * .42 - sway
+      return projectArm(i, swingArm(p(0, 0), upper, lower, swing, .18 + push * .25))
     }
     if (vehicle === 'scooter' || cycling) {
       // Keep each arm almost extended, with a little shock-absorbing flexion.

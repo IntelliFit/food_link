@@ -84,7 +84,7 @@ test('changing tool starts its own cycle while retaining the already loaded iden
   ready(); tick(100); tick(150)
   rerender(<PetRigActor rig={PET_RIGS.huatuo} vehicle='scooter' />)
   expect(latestPose().phase).toBe(0)
-  expect(latestPose().stage).toBe('滑行')
+  expect(latestPose().stage).toBe('落脚')
   expect(node.createImage).toHaveBeenCalledTimes(2)
   hide(); const count = draw.mock.calls.length; tick(100000)
   expect(draw).toHaveBeenCalledTimes(count)

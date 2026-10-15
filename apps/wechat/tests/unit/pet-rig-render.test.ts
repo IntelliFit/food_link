@@ -1,13 +1,13 @@
 import { PET_RIGS, rigPose } from '../../src/utils/pet-rig'
 import { drawPetRig } from '../../src/utils/pet-rig-render'
 
-test.each(Object.keys(PET_RIGS))('%s keeps its outer pedalling leg visible in front of the seated garment', key => {
+test.each(Object.keys(PET_RIGS).flatMap(key => (['bicycle', 'scooter', 'skateboard'] as const).map(vehicle => ({ key, vehicle }))))('$key keeps its outer $vehicle leg visible in front of the garment', ({ key, vehicle }) => {
   const rig = PET_RIGS[key], image = {} as CanvasImageSource
   const drawImage = jest.fn()
   const ctx = new Proxy({ globalAlpha: 1, drawImage }, {
     get(target, property) { return property in target ? target[property as keyof typeof target] : () => undefined },
   }) as unknown as CanvasRenderingContext2D
-  drawPetRig(ctx, image, rig, rigPose(rig, 'bicycle', 'ride', 0), 'bicycle')
+  drawPetRig(ctx, image, rig, rigPose(rig, vehicle, 'ride', 0), vehicle)
   const calls = drawImage.mock.calls
   const torso = calls.findIndex(call => call.length === 9 && call.slice(1, 5).every((n, i) => n === rig.torso[i]))
   expect(torso).toBeGreaterThan(0)
