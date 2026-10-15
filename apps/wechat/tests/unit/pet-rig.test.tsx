@@ -1,5 +1,5 @@
 import { fireEvent, render } from '@testing-library/react'
-import { PET_RIGS, bend, boardingPose, distance, petRig, rigPose, shoeProjection } from '../../src/utils/pet-rig'
+import { PET_RIGS, bend, boardingPose, distance, petRig, rigPose, shoeProjection, travelHeadRect } from '../../src/utils/pet-rig'
 import { PetTransportPicker } from '../../src/packagePetStudio/components/PetTransportPicker'
 import Taro from '@tarojs/taro'
 import { ORIGINAL_COMPANION_SRC } from '../../src/utils/pet-companion-preference'
@@ -38,15 +38,36 @@ test('nickname cannot change the approved source or unlock another photo charact
   expect(petRig({ pixel_motion_version: 1, pixel_motion_atlas_url: 'my-photo.png' })).toBeUndefined()
   expect(petRig({ builtin_avatar_id: 'huatuo-01' }, '/different-person.png')).toBeUndefined()
 })
+
+test.each(Object.keys(PET_RIGS))('%s travels side-on with attached shoulders and an existing directional head', key => {
+  const rig = PET_RIGS[key]
+  expect(rig.profileHead?.src).toBe(`/assets/pets/motions/${key}-motion-v1.png`)
+  for (const vehicle of ['bicycle', 'scooter', 'skateboard'] as const) {
+    const pose = rigPose(rig, vehicle, 'ride', 0)
+    expect(pose.travelFacing).toBe(1)
+    expect(boardingPose(rig, pose, 0).travelFacing).toBe(0)
+    for (const weight of [0, .25, .5, .75, 1]) expect(boardingPose(rig, pose, weight).vehicleProjection).toBe(pose.vehicleProjection)
+    expect(pose.projectedArms && pose.projectedLegs).toBe(true)
+    if (vehicle !== 'skateboard') expect(pose.bodyWidth).toBeLessThan(.5)
+    for (const [i, arm] of pose.arms.entries()) {
+      const source = rig.shoulders?.[i] || { x: rig.arms[i][0].x % (key === 'jianwen' ? 160 : 1000), y: rig.arms[i][0].y }
+      const offset = (source.x - rig.hip.x) * pose.scale
+      const x = offset * pose.bodyWidth, y = (source.y - rig.hip.y) * pose.scale + offset * pose.bodySkew
+      expect(arm[0].x).toBeCloseTo(pose.hip.x + x * Math.cos(pose.angle) - y * Math.sin(pose.angle), 6)
+      expect(arm[0].y).toBeCloseTo(pose.hip.y + x * Math.sin(pose.angle) + y * Math.cos(pose.angle), 6)
+    }
+  }
+})
 test.each(Object.keys(PET_RIGS))('%s contacts the pedals throughout a complete cycle without stretching bones', key => {
   const rig = PET_RIGS[key]
   for (let ms = 0; ms <= 1600; ms += 10) {
     const pose = rigPose(rig, 'bicycle', 'ride', ms)
     for (const i of [0, 1]) {
       expect(distance(pose.legs[i][2], pose.pedals[i])).toBeLessThan(.001)
-      expect(distance(pose.pedals[i], pose.crank)).toBeCloseTo(pose.radius, 6)
-      for (const part of [0, 1]) expect(distance(pose.legs[i][part], pose.legs[i][part + 1])).toBeCloseTo(distance(rig.legs[i][part], rig.legs[i][part + 1]) * pose.scale, 5)
-      const [hip, knee, ankle] = pose.legs[i]
+      expect(pose.vehicleProjection).toBeCloseTo(Math.sqrt(1 - pose.bodyWidth ** 2), 6)
+      expect(Math.hypot((pose.pedals[i].x - pose.crank.x) / pose.vehicleProjection, pose.pedals[i].y - pose.crank.y)).toBeCloseTo(pose.radius, 6)
+      for (const part of [0, 1]) expect(distance(pose.legLocal[i][part], pose.legLocal[i][part + 1])).toBeCloseTo(distance(rig.legs[i][part], rig.legs[i][part + 1]) * pose.scale, 5)
+      const [hip, knee, ankle] = pose.legLocal[i]
       const upper = distance(hip, knee), lower = distance(knee, ankle), reach = distance(hip, ankle)
       const angle = Math.acos(Math.max(-1, Math.min(1, (upper * upper + lower * lower - reach * reach) / (2 * upper * lower)))) * 180 / Math.PI
       expect(angle).toBeGreaterThan(55)
@@ -234,4 +255,16 @@ test('preview pause and resume do not save tools or spend currency', () => {
   fireEvent.click(toggle)
   expect(container.querySelector('.pet-transport-actor')).not.toHaveClass('is-paused')
   expect(Taro.setStorageSync).not.toHaveBeenCalled()
+})
+
+test.each(Object.keys(PET_RIGS))('%s keeps its head envelope continuous across directional material changes', key => {
+  const rig = PET_RIGS[key]
+  expect(travelHeadRect(rig, 0)).toEqual(rig.head)
+  const before = travelHeadRect(rig, .499), after = travelHeadRect(rig, .501)
+  for (let i = 0; i < 4; i++) expect(Math.abs(before[i] - after[i])).toBeLessThan(.1)
+  for (let step = 0; step <= 100; step++) {
+    const box = travelHeadRect(rig, step / 100)
+    expect(box.every(Number.isFinite)).toBe(true)
+    expect(box[2]).toBeGreaterThan(rig.head[2] * .7)
+  }
 })

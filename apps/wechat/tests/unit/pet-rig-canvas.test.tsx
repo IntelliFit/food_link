@@ -41,6 +41,20 @@ const latestPose = () => draw.mock.calls[draw.mock.calls.length - 1][3]
 const tick = (timestamp: number) => act(() => { const calls = node.requestAnimationFrame.mock.calls; calls[calls.length - 1][0](timestamp) })
 const fade = (ms: number) => act(() => { jest.advanceTimersByTime(ms) })
 
+test('ride presentation waits for its directional head material before declaring ready', () => {
+  const profile: any = { onload: null, onerror: null }
+  Object.defineProperty(profile, 'src', { set: () => undefined })
+  node.createImage.mockReset().mockImplementationOnce(() => image).mockImplementationOnce(() => profile)
+  const onReady = jest.fn()
+  render(<PetRigActor rig={PET_RIGS.guigui} vehicle='bicycle' onReady={onReady} />)
+  ready()
+  expect(onReady).not.toHaveBeenCalled()
+  expect(draw).not.toHaveBeenCalled()
+  act(() => profile.onload())
+  expect(onReady).toHaveBeenCalledTimes(1)
+  expect(draw.mock.calls[draw.mock.calls.length - 1][8]).toBe(profile)
+})
+
 test('low frame rates retain the walking cadence while long stalls do not fast-forward', () => {
   render(<PetRigActor rig={PET_RIGS.guigui} action='walk' />)
   ready(); tick(100)

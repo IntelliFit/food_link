@@ -23,6 +23,7 @@ export interface PetRig {
     grip?: { hand: [number, number, number, number]; wrist: Point; contact: Point }
   }
   legWidth: number; armWidth: number; top: number; floor: number
+  profileHead?: { src: string; rect: [number, number, number, number]; neck: Point; attachment: Point; mask?: Point[] }
 }
 const p = (x: number, y: number): Point => ({ x, y })
 const bone = (a: number[], b: number[], c: number[]): Bone => [p(a[0], a[1]), p(b[0], b[1]), p(c[0], c[1])]
@@ -45,12 +46,35 @@ PET_RIGS.xiaomai.armSource = { src: '/assets/pets/motions/xiaomai-motion-v1.png'
 PET_RIGS.huatuo.armSource = { src: '/assets/pets/motions/huatuo-motion-v1.png', bone: bone([206, 199], [215, 197], [211, 190]), width: 9, hipX: 192, hand: [332, 307, 11, 11], handBinding: { wrist: p(335, 316), axis: p(338, 309), scale: .85, mask: [p(335, 308), p(339, 308), p(341, 310), p(341, 313), p(339, 315), p(336, 316), p(334, 316), p(333, 314), p(333, 311), p(335, 309)] }, mask: [p(202, 196), p(210, 194), p(209, 182), p(219, 180), p(223, 187), p(218, 199), p(212, 204), p(204, 204)], grip: { hand: [79, 444, 11, 10], wrist: p(80, 448), contact: p(85, 449) } }
 PET_RIGS.doudou.armSource = { src: '/assets/pets/motions/doudou-motion-v1.png', bone: bone([436, 329], [431, 327], [427, 324]), width: 8, hipX: 448, hand: [418, 317, 13, 12], mask: [p(436, 326), p(438, 330), p(432, 333), p(426, 330), p(421, 329), p(417, 324), p(419, 318), p(425, 317), p(431, 324)], grip: { hand: [79, 447, 11, 9], wrist: p(80, 451), contact: p(85, 452) } }
 PET_RIGS.taiji.armSource = { src: '/assets/pets/motions/taiji-motion-v1.png', bone: bone([58, 72], [54, 77], [54, 83]), width: 8, hipX: 67, hand: [50, 83, 9, 8], mask: [p(57, 70), p(60, 71), p(59, 74), p(58, 78), p(57, 82), p(57, 87), p(55, 91), p(50, 91), p(49, 87), p(50, 84), p(49, 80), p(51, 76), p(54, 73)], grip: { hand: [81, 441, 11, 8], wrist: p(81, 445), contact: p(86, 445.5) } }
+// The existing fourth atlas row already looks along the travel direction.
+// These are material bindings only; the body and limbs still share one rig.
+const profileHeads: Record<string, Omit<NonNullable<PetRig['profileHead']>, 'src'>> = {
+  guigui: { rect: [47, 410, 34, 32], neck: p(64, 441), attachment: p(83, 90) },
+  jianwen: { rect: [45, 407, 39, 36], neck: p(65, 442), attachment: p(80, 104), mask: [[45, 407], [84, 407], [84, 436], [80, 440], [73, 443], [64, 443], [60, 441], [51, 437], [45, 432]].map(([x, y]) => p(x, y)) },
+  huatuo: { rect: [48, 406, 33, 43], neck: p(64, 440), attachment: p(120, 147), mask: [[48, 406], [81, 406], [81, 439], [79, 442], [77, 445], [74, 447], [71, 448], [68, 447], [64, 445], [62, 442], [60, 440], [58, 438], [56, 437], [53, 434], [51, 432], [48, 429]].map(([x, y]) => p(x, y)) },
+  taiji: { rect: [48, 402, 34, 37], neck: p(64, 438), attachment: p(120, 140) },
+  xiaomai: { rect: [43, 405, 48, 45], neck: p(67, 443), attachment: p(115, 141), mask: [[43, 405], [91, 405], [91, 431], [85, 436], [83, 441], [79, 446], [74, 449], [68, 449], [64, 447], [60, 446], [58, 448], [56, 450], [43, 450]].map(([x, y]) => p(x, y)) },
+  doudou: { rect: [51, 415, 35, 36], neck: p(67, 449), attachment: p(129, 146), mask: [[51, 415], [86, 415], [86, 443], [83, 446], [78, 449], [72, 451], [63, 450], [56, 446], [51, 440]].map(([x, y]) => p(x, y)) },
+}
+for (const [key, binding] of Object.entries(profileHeads)) PET_RIGS[key].profileHead = { ...binding, src: `/assets/pets/motions/${key}-motion-v1.png` }
 export function petRig(pet?: Partial<PetProfile> | null, sprite?: string): PetRig | undefined {
   const key = petMotionAtlas(pet, sprite)?.match(/^\/assets\/pets\/motions\/(\w+)-motion-v1\.png$/)?.[1]
   return key ? PET_RIGS[key] : undefined
 }
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
 export const lerp = (a: Point, b: Point, t: number): Point => p(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+/** One continuous head envelope during a turn, whichever directional material is sampled. */
+export function travelHeadRect(rig: PetRig, weight: number): [number, number, number, number] {
+  const profile = rig.profileHead
+  if (!profile) return rig.head
+  const [x, y, w, h] = profile.rect, t = Math.max(0, Math.min(1, weight))
+  const factor = Math.min(rig.head[2] / w, (profile.attachment.y - rig.head[1]) / (profile.neck.y - y))
+  const target = [profile.attachment.x + (x - profile.neck.x) * factor, profile.attachment.y + (y - profile.neck.y) * factor, w * factor, h * factor]
+  const box = rig.head.map((n, i) => n + (target[i] - n) * t) as [number, number, number, number]
+  const width = box[2] * (1 - .2 * Math.sin(Math.PI * t))
+  box[0] += (box[2] - width) / 2; box[2] = width
+  return box
+}
 /** Horizontal foot heading is independent of heel/toe roll. */
 export function shoeProjection(rig: PetRig, scale: number, bodyWidth: number, heading: number) {
   const camera = Math.sqrt(Math.max(0, 1 - bodyWidth * bodyWidth))
@@ -61,6 +85,7 @@ export function shoeProjection(rig: PetRig, scale: number, bodyWidth: number, he
 }
 const ease = (t: number) => t * t * (3 - 2 * t)
 const walkingShoulder = (phase: number) => phase < .6 ? -.34 * Math.cos(Math.PI * phase / .6) : .34 * Math.cos(Math.PI * (phase - .6) / .4)
+const cycleSeats = new WeakMap<PetRig, Map<number, Point>>()
 
 /** Analytic two-bone IK: no limb stretch; reject unreachable contact targets in tests. */
 export function bend(start: Point, end: Point, upper: number, lower: number, side = -1): Point {
@@ -86,6 +111,7 @@ export interface RigPose {
   // Sagittal-space bones keep physical lengths before camera foreshortening.
   armLocal: [Bone, Bone]; projectedArms: boolean; legLocal: [Bone, Bone]; projectedLegs: boolean
   contacts: ['deck' | 'heel' | 'sole' | 'toe' | 'air', 'deck' | 'heel' | 'sole' | 'toe' | 'air']
+  travelFacing: number; vehicleProjection: number
 }
 
 /** Move one skeleton between its original standing pose and the prepared ride. */
@@ -117,6 +143,7 @@ export function boardingPose(rig: PetRig, ride: RigPose, weight: number): RigPos
   }) as RigPose['arms']
   const pairs = (from: [number, number], to: [number, number]): [number, number] => from.map((n, i) => n + (to[i] - n) * t) as [number, number]
   return { ...ride, hip: lerp(project(rig.hip), ride.hip, t), angle: ride.angle * t,
+    travelFacing: ride.travelFacing * t,
     bodyWidth: 1 + (ride.bodyWidth - 1) * t, bodySkew: ride.bodySkew * t,
     legs: bones(rig.legs, ride.legs), arms: bones(rig.arms, ride.arms, true), projectedLegs: true,
     footAngles: pairs([0, 0], ride.footAngles), footHeading: pairs([0, 0], ride.footHeading), footDepth: pairs([0, 0], ride.footDepth),
@@ -131,6 +158,10 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
   const scale = (vehicle ? 163 : 184) / (rig.floor - rig.top)
   const lengths = rig.legs.map(b => [distance(b[0], b[1]) * scale, distance(b[1], b[2]) * scale])
   const total = Math.min(...lengths.map(([a, b]) => a + b))
+  let bodyWidth = cycling ? .34 : 1
+  // Keep the wheel plane and pedal orbit at the rider's travelling camera angle.
+  // Boarding changes the body pose, while the prepared vehicle keeps this angle.
+  const vehicleProjection = cycling ? Math.sqrt(1 - bodyWidth ** 2) : vehicle === 'scooter' ? Math.sqrt(1 - .42 ** 2) : .78
   // A camera-projected reach ellipse places the pelvis above each contact.
   // Both arms and legs then solve in the same physical sagittal plane.
   const contactHeight = (foot: Point, source: Point, reach: number, hipX: number, width: number, skew: number, lean: number) => {
@@ -144,12 +175,11 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
   }
   // A low deck lets short-legged characters reach the ground without squatting.
   const deck = 188 - Math.min(4, total * .12)
-  const radius = Math.min(10, total * .18)
+  const radius = Math.min(10, total * .16)
   const crank = p(103, 155)
   const theta = phase * Math.PI * 2 - Math.PI / 2
-  const pedals: [Point, Point] = [p(crank.x + radius * Math.cos(theta), crank.y + radius * Math.sin(theta)), p(crank.x - radius * Math.cos(theta), crank.y - radius * Math.sin(theta))]
+  const pedals: [Point, Point] = [p(crank.x + radius * Math.cos(theta) * vehicleProjection, crank.y + radius * Math.sin(theta)), p(crank.x - radius * Math.cos(theta) * vehicleProjection, crank.y - radius * Math.sin(theta))]
   let hip = p(100, 195 - (rig.floor - rig.hip.y) * scale), angle = 0, stage = '步行'
-  let bodyWidth = 1
   let bodySkew = 0
   let restingHip: Point | undefined
   const footAngles: [number, number] = [0, 0]
@@ -164,9 +194,40 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
   }
   let feet: [Point, Point]
   if (cycling) {
+    bodySkew = -.04
     // Raise the saddle relative to each character's leg length: the knee opens on
     // the downstroke instead of folding both thighs against the torso.
-    hip = p(crank.x - total * .28, crank.y - total * .68)
+    let seat = cycleSeats.get(rig)?.get(scale)
+    if (!seat) {
+      // Fit one fixed saddle to the complete pedal circle. Wide-hipped, short
+      // characters need less setback; a phase-by-phase clamp makes knees snap.
+      const camera = Math.sqrt(1 - bodyWidth ** 2)
+      for (let setback = .28; setback >= -.001; setback -= .02) {
+        const candidate = p(crank.x - total * setback, -Infinity)
+        const reach = lengths.map(([a, b]) => Math.sqrt(a * a + b * b - 2 * a * b * Math.cos(147 * Math.PI / 180)) * .995)
+        for (let step = 0; step < 32; step++) for (const [i, source] of rig.legs.entries()) {
+          const theta = step * Math.PI / 16, lean = .14 + Math.sin(theta * 2) * .008
+          const foot = p(crank.x + radius * Math.cos(theta) * camera, crank.y + radius * Math.sin(theta))
+          candidate.y = Math.max(candidate.y, contactHeight(foot, source[0], reach[i], candidate.x, bodyWidth, bodySkew, lean))
+        }
+        let minKnee = Math.PI
+        for (let step = 0; step < 32; step++) for (const [i, source] of rig.legs.entries()) {
+          const theta = step * Math.PI / 16, lean = .14 + Math.sin(theta * 2) * .008
+          const offset = (source[0].x - rig.hip.x) * scale
+          const x = offset * bodyWidth, y = (source[0].y - rig.hip.y) * scale + offset * bodySkew
+          const dx = crank.x + radius * Math.cos(theta) * camera - candidate.x - x * Math.cos(lean) + y * Math.sin(lean)
+          const dy = crank.y + radius * Math.sin(theta) - candidate.y - x * Math.sin(lean) - y * Math.cos(lean)
+          const forward = (dx * Math.cos(lean) + dy * Math.sin(lean)) / camera, vertical = -dx * Math.sin(lean) + dy * Math.cos(lean)
+          const [a, b] = lengths[i]
+          minKnee = Math.min(minKnee, Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - forward * forward - vertical * vertical) / (2 * a * b)))))
+        }
+        seat = candidate
+        if (minKnee >= 56 * Math.PI / 180) break
+      }
+      if (!cycleSeats.has(rig)) cycleSeats.set(rig, new Map())
+      cycleSeats.get(rig)!.set(scale, seat!)
+    }
+    hip = { ...seat! }
     feet = pedals; angle = .14 + Math.sin(theta * 2) * .008; stage = '踩踏'
   } else if (vehicle === 'scooter' || vehicle === 'skateboard') {
     const board = vehicle === 'skateboard', spread = Math.min(14, total * .26)
@@ -176,10 +237,10 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
     restingHip = p(board ? 100 : 102, -Infinity)
     for (const [i, foot] of [glide, support].entries()) {
       const reach = (lengths[i][0] + lengths[i][1]) * .997
-      restingHip.y = Math.max(restingHip.y, contactHeight(foot, rig.legs[i][0], reach, restingHip.x, board ? .82 : .72, bodySkew, .035))
+      restingHip.y = Math.max(restingHip.y, contactHeight(foot, rig.legs[i][0], reach, restingHip.x, board ? .82 : .42, bodySkew, .035))
     }
     const pushWeight = phase >= .42 ? Math.sin((phase - .42) / .58 * Math.PI) ** 2 : 0
-    bodyWidth = board ? .82 - pushWeight * .10 : .72
+    bodyWidth = board ? .82 - pushWeight * .10 : .42
     if (board) {
       // Pivot towards the nose before pushing, then return to the transverse
       // cruising stance after the rear foot has recovered onto the deck.
@@ -188,7 +249,7 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
       footHeading[0] = footHeading[1] = -Math.PI / 2 * (1 - pivot)
     }
     // Kick under the pelvis/support heel, then extend back and flex to recover.
-    const restingWidth = board ? .82 : .72, camera = Math.sqrt(1 - restingWidth ** 2)
+    const restingWidth = board ? .82 : .42, camera = Math.sqrt(1 - restingWidth ** 2)
     const contactX = (board ? 100 : 102) + (rig.legs[0][0].x - rig.hip.x) * scale * restingWidth + total * .12 * camera
     const contact = p(contactX, 188 - footDepth[0]), finish = p(contactX - total * .35 * camera, 188 - footDepth[0])
     const lifted = p(finish.x + total * .08, deck - Math.min(16, total * .30))
@@ -303,7 +364,7 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
       if (distance(previous, hip) < 1e-7) break
     }
   }
-  const projectedLegs = walking || vehicle === 'scooter' || vehicle === 'skateboard'
+  const projectedLegs = cycling || walking || vehicle === 'scooter' || vehicle === 'skateboard'
   const legLocal: [Bone, Bone] = [bone([0, 0], [0, 0], [0, 0]), bone([0, 0], [0, 0], [0, 0])]
   const legs = rig.legs.map((b, i) => {
     const separation = Math.min(2, total * .04)
@@ -332,14 +393,12 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
   }) as [Bone, Bone]
   const holding = vehicle === 'bicycle' || vehicle === 'scooter' || !vehicle && action === 'ride'
   const shoulders = rig.arms.map((b, i) => map(rig.shoulders?.[i] || p(b[0].x % (rig.key === 'jianwen' ? 160 : 1000), b[0].y)))
-  // Scooter shoulders stay attached to their own projected torso edges.
-  if (cycling) { shoulders[0] = p(shoulders[1].x - 5, shoulders[1].y + 1) }
   const armLengths = rig.arms.map(b => [distance(b[0], b[1]) * scale, distance(b[1], b[2]) * scale])
   const gripLength = Math.min(...armLengths.map(([upper, lower]) => upper + lower))
-  const grip = p(shoulders[1].x + gripLength * .80, shoulders[1].y + gripLength * .40)
+  const grip = p((shoulders[0].x + shoulders[1].x) / 2 + gripLength * .68 * forwardProjection, Math.max(shoulders[0].y, shoulders[1].y) + gripLength * .35)
   const farGrip = p(grip.x - 3, grip.y)
   const push = phase < .42 ? 0 : Math.sin((phase - .42) / .58 * Math.PI) ** 2
-  const projectedArms = walking || vehicle === 'skateboard' || vehicle === 'scooter'
+  const projectedArms = cycling || walking || vehicle === 'skateboard' || vehicle === 'scooter'
   const armLocal: [Bone, Bone] = [bone([0, 0], [0, 0], [0, 0]), bone([0, 0], [0, 0], [0, 0])]
   const armDepth: RigPose['armDepth'] = [[-1, -1, -1], [1, 1, 1]]
   const projectArm = (i: number, local: Bone): Bone => {
@@ -373,14 +432,14 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
       const swing = i ? -.08 - push * .34 + sway : .04 + push * .32 - sway
       return projectArm(i, swingArm(p(0, 0), upper, lower, swing, .18 + push * .16))
     }
-    if (vehicle === 'scooter') {
+    if (vehicle === 'scooter' || cycling) {
       // Keep each arm almost extended, with a little shock-absorbing flexion.
       // Using the shorter arm for both grips folded the longer arm at its elbow.
       // Each template instead has its own reach and a correctly separated grip.
       // The bar belongs to the scooter, not to a bobbing shoulder. Fit it once
       // to the resting proportions, then let the torso/arms move under it.
       const source = rig.shoulders?.[i] || p(b[0].x % (rig.key === 'jianwen' ? 160 : 1000), b[0].y)
-      const target = scooterTarget(source, upper + lower)
+      const target = cycling ? (i ? grip : farGrip) : scooterTarget(source, upper + lower)
       const dx = target.x - start.x, dy = target.y - start.y
       const localTarget = p((dx * Math.cos(angle) + dy * Math.sin(angle)) / forwardProjection, -dx * Math.sin(angle) + dy * Math.cos(angle))
       return projectArm(i, [p(0, 0), bend(p(0, 0), localTarget, upper, lower, 1), localTarget])
@@ -406,5 +465,5 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
   const gripBinding = rig.armSource?.grip || rig.gripBinding
   const gripScale = scale * (rig.armSource?.grip ? rig.armWidth / rig.armSource.width : 1)
   const handContact = (wrist: Point) => (cycling || vehicle === 'scooter') && gripBinding ? p(wrist.x + (gripBinding.contact.x - gripBinding.wrist.x) * gripScale, wrist.y + (gripBinding.contact.y - gripBinding.wrist.y) * gripScale) : wrist
-  return { scale, hip, angle, legs, arms, armLocal, projectedArms, legLocal, projectedLegs, armDepth, phase, stage, crank, pedals, radius, seat: cycling ? p(hip.x - 2, hip.y + 4) : hip, grip: handContact(arms[1][2]), farGrip: handContact(arms[0][2]), floor: 191, deck, action, bodyWidth, bodySkew, footAngles, footHeading, footDepth, contacts }
+  return { scale, hip, angle, legs, arms, armLocal, projectedArms, legLocal, projectedLegs, armDepth, phase, stage, crank, pedals, radius, seat: cycling ? p(hip.x - 2, hip.y + 4) : hip, grip: handContact(arms[1][2]), farGrip: handContact(arms[0][2]), floor: 191, deck, action, bodyWidth, bodySkew, footAngles, footHeading, footDepth, contacts, vehicleProjection, travelFacing: cycling || vehicle === 'scooter' || vehicle === 'skateboard' ? 1 : 0 }
 }

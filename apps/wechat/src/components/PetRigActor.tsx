@@ -60,7 +60,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
     let currentHandoff: typeof handoff, currentHandoffId = handoffId, handoffElapsed = 0, handoffEpoch = 0, presented = false, completed = false, ticks = 0
     let handoffTimer: ReturnType<typeof setTimeout> | undefined, handoffLast: number | undefined
     let travelId: number | undefined, travelElapsed = 0, travelX = 0, travelNotified = false
-    let canvas: MiniCanvas | undefined, image: HTMLImageElement | undefined, armImage: HTMLImageElement | undefined, scarfImage: HTMLImageElement | undefined
+    let canvas: MiniCanvas | undefined, image: HTMLImageElement | undefined, armImage: HTMLImageElement | undefined, scarfImage: HTMLImageElement | undefined, profileImage: HTMLImageElement | undefined
     let reduce = false
     const stop = () => { if (canvas && frame) canvas.cancelAnimationFrame(frame); clearTimeout(handoffTimer); handoffTimer = undefined; handoffLast = undefined; frame = 0; last = 0 }
     const hide = () => { hidden = true; stop() }
@@ -93,6 +93,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
         ctx.scale(unit, unit)
         image = canvas.createImage()
         if (rig.armSource) armImage = canvas.createImage()
+        if (rig.profileHead) profileImage = rig.profileHead.src === rig.armSource?.src ? armImage : canvas.createImage()
         if (standingScarf && rig.key === 'guigui') scarfImage = canvas.createImage()
         const start = () => {
           if (disposed || !canvas || !image) return
@@ -131,7 +132,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
             try {
               ctx.globalAlpha = current.handoff && rideAlpha === 0 ? 0 : 1
               if (current.facing === 'left') { ctx.translate(mirrorAxis * 2, 0); ctx.scale(-1, 1) }
-              drawPetRig(ctx, image!, rig, handoffPose, current.vehicle, current.showGround, armImage, rideAlpha)
+              drawPetRig(ctx, image!, rig, handoffPose, current.vehicle, current.showGround, armImage, rideAlpha, profileImage)
             } finally { ctx.restore() }
             if (current.handoff) {
               // Paint the exact original frame only at the standing endpoint. In
@@ -235,11 +236,12 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
           }
           paint.current(true); paintedRig.current = rig; setReady(true)
         }
-        const sources = [image, ...(armImage ? [armImage] : []), ...(scarfImage ? [scarfImage] : [])]
+        const sources = [...new Set([image, ...(armImage ? [armImage] : []), ...(scarfImage ? [scarfImage] : []), ...(profileImage ? [profileImage] : [])])]
         let loaded = 0
         sources.forEach(source => { source.onerror = fail; source.onload = () => { if (++loaded === sources.length) start() } })
         image.src = rig.src
         if (armImage && rig.armSource) armImage.src = rig.armSource.src
+        if (profileImage && profileImage !== armImage && rig.profileHead) profileImage.src = rig.profileHead.src
         if (scarfImage && standingScarf) scarfImage.src = `/assets/pets/clothing/${standingScarf === 'cozy-scarf' ? 'cozy-scarf' : 'explorer-scarf'}.png`
       })
     }
@@ -249,6 +251,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
       if (image) { image.onload = null; image.onerror = null }
       if (armImage) { armImage.onload = null; armImage.onerror = null }
       if (scarfImage) { scarfImage.onload = null; scarfImage.onerror = null }
+      if (profileImage) { profileImage.onload = null; profileImage.onerror = null }
       media?.removeEventListener?.('change', motionPreference)
       Taro.offAppHide?.(hide); Taro.offAppShow?.(show)
     }
