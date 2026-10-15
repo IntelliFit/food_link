@@ -7,6 +7,7 @@ import { redirectToLogin } from '../utils/withAuth'
 import { PetAvatar } from './PetAvatar'
 import { PetActor } from './PetActor'
 import { petMotionAtlas } from '../utils/pet-motion'
+import { petRig } from '../utils/pet-rig'
 import { PetTransportActor } from './PetTransportActor'
 import { defaultPetTransport, petTransportAppearance, petTransportCapabilities } from '../utils/pet-transport'
 import { PET_TRANSPORT_CHANGED, readPetTransport } from '../utils/pet-transport-storage'
@@ -79,6 +80,10 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   const [, refreshTransport] = useState(0)
   const [windowWidth, setWindowWidth] = useState(() => Taro.getSystemInfoSync().windowWidth || 375)
   const [failedTransport, setFailedTransport] = useState('')
+  const [lane, setLane] = useState({ left: 0, top: 0, rootLeft: 0, exit: 0, rest: 0, request: 0 })
+  const laneRequest = useRef(0), laneMeasuring = useRef(false), lanePrepared = useRef(false)
+  const latestDock = useRef<(automatic: boolean) => void>(() => undefined)
+  const latestReturn = useRef<() => void>(() => undefined), autoReturnPending = useRef(false)
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const returnTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastScrollTop = useRef(0)
@@ -100,7 +105,8 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   const travelVehicle = useRef(vehicle)
   const standingFacing = walking ? !roamFar ? 'left' : 'right' : restingFacing
   const currentStandingFacing = useRef(standingFacing); currentStandingFacing.current = standingFacing
-  const appearanceKey = `${pet?.id}:${companionSprite || pet?.builtin_avatar_id || pet?.pixel_avatar_url}:${standingScarf || ''}`
+  const currentRoamFar = useRef(roamFar); currentRoamFar.current = roamFar
+  const appearanceKey = `${pet?.id}:${companionSprite || pet?.builtin_avatar_id || pet?.pixel_avatar_url}:${standingScarf || ''}:${windowWidth}`
   const transportMounted = visible && refinedMotion
   const transportOwner = useRef({ appearance: appearanceKey, mounted: transportMounted, generation: 0 })
   const transportReady = useRef('')
@@ -118,6 +124,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
   const currentTransportKey = useRef(transportKey); currentTransportKey.current = transportKey
   const hasRidePose = refinedMotion && displayedVehicle === 'bicycle' && Boolean(petMotionAtlas(pet, companionSprite))
   const layout = floatingPetLayout(pet, companionSprite, displayedVehicle, windowWidth, failedTransport === transportOwnerKey)
+  const fixedLane = refinedMotion && displayedVehicle !== 'walk' && Boolean(petRig(pet, companionSprite)) && failedTransport !== transportOwnerKey
   const traveling = phase === 'running' || phase === 'returning'
   const handoff = phase === 'boarding' || phase === 'alighting' ? phase : undefined
   const transportVisible = visible && !chatOpen && ownerCurrent && (traveling || Boolean(handoff))
@@ -144,6 +151,8 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     returnTimer.current = null
     pendingDock.current = null
     pendingReturn.current = false
+    autoReturnPending.current = false
+    laneRequest.current += 1; laneMeasuring.current = false; lanePrepared.current = false
   }, [])
 
   const changePhase = useCallback((next: Phase) => {
@@ -184,10 +193,13 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     setRestingFacing(expected === 'alighting' ? 'left' : 'right')
     changePhase(expected === 'boarding' ? 'running' : 'playing')
     if (expected === 'boarding') settleTimer.current = setTimeout(() => {
-      if (phaseRef.current === 'running') changePhase('docked')
+      if (phaseRef.current === 'running') {
+        if (fixedLane) { manualDockedRef.current = false; changePhase('playing') }
+        else changePhase('docked')
+      }
       settleTimer.current = null
-    }, DOCK_WITH_RIDE_MS + 600)
-  }, [changePhase])
+    }, fixedLane ? 8000 : DOCK_WITH_RIDE_MS + 600)
+  }, [changePhase, fixedLane])
 
   const finishTrip = useCallback((expected: 'running' | 'returning') => {
     if (phaseRef.current !== expected) return
@@ -196,10 +208,17 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     if (expected === 'returning' && refinedMotion && travelVehicle.current !== 'walk' && failedTransport !== transportOwnerKey) {
       changePhase('alighting')
       settleTimer.current = setTimeout(() => finishHandoff('alighting'), RIDE_HANDOFF_MS + 600)
-    } else changePhase(expected === 'running' ? 'docked' : 'playing')
+    } else {
+      changePhase(expected === 'running' ? 'docked' : 'playing')
+      if (expected === 'running' && autoReturnPending.current && !manualDockedRef.current) {
+        autoReturnPending.current = false
+        latestReturn.current()
+      }
+    }
   }, [changePhase, finishHandoff, refinedMotion, failedTransport, transportOwnerKey])
 
   const finishFromView = (event: { target?: { id?: string } }, expected: 'running' | 'returning') => {
+    if (fixedLane) return
     if (event.target?.id !== 'home-floating-pet') return
     const duration = expected === 'running' ? DOCK_WITH_RIDE_MS : RETURN_TO_DESK_MS
     if (Date.now() - tripStarted.current >= duration * .8) finishTrip(expected)
@@ -212,8 +231,12 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     if (refinedMotion && transportReady.current !== currentTransportKey.current) { pendingReturn.current = true; return }
     changePhase('returning')
     // Real view completion wins; the longer guard also covers reduced motion/missing events.
-    settleTimer.current = setTimeout(() => finishTrip('returning'), RETURN_TO_DESK_MS + (refinedMotion ? 600 : 0))
-  }, [changePhase, clearTimers, finishTrip, refinedMotion, transportKey])
+    settleTimer.current = setTimeout(() => {
+      if (fixedLane) { if (phaseRef.current === 'returning') changePhase('playing') }
+      else finishTrip('returning')
+    }, fixedLane ? 8000 : RETURN_TO_DESK_MS + (refinedMotion ? 600 : 0))
+  }, [changePhase, clearTimers, finishTrip, refinedMotion, transportKey, fixedLane])
+  latestReturn.current = startReturnToDesk
 
   const minimize = useCallback(() => {
     setChatOpen(false)
@@ -246,12 +269,49 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     // Continuous scrolling extends the peek, without restarting the run-in.
     if (returnTimer.current) clearTimeout(returnTimer.current)
     returnTimer.current = null
+    autoReturnPending.current = false
     if (!returnAutomatically) manualDockedRef.current = true
     if (refinedMotion && transportReady.current !== currentTransportKey.current) { pendingDock.current = returnAutomatically; return }
+    if (fixedLane && phaseRef.current === 'playing' && !lanePrepared.current) {
+      pendingDock.current = returnAutomatically
+      if (laneMeasuring.current) return
+      laneMeasuring.current = true
+      const request = ++laneRequest.current, owner = currentTransportKey.current
+      const rpx = windowWidth / 750, baseLeft = windowWidth - 196 * rpx
+      const info = Taro.getWindowInfo?.() || Taro.getSystemInfoSync()
+      const cancelMeasurement = () => {
+        if (request !== laneRequest.current) return
+        if (settleTimer.current) clearTimeout(settleTimer.current)
+        settleTimer.current = null
+        laneRequest.current += 1; laneMeasuring.current = false
+        pendingDock.current = null; manualDockedRef.current = false
+      }
+      settleTimer.current = setTimeout(cancelMeasurement, 2000)
+      const accept = (row?: { left?: number; top?: number }) => {
+        if (request !== laneRequest.current) return
+        if (phaseRef.current !== 'playing') return
+        if (owner !== currentTransportKey.current) { cancelMeasurement(); latestDock.current(returnAutomatically); return }
+        const rootLeft = row?.left ?? baseLeft + (currentRoamFar.current ? 0 : -28 * rpx)
+        const rootTop = row?.top ?? (info.windowHeight || 667) - ((info as { safeArea?: { bottom: number } }).safeArea ? (info.windowHeight - info.safeArea!.bottom) : 0) - 546 * rpx
+        // Commit the empty native lane first. Its first pixels must wait until
+        // the new screen position has reached the native view.
+        setLane({ request, rootLeft, left: rootLeft + layout.left, top: rootTop + 84 * rpx + layout.top, exit: baseLeft + 224 * rpx - rootLeft, rest: baseLeft + (currentRoamFar.current ? 0 : -28 * rpx) - rootLeft })
+      }
+      if (typeof Taro.createSelectorQuery === 'function') {
+        try { Taro.createSelectorQuery().select('#home-floating-pet').fields({ rect: true }).exec(rows => {
+          const row = rows?.[0]
+          if (!row || !Number.isFinite(row.left) || !Number.isFinite(row.top)) cancelMeasurement()
+          else accept(row)
+        }) } catch { cancelMeasurement() }
+      }
+      else accept()
+      return
+    }
     if (phaseRef.current !== 'docked' && phaseRef.current !== 'running' && phaseRef.current !== 'boarding') {
       if (settleTimer.current) clearTimeout(settleTimer.current)
       if (refinedMotion && currentVehicle.current !== 'walk' && failedTransport !== transportOwnerKey) {
         changePhase('boarding')
+        lanePrepared.current = false
         // Never start an unseen ride if the native presentation callback stalls.
         settleTimer.current = setTimeout(() => {
           if (phaseRef.current !== 'boarding') return
@@ -264,10 +324,28 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     }
     if (returnAutomatically && !manualDockedRef.current) {
       returnTimer.current = setTimeout(() => {
+        returnTimer.current = null
+        if (fixedLane && phaseRef.current !== 'docked') { autoReturnPending.current = true; return }
         startReturnToDesk()
       }, 2800 + (refinedMotion ? RIDE_HANDOFF_MS : 0))
     }
-  }, [changePhase, finishTrip, finishHandoff, startReturnToDesk, refinedMotion, transportKey, failedTransport, transportOwnerKey])
+  }, [changePhase, finishTrip, finishHandoff, startReturnToDesk, refinedMotion, transportKey, failedTransport, transportOwnerKey, fixedLane, windowWidth, roamFar, layout.left, layout.top])
+  latestDock.current = dock
+
+  useEffect(() => {
+    if (!lane.request || lane.request !== laneRequest.current || !visible || chatOpen) return undefined
+    let current = true
+    Taro.nextTick(() => {
+      if (!current || lane.request !== laneRequest.current || phaseRef.current !== 'playing' || pendingDock.current === null) return
+      if (settleTimer.current) clearTimeout(settleTimer.current)
+      settleTimer.current = null
+      laneMeasuring.current = false; lanePrepared.current = true
+      const automatic = pendingDock.current
+      pendingDock.current = null
+      latestDock.current(automatic)
+    })
+    return () => { current = false }
+  }, [lane, transportKey, visible, chatOpen])
 
   const restoreToDesk = useCallback(() => {
     clearTimers()
@@ -405,10 +483,22 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
     height: `${Math.max(0, windowHeightRef.current - keyboardHeight - 24)}px`,
     maxHeight: `${Math.max(0, windowHeightRef.current - keyboardHeight - 24)}px`,
   } : undefined
+  const transportActor = <View className={`pet-assistant-transport${fixedLane ? ' pet-assistant-transport--lane' : ''}${transportVisible ? '' : ' is-standby'}`} style={fixedLane ? { position: 'fixed', left: '0px', top: `${lane.top}px`, width: `${windowWidth}px`, height: `${layout.transportSize * 1.1}px` } : { left: `${layout.left}px`, top: `${layout.top}px`, width: `${layout.transportSize}px`, height: `${layout.transportSize * 1.1}px` }} aria-hidden={!transportVisible}>
+    <PetTransportActor key={transportOwnerKey} pet={pet} sprite={companionSprite} vehicle={failedTransport === transportOwnerKey ? 'walk' : displayedVehicle} size={layout.transportSize} active={travelVisible} visible={transportVisible} facing={phase === 'returning' || phase === 'alighting' ? 'left' : 'right'} boardingFacing={boardingFacing} standingScarf={standingScarf} sceneWidth={fixedLane ? windowWidth : undefined} sceneOriginX={fixedLane ? lane.left : undefined} travel={fixedLane && traveling ? { id: renderedTrip, from: phase === 'running' ? 0 : lane.exit, to: phase === 'running' ? lane.exit : lane.rest, duration: phase === 'running' ? DOCK_WITH_RIDE_MS : RETURN_TO_DESK_MS, easing: phase === 'running' ? 'depart' : 'return' } : undefined} onTravelComplete={() => { if (currentTransportKey.current === transportKey && tripGeneration.current === renderedTrip && traveling && visible && !chatOpen) finishTrip(phase as 'running' | 'returning') }} handoff={ownerCurrent ? handoff : undefined} handoffId={renderedTrip} handoffAcknowledged={phase !== 'boarding' || boardingPresented} handoffMs={RIDE_HANDOFF_MS} onPresented={() => { if (currentTransportKey.current === transportKey && tripGeneration.current === renderedTrip && phaseRef.current === 'boarding' && visible && !chatOpen) setBoardingPresented(true) }} onHandoffComplete={() => { if (currentTransportKey.current === transportKey && tripGeneration.current === renderedTrip && handoff && visible && !chatOpen) finishHandoff(handoff) }} onUnavailable={() => {
+      if (currentTransportKey.current !== transportKey) return
+      setFailedTransport(transportOwnerKey)
+      // The failed canvas can no longer acknowledge its trip; cancel it before
+      // changing to the DOM walker, whose old CSS end event may have passed.
+      if (phaseRef.current !== 'playing' && phaseRef.current !== 'docked') {
+        clearTimers(); manualDockedRef.current = false; changePhase('playing')
+      }
+    }} onReady={() => { if (currentTransportKey.current !== transportKey) return; transportReady.current = transportKey; if (!visible || chatOpen) return; if (pendingReturn.current) { pendingReturn.current = false; startReturnToDesk() } else if (pendingDock.current !== null) { const auto = pendingDock.current; pendingDock.current = null; dock(auto) } }}
+    />
+  </View>
   return (
     <View className={`pet-assistant ${dark ? 'pet-assistant--dark' : ''}${wellness ? ' pet-assistant--wellness' : ''}${refinedMotion ? ' pet-assistant--refined-motion' : ''}`}>
       {visible ? (
-        <View id='home-floating-pet' data-trip={process.env.NODE_ENV === 'development' ? renderedTrip : undefined} data-presented={process.env.NODE_ENV === 'development' ? boardingPresented : undefined} className={`pet-assistant-float pet-assistant-float--${ownerCurrent ? phase : manualDockedRef.current ? 'docked' : 'playing'}${chatOpen ? ' is-chat-open' : ''} ${welcoming ? 'is-welcoming' : ''} ${roamFar ? 'is-roaming-far' : 'is-roaming-near'} ${walking ? 'is-walking' : `is-${idleAction}`} ${companionSprite || hasRidePose ? 'has-full-body' : ''} ${hasRidePose ? 'has-ride-pose' : ''}`} aria-hidden={chatOpen} onTransitionEnd={event => finishFromView(event, 'running')} onAnimationEnd={event => finishFromView(event, 'returning')}>
+        <View id='home-floating-pet' style={fixedLane && (phase === 'boarding' || laneMeasuring.current && lane.request === laneRequest.current) ? { transform: `translateX(${lane.rootLeft - (windowWidth - 196 * windowWidth / 750)}px)`, transition: 'none' } : undefined} data-trip={process.env.NODE_ENV === 'development' ? renderedTrip : undefined} data-presented={process.env.NODE_ENV === 'development' ? boardingPresented : undefined} className={`pet-assistant-float pet-assistant-float--${ownerCurrent ? phase : manualDockedRef.current ? 'docked' : 'playing'}${chatOpen ? ' is-chat-open' : ''} ${welcoming ? 'is-welcoming' : ''} ${roamFar ? 'is-roaming-far' : 'is-roaming-near'} ${walking ? 'is-walking' : `is-${idleAction}`} ${companionSprite || hasRidePose ? 'has-full-body' : ''} ${hasRidePose ? 'has-ride-pose' : ''}`} aria-hidden={chatOpen} onTransitionEnd={event => finishFromView(event, 'running')} onAnimationEnd={event => finishFromView(event, 'returning')}>
           {phase === 'playing' && reminder ? (
             <View id={reminder.tone === 'messages' ? 'home-pet-message-reminder' : 'home-pet-analyze-reminder'} className='pet-assistant-reminder' role='button' onClick={onReminderPress}>
               <Text>{reminder.text}</Text>
@@ -443,7 +533,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
           ) : null}
           {phase === 'playing' ? <View className='pet-assistant-tuck' role='button' aria-label='暂时收起宠物' onClick={() => dock(false)}><Text>›</Text></View> : null}
           <View id='pet-assistant-open' className='pet-assistant-companion' role='button' aria-label={`和${pet?.name || '宠物'}聊聊`} onClick={() => openChat()}>
-            {refinedMotion && <View className={`pet-assistant-transport${transportVisible ? '' : ' is-standby'}`} style={{ left: `${layout.left}px`, top: `${layout.top}px`, width: `${layout.transportSize}px`, height: `${layout.transportSize * 1.1}px` }} aria-hidden={!transportVisible}><PetTransportActor key={transportOwnerKey} pet={pet} sprite={companionSprite} vehicle={displayedVehicle} size={layout.transportSize} active={travelVisible} visible={transportVisible} facing={phase === 'returning' || phase === 'alighting' ? 'left' : 'right'} boardingFacing={boardingFacing} standingScarf={standingScarf} handoff={ownerCurrent ? handoff : undefined} handoffId={renderedTrip} handoffAcknowledged={phase !== 'boarding' || boardingPresented} handoffMs={RIDE_HANDOFF_MS} onPresented={() => { if (currentTransportKey.current === transportKey && tripGeneration.current === renderedTrip && phaseRef.current === 'boarding' && visible && !chatOpen) setBoardingPresented(true) }} onHandoffComplete={() => { if (currentTransportKey.current === transportKey && tripGeneration.current === renderedTrip && handoff && visible && !chatOpen) finishHandoff(handoff) }} onUnavailable={() => setFailedTransport(transportOwnerKey)} onReady={() => { if (currentTransportKey.current !== transportKey) return; transportReady.current = transportKey; if (!visible || chatOpen) return; if (pendingReturn.current) { pendingReturn.current = false; startReturnToDesk() } else if (pendingDock.current !== null) { const auto = pendingDock.current; pendingDock.current = null; dock(auto) } }} /></View>}
+            {refinedMotion && !fixedLane && transportActor}
             <View className={`pet-assistant-traveler${refinedMotion && !restingVisible ? ' is-standby' : ''}`} aria-hidden={refinedMotion && !restingVisible}>
               <View className='pet-assistant-facing'>
                 <View className='pet-assistant-look'>
@@ -511,6 +601,7 @@ export const FloatingPetAssistant = forwardRef<FloatingPetAssistantHandle, Props
           ) : null}
         </View>
       ) : null}
+      {visible && fixedLane && transportActor}
       {chatMounted ? (
         <View className={`pet-assistant-chat-layer ${chatOpen && visible ? 'is-open' : ''}`}>
           <View id='pet-assistant-chat-mask' className='pet-assistant-chat-mask' catchMove onClick={minimize} />

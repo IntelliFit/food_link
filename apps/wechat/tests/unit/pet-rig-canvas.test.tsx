@@ -234,7 +234,8 @@ test('left-facing reboarding turns the original frame before revealing the bike 
   expect(ctx.scale).toHaveBeenCalledWith(-1, 1)
   fade(64)
   expect(alphas[alphas.length - 1]).toBe(0)
-  expect(ctx.scale.mock.calls.some(([x, y]) => Math.abs(x) < .4 && y === 1)).toBe(true)
+  expect(ctx.scale.mock.calls.some(([x, y]) => Math.abs(x) >= .6 && Math.abs(x) < 1 && y === 1)).toBe(true)
+  expect(ctx.scale.mock.calls.every(([x]) => Math.abs(x) >= .6)).toBe(true)
   fade(256)
   expect(alphas[alphas.length - 1]).toBeCloseTo(.625)
   expect(complete).not.toHaveBeenCalled()
@@ -243,6 +244,27 @@ test('left-facing reboarding turns the original frame before revealing the bike 
   expect(complete).toHaveBeenCalledTimes(1)
   expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 200, 220)
   draw.mockReset()
+})
+
+test('a fixed wide canvas remains mounted with empty pixels while idle and moves inside its own clock', () => {
+  const complete = jest.fn()
+  ;(Taro.createSelectorQuery as jest.Mock).mockImplementation(() => ({ select: () => ({ fields: () => ({ exec: (callback: any) => callback([{ node, width: 400, height: 110 }]) }) }) }))
+  const { container, rerender } = render(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' active={false} visible={false} sceneWidth={400} sceneOriginX={290} />)
+  ready()
+  expect(container.querySelector('canvas')).not.toHaveAttribute('hidden')
+  expect(container.querySelector('canvas')).toHaveStyle({ opacity: '1', visibility: 'visible' })
+  expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 800, 220)
+  const travel = { id: 1, from: 0, to: 120, duration: 1000, easing: 'depart' as const }
+  rerender(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' sceneWidth={400} sceneOriginX={290} travel={travel} onTravelComplete={complete} />)
+  tick(100); tick(600)
+  expect(latestPose().phase).toBeCloseTo(500 / 1600)
+  expect(ctx.translate).toHaveBeenCalledWith((290 + 30) * 2, 0)
+  expect(complete).not.toHaveBeenCalled()
+  tick(1100)
+  expect(ctx.translate).toHaveBeenCalledWith((290 + 120) * 2, 0)
+  expect(complete).toHaveBeenCalledTimes(1)
+  rerender(<PetRigActor rig={PET_RIGS.jianwen} vehicle='bicycle' active={false} visible={false} sceneWidth={400} sceneOriginX={290} />)
+  expect(ctx.clearRect).toHaveBeenLastCalledWith(0, 0, 800, 220)
 })
 test('reduced motion draws a stable pose and never starts an animation clock', () => {
   const media = { matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn() }

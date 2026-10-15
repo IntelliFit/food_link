@@ -547,6 +547,9 @@
 .pet-assistant--refined-motion .pet-assistant-transport { position: absolute; top: 0; left: -8rpx; width: 200rpx; height: 220rpx; }
 .pet-assistant--refined-motion .pet-assistant-transport.is-standby,
 .pet-assistant--refined-motion .pet-assistant-traveler.is-standby { visibility: hidden; pointer-events: none; }
+.pet-assistant--refined-motion .pet-assistant-transport.pet-assistant-transport--lane {
+  position: fixed; z-index: 900; visibility: visible; pointer-events: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .pet-assistant--refined-motion .has-ride-pose .pet-assistant-ride__pedal,
   .pet-assistant--refined-motion .has-ride-pose .pet-assistant-ride__wheel { animation: none !important; }

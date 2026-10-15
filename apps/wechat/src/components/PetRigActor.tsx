@@ -6,22 +6,24 @@ import { drawPetRig } from '../utils/pet-rig-render'
 import type { PetMotionAction } from '../utils/pet-motion'
 import type { PetTransportId } from '../utils/pet-transport'
 import type { PetLoadout } from '../utils/pet-loadout'
+import { petRigTravelX, type PetRigTravel } from '../utils/pet-rig-travel'
 import './PetRigActor.scss'
 
-type MiniCanvas = HTMLCanvasElement & { createImage: () => HTMLImageElement; requestAnimationFrame: (callback: (timestamp: number) => void) => number; cancelAnimationFrame: (frame: number) => void; __petRigFrame?: { phase: number; stage: string; clock: number; handoff?: string; progress: number; rideAlpha: number; debug: { active: boolean; appHidden: boolean; pageHidden: boolean; presented: boolean; acknowledged: boolean; id: number; ticks: number } } }
+type MiniCanvas = HTMLCanvasElement & { createImage: () => HTMLImageElement; requestAnimationFrame: (callback: (timestamp: number) => void) => number; cancelAnimationFrame: (frame: number) => void; __petRigFrame?: { phase: number; stage: string; clock: number; worldX?: number; travelProgress?: number; handoff?: string; progress: number; rideAlpha: number; debug: { active: boolean; appHidden: boolean; pageHidden: boolean; presented: boolean; acknowledged: boolean; id: number; ticks: number } } }
 let canvasSerial = 0
 
 /** One clock drives both the character's joints and the tool's pedals. No frame-by-frame React updates. */
-export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visible = true, facing = 'right', boardingFacing = facing, showGround = false, standingScarf, handoff, handoffId = 0, handoffAcknowledged = true, handoffMs = 320, onPresented, onHandoffComplete, onReady, onUnavailable }: {
+export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visible = true, facing = 'right', boardingFacing = facing, showGround = false, standingScarf, sceneWidth, sceneOriginX, travel, onTravelComplete, handoff, handoffId = 0, handoffAcknowledged = true, handoffMs = 320, onPresented, onHandoffComplete, onReady, onUnavailable }: {
   rig: PetRig; vehicle?: PetTransportId; action?: PetMotionAction; active?: boolean; visible?: boolean; facing?: 'left' | 'right'; showGround?: boolean
   handoff?: 'boarding' | 'alighting'; handoffId?: number; handoffAcknowledged?: boolean; handoffMs?: number; onPresented?: () => void; onHandoffComplete?: () => void; onReady?: () => void; onUnavailable?: () => void
   standingScarf?: PetLoadout['scarf']
   boardingFacing?: 'left' | 'right'
+  sceneWidth?: number; sceneOriginX?: number; travel?: PetRigTravel; onTravelComplete?: () => void
 }) {
   const [id] = useState(() => `pet-rig-${++canvasSerial}`)
   const [ready, setReady] = useState(false)
-  const options = useRef({ vehicle, action, active, visible, facing, boardingFacing, showGround, handoff, handoffId, handoffMs, onPresented, onHandoffComplete, onReady, onUnavailable })
-  options.current = { vehicle, action, active, visible, facing, boardingFacing, showGround, handoff, handoffId, handoffMs, onPresented, onHandoffComplete, onReady, onUnavailable }
+  const options = useRef({ vehicle, action, active, visible, facing, boardingFacing, showGround, sceneOriginX, travel, onTravelComplete, handoff, handoffId, handoffMs, onPresented, onHandoffComplete, onReady, onUnavailable })
+  options.current = { vehicle, action, active, visible, facing, boardingFacing, showGround, sceneOriginX, travel, onTravelComplete, handoff, handoffId, handoffMs, onPresented, onHandoffComplete, onReady, onUnavailable }
   const unavailable = useRef<() => void>()
   const paint = useRef<((reset?: boolean) => void) | null>(null)
   const paintedRig = useRef<PetRig>()
@@ -45,7 +47,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
     // discarded. Restart only after the shown node has reached the native view.
     if (visible && paint.current) Taro.nextTick(() => { if (current) paint.current?.() })
     return () => { current = false }
-  }, [active, visible, facing, boardingFacing, handoff, handoffId, handoffMs])
+  }, [active, visible, facing, boardingFacing, sceneOriginX, travel?.id, handoff, handoffId, handoffMs])
   useEffect(() => {
     let current = true
     if (visible && handoff === 'boarding' && handoffAcknowledged) Taro.nextTick(() => {
@@ -57,6 +59,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
     let disposed = false, hidden = false, frame = 0, clock = 0, last = 0, timer: ReturnType<typeof setTimeout> | undefined
     let currentHandoff: typeof handoff, currentHandoffId = handoffId, handoffElapsed = 0, handoffEpoch = 0, presented = false, completed = false, ticks = 0
     let handoffTimer: ReturnType<typeof setTimeout> | undefined, handoffLast: number | undefined
+    let travelId: number | undefined, travelElapsed = 0, travelX = 0, travelNotified = false
     let canvas: MiniCanvas | undefined, image: HTMLImageElement | undefined, armImage: HTMLImageElement | undefined, scarfImage: HTMLImageElement | undefined
     let reduce = false
     const stop = () => { if (canvas && frame) canvas.cancelAnimationFrame(frame); clearTimeout(handoffTimer); handoffTimer = undefined; handoffLast = undefined; frame = 0; last = 0 }
@@ -86,7 +89,8 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
         const ctx = canvas.getContext('2d')
         if (!ctx) { fail(); return }
         const unit = canvas.height / 220
-        ctx.translate((canvas.width - 200 * unit) / 2, 0); ctx.scale(unit, unit)
+        const sceneUnits = canvas.width / unit
+        ctx.scale(unit, unit)
         image = canvas.createImage()
         if (rig.armSource) armImage = canvas.createImage()
         if (standingScarf && rig.key === 'guigui') scarfImage = canvas.createImage()
@@ -99,7 +103,7 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
             // Some native canvas layers ignore ancestor visibility/opacity.
             // A standby layer must contain no pixels, even before its hidden flag commits.
             if (!current.visible) {
-              ctx.clearRect(0, 0, 200, 220)
+              ctx.clearRect(0, 0, sceneUnits, 220)
               if (process.env.NODE_ENV === 'development') canvas!.__petRigFrame = undefined
               return
             }
@@ -111,12 +115,18 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
             const frameAxis = 100 + (rig.frame[0] + rig.frame[2] / 2 - rig.hip.x) * pose.scale
             const mirrorAxis = 100 + (frameAxis - 100) * (current.handoff === 'alighting' ? 1 - rideAlpha : 0)
             const turnProgress = !acknowledged ? 0 : reduce ? 1 : Math.min(1, handoffElapsed / Math.max(1, turnMs()))
-            const easedTurn = turnProgress * turnProgress * (3 - 2 * turnProgress)
             const direction = current.facing === 'left' ? -1 : 1
-            const standingDirection = current.handoff === 'boarding' && turnMs() ? (current.boardingFacing === 'left' ? -1 : 1) * (1 - easedTurn) + direction * easedTurn : direction
+            // A 2D source has no edge-on artwork: never squeeze it to zero and
+            // erase the character at the middle of a turn.
+            const turnHalf = turnProgress < .5 ? turnProgress * 2 : (turnProgress - .5) * 2
+            const turnEase = turnHalf * turnHalf * (3 - 2 * turnHalf)
+            const turnWidth = turnProgress < .5 ? 1 - .4 * turnEase : .6 + .4 * turnEase
+            const standingDirection = current.handoff === 'boarding' && turnMs() ? (turnProgress < .5 ? current.boardingFacing === 'left' ? -1 : 1 : direction) * turnWidth : direction
             // Clear in the unmirrored coordinate plane. A narrowing turn cannot
             // clear last frame's full-width pixels through its own transform.
-            ctx.clearRect(0, 0, 200, 220)
+            ctx.clearRect(0, 0, sceneUnits, 220)
+            const origin = current.sceneOriginX === undefined ? (sceneUnits - 200) / 2 : current.sceneOriginX * pixelRatio / unit
+            ctx.save(); ctx.translate(origin + travelX * pixelRatio / unit, 0)
             ctx.save()
             try {
               ctx.globalAlpha = current.handoff && rideAlpha === 0 ? 0 : 1
@@ -145,7 +155,15 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
               ctx.restore()
             }
             // Read-only native QA metadata; no clock injection or React updates.
-            if (process.env.NODE_ENV === 'development') canvas!.__petRigFrame = { phase: pose.phase, stage: pose.stage, clock, handoff: current.handoff, progress, rideAlpha, debug: { active: current.active, appHidden: hidden, pageHidden: pageHidden.current, presented, acknowledged, id: current.handoffId, ticks } }
+            ctx.restore()
+            if (process.env.NODE_ENV === 'development') canvas!.__petRigFrame = { phase: pose.phase, stage: pose.stage, clock, worldX: (current.sceneOriginX || 0) + travelX, travelProgress: current.travel ? Math.min(1, travelElapsed / Math.max(1, current.travel.duration)) : undefined, handoff: current.handoff, progress, rideAlpha, debug: { active: current.active, appHidden: hidden, pageHidden: pageHidden.current, presented, acknowledged, id: current.handoffId, ticks } }
+          }
+          const notifyTravel = () => {
+            const current = options.current
+            if (!current.visible || !current.travel || travelNotified || !reduce && travelElapsed < current.travel.duration) return
+            travelNotified = true
+            const expected = current.travel.id
+            Taro.nextTick(() => { if (!disposed && options.current.visible && options.current.travel?.id === expected) options.current.onTravelComplete?.() })
           }
           const notifyHandoff = () => {
             const current = options.current, epoch = handoffEpoch
@@ -173,9 +191,13 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
             // Hide/pause clears last; only unexplained long stalls are discarded.
             if (last) {
               const delta = Math.max(0, timestamp - last)
-              if (current.active) clock += delta <= 1000 ? delta : 50
+              if (current.active) {
+                const elapsed = delta <= 1000 ? delta : 50
+                clock += elapsed
+                if (current.travel) { travelElapsed += elapsed; travelX = petRigTravelX(current.travel, travelElapsed) }
+              }
             }
-            last = timestamp; draw(); notifyHandoff()
+            last = timestamp; draw(); notifyHandoff(); notifyTravel()
             if (!disposed && options.current.visible && options.current.active && !options.current.handoff) frame = canvas!.requestAnimationFrame(tick)
           }
           const tickHandoff = () => {
@@ -193,9 +215,14 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
             if (reset) clock = 0
             if (currentHandoff !== options.current.handoff || currentHandoffId !== options.current.handoffId) {
               currentHandoff = options.current.handoff; currentHandoffId = options.current.handoffId; handoffElapsed = 0; handoffEpoch += 1; presented = false; completed = false
+              if (currentHandoff === 'boarding') travelX = 0
+            }
+            if (travelId !== options.current.travel?.id) {
+              travelId = options.current.travel?.id; travelElapsed = 0; travelNotified = false
+              if (options.current.travel) travelX = reduce ? options.current.travel.to : options.current.travel.from
             }
             draw()
-            if (reduce) notifyHandoff()
+            if (reduce) { notifyHandoff(); notifyTravel() }
             if (!disposed && !hidden && !pageHidden.current && options.current.visible && !reduce) {
               if (options.current.handoff && !completed) {
                 // This short pose handoff must advance while pedalling is paused.
@@ -225,11 +252,11 @@ export function PetRigActor({ rig, vehicle, action = 'idle', active = true, visi
       media?.removeEventListener?.('change', motionPreference)
       Taro.offAppHide?.(hide); Taro.offAppShow?.(show)
     }
-  }, [id, rig, standingScarf])
+  }, [id, rig, standingScarf, sceneWidth])
   const [left, top, width, height] = rig.frame
   const isSheet = rig.key === 'guigui' || rig.key === 'jianwen'
   return <View className={`pet-rig${ready ? ' is-ready' : ''}${active ? '' : ' is-paused'}`} data-character={rig.key} data-source={rig.src} data-motion={vehicle || action} data-facing={facing}>
     <View className='pet-rig__fallback' style={{ visibility: visible && !ready ? 'visible' : 'hidden' }}><Image src={rig.src} className='pet-rig__source' mode='scaleToFill' onError={onUnavailable} style={isSheet ? { width: '400%', height: rig.key === 'jianwen' ? '200%' : '100%', transform: `translate(${-left / width * 100}%, ${-top / height * 100}%)` } : undefined} /></View>
-    <Canvas type='2d' id={id} className='pet-rig__canvas' hidden={ready && !visible} style={{ opacity: visible && ready ? 1 : 0, visibility: visible ? 'visible' : 'hidden' }} onError={() => unavailable.current?.()} />
+    <Canvas type='2d' id={id} className='pet-rig__canvas' hidden={!sceneWidth && ready && !visible} style={{ opacity: ready && (visible || sceneWidth) ? 1 : 0, visibility: visible || sceneWidth ? 'visible' : 'hidden' }} onError={() => unavailable.current?.()} />
   </View>
 }
