@@ -28,7 +28,8 @@
   .home-mode-float__track.is-wellness .home-mode-float__thumb { transform: translateX(100%); }
   .home-mode-float__option {
     position: relative; z-index: 1; display: flex; align-items: center; justify-content: center;
-    flex: 1; min-width: 0; height: 88rpx; min-height: 44px; gap: 8rpx;
+    // Uppercase PX preserves the physical touch target through Taro pxtransform.
+    flex: 1; min-width: 0; height: 88rpx; min-height: 44PX; gap: 8rpx;
     font-size: 28rpx; line-height: 1; font-weight: 600; white-space: nowrap;
     color: var(--mode-ink); border-radius: inherit;
     &.is-selected { color: var(--mode-active-ink); }
