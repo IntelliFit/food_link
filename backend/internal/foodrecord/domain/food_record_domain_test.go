@@ -19,6 +19,12 @@ func TestMacroCaloriesAndAIGeneratedSource(t *testing.T) {
 	assert.True(t, IsAIGeneratedNutritionSource("llm_generated"))
 	assert.False(t, IsAIGeneratedNutritionSource("ingredient_label"))
 	assert.False(t, IsAIGeneratedNutritionSource("library_exact_canonical"))
+	for _, source := range []string{"ai_direct", "legacy_direct", "qwen_generated", "llm_generated"} {
+		item := FoodItem{Name: "五花肉", Weight: 200, NutritionSource: &source, Nutrients: FoodItemNutrients{Calories: 800}}
+		assert.Error(t, ValidateFoodItemsForRecording([]FoodItem{item}), "AI热量不能掩盖全部缺失的三大营养素")
+	}
+	assert.NoError(t, ValidateFoodItemsForRecording([]FoodItem{{Name: "自定义食物", Weight: 200, Nutrients: FoodItemNutrients{Calories: 800}}}), "手动仅填热量仍然允许")
+	assert.NoError(t, ValidateFoodItemsForRecording([]FoodItem{{Name: "水", Weight: 200}}))
 }
 
 func TestFoodItemUnmarshalJSON_Ingredients(t *testing.T) {

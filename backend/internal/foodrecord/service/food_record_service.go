@@ -159,6 +159,10 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	}
 	var aiGeneratedNutrition bool
 	input.Items, aiGeneratedNutrition = reconcileAIGeneratedFoodItems(input.Items)
+	if err := domain.ValidateFoodItemsForRecording(input.Items); err != nil {
+		logger.Warn(ctx, "拦截营养校准后的无效饮食记录", slog.String("user_id", userID), slog.Int("item_count", len(input.Items)), logger.Err(err))
+		return nil, &commonerrors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+	}
 	if aiGeneratedNutrition {
 		oldCalories := input.TotalCalories
 		input.TotalCalories = recordCalorieTotal(input.Items, input.TotalCalories)
@@ -704,6 +708,10 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	if input.Items != nil {
 		effectiveItems = normalizeFoodItems(input.Items)
 		effectiveItems, enforceAIGeneratedEnergy = reconcileAIGeneratedFoodItems(effectiveItems)
+		if err := domain.ValidateFoodItemsForRecording(effectiveItems); err != nil {
+			logger.Warn(ctx, "拦截无效饮食记录修改", slog.String("user_id", userID), slog.String("record_id", recordID), logger.Err(err))
+			return nil, &commonerrors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+		}
 		updates["items"] = effectiveItems
 	} else if nutritionUpdate {
 		effectiveItems, enforceAIGeneratedEnergy = reconcileAIGeneratedFoodItems(effectiveItems)

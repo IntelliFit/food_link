@@ -1104,14 +1104,7 @@ func (s *AnalyzeService) applyPreciseMicronutrientsToResolvedItems(ctx context.C
 			rows[index] = existingUnit
 			continue
 		}
-		candidates = append(candidates, UnresolvedNutritionCandidate{
-			Index:                index,
-			Name:                 name,
-			EstimatedWeightGrams: weight,
-			FoodState:            strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["foodState"], item["food_state"]))),
-			WeightBasis:          strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["weightBasis"], item["weight_basis"]))),
-			BasisEvidence:        strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["basisEvidence"], item["basis_evidence"]))),
-		})
+		candidates = append(candidates, nutritionFallbackForItem(index, item, name))
 	}
 	if len(candidates) > 0 {
 		generatedRows, err := s.estimateNutritionWithFallback(ctx, candidates, additionalContext)
@@ -5292,13 +5285,22 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		var callErr error
 		if isFastExecutionMode(executionMode) {
 			raw, callErr = newAnalyzeWithImagesWithoutThinkingModelCall(client, prompt, nil, model)(callCtx)
+		} else if structured, ok := client.(interface {
+			AnalyzeTextWithJSONSchema(context.Context, string, string, map[string]any) (map[string]any, error)
+		}); ok && provider == "qwen" && strings.HasPrefix(model, "qwen3.8-") {
+			raw, callErr = structured.AnalyzeTextWithJSONSchema(callCtx, prompt, model, textNutritionJSONSchema(analysisEngineProducesNutrition(input.AnalysisEngine)))
 		} else {
 			raw, callErr = client.Analyze(callCtx, prompt, "")
 		}
 		if callErr != nil {
 			return nil, callErr
 		}
-		return normalizeAndValidateTextResult(raw, input)
+		shape := textResultShape(raw)
+		normalized, validationErr := normalizeAndValidateTextResult(raw, input)
+		if validationErr != nil {
+			logger.Warn(callCtx, "文字食物模型输出未通过有效性校验", slog.String("user_id", userID), slog.String("provider", provider), slog.String("model", model), slog.String("raw_field_shape", shape), logger.Err(validationErr))
+		}
+		return normalized, validationErr
 	})
 	if err != nil {
 		metrics.ObserveFoodAnalysis("text", provider, model, "llm_error", time.Since(start), -1)
@@ -6211,6 +6213,8 @@ type nutritionCandidateQuery struct {
 	FoodState           string `json:"foodState,omitempty"`
 	WeightBasis         string `json:"weightBasis,omitempty"`
 	RecognitionEvidence string `json:"recognitionEvidence,omitempty"`
+	BasisEvidence       string `json:"basisEvidence,omitempty"`
+	ItemHint            string `json:"itemHint,omitempty"`
 	FullContext         string `json:"fullContext,omitempty"`
 }
 
@@ -6423,30 +6427,23 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			packagedResolutionFallback++
 		}
 		resolve, err := s.nutrition.ResolveFood(ctx, lookups[i].nutritionName)
+		if resolve != nil && resolve.Food != nil {
+			if reason := nutritionReuseRejection(item, resolve.Food); reason != "" {
+				rejectNutritionReuse(ctx, item, resolve.Food, reason)
+				resolve = nil
+			}
+		}
 		if err != nil || resolve == nil || resolve.Food == nil {
 			if err == nil && strings.TrimSpace(lookups[i].nutritionName) != "" {
-				semanticQueries[index] = nutritionCandidateQuery{
-					QueryName:           lookups[i].nutritionName,
-					OriginalName:        name,
-					FoodState:           strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["foodState"], item["food_state"]))),
-					WeightBasis:         strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["weightBasis"], item["weight_basis"]))),
-					RecognitionEvidence: strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["recognitionEvidence"], item["recognition_evidence"]))),
-				}
+				semanticQueries[index] = nutritionQueryForItem(item, lookups[i].nutritionName, options.additionalContext)
 				semanticEmbeddingEligible[index] = !shouldResolvePackagedFoodForDBFirst(item, options.packagedResolverEnabled())
-				if candidates, candidateErr := s.nutrition.SearchCandidates(ctx, lookups[i].nutritionName, resolveFoodCandidateLimit); candidateErr == nil && len(candidates) > 0 {
+				if candidates, candidateErr := s.searchNutritionCandidates(ctx, item, lookups[i].nutritionName, resolveFoodCandidateLimit); candidateErr == nil && len(candidates) > 0 {
 					semanticCandidates[index] = candidates
 				}
 			}
 			unresolvedCount++
 			if weight > 0 {
-				fallbackCandidates = append(fallbackCandidates, UnresolvedNutritionCandidate{
-					Index:                index,
-					Name:                 lookups[i].nutritionName,
-					EstimatedWeightGrams: weight,
-					FoodState:            strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["foodState"], item["food_state"]))),
-					WeightBasis:          strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["weightBasis"], item["weight_basis"]))),
-					BasisEvidence:        strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["basisEvidence"], item["basis_evidence"]))),
-				})
+				fallbackCandidates = append(fallbackCandidates, nutritionFallbackForItem(index, item, lookups[i].nutritionName))
 			}
 			lookups[i] = lookupItem{index: index, item: item, name: name, nutritionName: lookups[i].nutritionName, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: "unresolved", Score: 0}}
 		} else {
@@ -6520,7 +6517,9 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					if position < len(embeddingCandidates) {
 						embeddingRows = embeddingCandidates[position]
 					}
-					merged := mergeNutritionCandidateRecall(semanticCandidates[index], embeddingRows, resolveFoodCandidateLimit)
+					lexicalRows := compatibleNutritionCandidates(ctx, lookupByIndex[index].item, semanticCandidates[index])
+					embeddingRows = compatibleNutritionCandidates(ctx, lookupByIndex[index].item, embeddingRows)
+					merged := mergeNutritionCandidateRecall(lexicalRows, embeddingRows, resolveFoodCandidateLimit)
 					if len(merged) > 0 {
 						semanticCandidates[index] = merged
 					}
@@ -6529,6 +6528,9 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		}
 	}
 
+	for index, rows := range semanticCandidates {
+		semanticCandidates[index] = compatibleNutritionCandidates(ctx, lookupByIndex[index].item, rows)
+	}
 	if len(semanticCandidates) > 0 && !options.skipSemanticRerank {
 		phaseStart := time.Now()
 		if decisions, err := s.rerankNutritionCandidatesWithAI(ctx, semanticQueries, semanticCandidates); err != nil {
@@ -6551,6 +6553,9 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					}
 					selected := candidates[decision.SelectedCandidateIndex]
 					food := selected.Food
+					if nutritionReuseRejection(lookups[lookupIndex].item, &food) != "" {
+						continue
+					}
 					lookups[lookupIndex].resolve = &foodrecordrepo.ResolveResult{
 						Food:        &food,
 						Status:      "semantic_rerank",
@@ -6727,7 +6732,11 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 				if unresolvedCount > 0 {
 					unresolvedCount--
 				}
-				if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.nutritionName, fallbackUnit, fallbackSource); err != nil {
+				// Per-meal state/portion evidence must not become a generic same-name
+				// library value. The library writer cannot persist that contract.
+				if strings.TrimSpace(options.additionalContext) != "" || stringFromAny(next["foodState"]) != "" || stringFromAny(next["weightBasis"]) != "" || nutritionItemEvidence(next) != lookup.name {
+					next["nutrition_persist_skip_reason"] = "contextual_state_estimate"
+				} else if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.nutritionName, fallbackUnit, fallbackSource); err != nil {
 					deepseekPersistFailedCount++
 					logger.Warn(ctx, "智能营养补全写库失败",
 						logger.Err(err),
@@ -6761,6 +6770,10 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			continue
 		}
 		unit := nutritionUnit(resolve.Food)
+		next["nutrition_match_status"] = "accepted"
+		delete(next, "nutrition_match_reason")
+		next["matched_food_state"] = resolve.Food.FoodState
+		next["matched_weight_basis"] = resolve.Food.WeightBasis
 		next["matched_food_id"] = resolve.Food.ID
 		next["matched_food_name"] = resolve.Food.CanonicalName
 		next["standardized_food_name"] = resolve.Food.CanonicalName
@@ -8564,7 +8577,7 @@ func nutritionSource(status string) string {
 		return "library_exact_alias"
 	case "exact_canonical":
 		return "library_exact_canonical"
-	case "semantic_rerank":
+	case "semantic_rerank", "candidate_ai_verified":
 		return "library_semantic_rerank"
 	case "fuzzy":
 		return "library_fuzzy"
@@ -8594,6 +8607,8 @@ func nutritionSourceCategory(source string) string {
 		return "user_text"
 	case "web_search":
 		return "web_search"
+	case analysisEngineAIDirect, analysisEngineLegacyDirect, analysisEngineAIThenDBExact, analysisEngineDBCandidates:
+		return "llm_generated"
 	case "packaged_food_library", "packaged_candidate_pending",
 		"library_exact_alias", "library_exact_canonical",
 		"library_semantic_rerank", "library_fuzzy":
@@ -8796,6 +8811,7 @@ func (s *AnalyzeService) rerankNutritionCandidatesWithAI(ctx context.Context, qu
 		"task": "逐项判断候选中是否存在可以按同一每100克营养口径直接复用的完全同一食物",
 		"rules": []string{
 			"先比较食物主体，再比较加工/烹饪状态、配方组成、干湿/生熟营养口径；四项必须全部等价。",
+			"必须同时核对itemHint和basisEvidence中的去皮/带皮、去骨/带骨及可食部分。去皮后的净肉不能复用皮骨状态未知或带皮食物的营养。库状态、重量口径或可食部分缺少证据时拒绝，不得仅因名称相同或数值看起来合理就通过。",
 			"名称包含关系不代表同一食物，例如单一原料与糖果、饮料、酸奶、代餐粉或混合菜不能互相复用。",
 			"品牌包装食品还必须是同一品牌、产品、口味和规格；缺少证据时拒绝复用。",
 			"普通自然食物允许常见规范同义名，但品种或状态会显著改变每100克营养时拒绝复用。",

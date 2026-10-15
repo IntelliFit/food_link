@@ -1132,8 +1132,14 @@ func TestTaskService_UpdateTaskResult(t *testing.T) {
 	task := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "pending"}
 	require.NoError(t, taskRepo.CreateTask(ctx, task))
 
-	err := svc.UpdateTaskResult(ctx, task.ID, "user1", map[string]any{"result": "ok"})
+	validResult := map[string]any{"items": []any{map[string]any{"name": "五花肉", "estimatedWeightGrams": 200.0, "nutrients": map[string]any{"calories": 800.0, "protein": 20.0, "carbs": 0.0, "fat": 80.0}}}}
+	err := svc.UpdateTaskResult(ctx, task.ID, "user1", validResult)
 	require.NoError(t, err)
+	err = svc.UpdateTaskResult(ctx, task.ID, "user1", map[string]any{"items": []any{map[string]any{"name": "五花肉", "estimatedWeightGrams": 0.0, "nutrients": map[string]any{"calories": 0.0}}}})
+	require.Error(t, err, "客户端不能把零值结果回写成有效任务")
+	stored, lookupErr := taskRepo.GetTaskByID(ctx, task.ID)
+	require.NoError(t, lookupErr)
+	assert.Equal(t, 200.0, numberFromAny(toItems(stored.Result["items"])[0]["estimatedWeightGrams"]), "拒绝更新后原有效结果必须保留")
 
 	err = svc.UpdateTaskResult(ctx, task.ID, "user2", map[string]any{})
 	assert.Error(t, err)
@@ -1184,7 +1190,10 @@ func TestTaskService_CreateBatchTask(t *testing.T) {
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
 	ctx := context.Background()
 
-	taskID, err := svc.CreateBatchTask(ctx, "user1", []string{"https://example.com/1.jpg"}, map[string]any{}, map[string]any{"items": []any{}})
+	_, err := svc.CreateBatchTask(ctx, "user1", []string{"https://example.com/1.jpg"}, map[string]any{}, map[string]any{"items": []any{}})
+	require.Error(t, err, "空结果不能创建done任务")
+	validResult := map[string]any{"items": []any{map[string]any{"name": "五花肉", "estimatedWeightGrams": 200.0, "nutrients": map[string]any{"calories": 800.0, "protein": 20.0, "carbs": 0.0, "fat": 80.0}}}}
+	taskID, err := svc.CreateBatchTask(ctx, "user1", []string{"https://example.com/1.jpg"}, map[string]any{}, validResult)
 	require.NoError(t, err)
 	assert.NotEmpty(t, taskID)
 }

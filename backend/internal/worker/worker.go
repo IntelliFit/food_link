@@ -120,6 +120,7 @@ type analyzeRunner interface {
 	RunPrecisionJSONWithImagesTemperatureNoFallback(context.Context, string, string, []string, string, float64) (map[string]any, error)
 	ApplyDBFirstToItems(context.Context, []map[string]any, string) []map[string]any
 	ApplyDBFirstToItemsWithPreciseMicronutrients(context.Context, []map[string]any, string) ([]map[string]any, error)
+	ApplyPrecisionNutrition(context.Context, []map[string]any, analyzeservice.AnalyzeInput) ([]map[string]any, error)
 }
 
 func selectPrecisionModel(analyze analyzeRunner, routingKey string) string {
@@ -2366,9 +2367,13 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	if sourceType != "text" {
 		sourceType = "image"
 	}
-	latestInputs := session.LatestInputs
-	if latestInputs == nil {
-		latestInputs = map[string]any{}
+	latestInputs := copyAnyMap(session.LatestInputs)
+	for _, key := range []string{"analysis_engine", "execution_mode", "precise_micronutrients"} {
+		if _, exists := latestInputs[key]; !exists {
+			if value, ok := task.Payload[key]; ok {
+				latestInputs[key] = value
+			}
+		}
 	}
 	if done, err := r.completeCorrectionTask(ctx, task, sessionID, roundIndex, latestInputs); done || err != nil {
 		return err
@@ -2744,17 +2749,12 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 			)
 		}
 	}
-	var dbItems []map[string]any
-	if requiresPreciseCampusMicronutrients(task.Payload) {
-		dbItems, err = r.analyze.ApplyDBFirstToItemsWithPreciseMicronutrients(ctx, parsedItems, additionalContext)
-		if err != nil {
-			if estimate != nil {
-				_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": sanitizeTaskErrorMessage(err)})
-			}
-			return err
+	dbItems, err := r.resolvePrecisionNutrition(ctx, parsedItems, plannedItems, task.Payload)
+	if err != nil {
+		if estimate != nil {
+			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": sanitizeTaskErrorMessage(err)})
 		}
-	} else {
-		dbItems = r.analyze.ApplyDBFirstToItems(ctx, parsedItems, additionalContext)
+		return err
 	}
 	if err := analyzeservice.ValidateResolvedNutritionItems(dbItems); err != nil {
 		if estimate != nil {
@@ -3094,7 +3094,7 @@ func precisionPendingRequirements(result map[string]any) []any {
 }
 
 func copyPrecisionPlanningPayload(source, target map[string]any) {
-	for _, key := range []string{"capture_protocol", "precision_options", "capture_views", "video_capture", "reference_object", "answers", "continue_with_uncertainty"} {
+	for _, key := range []string{"analysis_engine", "execution_mode", "precise_micronutrients", "capture_protocol", "precision_options", "capture_views", "video_capture", "reference_object", "answers", "continue_with_uncertainty"} {
 		if value, ok := source[key]; ok {
 			target[key] = value
 		}

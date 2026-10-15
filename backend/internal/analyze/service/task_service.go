@@ -1554,6 +1554,12 @@ func (s *TaskService) UpdateTaskResult(ctx context.Context, taskID, userID strin
 	if result == nil {
 		result = map[string]any{}
 	}
+	if task.TaskType == "food" || task.TaskType == "food_text" || task.TaskType == "precision_aggregate" {
+		if err := ValidateResolvedNutritionItems(toItems(result["items"])); err != nil {
+			logger.Warn(ctx, "拦截无效识别结果更新", slog.String("task_id", taskID), slog.String("user_id", userID), logger.Err(err))
+			return &errors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+		}
+	}
 	delete(result, contentsecurity.ApprovalKey)
 	delete(result, contentsecurity.WaitingKey)
 	if approval, ok := task.Result[contentsecurity.ApprovalKey]; ok {
@@ -2032,6 +2038,10 @@ func (s *TaskService) CleanupTimeoutTasks(ctx context.Context, timeoutMinutes in
 }
 
 func (s *TaskService) CreateBatchTask(ctx context.Context, userID string, imageURLs []string, payload map[string]any, result map[string]any) (string, error) {
+	if err := ValidateResolvedNutritionItems(toItems(result["items"])); err != nil {
+		logger.Warn(ctx, "拦截无效批量识别结果", slog.String("user_id", userID), logger.Err(err))
+		return "", &errors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+	}
 	var imageURL *string
 	if len(imageURLs) > 0 {
 		imageURL = &imageURLs[0]

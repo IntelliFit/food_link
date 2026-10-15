@@ -41,6 +41,31 @@ func ValidateFoodItemsForRecording(items []FoodItem) error {
 		if err := ValidateFoodNutritionValues(item.Name, item.Weight, n.Calories, n.Protein, n.Carbs, n.Fat); err != nil {
 			return err
 		}
+		if hasModelNutritionSource(item) && n.Protein+n.Carbs+n.Fat == 0 && !ZeroEnergyFood(item.Name) {
+			return fmt.Errorf("食物「%s」缺少有效三大营养素，请重新分析", item.Name)
+		}
 	}
 	return nil
+}
+
+func hasModelNutritionSource(item FoodItem) bool {
+	for _, value := range []*string{item.NutritionSource, item.NutritionSourceCategory} {
+		if value != nil && strings.EqualFold(strings.TrimSpace(*value), "user_correction_context") {
+			return false
+		}
+	}
+	for _, value := range []*string{item.NutritionSource, item.NutritionSourceCategory} {
+		if value == nil {
+			continue
+		}
+		source := strings.ToLower(strings.TrimSpace(*value))
+		if IsAIGeneratedNutritionSource(source) {
+			return true
+		}
+		switch source {
+		case "ai_direct", "legacy_direct", "ai_then_db_exact", "db_candidates_ai":
+			return true
+		}
+	}
+	return false
 }

@@ -177,10 +177,8 @@ func TestCandidateGuidedNutritionInjectsFullContextAndCanRejectAllCandidates(t *
 		AnalysisEngine: analysisEngineDBCandidates,
 	})
 	item := toItems(resp["items"])[0]
-	assert.Equal(t, "rejected_ai_kept", item["candidate_review_status"])
+	assert.Equal(t, "no_candidates_ai_kept", item["candidate_review_status"])
 	assert.Nil(t, item["matched_food_id"])
-	require.Len(t, client.prompts, 1)
-	assert.Contains(t, client.prompts[0], "整批只放5克油")
-	assert.Contains(t, client.prompts[0], "油炸薯条")
-	assert.Contains(t, client.prompts[0], "拒绝候选并保留AI原始估算")
+	assert.Equal(t, "food_state_conflict", item["nutrition_match_reason"])
+	assert.Empty(t, client.prompts) // A model cannot override a known state conflict.
 }

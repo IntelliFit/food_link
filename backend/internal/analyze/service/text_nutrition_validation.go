@@ -12,12 +12,63 @@ import (
 
 const fastTextModel = "qwen-flash"
 
+func textNutritionJSONSchema(withNutrition bool) map[string]any {
+	nutrientKeys := append([]string{"calories", "protein", "carbs", "fat"}, preciseMicronutrientKeys...)
+	nutrientProperties := map[string]any{}
+	for _, key := range nutrientKeys {
+		nutrientProperties[key] = map[string]any{"type": "number", "minimum": 0}
+	}
+	text := func() map[string]any { return map[string]any{"type": "string"} }
+	textList := map[string]any{"type": "array", "items": text()}
+	itemProperties := map[string]any{
+		"name":                 map[string]any{"type": "string", "minLength": 1},
+		"type":                 map[string]any{"type": "string", "enum": []string{"normal", "snack", "packaged"}},
+		"estimatedWeightGrams": map[string]any{"type": "number", "exclusiveMinimum": 0},
+		"nutrients":            map[string]any{"type": "object", "properties": nutrientProperties, "required": nutrientKeys, "additionalProperties": false},
+		"foodState":            text(), "weightBasis": text(), "basisEvidence": text(), "isComposite": map[string]any{"type": "boolean"},
+		"addedIngredients": map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": true}},
+		"assumptions":      textList, "suggestedRatio": map[string]any{"type": "number", "minimum": 0, "maximum": 100},
+		"grossWeightGrams":    map[string]any{"type": "number", "minimum": 0},
+		"ediblePortionRatio":  map[string]any{"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+		"ediblePortionReason": text(), "waterMl": map[string]any{"type": "number", "minimum": 0},
+	}
+	itemRequired := []string{"name", "type", "estimatedWeightGrams"}
+	if withNutrition {
+		itemRequired = append(itemRequired, "nutrients", "foodState", "weightBasis", "basisEvidence", "isComposite", "addedIngredients", "assumptions", "suggestedRatio")
+	} else {
+		delete(itemProperties, "nutrients")
+	}
+	properties := map[string]any{"items": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "object", "properties": itemProperties, "required": itemRequired, "additionalProperties": false}}, "uncertaintyNotes": textList}
+	required := []string{"items", "uncertaintyNotes"}
+	for _, key := range []string{"description", "insight", "pfc_ratio_comment", "eating_order_advice", "absorption_notes", "context_advice"} {
+		properties[key] = text()
+		required = append(required, key)
+	}
+	return map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}
+}
+
+// Record field presence/type, never the complete prompt or model response.
+func textResultShape(parsed map[string]any) string {
+	items := toItems(parsed["items"])
+	if len(items) == 0 {
+		return "no_items"
+	}
+	item := items[0]
+	weight, hasWeight := item["estimatedWeightGrams"]
+	nutrients := mapFromAny(item["nutrients"])
+	calories, hasCalories := nutrients["calories"]
+	weightNumber, weightNumeric := finiteNutritionNumber(weight)
+	caloriesNumber, caloriesNumeric := finiteNutritionNumber(calories)
+	return fmt.Sprintf("weight_present=%t weight_type=%T weight_numeric=%t weight_positive=%t calories_present=%t calories_type=%T calories_numeric=%t calories_positive=%t nutrient_fields=%d", hasWeight, weight, weightNumeric, weightNumber > 0, hasCalories, calories, caloriesNumeric, caloriesNumber > 0, len(nutrients))
+}
+
 var textWeightQuantity = `([0-9]+(?:\.[0-9]+)?)\s*(kg|KG|公斤|千克|斤|两|g|G|克)`
+var textFoodNameQualifier = regexp.MustCompile(`[（(][^）)]*[）)]`)
 
 // Match only a quantity directly attached to this food. Do not distribute a
 // recipe's total, an ingredient's weight, or a separate dish across all items.
 func explicitTextItemWeight(text, name string) (float64, bool) {
-	name = strings.TrimSpace(name)
+	name = strings.TrimSpace(textFoodNameQualifier.ReplaceAllString(name, ""))
 	if name == "" {
 		return 0, false
 	}
@@ -49,7 +100,13 @@ func explicitTextItemWeight(text, name string) (float64, bool) {
 
 func normalizeAndValidateTextResult(parsed map[string]any, input AnalyzeInput) (map[string]any, error) {
 	parsed = copyAnyMap(normalizePayload(parsed))
-	items := toItems(parsed["items"])
+	rawItems := toItems(parsed["items"])
+	items := make([]map[string]any, 0, len(rawItems))
+	for _, raw := range rawItems {
+		item := copyAnyMap(raw)
+		item["nutrients"] = copyAnyMap(mapFromAny(raw["nutrients"]))
+		items = append(items, item)
+	}
 	if len(items) == 0 {
 		return nil, &LLMJSONParseError{Err: ErrEmptyFoodAnalysisResult}
 	}
@@ -60,7 +117,9 @@ func normalizeAndValidateTextResult(parsed map[string]any, input AnalyzeInput) (
 			// Explicit gross weights of shelled/bony foods still require edible
 			// conversion. A boneless food such as pork belly keeps the stated grams.
 			ratio := numberFromAny(firstNonNil(item["ediblePortionRatio"], item["edible_portion_ratio"]))
-			if ratio <= 0 || ratio >= 100 {
+			plainName := strings.TrimSpace(textFoodNameQualifier.ReplaceAllString(name, ""))
+			bonelessPork := (plainName == "五花肉" || plainName == "猪肉" || plainName == "猪五花肉") && !strings.Contains(input.Text, "骨") && !strings.Contains(input.Text, "去皮") && !strings.Contains(input.Text, "皮不吃")
+			if ratio <= 0 || ratio >= 100 || bonelessPork {
 				if weight > 0 && math.Abs(explicit-weight) > 0.001 {
 					nutrients := mapFromAny(item["nutrients"])
 					for key, value := range nutrients {
@@ -73,18 +132,18 @@ func normalizeAndValidateTextResult(parsed map[string]any, input AnalyzeInput) (
 				item["estimatedWeightGrams"] = explicit
 				item["originalWeightGrams"] = explicit
 				item["grossWeightGrams"] = explicit
+				item["ediblePortionRatio"] = 100.0
 				item["weight_method"] = "user_explicit_weight"
 				item["weight_confidence"] = 1.0
 				item["needs_user_confirmation"] = false
 			}
 		}
-		// DB-first parses names and portions before the nutrition resolver runs.
-		// Its prompt deliberately forbids model nutrition. Finalized results and
-		// recording still require complete valid nutrition.
+		if strings.TrimSpace(name) == "" || weight <= 0 || math.IsNaN(weight) || math.IsInf(weight, 0) {
+			return nil, &LLMJSONParseError{Err: fmt.Errorf("文字食物分析缺少有效名称或份量")}
+		}
+		// Database-first parses the food/weight before the resolver supplies
+		// nutrition. Do not require model nutrition that its prompt forbids.
 		if !analysisEngineProducesNutrition(input.AnalysisEngine) {
-			if strings.TrimSpace(name) == "" || weight <= 0 || math.IsNaN(weight) || math.IsInf(weight, 0) {
-				return nil, &LLMJSONParseError{Err: fmt.Errorf("文字食物分析缺少有效名称或份量")}
-			}
 			continue
 		}
 		nutrients := mapFromAny(item["nutrients"])
@@ -99,6 +158,9 @@ func normalizeAndValidateTextResult(parsed map[string]any, input AnalyzeInput) (
 		}
 		if err := foodrecorddomain.ValidateFoodNutritionValues(name, weight, values[0], values[1], values[2], values[3]); err != nil {
 			return nil, &LLMJSONParseError{Err: err}
+		}
+		if values[1]+values[2]+values[3] == 0 && !foodrecorddomain.ZeroEnergyFood(name) {
+			return nil, &LLMJSONParseError{Err: fmt.Errorf("文字食物分析缺少有效三大营养素")}
 		}
 	}
 	parsed["items"] = items
