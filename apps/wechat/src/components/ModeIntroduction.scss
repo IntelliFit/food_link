@@ -75,4 +75,15 @@
 @keyframes mode-intro-bar { from { transform: scaleY(.15); } to { transform: scaleY(1); } }
 @keyframes mode-intro-ink { from { transform: rotate(-80deg); opacity: 0; } to { transform: rotate(0); opacity: 1; } }
 @keyframes mode-intro-ripple { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .mode-introduction *, .mode-introduction { animation: none !important; transition: none !important; } }
+// Taro removes universal selectors; explicit targets keep this WXSS media block valid.
+@media (prefers-reduced-motion: reduce) {
+  .mode-introduction,
+  .mode-introduction__plate,
+  .mode-introduction__bars > view,
+  .mode-introduction__taiji,
+  .mode-introduction__ripple,
+  .mode-introduction__progress > view {
+    animation: none !important;
+    transition: none !important;
+  }
+}
