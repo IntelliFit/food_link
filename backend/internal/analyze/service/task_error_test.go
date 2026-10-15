@@ -13,6 +13,12 @@ func TestSanitizeAIUpstreamErrorMessage(t *testing.T) {
 		forbid string
 	}{
 		{
+			name:   "incomplete food analysis hides parser fields",
+			input:  "parse llm json failed: 文字食物分析缺少有效calories",
+			want:   "本次食物分析结果不完整，请重试或修改食物描述",
+			forbid: "calories",
+		},
+		{
 			name:   "model not found",
 			input:  "doubao api error 400: model not found",
 			want:   "AI 识别服务配置异常，请联系管理员处理",

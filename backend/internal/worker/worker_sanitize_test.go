@@ -141,6 +141,51 @@ type workerMixedMealLLMClient struct {
 	calls int
 }
 
+type workerCorrectionParseClient struct {
+	calls int
+}
+
+func (c *workerCorrectionParseClient) Analyze(_ context.Context, prompt, _ string) (map[string]any, error) {
+	c.calls++
+	return map[string]any{"items": []any{map[string]any{"name": "白米饭", "type": "normal", "estimatedWeightGrams": 50.0, "ediblePortionRatio": 100.0}}}, nil
+}
+
+func TestResolveScopedCorrection_PhotoListEditUsesDatabaseNutrition(t *testing.T) {
+	client := &workerCorrectionParseClient{}
+	analyze := analyzeservice.NewAnalyzeService(nil, client, nil)
+	resolver := newWorkerFakeNutritionResolver()
+	resolver.rice.FiberPer100g, resolver.rice.SugarPer100g = 1, 1
+	resolver.rice.SaturatedFatPer100g, resolver.rice.SodiumMgPer100g = 1, 1
+	analyze.ConfigureNutritionResolver(resolver)
+	runner := &Runner{analyze: analyze}
+	unchanged := map[string]any{"itemId": 2, "name": "杂粮饭", "estimatedWeightGrams": 180.0, "intakeRatio": 100.0, "nutrients": map[string]any{"calories": 201.1, "protein": 5.8, "carbs": 41.1, "fat": 1.5}}
+	resized := map[string]any{"itemId": 3, "name": "青椒炒肉丝", "estimatedWeightGrams": 20.0, "nutrients": map[string]any{"calories": 27.6, "protein": 1.6, "carbs": 0.8, "fat": 2.0}}
+	removed := map[string]any{"itemId": 4, "name": "西兰花", "estimatedWeightGrams": 90.0, "nutrients": map[string]any{"calories": 50.0}}
+	mode := "standard"
+	result, err := runner.resolveScopedCorrection(context.Background(), "", analyzeservice.AnalyzeInput{
+		AnalysisEngine: "db_first", ModelName: "gemini-3.7-flash", ExecutionMode: &mode,
+		PreviousResult: map[string]any{"items": []any{unchanged, resized, removed}},
+		CorrectionItems: []map[string]any{
+			{"sourceItemId": 2, "name": "杂粮饭", "weight": 180.0},
+			{"sourceItemId": 3, "name": "青椒炒肉丝", "weight": 35.0},
+			{"sourceItemId": 4, "name": "白米饭", "weight": 50.0},
+			{"itemId": 5, "name": "白米饭", "weight": 25.0},
+		},
+	}, nil)
+	require.NoError(t, err, "拍照后的新增/改名应先解析再查库，不能因模型不输出营养而失败")
+	items := extractItems(result["items"])
+	require.Len(t, items, 4)
+	require.Equal(t, unchanged, items[0], "未修改项必须保持原值")
+	require.Equal(t, 35.0, items[1]["estimatedWeightGrams"])
+	require.Equal(t, 48.3, mapFromAny(items[1]["nutrients"])["calories"])
+	require.Equal(t, 50.0, items[2]["estimatedWeightGrams"])
+	require.Equal(t, 58.0, mapFromAny(items[2]["nutrients"])["calories"])
+	require.Equal(t, 25.0, items[3]["estimatedWeightGrams"])
+	require.Equal(t, 29.0, mapFromAny(items[3]["nutrients"])["calories"])
+	require.Equal(t, 0, client.calls, "已确认名称和重量不应再次调用文字解析模型")
+	require.NoError(t, analyzeservice.ValidateResolvedNutritionItems(items))
+}
+
 func (c *workerMixedMealLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
 	c.calls++
 	if strings.Contains(prompt, "suggestedRatio") && strings.Contains(prompt, "健康饮食决策助手") {
