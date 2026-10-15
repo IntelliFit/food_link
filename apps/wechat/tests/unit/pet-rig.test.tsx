@@ -87,6 +87,19 @@ test.each(Object.keys(PET_RIGS))('%s contacts the pedals throughout a complete c
     expect(pose.farGrip.x).toBeCloseTo(pose.grip.x - 3, 6)
   }
 })
+test.each(Object.keys(PET_RIGS))('%s visibly lifts and presses alternating bicycle knees through a full loop', key => {
+  const rig = PET_RIGS[key]
+  const poses = Array.from({ length: 160 }, (_, i) => rigPose(rig, 'bicycle', 'ride', i * 10))
+  const legLength = Math.min(...rig.legs.map(b => distance(b[0], b[1]) + distance(b[1], b[2]))) * poses[0].scale
+  const span = (joint: number, axis: 'x' | 'y' = 'y') => Math.max(...poses.map(p => p.legs[0][joint][axis])) - Math.min(...poses.map(p => p.legs[0][joint][axis]))
+  expect(span(2)).toBeGreaterThan(legLength * .42)
+  // The bent knee moves both forwards and upwards in the side camera.
+  expect(Math.hypot(span(1, 'x'), span(1))).toBeGreaterThan(legLength * .42)
+  expect(poses[0].legs[0][2].y).toBeLessThan(poses[0].legs[1][2].y)
+  expect(poses[80].legs[0][2].y).toBeGreaterThan(poses[80].legs[1][2].y)
+  expect(rigPose(rig, 'bicycle', 'ride', 1600)).toEqual(poses[0])
+})
+
 test.each(Object.keys(PET_RIGS))('%s scooter keeps a planted foot, pushes along the ground and returns to the deck', key => {
   const rig = PET_RIGS[key], stages = new Set<string>()
   const rest = rigPose(rig, 'scooter', 'ride', 0)

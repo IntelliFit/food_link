@@ -175,7 +175,7 @@ export function rigPose(rig: PetRig, vehicle: PetTransportId | undefined, action
   }
   // A low deck lets short-legged characters reach the ground without squatting.
   const deck = 188 - Math.min(4, total * .12)
-  const radius = Math.min(10, total * .16)
+  const radius = Math.min(14, total * .22)
   const crank = p(103, 155)
   const theta = phase * Math.PI * 2 - Math.PI / 2
   const pedals: [Point, Point] = [p(crank.x + radius * Math.cos(theta) * vehicleProjection, crank.y + radius * Math.sin(theta)), p(crank.x - radius * Math.cos(theta) * vehicleProjection, crank.y - radius * Math.sin(theta))]

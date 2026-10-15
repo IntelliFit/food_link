@@ -116,6 +116,7 @@ function armLayerClip(ctx: CanvasRenderingContext2D, rig: PetRig, pose: RigPose,
   return visible
 }
 export function drawPetRig(ctx: CanvasRenderingContext2D, image: CanvasImageSource, rig: PetRig, pose: RigPose, vehicle?: PetTransportId, ground = false, armImage?: CanvasImageSource, vehicleAlpha = 1, profileImage?: CanvasImageSource) {
+  const cycling = vehicle === 'bicycle' || !vehicle && pose.action === 'ride'
   ctx.clearRect(0, 0, 200, 220)
   if (ground) line(ctx, { x: 5, y: pose.floor + 2 }, { x: 195, y: pose.floor + 2 }, '#b8ba9a', .8)
   ctx.save(); ctx.translate(100, pose.floor + 1); ctx.scale(1, .15); disc(ctx, 0, 0, 39, 'rgba(51,62,43,.12)'); ctx.restore()
@@ -156,11 +157,15 @@ export function drawPetRig(ctx: CanvasRenderingContext2D, image: CanvasImageSour
     if (layer && !holding && !armLayerClip(ctx, rig, pose, side, layer === 'front')) { ctx.restore(); return }
     const src = rig[kind][side], dest = pose[kind][side], width = kind === 'legs' ? rig.legWidth : rig.armWidth
     if (kind === 'legs') {
-      segment(ctx, image, src[0], src[1], dest[0], dest[1], width, pose.scale, width / 2, false, pose.projectedLegs)
+      // Front-view trouser widths hid the alternating knees in a side view.
+      // Project their thickness too, keeping the source pixels and bone lengths.
+      const thickness = cycling ? Math.min(Math.sqrt(pose.bodyWidth ** 2 + .45 * (1 - pose.bodyWidth ** 2)), (distance(src[0], src[1]) + distance(src[1], src[2])) / width * .5) : 1
+      const legScale = pose.scale * (1 + (thickness - 1) * pose.travelFacing)
+      segment(ctx, image, src[0], src[1], dest[0], dest[1], width, legScale, width / 2, false, pose.projectedLegs)
       const length = distance(src[1], src[2]), factor = Math.max(.5, 1 - 4 / length)
       const cut = { x: src[1].x + (src[2].x - src[1].x) * factor, y: src[1].y + (src[2].y - src[1].y) * factor }
       const end = { x: dest[1].x + (dest[2].x - dest[1].x) * factor, y: dest[1].y + (dest[2].y - dest[1].y) * factor }
-      segment(ctx, image, src[1], cut, dest[1], end, width, pose.scale, width / 2, true, pose.projectedLegs)
+      segment(ctx, image, src[1], cut, dest[1], end, width, legScale, width / 2, true, pose.projectedLegs)
       // Shoe roll is independent of the shin, with heel/toe ground contact.
       const bottom = ({ huatuo: 236, taiji: 236, xiaomai: 239, doudou: 236 } as Record<string, number>)[rig.key] || rig.floor
       const h = Math.max(8, bottom - src[2].y + 4), w = width + 4
@@ -224,9 +229,12 @@ export function drawPetRig(ctx: CanvasRenderingContext2D, image: CanvasImageSour
   limbs('arms', 0, pose.bodyWidth < 1 ? 'back' : undefined)
   if (pose.bodyWidth < 1) limbs('arms', 1, 'back')
   // The far leg passes behind the frame; the near outer leg covers it.
-  if (pose.bodyWidth < 1) { limbs('legs', 1); vehicleLayer(false); limbs('legs', 0) }
+  if (pose.bodyWidth < 1) { limbs('legs', 1); vehicleLayer(false); if (!cycling) limbs('legs', 0) }
   else { vehicleLayer(false); limbs('legs', 0); limbs('legs', 1) }
   bodyPart(ctx, image, rig.torso, rig, pose)
+  // The outer bent thigh passes in front of a seated coat/robe. Painting the
+  // whole upright garment last previously covered even the animated knee.
+  if (cycling && pose.bodyWidth < 1) limbs('legs', 0)
   if (pose.bodyWidth < 1) { limbs('arms', 1, 'front'); limbs('arms', 0, 'front') }
   else limbs('arms', 1)
   const profile = rig.profileHead
