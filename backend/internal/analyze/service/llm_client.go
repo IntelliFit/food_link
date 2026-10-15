@@ -135,6 +135,14 @@ func (c *OfoxAIClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prom
 	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, "", nil)
 }
 
+// The strict schema is text-only and is used only for model families that
+// advertise JSON Schema support. Legacy text models retain the local gate.
+func (c *OfoxAIClient) AnalyzeTextWithJSONSchema(ctx context.Context, prompt, model string, schema map[string]any) (map[string]any, error) {
+	return c.analyzeWithImagesAndTemperature(ctx, prompt, nil, 0, model, map[string]any{
+		"response_format": map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "food_text_nutrition", "strict": true, "schema": schema}},
+	})
+}
+
 func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
 	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, modelName, nil)
 }

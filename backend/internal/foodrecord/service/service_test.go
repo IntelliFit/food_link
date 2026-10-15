@@ -61,6 +61,7 @@ func TestFoodRecordService_Save(t *testing.T) {
 		MealType:      "lunch",
 		TotalCalories: 500,
 		TotalProtein:  20,
+		Items:         []domain.FoodItem{{Name: "午餐", Weight: 300, Nutrients: domain.FoodItemNutrients{Calories: 500, Protein: 20, Carbs: 60, Fat: 20}}},
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, record.ID)
@@ -1372,7 +1373,7 @@ func TestFoodRecordService_Update_Items(t *testing.T) {
 	record := &domain.FoodRecord{UserID: "u1", MealType: "lunch", RecordTime: &now, TotalCalories: 500}
 	require.NoError(t, r.Create(ctx, record))
 
-	items := []domain.FoodItem{{Name: "apple", Weight: 100}}
+	items := []domain.FoodItem{{Name: "apple", Weight: 100, Nutrients: domain.FoodItemNutrients{Calories: 52, Protein: 0.3, Carbs: 13.8, Fat: 0.2}}}
 	patches := ApplyMethod(reflect.TypeOf(r), "Update", func(_ *foodrepo.FoodRecordRepo, _ context.Context, _, _ string, updates map[string]any) (*domain.FoodRecord, error) {
 		// Verify items is in updates
 		assert.NotNil(t, updates["items"])

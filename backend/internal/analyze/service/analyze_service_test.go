@@ -237,6 +237,8 @@ func newFakeAnalyzeNutritionResolver() *fakeAnalyzeNutritionResolver {
 			ID:             "rice-1",
 			CanonicalName:  "白米饭",
 			NormalizedName: "白米饭",
+			FoodState:      "cooked",
+			WeightBasis:    "as_served",
 			KcalPer100g:    116,
 			ProteinPer100g: 2.6,
 			CarbsPer100g:   25.9,
@@ -1643,6 +1645,14 @@ func TestAnalyzeService_AnalyzeText(t *testing.T) {
 	assert.Equal(t, true, mapFromAny(result["precise_micronutrients"])["requested"])
 	assert.Equal(t, 1, qwenClient.calls)
 	assert.Equal(t, 0, doubaoClient.calls)
+	for _, text := range []string{"200g五花肉", "200克五花肉", "五花肉200克"} {
+		t.Run(text+"含生熟名称修饰", func(t *testing.T) {
+			qwenClient.result = map[string]any{"items": []any{map[string]any{"name": "五花肉（生）", "estimatedWeightGrams": 0.0, "ediblePortionRatio": 90.0, "nutrients": nutrients}}}
+			result, analyzeErr := svc.AnalyzeText(ctx, "", AnalyzeInput{Text: text})
+			require.NoError(t, analyzeErr)
+			assert.Equal(t, 200.0, numberFromAny(toItems(result["items"])[0]["estimatedWeightGrams"]), "名称修饰和模型可食比例不能覆盖明确五花肉份量")
+		})
+	}
 	qwenClient.result = map[string]any{"items": []any{}}
 	_, err = svc.AnalyzeText(ctx, "", AnalyzeInput{Text: "200g五花肉"})
 	require.Error(t, err, "空结果不能标记为成功")
@@ -1656,10 +1666,10 @@ func TestAnalyzeService_AnalyzeText(t *testing.T) {
 		// Production corrections add one dish through AnalyzeText(db_first).
 		// The parser intentionally supplies no nutrition; only the final result
 		// must contain database macros and the complete micronutrient profile.
-		client := &mockLLMClient{result: map[string]any{"items": []any{map[string]any{"name": "炒菠菜", "type": "normal", "estimatedWeightGrams": 50.0, "ediblePortionRatio": 100.0}}}}
+		client := &mockLLMClient{result: map[string]any{"items": []any{map[string]any{"name": "炒菠菜", "type": "normal", "foodState": "cooked", "weightBasis": "as_served", "estimatedWeightGrams": 50.0, "ediblePortionRatio": 100.0}}}}
 		correctionService := NewAnalyzeService(nil, client, nil)
 		resolver := newFakeAnalyzeNutritionResolver()
-		resolver.ordinaryFoods["炒菠菜"] = foodrecorddomain.FoodNutrition{ID: "spinach", CanonicalName: "炒菠菜", NormalizedName: "炒菠菜", KcalPer100g: 68, ProteinPer100g: 2.6, CarbsPer100g: 4.2, FatPer100g: 4.5, IsActive: true}
+		resolver.ordinaryFoods["炒菠菜"] = foodrecorddomain.FoodNutrition{ID: "spinach", CanonicalName: "炒菠菜", NormalizedName: "炒菠菜", FoodState: "cooked", WeightBasis: "cooked", KcalPer100g: 68, ProteinPer100g: 2.6, CarbsPer100g: 4.2, FatPer100g: 4.5, IsActive: true}
 		correctionService.ConfigureNutritionResolver(resolver)
 		unit := map[string]any{fallbackNutritionSourceKey: "qwen_generated", "calories": 68.0, "protein": 2.6, "carbs": 4.2, "fat": 4.5}
 		for _, key := range preciseMicronutrientKeys {
@@ -1678,7 +1688,12 @@ func TestAnalyzeService_AnalyzeText(t *testing.T) {
 		assert.Equal(t, "completed", mapFromAny(result["precise_micronutrients"])["status"])
 		require.NoError(t, ValidateResolvedNutritionItems(items))
 	})
-
+	t.Run("模型错误字段不能变为零值成功", func(t *testing.T) {
+		_, parseErr := normalizeAndValidateTextResult(map[string]any{"items": []any{map[string]any{"name": "五花肉", "estimatedWeightGrams": 200.0, "nutrients": map[string]any{",calories": 790.0, ",protein": 27.2}}}}, AnalyzeInput{Text: "200克五花肉", AnalysisEngine: "ai_direct"})
+		require.Error(t, parseErr)
+		_, parseErr = normalizeAndValidateTextResult(map[string]any{"items": []any{map[string]any{"name": "猪肉", "200克猪肉": nil, "basisEvidence": "用户仅写"}}}, AnalyzeInput{Text: "200克猪肉", AnalysisEngine: "ai_direct"})
+		require.Error(t, parseErr)
+	})
 }
 
 func TestAnalyzeService_AnalyzeTextRequiresConfiguredTextModel(t *testing.T) {
@@ -2773,7 +2788,8 @@ func mixedMealWithPackagedFoodParsed() map[string]any {
 		"description": "米饭配面包",
 		"items": []any{
 			map[string]any{
-				"name":                 "白米饭",
+				"name":      "白米饭",
+				"foodState": "cooked", "weightBasis": "as_served",
 				"type":                 "normal",
 				"estimatedWeightGrams": 200.0,
 				"grossWeightGrams":     200.0,
@@ -3621,7 +3637,8 @@ func TestAnalyzeService_ApplyDBFirstToItemsIntegratesPackagedFoodForWorkerPrecis
 
 	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{
 		{
-			"name":                 "白米饭",
+			"name":      "白米饭",
+			"foodState": "cooked", "weightBasis": "as_served",
 			"type":                 "normal",
 			"estimatedWeightGrams": 150.0,
 			"grossWeightGrams":     150.0,
@@ -3803,8 +3820,9 @@ func TestAnalyzeService_ApplyDBFirstIntegratesPackagedFoodInMixedMeal(t *testing
 	setupAnalyzeFoodDB(t, db)
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
-		ID:             "rice-1",
-		CanonicalName:  "白米饭",
+		ID:            "rice-1",
+		CanonicalName: "白米饭",
+		FoodState:     "cooked", WeightBasis: "cooked",
 		NormalizedName: "白米饭",
 		KcalPer100g:    116,
 		ProteinPer100g: 2.6,
@@ -3829,7 +3847,8 @@ func TestAnalyzeService_ApplyDBFirstIntegratesPackagedFoodInMixedMeal(t *testing
 	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
 	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{
 		{
-			"name":                 "白米饭",
+			"name":      "白米饭",
+			"foodState": "cooked", "weightBasis": "as_served",
 			"type":                 "normal",
 			"estimatedWeightGrams": 200.0,
 		},
@@ -4055,14 +4074,16 @@ func TestAnalyzeService_ApplyDBFirstUsesWaterMlAsLiquidWeight(t *testing.T) {
 		ID:             "drink-1",
 		CanonicalName:  "可乐",
 		NormalizedName: "可乐",
-		KcalPer100g:    42,
-		CarbsPer100g:   10.6,
-		IsActive:       true,
+		FoodState:      "liquid", WeightBasis: "as_served",
+		KcalPer100g:  42,
+		CarbsPer100g: 10.6,
+		IsActive:     true,
 	}).Error)
 
 	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
 	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
-		"name":                 "可乐",
+		"name":      "可乐",
+		"foodState": "liquid", "weightBasis": "as_served",
 		"estimatedWeightGrams": 0.0,
 		"originalWeightGrams":  0.0,
 		"waterMl":              100.0,
@@ -4086,6 +4107,7 @@ func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
 		ID:             "icecream-1",
 		CanonicalName:  "蜜雪冰城原味冰淇淋蛋筒",
 		NormalizedName: "蜜雪冰城原味冰淇淋蛋筒",
+		FoodState:      "packaged", WeightBasis: "as_served",
 		KcalPer100g:    220,
 		ProteinPer100g: 4,
 		CarbsPer100g:   28,
@@ -4096,6 +4118,7 @@ func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
 		ID:             "icecream-2",
 		CanonicalName:  "蜜雪冰城蜜瓜冰淇淋",
 		NormalizedName: "蜜雪冰城蜜瓜冰淇淋",
+		FoodState:      "packaged", WeightBasis: "as_served",
 		KcalPer100g:    215,
 		ProteinPer100g: 4,
 		CarbsPer100g:   27,
@@ -4115,7 +4138,8 @@ func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
 	})}
 
 	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
-		"name":                 "蜜雪冰城原味冰淇淋",
+		"name":      "蜜雪冰城原味冰淇淋",
+		"foodState": "packaged", "weightBasis": "as_served",
 		"estimatedWeightGrams": 80.0,
 	}}, "")
 
@@ -4134,8 +4158,9 @@ func TestAnalyzeService_SemanticReuseDoesNotPersistModelSuggestedAlias(t *testin
 	resolver.searchCandidates = map[string][]foodrecordrepo.SearchCandidate{
 		"原味冰淇淋": {{
 			Food: foodrecorddomain.FoodNutrition{
-				ID:             "icecream-1",
-				CanonicalName:  "原味冰淇淋蛋筒",
+				ID:            "icecream-1",
+				CanonicalName: "原味冰淇淋蛋筒",
+				FoodState:     "packaged", WeightBasis: "as_served",
 				KcalPer100g:    220,
 				ProteinPer100g: 4,
 				CarbsPer100g:   28,
@@ -4155,7 +4180,8 @@ func TestAnalyzeService_SemanticReuseDoesNotPersistModelSuggestedAlias(t *testin
 	})}
 
 	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
-		"name":                 "原味冰淇淋",
+		"name":      "原味冰淇淋",
+		"foodState": "packaged", "weightBasis": "as_served",
 		"type":                 "dish",
 		"estimatedWeightGrams": 80.0,
 	}}, "")
@@ -4498,6 +4524,7 @@ func TestApplyDBFirstToItemsFallsBackToLibraryWhenNoIngredientLabel(t *testing.T
 		ID:             "apple-1",
 		CanonicalName:  "苹果",
 		NormalizedName: "苹果",
+		FoodState:      "raw", WeightBasis: "raw_edible",
 		KcalPer100g:    52,
 		ProteinPer100g: 0.3,
 		CarbsPer100g:   14.0,
@@ -4507,7 +4534,8 @@ func TestApplyDBFirstToItemsFallsBackToLibraryWhenNoIngredientLabel(t *testing.T
 
 	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
 	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
-		"name":                 "苹果",
+		"name":      "苹果",
+		"foodState": "fresh", "weightBasis": "as_served",
 		"estimatedWeightGrams": 200.0,
 		"type":                 "normal",
 	}}, "")

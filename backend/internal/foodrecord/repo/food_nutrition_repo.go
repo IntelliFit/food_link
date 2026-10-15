@@ -379,6 +379,10 @@ func allNutritionAliasesUnsafe(query string, aliasNames []string, canonicalName 
 }
 
 func isUnsafeNutritionAliasMatch(query, aliasName, canonicalName string) bool {
+	return isUnsafeNutritionAliasMatchWithState(query, aliasName, canonicalName, false)
+}
+
+func isUnsafeNutritionAliasMatchWithState(query, aliasName, canonicalName string, sourceStateKnown bool) bool {
 	queryNorm := normalizeFoodName(query)
 	aliasNorm := normalizeFoodName(aliasName)
 	canonicalNorm := normalizeFoodName(canonicalName)
@@ -390,7 +394,7 @@ func isUnsafeNutritionAliasMatch(query, aliasName, canonicalName string) bool {
 	if containsAnyToken(canonicalNorm, processedTokens) && !containsAnyToken(queryText, processedTokens) {
 		return true
 	}
-	if containsCJK(queryNorm) && isMostlyASCII(canonicalName) {
+	if containsCJK(queryNorm) && isMostlyASCII(canonicalName) && !sourceStateKnown {
 		return true
 	}
 	if isNutritionMixedDishName(queryText) && !isNutritionMixedDishName(canonicalNorm) && containsAnyToken(canonicalNorm, nutritionIngredientTokens) {
@@ -403,6 +407,19 @@ func isUnsafeNutritionAliasMatch(query, aliasName, canonicalName string) bool {
 		return true
 	}
 	return false
+}
+
+func allNutritionCandidateAliasesUnsafe(query string, names []string, food domain.FoodNutrition) bool {
+	if len(names) == 0 {
+		return false
+	}
+	known := domain.HasExplicitNutritionState(food) && food.QualityTier == domain.NutritionQualityAuthoritative
+	for _, name := range names {
+		if !isUnsafeNutritionAliasMatchWithState(query, name, food.CanonicalName, known) {
+			return false
+		}
+	}
+	return true
 }
 
 var nutritionMixedDishTokens = []string{
@@ -1595,6 +1612,84 @@ func (r *FoodNutritionRepo) Search(ctx context.Context, query string, limit int)
 }
 
 func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, limit int) ([]SearchCandidate, error) {
+	return r.searchCandidatesForState(ctx, query, domain.NutritionStateQuery{}, limit)
+}
+
+// SearchCandidatesForState filters before LIMIT so incompatible/unknown rows
+// cannot occupy all of the lexical recall budget.
+func (r *FoodNutritionRepo) SearchCandidatesForState(ctx context.Context, query string, state domain.NutritionStateQuery, limit int) ([]SearchCandidate, error) {
+	return r.searchCandidatesForState(ctx, query, state, limit)
+}
+
+func nutritionStateCandidateScope(db *gorm.DB, state domain.NutritionStateQuery, prefix string) *gorm.DB {
+	// Catalog/maintenance callers may browse incomplete records. Automatic
+	// analysis supplies a typed portion query and enforces the reuse contract.
+	if state == (domain.NutritionStateQuery{}) {
+		return db
+	}
+	db = db.Where(prefix + "food_state <> '' AND " + prefix + "weight_basis <> ''")
+	db = db.Where(prefix+"food_state IN ?", []string{"raw", "fresh", "dry", "hydrated", "cooked", "baked", "roasted", "fried", "dehydrated", "liquid", "packaged"})
+	db = db.Where(prefix+"weight_basis IN ?", []string{"raw", "raw_edible", "dry", "dry_raw", "cooked", "cooked_edible", "as_served", "package_net"})
+	db = db.Where("NOT (COALESCE("+prefix+"source,'') LIKE ? AND "+prefix+"quality_reviewed_at IS NULL)", "%历史识别记录营养均值%")
+	switch state.FoodState {
+	case "raw", "fresh":
+		db = db.Where(prefix+"food_state IN ?", []string{"raw", "fresh", "dry"})
+	case "dry":
+		db = db.Where(prefix+"food_state IN ?", []string{"raw", "dry", "dehydrated"})
+	case "cooked":
+		db = db.Where(prefix+"food_state IN ?", []string{"cooked", "baked", "roasted", "fried"})
+	case "baked", "roasted":
+		db = db.Where(prefix+"food_state IN ?", []string{"baked", "roasted", "cooked"})
+	case "":
+	default:
+		db = db.Where(prefix+"food_state = ?", state.FoodState)
+	}
+	basis := state.WeightBasis
+	if basis == "as_served" {
+		switch state.FoodState {
+		case "raw", "fresh":
+			basis = "raw"
+		case "cooked", "baked", "roasted", "fried":
+			basis = "cooked"
+		}
+	}
+	switch basis {
+	case "dry":
+		db = db.Where(prefix+"weight_basis IN ?", []string{"dry", "dry_raw"})
+	case "raw":
+		db = db.Where(prefix+"weight_basis IN ?", []string{"raw", "raw_edible", "as_served"})
+	case "cooked":
+		db = db.Where(prefix+"weight_basis IN ?", []string{"cooked", "cooked_edible", "as_served"})
+	case "as_served", "package_net":
+		db = db.Where(prefix+"weight_basis = ?", basis)
+	}
+	tags := "CAST(" + prefix + "state_tags AS jsonb)"
+	if state.SkinState == "skinless" {
+		db = db.Where("(" + tags + " ? 'skinless' OR " + tags + " ? '去皮' OR " + prefix + "canonical_name LIKE '%去皮%' OR " + prefix + "canonical_name ILIKE '%skinless%' OR " + prefix + "canonical_name ILIKE '%meat only%')")
+	} else if state.SkinState == "with_skin" {
+		db = db.Where("(" + tags + " ? 'with_skin' OR " + tags + " ? '带皮' OR " + prefix + "canonical_name LIKE '%带皮%' OR " + prefix + "canonical_name ILIKE '%meat and skin%')")
+	}
+	if state.BoneState == "boneless" {
+		db = db.Where("(" + prefix + "weight_basis LIKE '%edible' OR " + tags + " ? 'boneless' OR " + tags + " ? '去骨' OR " + prefix + "canonical_name LIKE '%去骨%' OR " + prefix + "canonical_name ILIKE '%boneless%' OR " + prefix + "canonical_name ILIKE '%meat only%')")
+	} else if state.BoneState == "bone_in" {
+		db = db.Where("(" + tags + " ? 'bone_in' OR " + tags + " ? '带骨' OR " + prefix + "canonical_name LIKE '%带骨%' OR " + prefix + "canonical_name ILIKE '%bone-in%')")
+	}
+	if state.Preparation != "" {
+		patterns := map[string][]string{"braised": {"%braised%", "%卤%", "%红烧%"}, "roasted": {"%roast%", "%baked%", "%烤%"}, "boiled": {"%boil%", "%水煮%", "%煮熟%"}, "steamed": {"%steam%", "%清蒸%", "%蒸熟%"}, "deep_fried": {"%fried%", "%油炸%"}, "air_dried": {"%air_dried%", "%空气炸锅烘干%"}}
+		if allowed := patterns[state.Preparation]; len(allowed) > 0 {
+			clauses := []string{}
+			args := []any{}
+			for _, pattern := range allowed {
+				clauses = append(clauses, prefix+"preparation_method ILIKE ? OR "+prefix+"canonical_name ILIKE ?")
+				args = append(args, pattern, pattern)
+			}
+			db = db.Where("("+strings.Join(clauses, " OR ")+")", args...)
+		}
+	}
+	return db
+}
+
+func (r *FoodNutritionRepo) searchCandidatesForState(ctx context.Context, query string, state domain.NutritionStateQuery, limit int) ([]SearchCandidate, error) {
 	if limit <= 0 {
 		limit = 5
 	}
@@ -1618,7 +1713,7 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 		pattern := fmt.Sprintf("%%%s%%", strings.ToLower(variant.Text))
 		normalizedPattern := fmt.Sprintf("%%%s%%", variant.Normalized)
 		var foods []domain.FoodNutrition
-		if err := r.db.WithContext(ctx).
+		if err := nutritionStateCandidateScope(r.db.WithContext(ctx), state, "").
 			Where("is_active = ? AND (LOWER(canonical_name) LIKE ? OR normalized_name LIKE ?)", true, pattern, normalizedPattern).
 			Limit(limit * 4).
 			Find(&foods).Error; err != nil {
@@ -1631,10 +1726,11 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 			}
 		}
 		var rows []aliasRow
-		if err := r.db.WithContext(ctx).
-			Table((&domain.FoodNutritionAlias{}).TableName()).
-			Select("food_id, alias_name, normalized_alias, match_status").
-			Where("match_status <> ? AND (LOWER(alias_name) LIKE ? OR normalized_alias LIKE ?)", domain.NutritionAliasBlocked, pattern, normalizedPattern).
+		if err := nutritionStateCandidateScope(r.db.WithContext(ctx), state, "foods.").
+			Table("food_nutrition_aliases AS aliases").
+			Joins("JOIN food_nutrition_library AS foods ON foods.id=aliases.food_id AND foods.is_active = ?", true).
+			Select("aliases.food_id, aliases.alias_name, aliases.normalized_alias, aliases.match_status").
+			Where("aliases.match_status <> ? AND (LOWER(aliases.alias_name) LIKE ? OR aliases.normalized_alias LIKE ?)", domain.NutritionAliasBlocked, pattern, normalizedPattern).
 			Limit(limit * 4).
 			Find(&rows).Error; err != nil {
 			return nil, err
@@ -1688,7 +1784,7 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 				return nil, err
 			}
 			for _, food := range aliasFoods {
-				if !isCandidateMatchEligibleNutritionFood(food) || allNutritionAliasesUnsafe(raw, aliasNamesByFoodID[food.ID], food.CanonicalName) || isImplausibleNutritionFoodMatch(raw, food) {
+				if !isCandidateMatchEligibleNutritionFood(food) || allNutritionCandidateAliasesUnsafe(raw, aliasNamesByFoodID[food.ID], food) || isImplausibleNutritionFoodMatch(raw, food) {
 					continue
 				}
 				variant := bestNutritionVariant(aliasVariantsByFoodID[food.ID])
@@ -1940,6 +2036,7 @@ func (r *FoodNutritionRepo) LoadNutritionEmbeddingIndex(ctx context.Context, mod
 			Where("embeddings.is_active = ? AND embeddings.embedding_model = ? AND embeddings.embedding_dimensions = ?", true, strings.TrimSpace(model), dimensions).
 			Where("embeddings.source_type = ?", "canonical").
 			Where("foods.is_active = ? AND foods.quality_tier IN ?", true, []string{domain.NutritionQualityAuthoritative, domain.NutritionQualityLegacyCurated}).
+			Where("foods.food_state <> '' AND foods.weight_basis <> ''").
 			Order("embeddings.identity_key ASC").
 			Limit(pageSize)
 		if afterIdentityKey != "" {

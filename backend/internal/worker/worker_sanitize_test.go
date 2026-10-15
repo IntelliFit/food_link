@@ -76,6 +76,14 @@ func (f *fakeWorkerAnalyzeRunner) ApplyDBFirstToItems(ctx context.Context, items
 	return items
 }
 
+func (f *fakeWorkerAnalyzeRunner) ApplyPrecisionNutrition(ctx context.Context, items []map[string]any, input analyzeservice.AnalyzeInput) ([]map[string]any, error) {
+	f.input = input
+	if input.PreciseMicronutrients {
+		return f.ApplyPreciseMicronutrientsToResolvedItems(ctx, items, input.AdditionalContext)
+	}
+	return items, f.err
+}
+
 func (f *fakeWorkerAnalyzeRunner) ApplyDBFirstToItemsWithPreciseMicronutrients(ctx context.Context, items []map[string]any, additionalContext string) ([]map[string]any, error) {
 	return f.ApplyPreciseMicronutrientsToResolvedItems(ctx, items, additionalContext)
 }

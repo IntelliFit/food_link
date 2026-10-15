@@ -100,6 +100,9 @@ func (s *AnalyzeService) applyAIThenExactDBNutrition(ctx context.Context, resp m
 		query := nutritionResolveName(item, name, fullNutritionContext(input))
 		match, err := s.nutrition.ResolveFood(ctx, query)
 		if err != nil || match == nil || match.Food == nil || !foodStateCompatible(item, match.Food) {
+			if match != nil && match.Food != nil {
+				rejectNutritionReuse(ctx, item, match.Food, nutritionReuseRejection(item, match.Food))
+			}
 			items[index]["db_calibration_status"] = "no_compatible_exact_match"
 			continue
 		}
@@ -131,10 +134,11 @@ func (s *AnalyzeService) applyCandidateGuidedNutrition(ctx context.Context, resp
 		}
 		name := stringFromAny(item["name"])
 		queryName := nutritionResolveName(item, name, fullContext)
-		rows, _ := s.nutrition.SearchCandidates(ctx, queryName, resolveFoodCandidateLimit)
+		rows, _ := s.searchNutritionCandidates(ctx, item, queryName, resolveFoodCandidateLimit)
 		if exact, err := s.nutrition.ResolveFood(ctx, queryName); err == nil && exact != nil && exact.Food != nil {
 			rows = prependUniqueNutritionCandidate(rows, foodrecordrepo.SearchCandidate{Food: *exact.Food, MatchSource: exact.MatchSource, Score: exact.Score})
 		}
+		rows = compatibleNutritionCandidates(ctx, item, rows)
 		if len(rows) == 0 {
 			items[index]["candidate_review_status"] = "no_candidates_ai_kept"
 			continue
@@ -143,14 +147,7 @@ func (s *AnalyzeService) applyCandidateGuidedNutrition(ctx context.Context, resp
 			rows = rows[:resolveFoodCandidateLimit]
 		}
 		candidateGroups[index] = rows
-		queries[index] = nutritionCandidateQuery{
-			QueryName:           queryName,
-			OriginalName:        name,
-			FoodState:           stringFromAny(firstNonNil(item["foodState"], item["food_state"])),
-			WeightBasis:         stringFromAny(firstNonNil(item["weightBasis"], item["weight_basis"])),
-			RecognitionEvidence: stringFromAny(firstNonNil(item["recognitionEvidence"], item["recognition_evidence"])),
-			FullContext:         fullContext,
-		}
+		queries[index] = nutritionQueryForItem(item, queryName, fullContext)
 	}
 	decisions, err := s.rerankNutritionCandidatesWithAI(ctx, queries, candidateGroups)
 	accepted := 0
@@ -291,26 +288,7 @@ func prependUniqueNutritionCandidate(rows []foodrecordrepo.SearchCandidate, exac
 }
 
 func foodStateCompatible(item map[string]any, food *foodrecorddomain.FoodNutrition) bool {
-	if food == nil {
-		return false
-	}
-	itemState := normalizeFoodStateToken(firstNonEmptyString(
-		stringFromAny(firstNonNil(item["foodState"], item["food_state"])),
-		stringFromAny(item["name"]),
-	))
-	foodState := normalizeFoodStateToken(firstNonEmptyString(food.FoodState, food.CanonicalName))
-	if itemState == "" {
-		return true
-	}
-	if foodState == "" {
-		return false
-	}
-	if itemState != foodState {
-		return false
-	}
-	itemBasis := normalizeWeightBasisToken(stringFromAny(firstNonNil(item["weightBasis"], item["weight_basis"])))
-	foodBasis := normalizeWeightBasisToken(food.WeightBasis)
-	return itemBasis == "" || itemBasis == "as_served" || foodBasis == "" || itemBasis == foodBasis
+	return nutritionReuseRejection(item, food) == ""
 }
 
 func exactDatabaseCalibrationAllowed(item map[string]any) bool {
@@ -346,10 +324,10 @@ func exactDatabaseCalibrationAllowed(item map[string]any) bool {
 func normalizeWeightBasisToken(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	switch {
-	case value == "raw" || value == "raw_edible" || strings.Contains(value, "生重") || strings.Contains(value, "raw"):
-		return "raw"
 	case value == "dry" || value == "dry_raw" || strings.Contains(value, "干重") || strings.Contains(value, "dry"):
 		return "dry"
+	case value == "raw" || value == "raw_edible" || strings.Contains(value, "生重") || strings.Contains(value, "raw"):
+		return "raw"
 	case value == "cooked" || value == "cooked_edible" || strings.Contains(value, "熟重") || strings.Contains(value, "cooked"):
 		return "cooked"
 	case value == "as_served" || value == "served" || strings.Contains(value, "成品") || strings.Contains(value, "食用时"):
@@ -391,6 +369,8 @@ func applyNutritionFoodToItem(item map[string]any, food *foodrecorddomain.FoodNu
 	weight := nutritionWeightFromItem(next)
 	unit := nutritionUnit(food)
 	next["matched_food_id"] = food.ID
+	next["nutrition_match_status"] = "accepted"
+	delete(next, "nutrition_match_reason")
 	next["matched_food_name"] = food.CanonicalName
 	next["standardized_food_name"] = food.CanonicalName
 	next["resolve_status"] = status
