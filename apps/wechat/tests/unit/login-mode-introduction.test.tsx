@@ -70,7 +70,7 @@ async function logIn() {
 }
 async function continueTimer() { await act(async () => { jest.advanceTimersByTime(1600) }) }
 async function choose() {
-  for (let i = 0; i < 9; i++) fireEvent.click(document.querySelector('#mode-introduction-next')!)
+  for (let i = 0; i < 10; i++) fireEvent.click(document.querySelector('#mode-introduction-next')!)
   fireEvent.click(screen.getByRole('button', { name: '选择养生模式·阴阳主题' }))
   await act(async () => { fireEvent.click(document.querySelector('#mode-introduction-next')!) })
 }

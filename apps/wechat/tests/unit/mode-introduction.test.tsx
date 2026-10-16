@@ -47,11 +47,15 @@ beforeEach(() => {
   ;(useDidShow as jest.Mock).mockImplementation(fn => React.useEffect(() => { shows.add(fn); return () => { shows.delete(fn) } }, [fn]))
 })
 const next = () => fireEvent.click(document.querySelector('#mode-introduction-next')!)
-const toChoices = () => { for (let i = 0; i < 9; i++) next() }
+const toChoices = () => { for (let i = 0; i < 10; i++) next() }
 
 test('nine independent chapters precede nine explicit choices, without saving previews', async () => {
   const save = jest.fn(() => true)
   render(<ModeIntroduction onConfirm={save} />)
+  expect(document.querySelector('#mode-introduction-updates')).toBeInTheDocument()
+  expect(screen.getByText('九种风格，逐一认识')).toBeInTheDocument()
+  expect(screen.queryByTestId('chapter-media')).not.toBeInTheDocument()
+  next()
   for (let i = 0; i < 9; i++) {
     expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-chapter', String(i))
     fireEvent.click(screen.getByRole('button', { name: '暂停动画' }))
@@ -82,9 +86,9 @@ test('replaying the introduction clears an unconfirmed selection', () => {
 test('native swipes change a single chapter without saving and suppress selection after a drag', () => {
   const save = jest.fn()
   render(<ModeIntroduction onConfirm={save} />)
-  act(() => mockSlide(1))
+  act(() => mockSlide(2))
   expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-chapter', '1')
-  act(() => mockSlide(0))
+  act(() => mockSlide(1))
   expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-chapter', '0')
   toChoices()
   act(() => { mockTouchStart(); mockTransition(80) })
@@ -152,7 +156,7 @@ test('completion in another gate does not late-mount a hidden pending page; only
   const current = render(<ModeIntroductionGate><span>当前业务页面</span></ModeIntroductionGate>)
   ;(Taro.reLaunch as jest.Mock).mockRejectedValueOnce(new Error('navigation failed'))
   const currentNext = () => fireEvent.click(current.container.querySelector('#mode-introduction-next')!)
-  for (let i = 0; i < 9; i++) currentNext()
+  for (let i = 0; i < 10; i++) currentNext()
   fireEvent.click(current.container.querySelector('#mode-introduction-wellness')!)
   await act(async () => { currentNext() })
   expect(previous.container.querySelector('#mode-introduction')).toBeInTheDocument()
