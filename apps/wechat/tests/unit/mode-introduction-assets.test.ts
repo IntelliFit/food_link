@@ -32,5 +32,10 @@ test('the native owner copies only after poster load and reuses only a complete 
     expect(triggerEvent).toHaveBeenLastCalledWith('mediaready', { src: '/usr/fl-intro-chapter-abc.mp4', asset: 'chapter', attempt: 1 })
     definition.methods.onPosterLoad.call(owner)
     expect(copyFileSync).toHaveBeenCalledTimes(1)
+    triggerEvent.mockClear()
+    definition.methods.onPosterLoad.call({ ...owner, properties: { ...owner.properties, motion: false } })
+    expect(copyFileSync).toHaveBeenCalledTimes(1)
+    expect(triggerEvent).toHaveBeenCalledTimes(1)
+    expect(triggerEvent).toHaveBeenCalledWith('posterload', { asset: 'chapter', attempt: 1 })
   } finally { (globalThis as any).wx = previous }
 })

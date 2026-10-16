@@ -5,7 +5,10 @@ import { ModeIntroduction } from '../../src/components/ModeIntroduction'
 import { ModeIntroductionGate } from '../../src/components/ModeIntroductionGate'
 import { MODE_INTRODUCTION_PREFIX } from '../../src/utils/mode-introduction'
 
-jest.mock('../../src/components/ModeIntroMedia', () => ({ ModeIntroMedia: ({ chapter, paused, onEnded }: any) => <div data-testid='chapter-media' data-chapter={chapter.chapter} data-paused={String(paused)}><button aria-label='结束本章' onClick={onEnded} /></div> }))
+jest.mock('../../src/components/ModeIntroMedia', () => ({ ModeIntroMedia: ({ chapter, paused }: any) => <div data-testid='chapter-media' data-chapter={chapter.chapter} data-paused={String(paused)} /> }))
+jest.mock('../../src/components/ModeIntroArtwork', () => ({ ModeIntroArtwork: () => null }))
+
+let mockSlide: (index: number) => void, mockTransition: (dx: number) => void, mockTouchStart: () => void
 
 jest.mock('@tarojs/components', () => {
   const React = require('react')
@@ -16,7 +19,12 @@ jest.mock('@tarojs/components', () => {
     PageMeta: () => null,
     ScrollView: ({ children }: any) => React.createElement('div', {}, children),
     SwiperItem: ({ children }: any) => React.createElement('div', {}, children),
-    Swiper: ({ children, current }: any) => React.createElement('div', {}, React.Children.toArray(children)[current]),
+    Swiper: ({ children, current, onChange, onTransition, onTouchStart, ...props }: any) => {
+      mockSlide = index => onChange({ detail: { current: index, source: 'touch' } })
+      mockTransition = dx => onTransition({ detail: { dx } })
+      mockTouchStart = onTouchStart
+      return React.createElement('div', { id: props.id }, React.Children.toArray(children)[current])
+    },
   }
 })
 
@@ -69,6 +77,28 @@ test('replaying the introduction clears an unconfirmed selection', () => {
   toChoices()
   expect(screen.getByRole('button', { name: '选定主题，开启食探' })).toBeDisabled()
   expect(save).not.toHaveBeenCalled()
+})
+
+test('native swipes change a single chapter without saving and suppress selection after a drag', () => {
+  const save = jest.fn()
+  render(<ModeIntroduction onConfirm={save} />)
+  act(() => mockSlide(1))
+  expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-chapter', '1')
+  act(() => mockSlide(0))
+  expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-chapter', '0')
+  toChoices()
+  act(() => { mockTouchStart(); mockTransition(80) })
+  fireEvent.click(screen.getByRole('button', { name: '选择澄明秩序' }))
+  expect(screen.getByRole('button', { name: '选定主题，开启食探' })).toBeDisabled()
+  act(() => mockTouchStart())
+  fireEvent.click(screen.getByRole('button', { name: '选择澄明秩序' }))
+  expect(screen.getByRole('button', { name: '选定主题，开启食探' })).not.toBeDisabled()
+  act(() => { mockTouchStart(); mockTransition(80) })
+  next()
+  fireEvent.click(screen.getByRole('button', { name: '重新观看全部介绍' }))
+  expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-chapter', '9')
+  expect(save).not.toHaveBeenCalled()
+  expect(Taro.setStorageSync).not.toHaveBeenCalled()
 })
 
 test('failed persistence keeps the choice screen visible and allows retry', async () => {

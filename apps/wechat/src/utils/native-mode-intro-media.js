@@ -3,13 +3,14 @@ module.exports = function createIntroMediaOwner(resourceRoot, assets) {
   return {
     options: { virtualHost: true, styleIsolation: 'apply-shared' },
     externalClasses: ['sceneclass'],
-    properties: { asset: { type: String, value: '' }, attempt: { type: Number, value: 0 } },
+    properties: { asset: { type: String, value: '' }, attempt: { type: Number, value: 0 }, motion: { type: Boolean, value: true } },
     lifetimes: { attached() { this._alive = true; }, detached() { this._alive = false; } },
     methods: {
       onPosterLoad() {
         const asset = this.properties.asset, attempt = this.properties.attempt;
         if (!this._alive || !assets[asset]) return;
         this.triggerEvent('posterload', { asset, attempt });
+        if (this.properties.motion === false) return;
         try {
           const fs = wx.getFileSystemManager(), spec = assets[asset];
           const src = `${wx.env.USER_DATA_PATH}/fl-intro-${asset}-${spec.revision}.mp4`;

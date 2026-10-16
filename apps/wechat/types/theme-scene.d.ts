@@ -1,7 +1,7 @@
 import type { HTMLAttributes } from 'react'
 
 type SceneImageAttributes = HTMLAttributes<HTMLElement> & { asset: string; sceneclass: string; mode?: string; onOwnerready?: () => void }
-type IntroMediaAttributes = HTMLAttributes<HTMLElement> & { asset: string; attempt: number; sceneclass: string; onPosterload: () => void; onMediaready: (event: any) => void }
+type IntroMediaAttributes = HTMLAttributes<HTMLElement> & { asset: string; attempt: number; motion: boolean; sceneclass: string; onPosterload: () => void; onMediaready: (event: any) => void }
 
 declare global {
   namespace JSX {

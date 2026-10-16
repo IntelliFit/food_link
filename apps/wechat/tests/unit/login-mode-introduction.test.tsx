@@ -24,6 +24,7 @@ jest.mock('../../src/utils/static-asset-cdn-url', () => ({ DEFAULT_AVATAR_URL: '
 jest.mock('@taroify/core', () => ({ Button: ({ children, onClick }: any) => <button onClick={onClick}>{children}</button> }))
 jest.mock('@taroify/core/button/style', () => ({}))
 jest.mock('../../src/components/ModeIntroMedia', () => ({ ModeIntroMedia: () => null }))
+jest.mock('../../src/components/ModeIntroArtwork', () => ({ ModeIntroArtwork: () => null }))
 
 jest.mock('@tarojs/components', () => {
   const React = require('react')

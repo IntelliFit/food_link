@@ -1,4 +1,4 @@
-<image wx:if="{{asset === '01-clarity-order-v1'}}" class="sceneclass" src="/packageModeIntroA/assets/01-clarity-order-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
-<image wx:if="{{asset === '02-natural-symbiosis-v1'}}" class="sceneclass" src="/packageModeIntroA/assets/02-natural-symbiosis-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
-<image wx:if="{{asset === '03-eastern-salon-v1'}}" class="sceneclass" src="/packageModeIntroA/assets/03-eastern-salon-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
-<image wx:if="{{asset === '07-clear-care-v1'}}" class="sceneclass" src="/packageModeIntroA/assets/07-clear-care-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
+<image wx:if="{{asset === '01-clarity-order-v2'}}" class="sceneclass" src="/packageModeIntroA/assets/01-clarity-order-v2.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
+<image wx:if="{{asset === '02-natural-symbiosis-v2'}}" class="sceneclass" src="/packageModeIntroA/assets/02-natural-symbiosis-v2.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
+<image wx:if="{{asset === '03-eastern-salon-v2'}}" class="sceneclass" src="/packageModeIntroA/assets/03-eastern-salon-v2.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
+<image wx:if="{{asset === '07-clear-care-v2'}}" class="sceneclass" src="/packageModeIntroA/assets/07-clear-care-v2.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />

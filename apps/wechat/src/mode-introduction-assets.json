@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "width": 640,
   "height": 1384,
   "duration": 8,
@@ -8,82 +8,91 @@
       "chapter": 0,
       "title": "澄明秩序",
       "packageRoot": "packageModeIntroA",
-      "file": "01-clarity-order-v1",
-      "videoBytes": 305706,
-      "posterBytes": 204365,
-      "sha256": "43854c0b895310e34cdba515200197a3d5f465cc6b4814267ce985ec6e80f665"
+      "file": "01-clarity-order-v2",
+      "videoBytes": 243101,
+      "posterBytes": 194345,
+      "sha256": "0f2ac99c6eb28c8564ada986109669c15b8d859e4df9eeadc8236c6d4b254da8",
+      "frameHeight": 1214
     },
     {
       "chapter": 1,
       "title": "自然共生",
       "packageRoot": "packageModeIntroA",
-      "file": "02-natural-symbiosis-v1",
-      "videoBytes": 267774,
-      "posterBytes": 239304,
-      "sha256": "8afd4a9bc7d00b861b6c29696efdebbf988c58a001740b3069bb5c9f1bc9f7fa"
+      "file": "02-natural-symbiosis-v2",
+      "videoBytes": 215733,
+      "posterBytes": 227670,
+      "sha256": "80f94a9ed7e257fb3bf74cf494af4ee7d081e801ad062121ed769206320dcaf5",
+      "frameHeight": 1214
     },
     {
       "chapter": 2,
       "title": "东方雅集",
       "packageRoot": "packageModeIntroA",
-      "file": "03-eastern-salon-v1",
-      "videoBytes": 173748,
-      "posterBytes": 188446,
-      "sha256": "7751e05d4056db36a436779afa539854d9da972fa463c4077adee46d9a6f0507"
+      "file": "03-eastern-salon-v2",
+      "videoBytes": 146461,
+      "posterBytes": 176387,
+      "sha256": "9fe4bf5d85ec71f4c9ec65b547fee527b83d58d84f0d9ca046f84d4f043847f4",
+      "frameHeight": 1214
     },
     {
       "chapter": 3,
       "title": "现代艺廊",
       "packageRoot": "packageModeIntroB",
-      "file": "04-modern-gallery-v1",
-      "videoBytes": 335105,
-      "posterBytes": 321810,
-      "sha256": "0f04346737b8af80b7bde25b6234fc24f7499ed71107ef3092aef19424d8cffd"
+      "file": "04-modern-gallery-v2",
+      "videoBytes": 272079,
+      "posterBytes": 307066,
+      "sha256": "d8ec60ea5e34726dcc51cf737f1d966349c3068f1969b433249371dd257885e7",
+      "frameHeight": 1214
     },
     {
       "chapter": 4,
       "title": "微缩世界",
       "packageRoot": "packageModeIntroB",
-      "file": "05-miniature-world-v1",
-      "videoBytes": 225499,
-      "posterBytes": 275918,
-      "sha256": "dc857b2498dd6519a19afe80d1cd55ec5ecf272a347806198f69b16c6a5193ca"
+      "file": "05-miniature-world-v2",
+      "videoBytes": 197284,
+      "posterBytes": 260297,
+      "sha256": "3e8c3338479fe4699689244d07a54dcdc3a7642c97d8da98766a1741e0c14cf3",
+      "frameHeight": 1214
     },
     {
       "chapter": 5,
       "title": "绘本陪伴",
       "packageRoot": "packageModeIntroB",
-      "file": "06-picturebook-companion-v1",
-      "videoBytes": 219624,
-      "posterBytes": 273897,
-      "sha256": "d3d297f49b3c44923fded4d4b3cc10e7fc6f19c3a70e1d378a058969b097817e"
+      "file": "06-picturebook-companion-v2",
+      "videoBytes": 185373,
+      "posterBytes": 257550,
+      "sha256": "d392cd89b6fe54399610f12c8c16485eb23f515733741826a06ffed0bb48a495",
+      "frameHeight": 1214
     },
     {
       "chapter": 6,
       "title": "清朗关怀",
       "packageRoot": "packageModeIntroA",
-      "file": "07-clear-care-v1",
-      "videoBytes": 114461,
-      "posterBytes": 188542,
-      "sha256": "546e4adbfbb6ded894bdfb62a5bde0513db92b2e301a7d18fd9733f22f77b11a"
+      "file": "07-clear-care-v2",
+      "videoBytes": 103141,
+      "posterBytes": 175608,
+      "sha256": "3fd41d7b440039bfe274b7603b9969b4627d77e4ab73b3a8bac325bed816cc37",
+      "frameHeight": 1214
     },
     {
       "chapter": 7,
       "title": "水之道",
       "packageRoot": "packageModeIntroC",
-      "file": "08-way-of-water-v1",
-      "videoBytes": 351090,
-      "posterBytes": 176239,
-      "sha256": "3ded8dcb5c0c8a8bf56c3415799ee60b920dadf01e76c057a616ec24ad6fe71f"
+      "file": "08-way-of-water-v2",
+      "videoBytes": 296561,
+      "posterBytes": 164149,
+      "sha256": "b47945a403de0f06f18671a42432240b7518afa7e845b7c34f02fd8d5de392d7",
+      "frameHeight": 1214
     },
     {
       "chapter": 8,
       "title": "养生模式·阴阳主题",
       "packageRoot": "packageModeIntroC",
-      "file": "09-yin-yang-wellness-v1",
-      "videoBytes": 450735,
-      "posterBytes": 186298,
-      "sha256": "47043fa10a957c6c0aa7ed18ac5f93b7118fe7b49fcd89edd58724ef792f98e5"
+      "file": "09-yin-yang-wellness-v2",
+      "videoBytes": 342089,
+      "posterBytes": 176682,
+      "sha256": "b59ab8c359095c2eafc127c384dfb05b1089cac609cae2dc75ca6a8b0498af48",
+      "frameHeight": 1214
     },
     {
       "chapter": 9,
@@ -92,7 +101,8 @@
       "file": "10-final-choice-v1",
       "videoBytes": 420011,
       "posterBytes": 269394,
-      "sha256": "99fbf414cf99318d2d267e35f4f5ffd97e34f27b7c4f24f0d87e9dd752d3dd68"
+      "sha256": "99fbf414cf99318d2d267e35f4f5ffd97e34f27b7c4f24f0d87e9dd752d3dd68",
+      "frameHeight": 1384
     }
   ]
 }

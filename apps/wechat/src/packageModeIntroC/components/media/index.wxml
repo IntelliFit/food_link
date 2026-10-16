@@ -1,3 +1,3 @@
-<image wx:if="{{asset === '08-way-of-water-v1'}}" class="sceneclass" src="/packageModeIntroC/assets/08-way-of-water-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
-<image wx:if="{{asset === '09-yin-yang-wellness-v1'}}" class="sceneclass" src="/packageModeIntroC/assets/09-yin-yang-wellness-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
+<image wx:if="{{asset === '08-way-of-water-v2'}}" class="sceneclass" src="/packageModeIntroC/assets/08-way-of-water-v2.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
+<image wx:if="{{asset === '09-yin-yang-wellness-v2'}}" class="sceneclass" src="/packageModeIntroC/assets/09-yin-yang-wellness-v2.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
 <image wx:if="{{asset === '10-final-choice-v1'}}" class="sceneclass" src="/packageModeIntroC/assets/10-final-choice-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />
