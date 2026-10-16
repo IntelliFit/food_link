@@ -104,5 +104,15 @@
       "sha256": "99fbf414cf99318d2d267e35f4f5ffd97e34f27b7c4f24f0d87e9dd752d3dd68",
       "frameHeight": 1384
     }
-  ]
+  ],
+  "cover": {
+    "title": "食探更新速递",
+    "packageRoot": "packageModeIntroCover",
+    "file": "00-food-update-world-v1",
+    "videoBytes": 218852,
+    "posterBytes": 360574,
+    "sha256": "6159ba47f916738986e31e669264889caa5a9e8dc77bfba18165a4aab26ff11c",
+    "frameHeight": 1384,
+    "background": "#f7efdf"
+  }
 }

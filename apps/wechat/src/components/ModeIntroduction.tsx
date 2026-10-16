@@ -8,6 +8,7 @@ import { INTRODUCTION_CHOICE_RECTS, INTRODUCTION_FEATURES, INTRODUCTION_RADIOS, 
 import { ModeIntroMedia } from './ModeIntroMedia'
 import { ModeIntroArtwork } from './ModeIntroArtwork'
 import { ModeIntroductionUpdates, MODE_INTRODUCTION_UPDATES } from './ModeIntroductionUpdates'
+import { cover } from '../mode-introduction-assets.json'
 import './ModeIntroduction.scss'
 
 const choices = MODE_INTRODUCTION_CHAPTERS.slice(0, 9)
@@ -18,6 +19,7 @@ export function ModeIntroduction({ onConfirm }: { onConfirm: (choice: ModeIntrod
   const [error, setError] = useState(''), [mediaError, setMediaError] = useState(''), [busy, setBusy] = useState(false), [foreground, setForeground] = useState(true)
   const confirming = useRef(false), owner = useRef(''), live = useRef(true), swipeConsumed = useRef(false)
   const chapter = MODE_INTRODUCTION_CHAPTERS[Math.max(0, step)], identity = `${step}:${attempt}`
+  const background = step < 0 ? cover.background : chapter.background
   owner.current = identity
   const [layout] = useState(() => {
     try {
@@ -28,7 +30,7 @@ export function ModeIntroduction({ onConfirm }: { onConfirm: (choice: ModeIntrod
       return { inset, width: frameWidth, height: frameWidth * 1844 / 853 }
     } catch { return { inset: 88, width: 332, height: 718 } }
   })
-  useEffect(() => { Taro.setNavigationBarColor?.({ frontColor: chapter.dark ? '#ffffff' : '#000000', backgroundColor: chapter.background })?.catch(() => undefined) }, [chapter])
+  useEffect(() => { Taro.setNavigationBarColor?.({ frontColor: chapter.dark ? '#ffffff' : '#000000', backgroundColor: background })?.catch(() => undefined) }, [chapter.dark, background])
   useEffect(() => { live.current = true; return () => { live.current = false; owner.current = ''; applyThemeNavigationBar(getStoredAppColorScheme()) } }, [])
   useDidHide(() => setForeground(false))
   useDidShow(() => setForeground(true))
@@ -56,7 +58,7 @@ export function ModeIntroduction({ onConfirm }: { onConfirm: (choice: ModeIntrod
     if (index === null) return
     void Taro.showModal({ title: choices[index].title, content: `${INTRODUCTION_FEATURES[index].join(' · ')}\n\n${index < 8 ? BALANCED_THEME_DEFINITIONS[index].audience : '适合偏爱东方审美与舒缓阅读的你。'}\n\n各主题共用饮食、饮水、体重与运动记录。切换不会清空已有内容。`, showCancel: false, confirmText: '知道了' })
   }
-  return <View id='mode-introduction' className={`mode-introduction${chapter.dark ? ' is-dark' : ''}`} style={{ backgroundColor: chapter.background, color: chapter.dark ? '#f7f1df' : '#172d22', paddingTop: `${layout.inset}px` }}>
+  return <View id='mode-introduction' className={`mode-introduction${chapter.dark ? ' is-dark' : ''}`} style={{ backgroundColor: background, color: chapter.dark ? '#f7f1df' : '#172d22', paddingTop: `${layout.inset}px` }}>
     <PageMeta pageStyle='overflow: hidden;' />
     <View className='mode-introduction__toolbar' style={{ top: `${layout.inset - 48}px` }}>
       {step > -1 && <Button className='mode-introduction__toolbar-button' id='mode-introduction-back' onClick={() => changeStep(step - 1)} disabled={busy}>{step === 0 ? '更新' : '上一章'}</Button>}
@@ -69,9 +71,8 @@ export function ModeIntroduction({ onConfirm }: { onConfirm: (choice: ModeIntrod
       onChange={event => { if (event.detail.current !== step + 1 && !confirming.current) changeStep(event.detail.current - 1) }}
     >
       <SwiperItem key='updates'>
-        <View id='mode-introduction-updates' className='mode-introduction__frame' style={{ width: `${layout.width}px`, height: `${layout.height}px`, backgroundColor: '#fbfbf7' }} aria-label='食探更新速递'>
-          <ModeIntroductionUpdates active={step < 0 && foreground} paused={paused} />
-          <View className='mode-introduction__swipe-hint'><Text>‹</Text><Text>左滑，认识九种主题</Text><Text>›</Text></View>
+        <View id='mode-introduction-updates' className='mode-introduction__frame' style={{ width: `${layout.width}px`, height: `${layout.height}px`, backgroundColor: cover.background }} aria-label='食探更新速递'>
+          {step < 1 && <ModeIntroductionUpdates key={identity} active={step < 0} paused={paused || !foreground} attempt={attempt} error={step < 0 ? mediaError : ''} onError={fail} onRetry={() => { setMediaError(''); setAttempt(attempt + 1); setPaused(false) }} />}
         </View>
       </SwiperItem>
       {MODE_INTRODUCTION_CHAPTERS.map((item, index) => <SwiperItem key={item.file}>

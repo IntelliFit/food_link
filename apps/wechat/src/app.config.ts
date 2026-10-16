@@ -86,6 +86,7 @@ export default defineAppConfig({
   darkmode: false,
   // Build-time native template discovery; the plugin declares async owners.
   usingComponents: {
+    'mode-intro-cover': './packageModeIntroCover/components/media/index',
     'mode-intro-a': './packageModeIntroA/components/media/index',
     'mode-intro-b': './packageModeIntroB/components/media/index',
     'mode-intro-c': './packageModeIntroC/components/media/index',
@@ -95,6 +96,7 @@ export default defineAppConfig({
   },
   pages: mainPages,
   subpackages: [
+    { root: 'packageModeIntroCover', name: 'mode-intro-cover', pages: ['pages/index/index'] },
     { root: 'packageModeIntroA', name: 'mode-intro-a', pages: ['pages/index/index'] },
     { root: 'packageModeIntroB', name: 'mode-intro-b', pages: ['pages/index/index'] },
     { root: 'packageModeIntroC', name: 'mode-intro-c', pages: ['pages/index/index'] },

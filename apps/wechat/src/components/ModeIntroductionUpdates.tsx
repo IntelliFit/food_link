@@ -1,4 +1,7 @@
-import { ScrollView, Text, View } from '@tarojs/components'
+import { Button, ScrollView, Text, View } from '@tarojs/components'
+import { cover } from '../mode-introduction-assets.json'
+import { ModeIntroArtwork } from './ModeIntroArtwork'
+import { ModeIntroMedia } from './ModeIntroMedia'
 import './ModeIntroductionUpdates.scss'
 
 export const MODE_INTRODUCTION_UPDATES = [
@@ -7,26 +10,22 @@ export const MODE_INTRODUCTION_UPDATES = [
   { title: '选好默认，继续记录', body: '确认后沿用你的选择，之后可在“我的”更换，已有记录继续保留。' },
 ] as const
 
-/** A native, editable release cover; its animation follows the introduction's pause state. */
-export function ModeIntroductionUpdates({ active, paused }: { active: boolean; paused: boolean }) {
-  return <ScrollView scrollY className={`mode-introduction-updates${!active || paused ? ' is-paused' : ''}`}>
-    <View className='mode-introduction-updates__content'>
-      <View className='mode-introduction-updates__masthead'><Text>食探</Text><Text>更新速递 · v{__APP_VERSION__}</Text></View>
-      <Text className='mode-introduction-updates__eyebrow'>本次更新</Text>
-      <Text className='mode-introduction-updates__title'>食探，{`\n`}又有新变化。</Text>
-      <Text className='mode-introduction-updates__subtitle'>新的风格，熟悉的日常。{`\n`}让每一次记录，都更合心意。</Text>
-      <View className='mode-introduction-updates__visual' aria-hidden>
-        <View className='mode-introduction-updates__halo' />
-        <View className='mode-introduction-updates__sheet is-back'><Text>日常 · 新一页</Text></View>
-        <View className='mode-introduction-updates__sheet is-front'><Text className='mode-introduction-updates__leaf'>食</Text><Text>探索更好的自己</Text></View>
-        <View className='mode-introduction-updates__seal'><Text>9</Text><Text>种风格</Text></View>
-      </View>
-      <View className='mode-introduction-updates__items'>
-        {MODE_INTRODUCTION_UPDATES.map((item, index) => <View key={item.title} className='mode-introduction-updates__item'>
-          <Text className='mode-introduction-updates__number'>0{index + 1}</Text>
-          <View className='mode-introduction-updates__copy'><Text className='mode-introduction-updates__item-title'>{item.title}</Text><Text>{item.body}</Text></View>
-        </View>)}
-      </View>
+/** The selected cover stays intact; only the active slide owns a video decoder. */
+export function ModeIntroductionUpdates({ active, paused, attempt, error, onError, onRetry }: {
+  active: boolean; paused: boolean; attempt: number; error: string
+  onError: (message: string) => void; onRetry: () => void
+}) {
+  if (error) return <ScrollView scrollY className='mode-introduction__fallback-scroll'>
+    <View className='mode-introduction__fallback' role='alert'>
+      <Text className='mode-introduction__fallback-title'>食探更新速递</Text>
+      {MODE_INTRODUCTION_UPDATES.map(item => <View key={item.title}><Text>{item.title}</Text><Text>{item.body}</Text></View>)}
+      <Text>{error}</Text>
+      <Button id='mode-introduction-cover-retry' className='mode-introduction__fallback-button' onClick={onRetry}>重试动画</Button>
     </View>
   </ScrollView>
+  return <View className='mode-introduction-updates' aria-label='食探更新速递。从一餐，探索新世界。八种均衡主题与阴阳养生主题；左右滑动，动画随你看；选定默认，记录继续保留。'>
+    {active
+      ? <ModeIntroMedia chapter={cover} attempt={attempt} paused={paused} onError={onError} />
+      : <ModeIntroArtwork chapter={cover} attempt={0} motion={false} onPosterLoad={() => undefined} onMediaReady={() => undefined} onError={() => undefined} />}
+  </View>
 }

@@ -18,7 +18,8 @@ function readPackageVersion(): string {
 
 const packageVersion = readPackageVersion()
 const themeSceneAssets = JSON.parse(readFileSync(join(appRoot, 'src/theme-scene-assets.json'), 'utf8')).assets as Array<{ packageRoot: string; file: string }>
-const modeIntroAssets = JSON.parse(readFileSync(join(appRoot, 'src/mode-introduction-assets.json'), 'utf8')).items as Array<{ packageRoot: string; file: string }>
+const modeIntroManifest = JSON.parse(readFileSync(join(appRoot, 'src/mode-introduction-assets.json'), 'utf8'))
+const modeIntroAssets = [modeIntroManifest.cover, ...modeIntroManifest.items] as Array<{ packageRoot: string; file: string }>
 
 function parseEnvFile(filePath: string): Record<string, string> {
   if (!existsSync(filePath)) return {}
@@ -74,6 +75,7 @@ const themeSceneComponents = {
   'theme-scene-nature-image': '/packageThemeScenesNature/components/scene-image/index',
   'theme-scene-gallery-image': '/packageThemeScenesGallery/components/scene-image/index',
   'mode-intro-a': '/packageModeIntroA/components/media/index',
+  'mode-intro-cover': '/packageModeIntroCover/components/media/index',
   'mode-intro-b': '/packageModeIntroB/components/media/index',
   'mode-intro-c': '/packageModeIntroC/components/media/index',
 }
@@ -152,7 +154,7 @@ export default defineConfig<'vite'>(async (merge) => {
         ...modeIntroAssets.flatMap(({ packageRoot, file }) => ['jpg', 'mp4'].map(extension => ({
           from: `src/${packageRoot}/assets/${file}.${extension}`, to: `${packageRoot}/assets/${file}.${extension}`,
         }))),
-        ...['A', 'B', 'C'].map(suffix => ({ from: `src/packageModeIntro${suffix}/components`, to: `packageModeIntro${suffix}/components` })),
+        ...['A', 'B', 'C', 'Cover'].map(suffix => ({ from: `src/packageModeIntro${suffix}/components`, to: `packageModeIntro${suffix}/components` })),
         { from: 'src/utils/native-mode-intro-media.js', to: 'mode-introduction/native-media.js' },
         { from: 'src/packagePetStudio/assets', to: 'packagePetStudio/assets' },
         { from: 'src/assets/pets/clothing', to: 'assets/pets/clothing' },

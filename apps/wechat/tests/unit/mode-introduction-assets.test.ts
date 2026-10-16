@@ -6,12 +6,13 @@ const source = path.resolve(__dirname, '../../src')
 test('all reviewed chapters have real legal packaged media owned in the same bounded subpackage', () => {
   expect(manifest.items).toHaveLength(10)
   const sizes: Record<string, number> = {}
-  for (const item of manifest.items) {
+  for (const item of [manifest.cover, ...manifest.items]) {
     const root = path.join(source, item.packageRoot), template = fs.readFileSync(path.join(root, 'components/media/index.wxml'), 'utf8')
     expect(template).toContain(`src="/${item.packageRoot}/assets/${item.file}.jpg"`)
     const jpg = fs.readFileSync(path.join(root, 'assets', item.file + '.jpg')), mp4 = fs.readFileSync(path.join(root, 'assets', item.file + '.mp4'))
     expect(jpg.subarray(0, 3).toString('hex')).toBe('ffd8ff'); expect(mp4.subarray(4, 8).toString()).toBe('ftyp')
     expect(mp4.length).toBe(item.videoBytes)
+    expect(jpg.length).toBe(item.posterBytes)
     sizes[item.packageRoot] = (sizes[item.packageRoot] || 0) + jpg.length + mp4.length
   }
   expect(Object.values(sizes).every(size => size < 1900000)).toBe(true)

@@ -1,0 +1,1 @@
+<image wx:if="{{asset === '00-food-update-world-v1'}}" class="sceneclass" src="/packageModeIntroCover/assets/00-food-update-world-v1.jpg" mode="aspectFit" bindload="onPosterLoad" binderror="onPosterError" aria-hidden="true" />

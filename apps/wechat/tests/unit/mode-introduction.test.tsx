@@ -5,7 +5,11 @@ import { ModeIntroduction } from '../../src/components/ModeIntroduction'
 import { ModeIntroductionGate } from '../../src/components/ModeIntroductionGate'
 import { MODE_INTRODUCTION_PREFIX } from '../../src/utils/mode-introduction'
 
-jest.mock('../../src/components/ModeIntroMedia', () => ({ ModeIntroMedia: ({ chapter, paused }: any) => <div data-testid='chapter-media' data-chapter={chapter.chapter} data-paused={String(paused)} /> }))
+let mockMediaError: (message: string) => void
+jest.mock('../../src/components/ModeIntroMedia', () => ({ ModeIntroMedia: ({ chapter, paused, attempt, onError }: any) => {
+  mockMediaError = onError
+  return <div data-testid='chapter-media' data-chapter={chapter.chapter} data-file={chapter.file} data-attempt={attempt} data-paused={String(paused)} />
+} }))
 jest.mock('../../src/components/ModeIntroArtwork', () => ({ ModeIntroArtwork: () => null }))
 
 let mockSlide: (index: number) => void, mockTransition: (dx: number) => void, mockTouchStart: () => void
@@ -53,8 +57,7 @@ test('nine independent chapters precede nine explicit choices, without saving pr
   const save = jest.fn(() => true)
   render(<ModeIntroduction onConfirm={save} />)
   expect(document.querySelector('#mode-introduction-updates')).toBeInTheDocument()
-  expect(screen.getByText('九种风格，逐一认识')).toBeInTheDocument()
-  expect(screen.queryByTestId('chapter-media')).not.toBeInTheDocument()
+  expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-file', '00-food-update-world-v1')
   next()
   for (let i = 0; i < 9; i++) {
     expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-chapter', String(i))
@@ -70,6 +73,24 @@ test('nine independent chapters precede nine explicit choices, without saving pr
   await act(async () => { next(); next() })
   expect(save).toHaveBeenCalledTimes(1)
   expect(save).toHaveBeenCalledWith({ mode: 'wellness' })
+})
+
+test('the update cover has readable error recovery and ignores its retired playback callback', () => {
+  const save = jest.fn()
+  render(<ModeIntroduction onConfirm={save} />)
+  act(() => mockMediaError('封面动画暂时不可用'))
+  expect(screen.getByRole('alert')).toHaveTextContent('九种风格，逐一认识')
+  expect(screen.queryByTestId('chapter-media')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '重试动画' }))
+  expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-attempt', '1')
+  expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-paused', 'false')
+  const retired = mockMediaError
+  next()
+  act(() => retired('迟到的封面失败'))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByTestId('chapter-media')).toHaveAttribute('data-chapter', '0')
+  expect(save).not.toHaveBeenCalled()
+  expect(Taro.setStorageSync).not.toHaveBeenCalled()
 })
 
 test('replaying the introduction clears an unconfirmed selection', () => {

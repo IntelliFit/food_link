@@ -6,6 +6,7 @@ type IntroMediaAttributes = HTMLAttributes<HTMLElement> & { asset: string; attem
 declare global {
   namespace JSX {
     interface IntrinsicElements {
+      'mode-intro-cover': IntroMediaAttributes
       'mode-intro-a': IntroMediaAttributes
       'mode-intro-b': IntroMediaAttributes
       'mode-intro-c': IntroMediaAttributes
