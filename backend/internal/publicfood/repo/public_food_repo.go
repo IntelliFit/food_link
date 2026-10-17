@@ -198,8 +198,8 @@ const canteenVenueTypeSQL = `CASE
 
 func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]domain.PublicFoodItem, error) {
 	var rows []domain.PublicFoodItem
-	projection := `p.*,
-			CASE WHEN COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true
+	projection := `p.*, COALESCE(nutrition_catalog.analysis_task_id, p.analysis_task_id) AS analysis_task_id,
+			CASE WHEN nutrition_catalog.id IS NOT NULL OR COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true
 				THEN COALESCE(p.nutrition_status, 'pending') ELSE COALESCE(rt.status, t.status, '') END AS analysis_status,
 			CASE WHEN COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true
 				THEN CASE WHEN p.nutrition_status = 'failed' THEN COALESCE(t.error_message, '') ELSE '' END ELSE COALESCE(rt.error_message, t.error_message, '') END AS analysis_error,
@@ -207,6 +207,7 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	q := r.db.WithContext(ctx).
 		Table("public_food_library AS p").
 		Select(projection).
+		Joins("LEFT JOIN campus_food_catalog_items nutrition_catalog ON nutrition_catalog.id = p.id").
 		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
 		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").
 		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").
@@ -636,12 +637,17 @@ func (r *PublicFoodRepo) GetItem(ctx context.Context, itemID string) (*domain.Pu
 	var row domain.PublicFoodItem
 	err := r.db.WithContext(ctx).
 		Table("public_food_library AS p").
-		Select(`p.*,
-			CASE WHEN p.status = 'published' AND (COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true)
+		Select(`p.*, COALESCE(nutrition_catalog.analysis_task_id, p.analysis_task_id) AS analysis_task_id,
+			nutrition_catalog.id AS catalog_item_id, nutrition_batch.venue_type AS venue_type,
+			nutrition_catalog.organization_name AS venue_organization_name, nutrition_catalog.area_name AS venue_area_name,
+			nutrition_catalog.canteen_name AS venue_canteen_name,
+			CASE WHEN p.status = 'published' AND (nutrition_catalog.id IS NOT NULL OR COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true)
 				THEN COALESCE(p.nutrition_status, 'pending') ELSE COALESCE(rt.status, t.status, '') END AS analysis_status,
 			CASE WHEN p.status = 'published' AND (COALESCE(p.type, '') = 'campus' OR COALESCE(p.is_campus_food, false) = true)
 				THEN CASE WHEN p.nutrition_status = 'failed' THEN COALESCE(t.error_message, '') ELSE '' END ELSE COALESCE(rt.error_message, t.error_message, '') END AS analysis_error,
 			s.logo_url AS school_logo_url`).
+		Joins("LEFT JOIN campus_food_catalog_items nutrition_catalog ON nutrition_catalog.id = p.id").
+		Joins("LEFT JOIN campus_food_collection_batches nutrition_batch ON nutrition_batch.id = nutrition_catalog.batch_id").
 		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
 		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").
 		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").

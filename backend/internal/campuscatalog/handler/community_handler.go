@@ -17,6 +17,7 @@ import (
 )
 
 type CommunityCatalogService interface {
+	CreateUserSingle(ctx context.Context, userID string, input service.CreateBatchInput) (*service.CreateBatchResult, error)
 	ApplyUserCorrection(ctx context.Context, userID, itemID string, input service.CorrectionInput) (*service.CorrectionResult, error)
 	ListRevisions(ctx context.Context, itemID string, page, limit int) (*service.RevisionListResult, error)
 	UploadCommunityImage(ctx context.Context, userID, sourceFilename, contentType string, data []byte) (string, error)
@@ -34,6 +35,21 @@ type CommunityHandler struct {
 
 func NewCommunityHandler(svc CommunityCatalogService) *CommunityHandler {
 	return &CommunityHandler{svc: svc}
+}
+
+func (h *CommunityHandler) CreateSingle(c *gin.Context) {
+	var input service.CreateBatchInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, badRequest("菜品内容格式不正确"))
+		return
+	}
+	result, err := h.svc.CreateUserSingle(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), input)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "用户上传食堂菜品成功", slog.String("batch_id", result.Batch.ID), slog.Int("item_count", len(result.Items)))
+	response.Success(c, result)
 }
 
 func (h *CommunityHandler) Correct(c *gin.Context) {
@@ -125,11 +141,14 @@ func (h *CommunityHandler) ApplyCollector(c *gin.Context) {
 		response.Error(c, badRequest("申请内容格式不正确"))
 		return
 	}
-	application, err := h.svc.ApplyCollector(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), input)
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logger.Info(c.Request.Context(), "用户申请食堂批量上传权限", slog.String("user_id", userID), slog.String("venue_type", input.VenueType))
+	application, err := h.svc.ApplyCollector(c.Request.Context(), userID, input)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logger.Info(c.Request.Context(), "食堂批量上传申请已保存", slog.String("user_id", userID), slog.String("application_id", application.ID))
 	response.Success(c, gin.H{"application": application})
 }
 
@@ -138,6 +157,23 @@ func (h *CommunityHandler) CollectorProfile(c *gin.Context) {
 	if err != nil {
 		response.Error(c, err)
 		return
+	}
+	// Older clients assume every grant has a school ID and prefill the first
+	// grant. Keep their campus-only view while updated clients opt into all venues.
+	if c.Query("include_venues") != "1" {
+		applications := make([]domain.CollectorApplication, 0)
+		for _, application := range profile.Applications {
+			if application.SchoolID != "" {
+				applications = append(applications, application)
+			}
+		}
+		scopes := make([]domain.CollectorScope, 0)
+		for _, scope := range profile.ActiveScopes {
+			if scope.SchoolID != "" {
+				scopes = append(scopes, scope)
+			}
+		}
+		profile.Applications, profile.ActiveScopes, profile.CanBatch = applications, scopes, len(scopes) > 0
 	}
 	response.Success(c, profile)
 }
@@ -154,7 +190,7 @@ func (h *CommunityHandler) CreateCollectorBatch(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	logger.Info(c.Request.Context(), "校园采集员批量上传菜品成功",
+	logger.Info(c.Request.Context(), "食堂采集员批量上传菜品成功",
 		slog.String("user_id", strings.TrimSpace(userID)), slog.String("batch_id", result.Batch.ID), slog.Int("item_count", len(result.Items)))
 	response.Success(c, result)
 }

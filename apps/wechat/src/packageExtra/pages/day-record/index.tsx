@@ -1,6 +1,6 @@
 import { Canvas, Image, ScrollView, Text, View } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   deleteFoodRecord,
@@ -24,7 +24,6 @@ import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { getCurrentPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
 import { claimSharePosterRewardQuietly } from '../../../utils/share-reward'
 import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
-import { mealRecordAdvice } from '../../../utils/meal-record-advice'
 
 /** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
 function formatNumber(value: number): string {
@@ -192,6 +191,15 @@ function DayRecordPage() {
     return typeof d === 'string' && d.length >= 8 ? d : formatDateKey(new Date())
   })
   const [records, setRecords] = useState<DayRecordCard[]>([])
+  const mealRecordsByType = useMemo(() => {
+    const groups = new Map<string, DayRecordCard[]>()
+    records.forEach(record => {
+      const entries = groups.get(record.mealType) || []
+      entries.push(record)
+      groups.set(record.mealType, entries)
+    })
+    return groups
+  }, [records])
   const [historyTotalCalorie, setHistoryTotalCalorie] = useState(0)
   const [targetCalories, setTargetCalories] = useState(2000)
   const [loading, setLoading] = useState(true)
@@ -297,6 +305,12 @@ function DayRecordPage() {
   const openRecordDetail = (recordId: string) => {
     Taro.navigateTo({
       url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(recordId)}&owned=1`
+    })
+  }
+
+  const openWholeMealDetail = (mealType: string) => {
+    Taro.navigateTo({
+      url: `${extraPkgUrl('/pages/meal-detail/index')}?date=${encodeURIComponent(selectedDate)}&meal_type=${encodeURIComponent(mealType)}`,
     })
   }
 
@@ -666,113 +680,112 @@ function DayRecordPage() {
           </View>
         ) : records.length > 0 ? (
           <View className='day-record-list'>
-            {Array.from(new Set(records.map(record => record.mealType))).map(mealType => {
-              const entries = records.filter(record => record.mealType === mealType)
-              const advice = mealRecordAdvice({
-                items: entries.flatMap(entry => entry.record.items),
-                total_calories: entries.reduce((sum, entry) => sum + entry.totalCalorie, 0),
-                total_protein: entries.reduce((sum, entry) => sum + entry.totalProtein, 0),
-                total_carbs: entries.reduce((sum, entry) => sum + entry.totalCarbs, 0),
-                total_fat: entries.reduce((sum, entry) => sum + entry.totalFat, 0),
-              })
+            {records.map((meal) => {
+              const sameMealRecords = mealRecordsByType.get(meal.mealType) || []
+              const showWholeMealLink = sameMealRecords.length > 1 && sameMealRecords[0].id === meal.id
               return (
-                <View className='day-meal-advice' key={mealType} onClick={() => Taro.navigateTo({ url: `${extraPkgUrl('/pages/meal-detail/index')}?date=${encodeURIComponent(selectedDate)}&meal_type=${encodeURIComponent(mealType)}` })}>
-                  <Text className='day-meal-advice-title'>{MEAL_TYPE_NAMES[mealType]} · 整餐营养点评</Text>
-                  <Text className='day-meal-advice-body'>{advice.insight}</Text>
-                  <Text className='day-meal-advice-body'>{advice.ratio}</Text>
-                  <Text className='day-meal-advice-note'>{entries.length > 1 ? `合并本餐 ${entries.length} 条记录计算。` : ''}查看整餐完整点评 ›</Text>
+                <View
+                  key={meal.id}
+                  className='day-record-card'
+                  onClick={() => openRecordDetail(meal.id)}
+                >
+                  <View className='day-record-card-header'>
+                    <View className='day-record-card-main'>
+                      <View
+                        className={`day-record-card-thumb ${meal.hasRealImage ? '' : 'is-placeholder'}`}
+                        onClick={(e) => previewMealImages(e as any, meal)}
+                      >
+                        {meal.hasRealImage ? (
+                          <Image
+                            className='day-record-card-thumb-image'
+                            src={meal.previewImage}
+                            mode='aspectFill'
+                          />
+                        ) : (
+                          <Text className='iconfont icon-shiwu' style={{ fontSize: '48rpx', color: '#00bc7d' }} />
+                        )}
+                        {!meal.hasRealImage && (
+                          <View className='day-record-card-thumb-badge placeholder'>
+                            <Text className='day-record-card-thumb-badge-text'>无照片</Text>
+                          </View>
+                        )}
+                        {meal.hasRealImage && meal.imageUrls.length > 1 && (
+                          <View className='day-record-card-thumb-badge'>
+                            <Text className='day-record-card-thumb-badge-text'>{meal.imageUrls.length} 张</Text>
+                          </View>
+                        )}
+                      </View>
+                      <View className={`day-record-card-icon ${meal.mealType}-icon`}>
+                        <Text className={`iconfont ${MEAL_TYPE_ICONS[meal.mealType] || 'icon-shiwu'}`}></Text>
+                      </View>
+                      <View className='day-record-card-copy'>
+                        <Text className='day-record-card-name'>{meal.mealName}</Text>
+                        <Text className='day-record-card-time'>{meal.time}</Text>
+                        <Text className='day-record-card-detail-link'>查看点评 ›</Text>
+                      </View>
+                    </View>
+                    <View className='day-record-card-actions'>
+                      <Text className='day-record-card-calorie'>{formatNumber(meal.totalCalorie)} kcal</Text>
+                      <View
+                        className='day-record-card-delete'
+                        onClick={(e) => handleDeleteRecord(e as any, meal.id)}
+                      >
+                        <Text className='iconfont icon-shanchu day-record-card-delete-icon' />
+                      </View>
+                    </View>
+                  </View>
+
+                  <View className='day-record-food-list'>
+                    {meal.foods.map((food, index) => (
+                      <View key={`${meal.id}-${index}`} className='day-record-food-item'>
+                        <View className='day-record-food-main'>
+                          <Text className='day-record-food-name'>{food.name}</Text>
+                          <Text className='day-record-food-amount'>{food.amount}</Text>
+                          <Text className={`day-record-food-ratio ${food.intakeRatio > 100 ? 'is-over' : ''}`}>
+                            {formatNumber(food.intakeRatio)}%
+                          </Text>
+                        </View>
+                        <View className='day-record-food-side'>
+                          <Text className='day-record-food-calorie'>{formatNumber(food.calorie)} kcal</Text>
+                          <View
+                            className='day-record-food-delete'
+                            onClick={(e) => handleDeleteFoodItem(e as any, meal, index)}
+                          >
+                            <Text className='iconfont icon-shanchu day-record-food-delete-icon' />
+                          </View>
+                        </View>
+                        <View className='day-record-food-macros'>
+                          <View className='day-record-food-macro'>
+                            <Text className='day-record-food-macro-label'>蛋白质</Text>
+                            <Text className='day-record-food-macro-value macro-protein'>{Math.round(food.protein)}g</Text>
+                          </View>
+                          <View className='day-record-food-macro'>
+                            <Text className='day-record-food-macro-label'>碳水</Text>
+                            <Text className='day-record-food-macro-value macro-carbs'>{Math.round(food.carbs)}g</Text>
+                          </View>
+                          <View className='day-record-food-macro'>
+                            <Text className='day-record-food-macro-label'>脂肪</Text>
+                            <Text className='day-record-food-macro-value macro-fat'>{Math.round(food.fat)}g</Text>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                  {showWholeMealLink && (
+                    <View
+                      className='day-record-meal-link'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openWholeMealDetail(meal.mealType)
+                      }}
+                    >
+                      <Text>{meal.mealName}共 {sameMealRecords.length} 条记录 · 整餐点评</Text>
+                      <Text>查看 ›</Text>
+                    </View>
+                  )}
                 </View>
               )
             })}
-            {records.map((meal) => (
-              <View
-                key={meal.id}
-                className='day-record-card'
-                onClick={() => openRecordDetail(meal.id)}
-              >
-                <View className='day-record-card-header'>
-                  <View className='day-record-card-main'>
-                    <View
-                      className={`day-record-card-thumb ${meal.hasRealImage ? '' : 'is-placeholder'}`}
-                      onClick={(e) => previewMealImages(e as any, meal)}
-                    >
-                      {meal.hasRealImage ? (
-                        <Image
-                          className='day-record-card-thumb-image'
-                          src={meal.previewImage}
-                          mode='aspectFill'
-                        />
-                      ) : (
-                        <Text className='iconfont icon-shiwu' style={{ fontSize: '48rpx', color: '#00bc7d' }} />
-                      )}
-                      {!meal.hasRealImage && (
-                        <View className='day-record-card-thumb-badge placeholder'>
-                          <Text className='day-record-card-thumb-badge-text'>无照片</Text>
-                        </View>
-                      )}
-                      {meal.hasRealImage && meal.imageUrls.length > 1 && (
-                        <View className='day-record-card-thumb-badge'>
-                          <Text className='day-record-card-thumb-badge-text'>{meal.imageUrls.length} 张</Text>
-                        </View>
-                      )}
-                    </View>
-                    <View className={`day-record-card-icon ${meal.mealType}-icon`}>
-                      <Text className={`iconfont ${MEAL_TYPE_ICONS[meal.mealType] || 'icon-shiwu'}`}></Text>
-                    </View>
-                    <View className='day-record-card-copy'>
-                      <Text className='day-record-card-name'>{meal.mealName}</Text>
-                      <Text className='day-record-card-time'>{meal.time}</Text>
-                    </View>
-                  </View>
-                  <View className='day-record-card-actions'>
-                    <Text className='day-record-card-calorie'>{formatNumber(meal.totalCalorie)} kcal</Text>
-                    <View
-                      className='day-record-card-delete'
-                      onClick={(e) => handleDeleteRecord(e as any, meal.id)}
-                    >
-                      <Text className='iconfont icon-shanchu day-record-card-delete-icon' />
-                    </View>
-                  </View>
-                </View>
-
-                <View className='day-record-food-list'>
-                  {meal.foods.map((food, index) => (
-                    <View key={`${meal.id}-${index}`} className='day-record-food-item'>
-                      <View className='day-record-food-main'>
-                        <Text className='day-record-food-name'>{food.name}</Text>
-                        <Text className='day-record-food-amount'>{food.amount}</Text>
-                        <Text className={`day-record-food-ratio ${food.intakeRatio > 100 ? 'is-over' : ''}`}>
-                          {formatNumber(food.intakeRatio)}%
-                        </Text>
-                      </View>
-                      <View className='day-record-food-side'>
-                        <Text className='day-record-food-calorie'>{formatNumber(food.calorie)} kcal</Text>
-                        <View
-                          className='day-record-food-delete'
-                          onClick={(e) => handleDeleteFoodItem(e as any, meal, index)}
-                        >
-                          <Text className='iconfont icon-shanchu day-record-food-delete-icon' />
-                        </View>
-                      </View>
-                      <View className='day-record-food-macros'>
-                        <View className='day-record-food-macro'>
-                          <Text className='day-record-food-macro-label'>蛋白质</Text>
-                          <Text className='day-record-food-macro-value macro-protein'>{Math.round(food.protein)}g</Text>
-                        </View>
-                        <View className='day-record-food-macro'>
-                          <Text className='day-record-food-macro-label'>碳水</Text>
-                          <Text className='day-record-food-macro-value macro-carbs'>{Math.round(food.carbs)}g</Text>
-                        </View>
-                        <View className='day-record-food-macro'>
-                          <Text className='day-record-food-macro-label'>脂肪</Text>
-                          <Text className='day-record-food-macro-value macro-fat'>{Math.round(food.fat)}g</Text>
-                        </View>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ))}
           </View>
         ) : (
           <View className='day-record-empty'>

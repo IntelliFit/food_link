@@ -103,6 +103,7 @@ func syncCommunityProjection(tx *gorm.DB, item *domain.CatalogItem) error {
 	location := strings.Join(nonEmptyCatalogValues(item.OrganizationName, item.AreaName, item.CanteenName, item.Floor, item.WindowName), " · ")
 	publication := publishedCatalogItem{
 		ID: item.ID, UserID: item.ContributorUserID, ImagePath: imagePath, ImagePaths: imagePaths,
+		AnalysisTaskID: item.AnalysisTaskID, UserNotes: item.Notes,
 		Items:    []map[string]any{},
 		FoodName: item.Name, Description: item.Description, MerchantName: item.CanteenName,
 		MerchantAddress: location, DetailAddress: location, Status: "published", Type: venue.Type,
@@ -117,6 +118,7 @@ func syncCommunityProjection(tx *gorm.DB, item *domain.CatalogItem) error {
 	}
 	columns := []string{
 		"user_id", "image_path", "image_paths", "food_name", "description", "merchant_name", "merchant_address", "detail_address",
+		"analysis_task_id", "user_notes",
 		"status", "type", "published_at", "updated_at", "is_campus_food", "school_id", "campus_id", "canteen_id", "window_id",
 		"school_name", "campus_name", "canteen_name", "floor", "window_name", "price", "price_type", "price_min", "price_max",
 		"price_unit", "price_collected_at", "portion_description", "campus_location_text", "content_version",
@@ -272,19 +274,45 @@ func (r *CatalogRepo) HasActiveCollectorScope(ctx context.Context, userID, schoo
 }
 
 func (r *CatalogRepo) LinkCommunityAnalysisTask(ctx context.Context, itemID string, targetVersion int64, taskID string, linkedAt time.Time) (bool, error) {
-	result := r.db.WithContext(ctx).Model(&domain.CatalogItem{}).
-		Where("id = ? AND version = ? AND status = ? AND nutrition_status IN ?", strings.TrimSpace(itemID), targetVersion, "published", []string{"pending", "stale", "failed"}).
-		Updates(map[string]any{
-			"analysis_task_id": strings.TrimSpace(taskID), "analysis_error": "",
-			"nutrition_status": func() string {
-				if targetVersion > 1 {
-					return "stale"
-				}
-				return "pending"
-			}(),
-			"analysis_started_at": linkedAt, "analysis_completed_at": nil, "updated_at": linkedAt,
-		})
-	return result.RowsAffected == 1, result.Error
+	linked := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&domain.CatalogItem{}).
+			Where("id = ? AND version = ? AND status = ? AND nutrition_status IN ?", strings.TrimSpace(itemID), targetVersion, "published", []string{"pending", "stale", "failed"}).
+			Updates(map[string]any{
+				"analysis_task_id": strings.TrimSpace(taskID), "analysis_error": "",
+				"nutrition_status": func() string {
+					if targetVersion > 1 {
+						return "stale"
+					}
+					return "pending"
+				}(),
+				"analysis_started_at": linkedAt, "analysis_completed_at": nil, "updated_at": linkedAt,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			// A fast worker may complete between enqueue and linking. Do not
+			// turn that successful result into a failure in the caller.
+			var count int64
+			err := tx.Model(&domain.CatalogItem{}).Where("id = ? AND version = ? AND analysis_task_id = ? AND nutrition_status = ? AND status = ?", itemID, targetVersion, taskID, "current", "published").Count(&count).Error
+			linked = count == 1
+			return err
+		}
+		// Clients poll the public projection, so link the task in both views.
+		var item domain.CatalogItem
+		if err := tx.First(&item, "id = ?", itemID).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&publishedCatalogItem{}).
+			Where("id = ? AND content_version = ?", itemID, targetVersion).
+			Updates(map[string]any{"analysis_task_id": taskID, "nutrition_status": item.NutritionStatus, "updated_at": linkedAt}).Error; err != nil {
+			return err
+		}
+		linked = true
+		return nil
+	})
+	return linked && err == nil, err
 }
 
 func (r *CatalogRepo) MarkCommunityAnalysisFailed(ctx context.Context, itemID string, targetVersion int64, message string, failedAt time.Time) error {
@@ -410,7 +438,12 @@ func (r *CatalogRepo) ReviewCollectorApplication(ctx context.Context, applicatio
 			return err
 		}
 		query := tx.Model(&domain.CollectorScope{}).
-			Where("user_id = ? AND school_id = ? AND status = ?", application.UserID, application.SchoolID, "active")
+			Where("user_id = ? AND status = ?", application.UserID, "active")
+		if application.SchoolID == "" {
+			query = query.Where("school_id IS NULL AND venue_type = ? AND organization_name = ? AND scope_canteen_name = ?", application.VenueType, application.OrganizationName, application.ScopeCanteenName)
+		} else {
+			query = query.Where("school_id = ?", application.SchoolID)
+		}
 		if application.CampusID == nil {
 			query = query.Where("campus_id IS NULL")
 		} else {
@@ -433,6 +466,7 @@ func (r *CatalogRepo) ReviewCollectorApplication(ctx context.Context, applicatio
 		created := domain.CollectorScope{
 			ID: uuid.NewString(), UserID: application.UserID, ApplicationID: &application.ID,
 			SchoolID: application.SchoolID, CampusID: application.CampusID, CanteenID: application.CanteenID,
+			VenueType: application.VenueType, OrganizationName: application.OrganizationName, ScopeCanteenName: application.ScopeCanteenName,
 			Status: "active", GrantedByAdminID: strings.TrimSpace(adminID), ExpiresAt: expiresAt,
 			CreatedAt: &reviewedAt, UpdatedAt: &reviewedAt,
 		}

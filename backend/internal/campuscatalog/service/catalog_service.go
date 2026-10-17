@@ -267,7 +267,23 @@ func (s *CatalogService) createBatch(ctx context.Context, actor batchActor, inpu
 	if organizationName == "" || canteenName == "" {
 		return nil, badRequest("请填写学校或园区名称以及食堂名称")
 	}
-	if actor.UserID != "" {
+	if len([]rune(organizationName)) > 200 || len([]rune(canteenName)) > 200 || len([]rune(input.AreaName)) > 200 {
+		return nil, badRequest("地点名称或位置说明最多 200 个字")
+	}
+	if actor.UserID != "" && venueType != "university" {
+		if actor.RequireScope {
+			if err := s.requireVenueCollectorScope(ctx, actor.UserID, venueType, organizationName, canteenName); err != nil {
+				return nil, err
+			}
+		}
+		if pointerValue(input.SchoolID) != "" || pointerValue(input.CampusID) != "" || pointerValue(input.CanteenID) != "" || pointerValue(input.DefaultWindowID) != "" {
+			return nil, badRequest("社区或园区菜品不能关联学校目录")
+		}
+		if _, ok := s.repo.(communityBatchRepository); !ok {
+			return nil, appError("食堂菜品共建服务未配置")
+		}
+	}
+	if actor.UserID != "" && venueType == "university" {
 		communityRepo, ok := s.repo.(communityBatchRepository)
 		if !ok {
 			return nil, appError("校园菜品共建服务未配置")

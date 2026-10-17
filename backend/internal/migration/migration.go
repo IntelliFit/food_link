@@ -176,6 +176,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := db.WithContext(ctx).AutoMigrate(migrationdo.AllModels()...); err != nil {
 		return fmt.Errorf("auto migrate models: %w", err)
 	}
+	if err := MigrateCanteenCollectorScopes(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureMealMeetupConstraints(ctx, db); err != nil {
 		return err
 	}
@@ -759,6 +762,9 @@ func MigrateCampusCatalogPublishing(ctx context.Context, db *gorm.DB, schema str
 		&migrationdo.CampusCollectorScopeDO{},
 	); err != nil {
 		return fmt.Errorf("auto migrate campus catalog publishing: %w", err)
+	}
+	if err := MigrateCanteenCollectorScopes(ctx, db); err != nil {
+		return err
 	}
 	if !db.Migrator().HasTable(&migrationdo.PublicFoodItemDO{}) {
 		return fmt.Errorf("public_food_library table is required")

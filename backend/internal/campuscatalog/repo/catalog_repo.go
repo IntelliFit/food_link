@@ -584,6 +584,7 @@ type publishedCatalogItem struct {
 	TotalFat           float64          `gorm:"column:total_fat"`
 	Items              []map[string]any `gorm:"column:items;serializer:json"`
 	Description        string           `gorm:"column:description"`
+	UserNotes          string           `gorm:"column:user_notes"`
 	Insight            string           `gorm:"column:insight"`
 	FoodName           string           `gorm:"column:food_name"`
 	MerchantName       string           `gorm:"column:merchant_name"`
@@ -645,7 +646,7 @@ func resolvePublicationVenue(tx *gorm.DB, item *domain.CatalogItem) (publication
 		return publicationVenue{}, err
 	}
 	if strings.TrimSpace(batch.VenueType) != "university" {
-		return publicationVenue{Type: "common", IsCampusFood: false}, nil
+		return publicationVenue{Type: "common", IsCampusFood: false, Floor: item.Floor, WindowName: item.WindowName}, nil
 	}
 	location := strings.Join(nonEmptyCatalogValues(item.OrganizationName, item.AreaName, item.CanteenName, item.Floor, item.WindowName), " · ")
 	return publicationVenue{

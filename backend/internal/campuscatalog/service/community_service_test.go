@@ -167,6 +167,24 @@ func TestApplyUserCorrectionQueuesNutritionForTargetContentVersion(t *testing.T)
 	require.EqualValues(t, 4, tasks.input.ExtraPayload["campus_content_version"])
 }
 
+func TestPriceCorrectionWhileAnalysisPendingQueuesTheNewVersion(t *testing.T) {
+	current := newPublishedCommunityItem()
+	current.NutritionStatus = "pending"
+	current.NutritionVersion = 0
+	current.AnalysisTaskID = stringPointer("old-task")
+	repository := &fakeCommunityRepo{fakeCatalogRepo: &fakeCatalogRepo{existingItem: current}}
+	svc := NewCatalogService(repository, nil)
+	svc.ConfigureAnalysis(&fakeCatalogAnalyzeSubmitter{taskID: "new-task"}, fakeCatalogAnalysisUserResolver{userID: uuid.NewString()})
+	result, err := svc.ApplyUserCorrection(context.Background(), uuid.NewString(), current.ID, CorrectionInput{
+		BaseVersion: current.Version, Patch: map[string]any{"price": 15.0},
+	})
+	require.NoError(t, err)
+	require.True(t, result.ReanalysisQueued)
+	require.Equal(t, current.Version+1, repository.linkedVersion)
+	require.Equal(t, "new-task", repository.linkedTaskID)
+	require.Equal(t, "pending", result.Item.NutritionStatus)
+}
+
 func TestApplyUserCorrectionDoesNotReanalyzeUnchangedSensitiveFields(t *testing.T) {
 	current := newPublishedCommunityItem()
 	repo := &fakeCommunityRepo{fakeCatalogRepo: &fakeCatalogRepo{existingItem: current}}
@@ -259,6 +277,25 @@ func TestCreateCollectorBatchRequiresAuthorizedScope(t *testing.T) {
 	var appErr *commonerrors.AppError
 	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, 403, appErr.HTTPStatus)
+}
+
+func TestCreateCommunitySingleDoesNotRequireSchoolButCannotBypassBatchScope(t *testing.T) {
+	repository := &fakeCommunityRepo{fakeCatalogRepo: &fakeCatalogRepo{}}
+	svc := NewCatalogService(repository, nil)
+	input := CreateBatchInput{ClientBatchKey: "community-single", VenueType: "community", OrganizationName: "青年社区", CanteenName: "邻里食堂",
+		Entries: []CreateCatalogItemInput{{Name: "番茄炒蛋", ImagePaths: []string{"campus-food/dish.jpg"}, PriceType: "unknown"}},
+	}
+	result, err := svc.CreateUserSingle(context.Background(), uuid.NewString(), input)
+	require.NoError(t, err)
+	require.Equal(t, "community", result.Batch.VenueType)
+	require.Nil(t, result.Items[0].SchoolID)
+	require.Equal(t, "published", result.Items[0].Status)
+	input.ClientBatchKey = "community-batch"
+	_, err = svc.CreateCollectorBatch(context.Background(), uuid.NewString(), input)
+	require.Error(t, err)
+	input.Entries = append(input.Entries, input.Entries[0])
+	_, err = svc.CreateUserSingle(context.Background(), uuid.NewString(), input)
+	require.Error(t, err)
 }
 
 func TestRollbackRevisionUsesOnlyCommunityEditableSnapshotFields(t *testing.T) {

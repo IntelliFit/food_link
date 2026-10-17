@@ -61,10 +61,13 @@ type collectorRepository interface {
 }
 
 type CollectorApplicationInput struct {
-	SchoolID      string  `json:"school_id"`
-	CampusID      *string `json:"campus_id"`
-	CanteenID     *string `json:"canteen_id"`
-	ApplicantNote string  `json:"applicant_note"`
+	VenueType        string  `json:"venue_type"`
+	OrganizationName string  `json:"organization_name"`
+	CanteenName      string  `json:"canteen_name"`
+	SchoolID         string  `json:"school_id"`
+	CampusID         *string `json:"campus_id"`
+	CanteenID        *string `json:"canteen_id"`
+	ApplicantNote    string  `json:"applicant_note"`
 }
 
 type CollectorProfile struct {
@@ -100,6 +103,9 @@ func (s *CatalogService) ApplyCollector(ctx context.Context, userID string, inpu
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
 		return nil, commonerrors.ErrUnauthorized
+	}
+	if venueType := strings.TrimSpace(input.VenueType); venueType != "" && venueType != "university" {
+		return s.applyVenueCollector(ctx, userID, input)
 	}
 	repo, ok := s.repo.(collectorRepository)
 	if !ok {
@@ -334,10 +340,12 @@ func (s *CatalogService) ApplyUserCorrection(ctx context.Context, userID, itemID
 	updated.LastContributorID = &userID
 	updated.LastVerifiedAt = &now
 	updated.UpdatedAt = &now
+	// Any new version supersedes the in-flight result, even a price-only edit.
+	refreshNutrition := nutritionChanged || current.NutritionStatus == "pending" || current.NutritionStatus == "stale" || current.NutritionStatus == "failed"
 	if updated.AvailabilityStatus == "" {
 		updated.AvailabilityStatus = "available"
 	}
-	if nutritionChanged {
+	if refreshNutrition {
 		updated.AnalysisTaskID = nil
 		updated.AnalysisError = ""
 		if updated.NutritionVersion > 0 {
@@ -371,7 +379,7 @@ func (s *CatalogService) ApplyUserCorrection(ctx context.Context, userID, itemID
 		return nil, err
 	}
 	queued := false
-	if nutritionChanged {
+	if refreshNutrition {
 		queued = s.queueCommunityNutritionRefresh(ctx, communityRepo, userID, &updated)
 	}
 	logger.Info(ctx, "校园菜品纠错已即时生效",
@@ -514,6 +522,31 @@ func (s *CatalogService) applyCorrectionPatch(ctx context.Context, repo communit
 	directoryChanged := false
 	for field, value := range patch {
 		switch field {
+		case "school_name", "campus_name", "canteen_name":
+			// Unbound community/park locations are contributed as text. School
+			// directory names remain authoritative and are never overwritten here.
+			if item.SchoolID != nil || patch["school_id"] != nil || patch["campus_id"] != nil || patch["canteen_id"] != nil {
+				return nil, false, badRequest("学校地点请通过目录选择")
+			}
+			text, err := correctionString(value, 200, field == "campus_name")
+			if err != nil {
+				return nil, false, err
+			}
+			switch field {
+			case "school_name":
+				item.OrganizationName = text
+			case "campus_name":
+				item.AreaName = text
+			case "canteen_name":
+				item.CanteenName = text
+			}
+			normalized[field] = text
+		case "notes":
+			text, err := correctionString(value, 500, true)
+			if err != nil {
+				return nil, false, err
+			}
+			item.Notes, normalized[field] = text, text
 		case "name":
 			text, err := correctionString(value, 100, false)
 			if err != nil {
@@ -966,6 +999,7 @@ func campusVersionConflict() error {
 var availabilityStatuses = enumSet("available", "temporarily_unavailable", "discontinued", "unknown")
 
 var correctionEditableFields = map[string]struct{}{
+	"school_name": {}, "campus_name": {}, "canteen_name": {}, "notes": {},
 	"name": {}, "description": {}, "school_id": {}, "campus_id": {}, "canteen_id": {}, "window_id": {},
 	"floor": {}, "window_name": {}, "meal_periods": {}, "available_weekdays": {}, "availability_note": {},
 	"service_mode": {}, "price_type": {}, "price": {}, "price_min": {}, "price_max": {}, "price_unit": {},

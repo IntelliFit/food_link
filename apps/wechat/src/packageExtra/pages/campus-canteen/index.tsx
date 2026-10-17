@@ -441,26 +441,29 @@ function CampusCanteenPage() {
   };
 
   const goUpload = () => {
-    Taro.navigateTo({ url: extraPkgUrl(campusScope ? "/pages/campus-food-share/index" : "/pages/food-library-share/index") });
+    const context: Record<string, string> = { scope: canteenScope };
+    if (campusScope) Object.assign(context, {
+      school_id: selectedSchool?.id || '', school_name: selectedSchool?.name || '',
+      campus_id: selectedCampus?.id || '', campus_name: selectedCampus?.name || '',
+      canteen_id: selectedCanteen?.id || '', canteen_name: selectedCanteen?.name || '',
+      floor: floorName || '', window_name: windowName || '',
+    });
+    if (communityScope) Object.assign(context, {
+      organization_name: selectedOrganization?.name || '',
+      canteen_name: selectedCommunityCanteen?.canteen_name || '',
+      area_name: selectedCommunityCanteen?.address || '',
+    });
+    const query = Object.entries(context).filter(([, value]) => value).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&');
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/campus-food-share/index')}?${query}` });
   };
 
   const goCollector = () => {
-    Taro.navigateTo({ url: extraPkgUrl("/pages/campus-food-collector/index") });
-  };
-
-  const openMore = async () => {
-    const actions = [
-      { label: "补充菜品", run: goUpload },
-      ...(campusScope ? [{ label: "批量采集", run: goCollector }] : []),
-      { label: "地点纠错", run: () => void handleLocationFeedback() },
-      { label: "刷新菜品", run: () => void loadList(false, true) },
-    ];
-    try {
-      const { tapIndex } = await Taro.showActionSheet({
-        itemList: actions.map((action) => action.label),
-      });
-      actions[tapIndex]?.run();
-    } catch { /* 取消更多菜单不执行操作。 */ }
+    const context: Record<string, string> = { venue_type: communityScope ? 'community' : 'university' };
+    if (communityScope) Object.assign(context, {
+      organization_name: selectedOrganization?.name || '', canteen_name: selectedCommunityCanteen?.canteen_name || '',
+    });
+    const query = Object.entries(context).filter(([, value]) => value).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&');
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/campus-food-collector/index')}?${query}` });
   };
 
   const openCanteenPicker = () => {
@@ -672,6 +675,10 @@ function CampusCanteenPage() {
     <FlPageThemeRoot>
       <View className='campus-canteen-page campus-canteen-page--directory'>
         <View className='campus-browse-header'>
+          <View className='canteen-upload-actions'>
+            <Button id='canteen-upload' className='canteen-upload-primary' onClick={goUpload}><Plus /><Text>上传菜品</Text></Button>
+            <Button id='canteen-batch-upload' className='canteen-upload-secondary' onClick={goCollector}>批量上传</Button>
+          </View>
           <View className='canteen-scope-tabs'>
             {([["all", "全部食堂"], ["campus", "校园"], ["community", "社区·园区"]] as const).map(([value, label]) => (
               <Button key={value} id={`canteen-scope-${value}`} ariaLabel={`${label}${canteenScope === value ? "，已选中" : ""}`} className={`canteen-scope-tab ${canteenScope === value ? "active" : ""}`} onClick={() => changeCanteenScope(value)}>{label}</Button>
@@ -683,9 +690,6 @@ function CampusCanteenPage() {
               <Text className='campus-school-name'>{selectedSchoolName}</Text>
               <ArrowDown className='campus-chevron' />
             </View>
-            <Button className='campus-more-button' ariaLabel={selectedSchool ? "补充食堂菜品" : "食堂更多操作"} onClick={() => selectedSchool ? goUpload() : void openMore()}>
-              {selectedSchool ? <Plus /> : <Ellipsis />}
-            </Button>
           </View>
           )}
           {communityScope && (
@@ -725,7 +729,9 @@ function CampusCanteenPage() {
           scrollY
           enhanced
           showScrollbar={false}
-          refresherEnabled={false}
+          refresherEnabled
+          refresherTriggered={loading}
+          onRefresherRefresh={() => void loadList(false, true)}
         >
           <View className='list-content'>
             {campusScope && selectedSchool && (
@@ -803,8 +809,8 @@ function CampusCanteenPage() {
                   {communityScope && selectedOrganization && <Text className='campus-results-location'>{[selectedOrganization.city, selectedOrganization.district].filter(Boolean).join(' · ')}</Text>}
                 </View>
                 {loading && visibleList.length > 0 && <View className='campus-refresh-indicator'><View className='loading-spinner-md' /></View>}
-                <Button className='campus-more-button' ariaLabel='菜品更多操作' onClick={() => void openMore()}><Ellipsis /></Button>
               </View>
+              {campusScope && selectedCanteen && <Text className='campus-text-button canteen-location-feedback' onClick={() => void handleLocationFeedback()}>“{selectedCanteen.name}”的地点信息有误？</Text>}
               <View className='campus-sort-row'>
                 {([
                   ["hot", "热门"], ["high_protein", "高蛋白"], ["low_calorie", "低热量"], ["value", "性价比"],

@@ -50,7 +50,7 @@ func (a campusCatalogAdapter) CreateCampusFood(ctx context.Context, userID strin
 		CollectorName:       "小程序用户",
 		SourceNote:          pointerText(input.UserNotes),
 		Entries: []campuscatalogservice.CreateCatalogItemInput{{
-			EntryType: "dish", Name: pointerText(input.FoodName), Description: pointerText(input.Description),
+			EntryType: "dish", Name: pointerText(input.FoodName),
 			WindowID: input.WindowID, Floor: pointerText(input.Floor), WindowName: pointerText(input.WindowName),
 			WindowLayout: "unknown", ServiceMode: "unknown", PriceType: priceType,
 			Price: input.Price, PriceMin: input.PriceMin, PriceMax: input.PriceMax, PriceUnit: pointerText(input.PriceUnit),

@@ -323,7 +323,7 @@ function ProfilePage() {
     {
       id: 9,
       iconClass: 'icon-dizhi',
-      title: '校园与社区食堂',
+      title: '食堂',
       desc: '查食堂菜品热量、价格和蛋白质',
       path: extraPkgUrl('/pages/campus-canteen/index')
     },

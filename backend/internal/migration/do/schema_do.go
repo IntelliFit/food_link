@@ -1861,18 +1861,21 @@ type CampusFoodRevisionDO struct {
 func (CampusFoodRevisionDO) TableName() string { return "campus_food_revisions" }
 
 type CampusCollectorApplicationDO struct {
-	ID            string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID        string     `gorm:"column:user_id;type:uuid;not null;index:idx_campus_collector_applications_user"`
-	SchoolID      string     `gorm:"column:school_id;type:uuid;not null;index:idx_campus_collector_applications_school"`
-	CampusID      *string    `gorm:"column:campus_id;type:uuid;index:idx_campus_collector_applications_campus"`
-	CanteenID     *string    `gorm:"column:canteen_id;type:uuid;index:idx_campus_collector_applications_canteen"`
-	ApplicantNote *string    `gorm:"column:applicant_note;type:text"`
-	Status        string     `gorm:"column:status;type:text;not null;default:'pending';index:idx_campus_collector_applications_status"`
-	ReviewNote    *string    `gorm:"column:review_note;type:text"`
-	ReviewedBy    *string    `gorm:"column:reviewed_by;type:uuid"`
-	ReviewedAt    *time.Time `gorm:"column:reviewed_at;type:timestamptz"`
-	CreatedAt     *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_campus_collector_applications_created_at,sort:desc"`
-	UpdatedAt     *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID           string     `gorm:"column:user_id;type:uuid;not null;index:idx_campus_collector_applications_user"`
+	SchoolID         *string    `gorm:"column:school_id;type:uuid;index:idx_campus_collector_applications_school"`
+	VenueType        string     `gorm:"column:venue_type;type:text;not null;default:'university'"`
+	OrganizationName string     `gorm:"column:organization_name;type:text;not null;default:''"`
+	ScopeCanteenName string     `gorm:"column:scope_canteen_name;type:text;not null;default:''"`
+	CampusID         *string    `gorm:"column:campus_id;type:uuid;index:idx_campus_collector_applications_campus"`
+	CanteenID        *string    `gorm:"column:canteen_id;type:uuid;index:idx_campus_collector_applications_canteen"`
+	ApplicantNote    *string    `gorm:"column:applicant_note;type:text"`
+	Status           string     `gorm:"column:status;type:text;not null;default:'pending';index:idx_campus_collector_applications_status"`
+	ReviewNote       *string    `gorm:"column:review_note;type:text"`
+	ReviewedBy       *string    `gorm:"column:reviewed_by;type:uuid"`
+	ReviewedAt       *time.Time `gorm:"column:reviewed_at;type:timestamptz"`
+	CreatedAt        *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_campus_collector_applications_created_at,sort:desc"`
+	UpdatedAt        *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
 
 func (CampusCollectorApplicationDO) TableName() string { return "campus_collector_applications" }
@@ -1881,7 +1884,10 @@ type CampusCollectorScopeDO struct {
 	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID           string     `gorm:"column:user_id;type:uuid;not null;index:idx_campus_collector_scopes_user_status,priority:1"`
 	ApplicationID    *string    `gorm:"column:application_id;type:uuid;index:idx_campus_collector_scopes_application"`
-	SchoolID         string     `gorm:"column:school_id;type:uuid;not null;index:idx_campus_collector_scopes_school"`
+	SchoolID         *string    `gorm:"column:school_id;type:uuid;index:idx_campus_collector_scopes_school"`
+	VenueType        string     `gorm:"column:venue_type;type:text;not null;default:'university'"`
+	OrganizationName string     `gorm:"column:organization_name;type:text;not null;default:''"`
+	ScopeCanteenName string     `gorm:"column:scope_canteen_name;type:text;not null;default:''"`
 	CampusID         *string    `gorm:"column:campus_id;type:uuid;index:idx_campus_collector_scopes_campus"`
 	CanteenID        *string    `gorm:"column:canteen_id;type:uuid;index:idx_campus_collector_scopes_canteen"`
 	Status           string     `gorm:"column:status;type:text;not null;default:'active';index:idx_campus_collector_scopes_user_status,priority:2"`
