@@ -1,0 +1,12 @@
+$ErrorActionPreference = 'Stop'
+$recordPath = 'D:/files/food_link/.local-state/runtime/meal-companion-prototype-20261010.json'
+if (!(Test-Path -LiteralPath $recordPath)) { Write-Output '没有本原型进程登记。'; exit }
+$record = Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json
+$previewProcess = Get-Process -Id $record.pid -ErrorAction SilentlyContinue
+if (!$previewProcess) { Write-Output '原型服务已停止。'; exit }
+$expectedStart = [DateTimeOffset]::Parse($record.startTime).UtcDateTime
+if ($previewProcess.StartTime.ToUniversalTime() -ne $expectedStart -or $previewProcess.ProcessName -ne 'node') {
+  throw 'PID 身份与本原型登记不符，未停止任何进程。'
+}
+Stop-Process -Id $previewProcess.Id
+Write-Output '已停止本次饮食社交原型服务，HTML 文件仍可直接打开。'

@@ -1,0 +1,28 @@
+# 本地候选配置，未加载到共享 Prometheus。阈值是待校准的运维策略，不是准确率结论。
+groups:
+  - name: foodlink-algorithm-contracts
+    rules:
+      - alert: FoodlinkCorrectionNotApplied
+        expr: sum by (exported_job) (increase(otel_food_link_algorithm_gates_total{gate="correction_effect",outcome="rejected"}[15m])) >= 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "纠错未产生实际变化，需按任务摘要排查"
+          description: "可能包含用户未提交有效修改；不能直接认作视觉识别错误。"
+      - alert: FoodlinkNutritionContractRejected
+        expr: sum by (exported_job) (increase(otel_food_link_algorithm_gates_total{gate="resolved_nutrition",outcome="rejected"}[15m])) >= 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "15分钟内多次拒绝不符合完整营养约束的结果"
+          description: "检查字段、份量、宏量物质边界、零能量依据，不应关闭门禁。"
+      - alert: FoodlinkAlgorithmTaskFailureBurst
+        expr: (sum by (exported_job) (increase(otel_food_link_algorithm_gates_total{gate="task_outcome",outcome="failed"}[15m])) / clamp_min(sum by (exported_job) (increase(otel_food_link_algorithm_gates_total{gate="task_outcome"}[15m])), 1) > 0.2) and (sum by (exported_job) (increase(otel_food_link_algorithm_gates_total{gate="task_outcome"}[15m])) >= 20)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "算法处理失败比例升高（含精准子任务）"
+          description: "先区分网络、审核、解析、身份和营养门禁；不是食物识别准确率。"
