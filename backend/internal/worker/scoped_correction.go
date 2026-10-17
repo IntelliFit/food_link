@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"regexp"
+	"reflect"
 	"strings"
 
 	analyzeservice "food_link/backend/internal/analyze/service"
 	"food_link/backend/internal/foodrecord/domain"
 	recordservice "food_link/backend/internal/foodrecord/service"
 	"food_link/backend/pkg/logger"
+	"food_link/backend/pkg/metrics"
 )
 
 // 结构化纠错按原食物标识合并，未修改项不进入营养重新估算。
@@ -110,7 +111,14 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 	if err := analyzeservice.ValidateResolvedNutritionItems(items); err != nil {
 		return nil, err
 	}
+	if !scopedCorrectionChanged(previous, items) {
+		metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_effect", "rejected")
+		logger.Warn(ctx, "纠错结果没有实际变化，拒绝标记成功", slog.Int("item_count", len(items)))
+		return nil, fmt.Errorf("未应用任何更正，请在纠错清单中填写需要修改的食物名称或重量")
+	}
+	metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_effect", "passed")
 	result["items"] = items
+	result["analysis_engine"] = "db_first"
 	result["description"] = "更正后的餐食：" + scopedItemNames(items)
 	record := &domain.FoodRecord{}
 	for _, item := range items {
@@ -134,6 +142,24 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 	result["context_advice"] = "更正后按最终食物与实际摄入量汇总；未修改食物的营养保持原值。"
 	logger.Info(ctx, "结构化纠错已合并并保留未修改食物", slog.Int("item_count", len(items)), slog.Int("recalculated_count", recalculated))
 	return result, nil
+}
+
+func scopedCorrectionChanged(previous, current []map[string]any) bool {
+	if len(previous) != len(current) {
+		return true
+	}
+	for index, item := range current {
+		old := previous[index]
+		if normalizeScopedName(firstNonEmptyString(item, "name")) != normalizeScopedName(firstNonEmptyString(old, "name")) {
+			return true
+		}
+		weight, _ := firstPositiveFloat(item, "estimatedWeightGrams", "weight")
+		oldWeight, _ := firstPositiveFloat(old, "estimatedWeightGrams", "weight")
+		if math.Abs(weight-oldWeight) > 0.001 || !reflect.DeepEqual(mapFromAny(item["nutrients"]), mapFromAny(old["nutrients"])) {
+			return true
+		}
+	}
+	return false
 }
 
 // The correction form already supplies authoritative names and edible grams.
@@ -201,30 +227,6 @@ func (r *Runner) resolveScopedCorrectionTargets(ctx context.Context, input analy
 	}
 	logger.Info(ctx, "纠错新增和改名食物已批量补全营养", slog.Int("item_count", len(resolved)))
 	return out, nil
-}
-
-// 常见明确改名语句只作用于被点名的项；其它说明不会触发整餐重估。
-func applyScopedCorrectionNames(items []map[string]any, text string) []map[string]any {
-	out := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		next := copyAnyMap(item)
-		source := firstNonEmptyString(item, "sourceName", "name")
-		if source != "" && !boolFromAny(item["nameEdited"]) {
-			prefix := regexp.QuoteMeta(source)
-			patterns := []string{"不是[\\s\"“]*" + prefix + "[\\s\"”]*[，,]?\\s*是\\s*[\"“]?([^，,；;。\\n\"”]+)", "(?:将|把)?[\"“]?" + prefix + "[\"”]?\\s*(?:改为|改成)\\s*[\"“]?([^，,；;。\\n\"”]+)"}
-			for _, pattern := range patterns {
-				if match := regexp.MustCompile(pattern).FindStringSubmatch(text); len(match) > 1 {
-					name := strings.TrimSpace(match[1])
-					if name != "" {
-						next["name"], next["nameEdited"], next["nutritionEdited"] = name, true, false
-					}
-					break
-				}
-			}
-		}
-		out = append(out, next)
-	}
-	return out
 }
 
 func scopedPreviousIndex(item map[string]any, previous []map[string]any) int {

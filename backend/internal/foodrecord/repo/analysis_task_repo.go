@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"strings"
 
 	analyzedomain "food_link/backend/internal/analyze/domain"
 
@@ -39,6 +40,28 @@ func (r *AnalysisTaskRepo) GetImagePathsByIDs(ctx context.Context, taskIDs []str
 	}
 	var tasks []analyzedomain.AnalysisTask
 	if err := r.db.WithContext(ctx).Select("id", "image_paths", "image_url").Where("id IN ?", taskIDs).Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(tasks))
+	for _, task := range tasks {
+		if len(task.ImagePaths) > 0 {
+			out[task.ID] = task.ImagePaths
+		} else if task.ImageURL != nil && *task.ImageURL != "" {
+			out[task.ID] = []string{*task.ImageURL}
+		}
+	}
+	return out, nil
+}
+
+// GetUserTaskImagePaths keeps legacy food-record links inside their owner's
+// task namespace. A record's foreign key alone is not an ownership check.
+func (r *AnalysisTaskRepo) GetUserTaskImagePaths(ctx context.Context, userID string, taskIDs []string) (map[string][]string, error) {
+	if strings.TrimSpace(userID) == "" || len(taskIDs) == 0 {
+		return nil, nil
+	}
+	var tasks []analyzedomain.AnalysisTask
+	if err := r.db.WithContext(ctx).Select("id", "image_paths", "image_url").
+		Where("user_id = ? AND id IN ?", userID, taskIDs).Find(&tasks).Error; err != nil {
 		return nil, err
 	}
 	out := make(map[string][]string, len(tasks))

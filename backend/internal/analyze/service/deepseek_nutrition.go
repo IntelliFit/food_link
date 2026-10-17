@@ -155,7 +155,7 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 		}
 		index := int(numberFromAny(row["index"]))
 		unit, ok := row["unitNutritionPer100g"].(map[string]any)
-		if !ok {
+		if !ok || !nutritionFallbackCoreFieldsValid(unit) {
 			continue
 		}
 		out[index] = normalizeFallbackUnitNutrition(candidateNames[index], coerceExtendedNutrients(unit))

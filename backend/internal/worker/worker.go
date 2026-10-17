@@ -1460,15 +1460,27 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 
 	input := analyzeInputFromTask(task)
 	applyLatestInputsToAnalyzeInput(&input, latestInputs)
-	input.CorrectionItems = applyScopedCorrectionNames(correctionItems, input.AdditionalContext)
-	correctionItems = input.CorrectionItems
+	input.CorrectionItems = correctionItems
 	if len(input.PreviousResult) == 0 {
 		input.PreviousResult = mapFromAny(firstNonNil(task.Payload["previousResult"], latestInputs["previousResult"]))
 	}
-	contextOverrides := parseCorrectionContextOverrides(input.AdditionalContext, correctionItems)
-	if len(contextOverrides) > 0 {
-		input.CorrectionItems = applyCorrectionContextOverrides(correctionItems, contextOverrides)
-		correctionItems = input.CorrectionItems
+	if resolver, ok := r.analyze.(interface {
+		ResolveCorrectionInstructions(context.Context, string, analyzeservice.AnalyzeInput) ([]map[string]any, error)
+	}); ok {
+		resolved, err := resolver.ResolveCorrectionInstructions(ctx, task.UserID, input)
+		if err != nil {
+			return true, err
+		}
+		input.CorrectionItems = resolved
+	} else {
+		return true, fmt.Errorf("纠错说明解析服务不可用，请稍后重试")
+	}
+	correctionItems = input.CorrectionItems
+	contextOverrides := map[int]correctionContextOverride{}
+	for index, item := range correctionItems {
+		if calories, ok := floatFromAny(item["correctionCalories"]); ok && calories > 0 {
+			contextOverrides[index] = correctionContextOverride{Index: index, Calories: &calories}
+		}
 	}
 	input.AnalysisEngine = "db_first"
 	input.ModelName = selectPrecisionModel(r.analyze, sessionID)
@@ -2714,11 +2726,13 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 	}
 	parsedItems, err := parsePrecisionEstimateItems(parsed, plannedItems, task.Payload)
 	if err != nil {
+		metrics.ObserveAlgorithmGate(ctx, stringFromMap(task.Payload, "execution_mode"), stringFromMap(task.Payload, "analysis_engine"), "precision_identity", "rejected")
 		if estimate != nil {
 			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": err.Error()})
 		}
 		return err
 	}
+	metrics.ObserveAlgorithmGate(ctx, stringFromMap(task.Payload, "execution_mode"), stringFromMap(task.Payload, "analysis_engine"), "precision_identity", "passed")
 	parsedItems = attachPrecisionItemMetadata(parsedItems, plannedItems)
 	rawInputForRefine := textInput
 	if sourceType == "image" {
@@ -2729,7 +2743,7 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 	}
 	initialWeights := precisionWeightSnapshot(parsedItems)
 	refinedNotes := []string{}
-	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, modelName)
+	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, modelName, task.Payload)
 	if refineErr != nil {
 		r.warn(ctx, "精确模式复核已跳过",
 			slog.String("task_id", task.ID),
@@ -3967,10 +3981,18 @@ func buildPrecisionItemEstimatePromptFromPayload(sourceType string, payload map[
 			}
 		}
 	}
-	return buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, textInput, additionalContext, referenceObjects), nil
+	itemKey := firstNonEmptyString(payload, "item_key")
+	if len(items) == 1 {
+		itemKey = firstNonEmptyString(items[0], "item_key")
+	}
+	return buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, textInput, additionalContext, referenceObjects, itemKey), nil
 }
 
-func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawInput, additionalContext string, referenceObjects []map[string]any) string {
+func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawInput, additionalContext string, referenceObjects []map[string]any, itemKeys ...string) string {
+	itemKey := ""
+	if len(itemKeys) > 0 {
+		itemKey = itemKeys[0]
+	}
 	if rawInput == "" {
 		rawInput = "无"
 	}
@@ -3984,7 +4006,7 @@ func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawI
 	if additionalContext == "" {
 		additionalContext = "无"
 	}
-	return fmt.Sprintf(`你是精准模式的分项估计器。你现在只需要聚焦一个主体食物：%s。
+	return fmt.Sprintf(`你是精准模式的分项估计器。你现在只需要聚焦一个主体食物：%s，稳定标识 item_key=%s。
 %s原始输入：
 %s
 
@@ -3995,12 +4017,13 @@ func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawI
 
 要求：
 - 只输出这个主体食物自己的名称和估计重量，不要把其他食物并进去。
-- 先判断食物种类，再估重量；如果 planner 给的名称和视觉证据不一致，可以把 name 修正为更可能的候选食物。
+- 必须保留计划食物的 name 和 item_key，不得用备选食物替换身份；每个计划项必须恰好返回一次，不得遗漏、重复或新增。
+- 若视觉证据无法与计划身份或重量口径对应，返回 {"items":[],"uncertaintyNotes":["身份或重量口径冲突的具体原因"]}，由系统明确失败并等待确认；不要偷偷改成另一种食物。
 - 必须输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）、weightBasis（dry/as_served/package_net）和 basisEvidence；状态、克重口径和名称必须互相一致。
 - 名称必须包含会显著影响营养密度的状态，例如“熟米粉”“干米粉”“泡发木耳”，不要把熟制湿重写成含糊的“米粉”后再套用干料营养。
 - 餐碗中已煮好可食用的米粉/米线/面条/粉条，使用 foodState=cooked、weightBasis=as_served；只有明确是下锅前干重时才使用 dry/dry。
 - 对相似项必须比较视觉证据：莴苣/莴笋片看厚片茎部和浅绿半透明质感，青菜/小白菜看叶片和菜梗；百叶包/千张包看豆皮褶皱和包裹边缘，蒸饺/馄饨看面皮半透明和褶边。
-- 如果只能在两个名称之间选择，name 填更可能的主名称，并在 uncertaintyNotes 简短记录备选。
+- 候选名称只用于检查身份；无法确认是计划食物时按上面的冲突规则明确失败，不得把备选名称写成新的 name。
 - 如果画面/描述里还有其他食物，忽略它们。
 - 如果主体提示说明这是混合菜中的某个成分，只估计该成分的可食净重；例如估“意大利面”时不要把鸡肉、胡萝卜、酱汁重量并入。
 - 参考物和尺寸如果可用，请务必用于精确估重。
@@ -4015,6 +4038,7 @@ func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawI
 JSON 结构：
 {
   "item": {
+    "item_key": "%s",
     "name": "%s",
     "foodState": "cooked",
     "weightBasis": "as_served",
@@ -4022,7 +4046,7 @@ JSON 结构：
     "estimatedWeightGrams": 180
   },
   "uncertaintyNotes": ["如果没有参考物，重量可能有一定波动"]
-}`, itemName, hintBlock, rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules(), itemName)
+}`, itemName, itemKey, hintBlock, rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules(), itemKey, itemName)
 }
 
 func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string]any, rawInput, additionalContext string, referenceObjects []map[string]any) string {
@@ -4039,6 +4063,9 @@ func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string
 			name = fmt.Sprintf("食物%d", index+1)
 		}
 		line := "  - " + name
+		if itemKey := firstNonEmptyString(item, "item_key"); itemKey != "" {
+			line += "【item_key=" + itemKey + "】"
+		}
 		if hint := firstNonEmptyString(item, "item_hint"); hint != "" {
 			line += "（" + hint + "）"
 		}
@@ -4072,12 +4099,13 @@ func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string
 
 要求：
 - 分别输出每个食物的名称和估计重量。
-- 先判断食物种类，再估重量；如果 planner 给的名称和视觉证据不一致，可以把 name 修正为更可能的候选食物。
+- 必须保留每个计划食物的 name 和 item_key；每个计划项必须恰好返回一次，不得遗漏、重复、新增或替换身份。
+- 若任何一项的视觉证据无法与计划身份或重量口径对应，返回 {"items":[],"uncertaintyNotes":["身份或重量口径冲突的具体原因"]}，由系统明确失败并等待确认；不要偷偷换成另一种食物。
 - 每项都必须输出 foodState（fresh/dry/hydrated/cooked/liquid/packaged）、weightBasis（dry/as_served/package_net）和 basisEvidence；名称也要包含会显著影响营养密度的状态。
 - 餐碗中已煮好可食用的米粉/米线/面条/粉条，名称写成“熟米粉”等明确状态，使用 cooked/as_served；只有明确是下锅前干重时才使用 dry/dry。
 - 状态、名称和重量口径必须一致，严禁用当前食用状态的湿重搭配干料每100g营养口径。
 - 对相似项必须比较视觉证据：莴苣/莴笋片看厚片茎部和浅绿半透明质感，青菜/小白菜看叶片和菜梗；百叶包/千张包看豆皮褶皱和包裹边缘，蒸饺/馄饨看面皮半透明和褶边。
-- 如果只能在两个名称之间选择，name 填更可能的主名称，并在 uncertaintyNotes 简短记录备选。
+- 候选名称只用于检查身份；无法确认是计划食物时按上面的冲突规则明确失败，不得把备选名称写成新的 name。
 - 注意食物之间的比例关系和相对大小，这有助于更准确地估重。
 - 参考物和尺寸如果可用，请务必用于精确估重。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示，不能当精确比例尺。
@@ -4090,12 +4118,9 @@ func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string
 
 JSON 结构：
 {
-  "items": [
-    {"name": "熟米粉", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "餐碗内已煮熟", "estimatedWeightGrams": 180},
-    {"name": "牛肉", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "画面为熟制牛肉", "estimatedWeightGrams": 120}
-  ],
+  "items": %s,
   "uncertaintyNotes": ["如果没有参考物，重量可能有一定波动"]
-}`, strings.Join(lines, "\n"), rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules())
+}`, strings.Join(lines, "\n"), rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules(), precisionEstimatePromptExample(items))
 }
 
 func precisionStapleVolumeRules() string {
@@ -4145,7 +4170,7 @@ func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, addition
 		if uncertaintyLevel == "high" || precisionNameHasRefineKeyword(name) {
 			note = "，重点复核"
 		}
-		itemLines = append(itemLines, fmt.Sprintf("- %s: 当前估计 %.0fg，难度 %s%s", name, weight, uncertaintyLevel, note))
+		itemLines = append(itemLines, fmt.Sprintf("- %s【item_key=%s】: 当前估计 %.0fg，难度 %s%s", name, firstNonEmptyString(item, "item_key"), weight, uncertaintyLevel, note))
 	}
 	if rawInput == "" {
 		rawInput = "无"
@@ -4168,8 +4193,9 @@ func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, addition
 
 复核规则：
 - 只复核重量，不要补充营养。
+- 保留全部原有 name 和 item_key，每项恰好返回一次；不得遗漏、重复、新增或替换食物身份。身份或重量口径无法对应时返回空 items 并说明原因，由系统跳过本轮复核、保留原完整估计。
 - 必须保留并返回每项原有的 foodState、weightBasis 和 basisEvidence；没有明确相反证据时，不得把 cooked/as_served 改成 dry/dry 或干料口径，也不得删掉名称中的“熟/干/泡发”等状态。
-- 如果复核发现名称与状态字段矛盾，应以画面中的当前食用形态为准统一修正；餐碗内已煮好的米粉/米线/面条/粉条必须保持熟制湿重口径。
+- 若复核发现名称与状态字段矛盾，按冲突规则返回空 items，不得在重量复核中静默改换身份或生熟/干湿口径。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示。
 - 必须根据可见面积、容器填充深度、堆积高度/厚度、与餐具/碗盘/手掌的相对大小重新审视重量。
 - estimatedWeightGrams 必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量复核，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
@@ -4180,12 +4206,9 @@ func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, addition
 
 JSON 结构：
 {
-  "items": [
-    {"name": "熟米粉", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "餐碗内已煮熟", "estimatedWeightGrams": 220},
-    {"name": "牛肉", "foodState": "cooked", "weightBasis": "as_served", "basisEvidence": "画面为熟制牛肉", "estimatedWeightGrams": 95}
-  ],
+  "items": %s,
   "uncertaintyNotes": ["米饭缺少清晰顶视角，估重仍有波动"]
-}`, strings.Join(itemLines, "\n"), rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules())
+}`, strings.Join(itemLines, "\n"), rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), precisionStapleVolumeRules(), precisionEstimatePromptExample(items))
 }
 
 func precisionNameHasRefineKeyword(name string) bool {
@@ -4231,17 +4254,21 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 	if parsed == nil {
 		parsed = map[string]any{}
 	}
-	if len(plannedItems) > 0 {
-		filterPayload := payload
-		if filterPayload == nil {
-			filterPayload = map[string]any{}
+	rawItems := extractItems(parsed["items"])
+	if len(rawItems) == 0 {
+		if item, ok := parsed["item"].(map[string]any); ok && item != nil {
+			rawItems = []map[string]any{item}
+		} else if firstNonEmptyString(parsed, "name") != "" {
+			rawItems = []map[string]any{parsed}
 		}
-		filterPayload["items_to_estimate"] = plannedItems
-		parsed = filterPrecisionResultToPlanned(copyAnyMap(parsed), filterPayload)
+	}
+	matchedItems, err := matchPrecisionEstimateItems(rawItems, plannedItems)
+	if err != nil {
+		return nil, err
 	}
 	isMulti := len(plannedItems) > 1
 	if isMulti {
-		rawItems := extractItems(parsed["items"])
+		rawItems := matchedItems
 		if len(rawItems) == 0 {
 			return nil, fmt.Errorf("精准模式多食物估计未返回有效结果")
 		}
@@ -4252,6 +4279,7 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 			if name != "" {
 				item := map[string]any{
 					"name":                 name,
+					"item_key":             firstNonEmptyString(raw, "item_key"),
 					"foodState":            firstNonEmptyString(raw, "foodState", "food_state"),
 					"weightBasis":          firstNonEmptyString(raw, "weightBasis", "weight_basis"),
 					"basisEvidence":        firstNonEmptyString(raw, "basisEvidence", "basis_evidence"),
@@ -4263,9 +4291,9 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 		return items, nil
 	}
 
-	itemPayload, ok := parsed["item"].(map[string]any)
-	if !ok || itemPayload == nil {
-		itemPayload = parsed
+	itemPayload := parsed
+	if len(matchedItems) == 1 {
+		itemPayload = matchedItems[0]
 	}
 	name := firstNonEmptyString(itemPayload, "name")
 	weight, _ := floatFromAny(firstNonNil(itemPayload["estimatedWeightGrams"], itemPayload["weight"]))
@@ -4274,6 +4302,7 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 	}
 	item := map[string]any{
 		"name":                 name,
+		"item_key":             firstNonEmptyString(itemPayload, "item_key"),
 		"foodState":            firstNonEmptyString(itemPayload, "foodState", "food_state"),
 		"weightBasis":          firstNonEmptyString(itemPayload, "weightBasis", "weight_basis"),
 		"basisEvidence":        firstNonEmptyString(itemPayload, "basisEvidence", "basis_evidence"),
@@ -4292,6 +4321,7 @@ func (r *Runner) maybeRefinePrecisionWeights(
 	referenceObjects []map[string]any,
 	imageURLs []string,
 	modelName string,
+	runtimePayload ...map[string]any,
 ) ([]map[string]any, []string, error) {
 	if !precisionRefineEnabled {
 		return parsedItems, nil, nil
@@ -4299,18 +4329,29 @@ func (r *Runner) maybeRefinePrecisionWeights(
 	if len(parsedItems) == 0 || !shouldRefinePrecisionWeights(plannedItems) {
 		return parsedItems, nil, nil
 	}
+	mode, engine := "", ""
+	if len(runtimePayload) > 0 {
+		mode = stringFromMap(runtimePayload[0], "execution_mode")
+		engine = stringFromMap(runtimePayload[0], "analysis_engine")
+	}
 	prompt := buildPrecisionWeightRefinePrompt(parsedItems, rawInput, additionalContext, referenceObjects)
 	refineCtx, cancel := context.WithTimeout(ctx, precisionRefineTimeout)
 	defer cancel()
 	parsed, err := r.analyze.RunPrecisionJSONWithImagesTemperatureNoFallback(refineCtx, sourceType, prompt, imageURLs, modelName, 0.1)
 	if err != nil {
+		metrics.ObserveAlgorithmGate(ctx, mode, engine, "precision_refinement", "failed")
 		return parsedItems, nil, err
 	}
-	refinedItems, notes := parsePrecisionRefinedItems(parsed, parsedItems)
-	return refinedItems, notes, nil
+	refined, notes, err := parsePrecisionRefinedItems(parsed, parsedItems)
+	if err != nil {
+		metrics.ObserveAlgorithmGate(ctx, mode, engine, "precision_refinement", "rejected")
+		return refined, notes, err
+	}
+	metrics.ObserveAlgorithmGate(ctx, mode, engine, "precision_refinement", "passed")
+	return refined, notes, nil
 }
 
-func parsePrecisionRefinedItems(parsed map[string]any, fallbackItems []map[string]any) ([]map[string]any, []string) {
+func parsePrecisionRefinedItems(parsed map[string]any, fallbackItems []map[string]any) ([]map[string]any, []string, error) {
 	notes := []string{}
 	if parsed != nil {
 		notes = stringSliceFromAny(parsed["uncertaintyNotes"])
@@ -4322,8 +4363,13 @@ func parsePrecisionRefinedItems(parsed map[string]any, fallbackItems []map[strin
 		}
 	}
 	if len(rawItems) == 0 {
-		return fallbackItems, notes
+		return fallbackItems, notes, fmt.Errorf("精准估重复核未返回计划食物")
 	}
+	matchedItems, err := matchPrecisionEstimateItems(rawItems, fallbackItems)
+	if err != nil {
+		return fallbackItems, notes, err
+	}
+	rawItems = matchedItems
 	refined := make([]map[string]any, 0, len(rawItems))
 	for _, raw := range rawItems {
 		name := firstNonEmptyString(raw, "name")
@@ -4333,6 +4379,7 @@ func parsePrecisionRefinedItems(parsed map[string]any, fallbackItems []map[strin
 		weight, _ := floatFromAny(firstNonNil(raw["estimatedWeightGrams"], raw["weight"]))
 		item := map[string]any{
 			"name":                 name,
+			"item_key":             firstNonEmptyString(raw, "item_key"),
 			"foodState":            firstNonEmptyString(raw, "foodState", "food_state"),
 			"weightBasis":          firstNonEmptyString(raw, "weightBasis", "weight_basis"),
 			"basisEvidence":        firstNonEmptyString(raw, "basisEvidence", "basis_evidence"),
@@ -4341,20 +4388,9 @@ func parsePrecisionRefinedItems(parsed map[string]any, fallbackItems []map[strin
 		refined = append(refined, normalizePrecisionStateMetadata(item, "name"))
 	}
 	if len(refined) == 0 {
-		return fallbackItems, notes
+		return fallbackItems, notes, fmt.Errorf("精准估重复核未返回有效食物")
 	}
-	filtered := filterPrecisionResultToPlanned(map[string]any{"items": refined}, map[string]any{"items_to_estimate": fallbackItems})
-	if item, ok := filtered["item"].(map[string]any); ok && item != nil {
-		return attachPrecisionItemMetadata([]map[string]any{item}, fallbackItems), notes
-	}
-	filteredItems := extractItems(filtered["items"])
-	if len(filteredItems) == 0 {
-		return fallbackItems, notes
-	}
-	if len(filteredItems) > len(fallbackItems) && len(fallbackItems) > 0 {
-		filteredItems = filteredItems[:len(fallbackItems)]
-	}
-	return attachPrecisionItemMetadata(filteredItems, fallbackItems), notes
+	return attachPrecisionItemMetadata(refined, fallbackItems), notes, nil
 }
 
 func precisionWeightSnapshot(items []map[string]any) []string {
@@ -4384,16 +4420,7 @@ func attachPrecisionItemMetadata(parsedItems, plannedItems []map[string]any) []m
 		if planned == nil {
 			continue
 		}
-		targetName := firstNonEmptyString(planned, "item_name", "name")
-		matchIndex := findPrecisionMetadataMatchIndex(enriched, targetName, used)
-		if matchIndex < 0 {
-			for index := range enriched {
-				if !used[index] {
-					matchIndex = index
-					break
-				}
-			}
-		}
+		matchIndex := findPrecisionMetadataMatchIndex(enriched, planned, used)
 		if matchIndex < 0 {
 			continue
 		}
@@ -4411,28 +4438,18 @@ func attachPrecisionItemMetadata(parsedItems, plannedItems []map[string]any) []m
 	return enriched
 }
 
-func findPrecisionMetadataMatchIndex(items []map[string]any, targetName string, used map[int]bool) int {
-	targetNorm := normalizeFoodName(targetName)
-	if targetNorm == "" {
-		return -1
-	}
-	fuzzyIndex := -1
+func findPrecisionMetadataMatchIndex(items []map[string]any, planned map[string]any, used map[int]bool) int {
+	matchIndex := -1
 	for index, item := range items {
-		if used[index] {
+		if used[index] || !precisionItemIdentityMatches(item, planned) {
 			continue
 		}
-		itemNorm := normalizeFoodName(stringFromMap(item, "name"))
-		if itemNorm == "" {
-			continue
+		if matchIndex >= 0 {
+			return -1
 		}
-		if itemNorm == targetNorm {
-			return index
-		}
-		if fuzzyIndex < 0 && (strings.Contains(targetNorm, itemNorm) || strings.Contains(itemNorm, targetNorm)) {
-			fuzzyIndex = index
-		}
+		matchIndex = index
 	}
-	return fuzzyIndex
+	return matchIndex
 }
 
 func filterPrecisionResultToPlanned(result map[string]any, payload map[string]any) map[string]any {
@@ -4446,7 +4463,7 @@ func filterPrecisionResultToPlanned(result map[string]any, payload map[string]an
 	items := extractItems(result["items"])
 	if len(items) == 0 {
 		if item, ok := result["item"].(map[string]any); ok && item != nil {
-			if plannedItemMatches(item, planned) || len(planned) == 1 {
+			if plannedItemMatches(item, planned) {
 				return result
 			}
 			result["item"] = nil
@@ -4472,9 +4489,6 @@ func filterPrecisionResultToPlanned(result map[string]any, payload map[string]an
 			used[bestIndex] = true
 			filtered = append(filtered, items[bestIndex])
 		}
-	}
-	if len(filtered) == 0 && len(items) <= len(planned) {
-		filtered = items
 	}
 	if len(planned) == 1 {
 		if len(filtered) > 0 {
@@ -5338,8 +5352,10 @@ func (r *Runner) completeTask(ctx context.Context, task *domain.AnalysisTask, re
 	}
 	if taskResultRequiresResolvedNutrition(task.TaskType) {
 		if err := analyzeservice.ValidateResolvedNutritionItems(extractItems(result["items"])); err != nil {
+			metrics.ObserveAlgorithmGate(ctx, firstNonEmptyString(task.Payload, "execution_mode"), firstNonEmptyString(task.Payload, "analysis_engine"), "resolved_nutrition", "rejected")
 			return err
 		}
+		metrics.ObserveAlgorithmGate(ctx, firstNonEmptyString(task.Payload, "execution_mode"), firstNonEmptyString(task.Payload, "analysis_engine"), "resolved_nutrition", "passed")
 	}
 	if result == nil {
 		result = map[string]any{}
@@ -5365,6 +5381,7 @@ func (r *Runner) completeTask(ctx context.Context, task *domain.AnalysisTask, re
 	}
 	task.Status = "done"
 	task.Result = result
+	recordAlgorithmOutcome(ctx, task, result, "done")
 	if r.autoRecorder != nil {
 		freshTask, lookupErr := r.tasks.GetTaskByID(ctx, task.ID)
 		if lookupErr != nil {
@@ -5430,6 +5447,7 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	}
 	task.Status = "failed"
 	task.ErrorMessage = &msg
+	recordAlgorithmOutcome(ctx, task, nil, "failed")
 	if errors.Is(taskErr, contentsecurity.ErrRejected) {
 		if err := r.tasks.MarkContentViolation(ctx, task.ID, attemptID, contentsecurity.ErrRejected.Message); err != nil {
 			return err

@@ -1084,6 +1084,16 @@ func (s *AnalyzeService) applyPreciseMicronutrientsToResolvedItems(ctx context.C
 	if err := ValidateResolvedNutritionItems(resolved); err != nil {
 		return nil, err
 	}
+	mode := nutritionMetricsExecutionMode(ctx)
+	validateFields := func(unit map[string]any) error {
+		err := validatePreciseMicronutrientUnit(unit)
+		outcome := "passed"
+		if err != nil {
+			outcome = "rejected"
+		}
+		metrics.ObserveAlgorithmGate(ctx, mode, "", "micronutrient_fields", outcome)
+		return err
+	}
 	candidates := make([]UnresolvedNutritionCandidate, 0, len(resolved))
 	rows := make(map[int]map[string]any, len(resolved))
 	for index, item := range resolved {
@@ -1094,13 +1104,12 @@ func (s *AnalyzeService) applyPreciseMicronutrientsToResolvedItems(ctx context.C
 		}
 		existingSource := strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source"]))
 		existingUnit := copyAnyMap(mapFromAny(item["unit_nutrition_per_100g"]))
-		if preferCompleteExisting && validatePreciseMicronutrientUnit(existingUnit) == nil {
-			existingUnit[fallbackNutritionSourceKey] = firstNonEmptyString(existingSource, "existing_nutrition")
-			rows[index] = existingUnit
-			continue
-		}
-		if foodrecorddomain.IsAIGeneratedNutritionSource(existingSource) && validatePreciseMicronutrientUnit(existingUnit) == nil {
-			existingUnit[fallbackNutritionSourceKey] = existingSource
+		if (preferCompleteExisting || foodrecorddomain.IsAIGeneratedNutritionSource(existingSource)) && validateFields(existingUnit) == nil {
+			source := existingSource
+			if preferCompleteExisting {
+				source = firstNonEmptyString(source, "existing_nutrition")
+			}
+			existingUnit[fallbackNutritionSourceKey] = source
 			rows[index] = existingUnit
 			continue
 		}
@@ -1124,7 +1133,7 @@ func (s *AnalyzeService) applyPreciseMicronutrientsToResolvedItems(ctx context.C
 		if source == "" {
 			return nil, fmt.Errorf("完整微量营养分析缺少第 %d 项来源", index+1)
 		}
-		if err := validatePreciseMicronutrientUnit(unit); err != nil {
+		if err := validateFields(unit); err != nil {
 			return nil, fmt.Errorf("第 %d 项微量营养结果不完整: %w", index+1, err)
 		}
 		weight := nutritionWeightFromItem(resolved[index])
@@ -1155,7 +1164,11 @@ func validatePreciseMicronutrientUnit(unit map[string]any) error {
 			missing = append(missing, key)
 			continue
 		}
-		if numberFromAny(value) > 0 {
+		amount, valid := finiteNutritionNumber(value)
+		if !valid {
+			return fmt.Errorf("字段 %s 必须为非负有限数值", key)
+		}
+		if amount > 0 {
 			positive++
 		}
 	}
@@ -6426,7 +6439,18 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			)
 			packagedResolutionFallback++
 		}
-		resolve, err := s.nutrition.ResolveFood(ctx, lookups[i].nutritionName)
+		// A basic same-name food cannot replace a portion with extra ingredients.
+		// Keep this contract on both exact and candidate paths: an AI equivalence
+		// decision must not bypass a recipe constraint already known in code.
+		reuseAllowed := exactDatabaseCalibrationAllowed(item)
+		var resolve *foodrecordrepo.ResolveResult
+		var err error
+		if reuseAllowed {
+			resolve, err = s.nutrition.ResolveFood(ctx, lookups[i].nutritionName)
+		} else {
+			item["db_calibration_status"] = "contextual_recipe_estimate_required"
+			logger.Info(ctx, "混合配方已跳过基础食物库复用", slog.Int("item_index", index))
+		}
 		if resolve != nil && resolve.Food != nil {
 			if reason := nutritionReuseRejection(item, resolve.Food); reason != "" {
 				rejectNutritionReuse(ctx, item, resolve.Food, reason)
@@ -6434,7 +6458,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			}
 		}
 		if err != nil || resolve == nil || resolve.Food == nil {
-			if err == nil && strings.TrimSpace(lookups[i].nutritionName) != "" {
+			if reuseAllowed && err == nil && strings.TrimSpace(lookups[i].nutritionName) != "" {
 				semanticQueries[index] = nutritionQueryForItem(item, lookups[i].nutritionName, options.additionalContext)
 				semanticEmbeddingEligible[index] = !shouldResolvePackagedFoodForDBFirst(item, options.packagedResolverEnabled())
 				if candidates, candidateErr := s.searchNutritionCandidates(ctx, item, lookups[i].nutritionName, resolveFoodCandidateLimit); candidateErr == nil && len(candidates) > 0 {

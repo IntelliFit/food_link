@@ -129,6 +129,23 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 			input.SourceTaskID = nil
 		} else {
 			input.SourceTaskID = &trimmed
+			if s.taskRepo == nil {
+				return nil, commonerrors.ErrNotFound
+			}
+			task, err := s.taskRepo.GetByID(ctx, trimmed)
+			if err != nil {
+				return nil, err
+			}
+			if task == nil {
+				return nil, commonerrors.ErrNotFound
+			}
+			if strings.TrimSpace(userID) == "" || task.UserID != userID {
+				logger.Warn(ctx, "拒绝关联不属于当前用户的识别任务", slog.String("user_id", userID), slog.String("task_id", trimmed))
+				return nil, commonerrors.ErrForbidden
+			}
+			if task.Status != "done" || task.IsViolated {
+				return nil, &commonerrors.AppError{Code: 10002, Message: "识别任务尚未完成或不可记录，请先确认识别结果", HTTPStatus: 409}
+			}
 			existing, err := s.recordRepo.GetByUserSourceTaskID(ctx, userID, trimmed)
 			if err != nil {
 				return nil, err
@@ -181,7 +198,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		}
 	}
 
-	recordTime, err := s.buildRecordTime(ctx, input.Date, input.SourceTaskID)
+	recordTime, err := s.buildRecordTime(ctx, userID, input.Date, input.SourceTaskID)
 	if err != nil {
 		return nil, err
 	}
@@ -579,8 +596,8 @@ func (s *FoodRecordService) ListPage(ctx context.Context, userID, date string, l
 		}
 	}
 	var taskImages map[string][]string
-	if len(taskIDs) > 0 {
-		taskImages, _ = s.taskRepo.GetImagePathsByIDs(ctx, taskIDs)
+	if len(taskIDs) > 0 && s.taskRepo != nil {
+		taskImages, _ = s.taskRepo.GetUserTaskImagePaths(ctx, userID, taskIDs)
 	}
 
 	for i := range records {
@@ -878,13 +895,13 @@ func (s *FoodRecordService) SaveCriticalSamples(ctx context.Context, userID stri
 	return s.recordRepo.InsertCriticalSamples(ctx, userID, items)
 }
 
-func (s *FoodRecordService) buildRecordTime(ctx context.Context, dateStr *string, sourceTaskID *string) (*time.Time, error) {
+func (s *FoodRecordService) buildRecordTime(ctx context.Context, userID string, dateStr *string, sourceTaskID *string) (*time.Time, error) {
 	recordedOn := ""
 	if dateStr != nil && *dateStr != "" {
 		recordedOn = *dateStr
-	} else if sourceTaskID != nil && *sourceTaskID != "" {
+	} else if sourceTaskID != nil && *sourceTaskID != "" && s.taskRepo != nil && strings.TrimSpace(userID) != "" {
 		task, err := s.taskRepo.GetByID(ctx, *sourceTaskID)
-		if err == nil && task != nil && task.Payload != nil {
+		if err == nil && task != nil && task.UserID == userID && task.Payload != nil {
 			if v, ok := task.Payload["recorded_on"].(string); ok && v != "" {
 				recordedOn = v
 			}
@@ -909,9 +926,9 @@ func (s *FoodRecordService) hydrateRecordWithContext(ctx context.Context, record
 	if record == nil {
 		return nil
 	}
-	if len(record.ImagePaths) == 0 && record.SourceTaskID != nil {
-		paths, err := s.taskRepo.GetImagePathsByID(ctx, *record.SourceTaskID)
-		if err == nil && len(paths) > 0 {
+	if len(record.ImagePaths) == 0 && record.SourceTaskID != nil && s.taskRepo != nil {
+		images, err := s.taskRepo.GetUserTaskImagePaths(ctx, record.UserID, []string{*record.SourceTaskID})
+		if paths := images[*record.SourceTaskID]; err == nil && len(paths) > 0 {
 			record.ImagePaths = paths
 		}
 	}
@@ -1102,7 +1119,7 @@ func (s *FoodRecordService) hydrateRecordNutrientsFromTask(ctx context.Context, 
 		return
 	}
 	task, err := s.taskRepo.GetByID(ctx, *record.SourceTaskID)
-	if err != nil || task == nil || len(task.Result) == 0 {
+	if err != nil || task == nil || strings.TrimSpace(record.UserID) == "" || task.UserID != record.UserID || len(task.Result) == 0 {
 		return
 	}
 	sourceItems := taskResultNutritionItems(task.Result)
