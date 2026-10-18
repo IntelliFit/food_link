@@ -1086,6 +1086,21 @@ func TestBuildPromptStandardMode(t *testing.T) {
 	assert.Contains(t, prompt, "260g")
 }
 
+func TestBuildPromptFastModeRequestsCompleteNutritionInOneCall(t *testing.T) {
+	for _, mode := range []string{fastExecutionMode, fastWebSearchMode} {
+		prompt := buildPrompt(AnalyzeInput{AnalysisEngine: analysisEngineAIDirect}, nil, mode)
+		assert.Contains(t, prompt, "一次完成识别、估重、可食部及完整营养", mode)
+		for _, key := range preciseMicronutrientKeys {
+			assert.Contains(t, prompt, `"`+key+`"`, mode)
+		}
+		assert.Contains(t, prompt, `"ediblePortionRatio":100`, mode)
+		assert.NotContains(t, prompt, `"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}`, mode)
+	}
+
+	dbFirst := buildPrompt(AnalyzeInput{AnalysisEngine: analysisEngineLegacyDBFirst}, nil, fastExecutionMode)
+	assert.NotContains(t, dbFirst, "一次完成识别、估重、可食部及完整营养")
+}
+
 func TestBuildPromptStrictModeUsesDBFirstPrompt(t *testing.T) {
 	input := AnalyzeInput{
 		MealType: "dinner",
@@ -3429,6 +3444,38 @@ func TestAnalyzeService_FinalizeFastDatabaseModeUsesOnlyQwenPostprocessing(t *te
 	assert.Equal(t, "qwen_generated", items[0]["nutrition_source"])
 	assert.Equal(t, "fast_default", items[0]["ediblePortionSource"])
 	assert.Equal(t, "ai", items[0]["suggestedRatioSource"])
+}
+
+func TestAnalyzeService_FinalizeFastModeSkipsMicronutrientCallWhenVisionIsComplete(t *testing.T) {
+	qwen := &sequenceLLMClient{}
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.ConfigureDashScopeLLMClient(qwen)
+	nutrients := map[string]any{"calories": 177.0, "protein": 12.0, "carbs": 20.0, "fat": 5.0}
+	for index, key := range preciseMicronutrientKeys {
+		nutrients[key] = float64(index + 1)
+	}
+
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
+		"description": "番茄炒蛋",
+		"items": []any{map[string]any{
+			"name":                 "番茄炒蛋",
+			"type":                 "normal",
+			"estimatedWeightGrams": 150.0,
+			"grossWeightGrams":     150.0,
+			"hasInedibleParts":     false,
+			"ediblePortionRatio":   100.0,
+			"ediblePortionReason":  "无不可食部分",
+			"nutrients":            nutrients,
+		}},
+	}, AnalyzeInput{AnalysisEngine: analysisEngineAIDirect, PreciseMicronutrients: true}, fastExecutionMode, "qwen", qwen38FlashModel, 6000)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, qwen.calls, "complete one-call vision nutrition must not trigger a second model request")
+	assert.Equal(t, "completed", mapFromAny(resp["precise_micronutrients"])["status"])
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, preciseMicronutrientAnalysisMarker, items[0]["micronutrient_analysis"])
+	assert.Equal(t, 8.0, mapFromAny(items[0]["nutrients"])["ironMg"])
 }
 
 func TestAnalyzeService_FinalizeAnalyzeResponseAdjustsImplausibleFallbackCalories(t *testing.T) {

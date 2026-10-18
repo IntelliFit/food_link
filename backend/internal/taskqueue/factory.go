@@ -24,6 +24,7 @@ func New(cfg config.TaskQueueConfig) (Queue, error) {
 			Brokers:       cfg.Brokers,
 			Topic:         cfg.Topic,
 			ConsumerGroup: cfg.ConsumerGroup,
+			MinPartitions: cfg.MinPartitions,
 		})
 		if err != nil {
 			metrics.SetTaskQueueComponentUp("kafka", "publisher", false)

@@ -1136,20 +1136,27 @@ func TestAttachPrecisionItemMetadata_MatchesByNameThenIndex(t *testing.T) {
 	}
 }
 
-func TestShouldRefinePrecisionWeights_RefinesEveryPrecisionItem(t *testing.T) {
-	cases := [][]map[string]any{
-		{{"item_name": "白米饭", "uncertainty_level": "low"}},
-		{{"item_name": "清炒冬瓜", "uncertainty_level": "high"}},
-		{{"item_name": "苹果", "requires_reference": true}},
-		{{"item_name": "鸡蛋", "uncertainty_level": "low"}},
+func TestShouldRefinePrecisionWeights_OnlyWhenPlannerIsUncertain(t *testing.T) {
+	refine := [][]map[string]any{
+		{{"item_name": "红烧肉", "uncertainty_level": "high"}},
+		{{"item_name": "白米饭", "uncertainty_level": "low"}, {"item_name": "咖喱", "uncertainty_level": " High "}},
 	}
-	for _, items := range cases {
+	for _, items := range refine {
 		if !shouldRefinePrecisionWeights(items) {
 			t.Fatalf("expected refine trigger for %#v", items)
 		}
 	}
-	if shouldRefinePrecisionWeights(nil) {
-		t.Fatalf("did not expect refine for empty plan")
+	skip := [][]map[string]any{
+		nil,
+		{{"item_name": "白米饭", "uncertainty_level": "low"}},
+		{{"item_name": "清炒西兰花", "uncertainty_level": "medium"}},
+		{{"item_name": "苹果", "requires_reference": true}},
+		{{"item_name": "鸡蛋"}},
+	}
+	for _, items := range skip {
+		if shouldRefinePrecisionWeights(items) {
+			t.Fatalf("did not expect refine for %#v", items)
+		}
 	}
 }
 

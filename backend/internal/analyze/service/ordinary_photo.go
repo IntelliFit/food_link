@@ -7,7 +7,8 @@ import (
 )
 
 // Reuse the ordinary photo context/rules, expanding only its output schema.
-// Text, precision planning and domestic rapid-mode prompts remain unchanged.
+// Ordinary and fast photo modes use it; text and precision planning prompts
+// remain unchanged.
 func combinedOrdinaryPhotoPrompt(prompt string) string {
 	nutrients := map[string]any{"calories": 0, "protein": 0, "carbs": 0, "fat": 0}
 	for _, key := range preciseMicronutrientKeys {

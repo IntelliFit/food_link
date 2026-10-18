@@ -1126,7 +1126,7 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 			slog.Any("items", analyzeservice.ItemLogSummary(items, 12)),
 		)...,
 	)
-	r.trySilentPackagedIngest(ctx, task, result)
+	r.startSilentPackagedIngest(ctx, task, result)
 	return nil
 }
 
@@ -2519,6 +2519,8 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		slog.String("detail", formatPrecisionGroups(groups)),
 	)
 	childTaskIDs := make([]string, 0, len(groups))
+	childTasks := make([]*domain.AnalysisTask, 0, len(groups))
+	aggregateTaskID := newPrecisionAggregateTaskID()
 
 	for groupIndex, groupItems := range groups {
 		groupPayload := map[string]any{
@@ -2543,6 +2545,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		groupPayload["round_index"] = roundIndex
 		groupPayload["group_index"] = groupIndex
 		groupPayload["items_to_estimate"] = groupItems
+		groupPayload["precision_aggregate_task_id"] = aggregateTaskID
 		if len(groupItems) == 1 {
 			groupPayload["item_key"] = stringFromMap(groupItems[0], "item_key")
 			groupPayload["item_name"] = stringFromMap(groupItems[0], "item_name")
@@ -2593,9 +2596,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		}); err != nil {
 			return err
 		}
-		if err := r.enqueueTask(ctx, childTask); err != nil {
-			return err
-		}
+		childTasks = append(childTasks, childTask)
 	}
 
 	aggregatePayload := map[string]any{
@@ -2627,6 +2628,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		aggregatePayload["text"] = strings.TrimSpace(*task.TextInput)
 	}
 	aggregateTask := &domain.AnalysisTask{
+		ID:         aggregateTaskID,
 		UserID:     task.UserID,
 		TaskType:   "precision_aggregate",
 		Status:     "pending",
@@ -2658,8 +2660,17 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	}); err != nil {
 		return err
 	}
-	if err := r.enqueueTask(ctx, aggregateTask); err != nil {
-		return err
+	// Children start only after every estimate row and the aggregate task exist,
+	// so whichever child finishes last can find the aggregate and publish it.
+	for _, childTask := range childTasks {
+		if err := r.enqueueTask(ctx, childTask); err != nil {
+			return err
+		}
+	}
+	if len(childTasks) == 0 {
+		if err := r.enqueueTask(ctx, aggregateTask); err != nil {
+			return err
+		}
 	}
 	err = r.completeTask(ctx, task, result)
 	return err
@@ -2805,6 +2816,7 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 			return err
 		}
 	}
+	r.enqueuePrecisionAggregateWhenReady(ctx, task)
 	err = r.completeTask(ctx, task, result)
 	return err
 }
@@ -4150,8 +4162,17 @@ var precisionWeightRefinementKeywords = []string{
 	"汤面",
 }
 
+// shouldRefinePrecisionWeights spends the second vision pass only where the
+// planner marked an item as hard to weigh (mixed dishes, sauce-covered or
+// shapeless food). Confident items keep their first estimate, which removes a
+// serial model call from most precision groups.
 func shouldRefinePrecisionWeights(plannedItems []map[string]any) bool {
-	return len(plannedItems) > 0
+	for _, item := range plannedItems {
+		if strings.EqualFold(strings.TrimSpace(stringFromMap(item, "uncertainty_level")), "high") {
+			return true
+		}
+	}
+	return false
 }
 
 func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, additionalContext string, referenceObjects []map[string]any) string {
@@ -5488,6 +5509,8 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 		if estimate, err := r.precision.GetItemEstimateBySourceTask(ctx, task.ID); err == nil && estimate != nil {
 			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": msg, "updated_at": time.Now()})
 		}
+		// The aggregate reports the failed child to the user instead of waiting.
+		r.enqueuePrecisionAggregateWhenReady(ctx, task)
 	}
 	r.refundTaskCredits(ctx, task)
 	r.errorLog(ctx, "任务失败", taskErr, append(taskAttrs(task.ID, task.TaskType, task.UserID),

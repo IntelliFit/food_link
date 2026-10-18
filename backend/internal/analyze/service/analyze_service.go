@@ -76,7 +76,7 @@ const (
 	ediblePortionTimeout            = 8 * time.Second
 	nutritionFallbackAttemptTimeout = 35 * time.Second
 	fastNutritionFallbackTimeout    = 25 * time.Second
-	fastVisionAnalysisTimeout       = 25 * time.Second
+	fastVisionAnalysisTimeout       = 30 * time.Second
 	fastPostprocessTimeout          = 30 * time.Second
 	standardHybridTimeout           = 60 * time.Second
 	webSearchTimeout                = 6 * time.Second
@@ -220,7 +220,7 @@ func (s *AnalyzeService) ConfigureImageModelTraffic(ordinaryQwenPercent, precisi
 	if s.balancedVisionEnabled() {
 		logger.Info(context.Background(), "食物图片三渠道模型映射已配置",
 			slog.String("ordinary_model", gemini3FlashModel), slog.String("wanjie_precision_model", gemini35FlashModel),
-			slog.String("relay_precision_model", relayGemini37FlashModel), slog.String("initial_traffic", "equal_available_channels"))
+			slog.String("relay_precision_model", relayGemini37FlashModel), slog.String("routing", "priority_by_recent_health_with_hedge"))
 		return
 	}
 	logger.Info(context.Background(), "食物图片模型路由已配置",
@@ -1787,7 +1787,9 @@ JSON:
   "context_advice":"",
   "uncertaintyNotes":[]
 	}`, compact, imageInputHint, additionalLine)
-		if isOrdinaryFoodImageMode(executionMode) && analysisEngineProducesNutrition(input.AnalysisEngine) {
+		// Fast mode shares the one-call schema so micronutrients do not need a
+		// second serial model request after the photo is recognized.
+		if (isOrdinaryFoodImageMode(executionMode) || isFastExecutionMode(executionMode)) && analysisEngineProducesNutrition(input.AnalysisEngine) {
 			return combinedOrdinaryPhotoPrompt(prompt)
 		}
 		return prompt
@@ -2880,6 +2882,8 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	analysisCallCtx := ctx
 	analysisCallCancel := func() {}
 	if isFastExecutionMode(executionMode) {
+		// The one-call fast output also carries micronutrients and edible-portion
+		// fields, so this budget covers what used to be a second serial request.
 		analysisCallCtx, analysisCallCancel = context.WithTimeout(ctx, fastVisionAnalysisTimeout)
 	}
 	defer analysisCallCancel()

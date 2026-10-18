@@ -118,6 +118,18 @@ brokers:
 
 Kafka consumer group。多个 server/worker 使用同一个 group 时，同一个 topic partition 只会分配给 group 内一个 consumer。不同 group 会各自收到一份消息。
 
+### min_partitions
+
+默认 `12`，环境变量 `TASK_QUEUE_MIN_PARTITIONS`。Kafka 模式下，每个进程启动时和之后每 5 分钟检查一次 topic：不存在就按这个分区数创建，分区不足就补齐；`0` 关闭检查。consumer 开启了分区变化监听，运行中补齐的分区约 30 秒内自动重新分配，不需要重启 Pod。
+
+分区数就是同一时刻最多能并行处理的任务数。只有 1 个分区时，无论 Pod 和 `worker.count` 开多少，整个环境都只有一个 consumer 在串行处理任务。
+
+## 生产 Kafka 现状（2026-10-18）
+
+- `kafka` Deployment 的数据目录挂在节点 hostPath `/var/lib/kafka-data/data`（容器内 `/bitnami/kafka/data`），部署策略为 `Recreate`，`KAFKA_KRAFT_CLUSTER_ID=6Q0dwtJXTWqx9unfAav0pA`。修改前的配置备份在服务器 `~/kafka-deploy-backup-20261018.yaml`。
+- 之前没有任何卷：约 10/2 节点磁盘压力驱逐 Kafka 后数据被清空，`food-link-analysis-tasks-main` 被自动重建成 1 个分区，48 个 consumer 只有 1 个在工作。
+- `food-link-analysis-tasks-main` 与 `-dev` 已扩到 12 个分区；main 组 12 个分区分布在 3 个 Pod 上，各 4 个。
+
 ## Kafka 处理过程
 
 Kafka 模式下单条消息的处理流程是：

@@ -468,16 +468,19 @@ func TestWorkerProcessPrecisionPlanRelinksCampusPublicFoodToAggregateTask(t *tes
 	require.Equal(t, "campus_public_food", aggregateTask.Payload["public_food_source_type"])
 	require.Equal(t, true, aggregateTask.Payload["micronutrient_analysis_required"])
 	require.Equal(t, "qwen3.8-flash", aggregateTask.Payload["modelName"])
-	require.Len(t, publisher.messages, 2)
+	// The aggregate stays pending until its last child finishes and publishes it.
+	require.Len(t, publisher.messages, 1)
+	require.Equal(t, "pending", aggregateTask.Status)
 	childTask, err := taskRepo.GetTaskByID(ctx, publisher.messages[0].TaskID)
 	require.NoError(t, err)
 	require.NotNil(t, childTask)
+	require.Equal(t, "precision_item_estimate", childTask.TaskType)
+	require.Equal(t, aggregateTask.ID, childTask.Payload["precision_aggregate_task_id"])
 	require.Equal(t, "campus_public_food", childTask.Payload["public_food_source_type"])
 	require.Equal(t, true, childTask.Payload["micronutrient_analysis_required"])
 	require.Equal(t, "qwen3.8-flash", childTask.Payload["modelName"])
 	require.Equal(t, []string{"qwen3.8-flash"}, analyze.precisionModels)
 	require.Equal(t, 1, analyze.precisionPlanRuns)
-	require.Equal(t, aggregateTask.ID, publisher.messages[1].TaskID)
 }
 
 func TestWorkerProcessPrecisionPlanPausesWithoutCreatingEstimateTasks(t *testing.T) {

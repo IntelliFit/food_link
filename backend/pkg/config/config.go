@@ -278,6 +278,9 @@ type TaskQueueConfig struct {
 	Topic         string   `mapstructure:"topic"`
 	Brokers       []string `mapstructure:"brokers"`
 	ConsumerGroup string   `mapstructure:"consumer_group"`
+	// MinPartitions keeps the Kafka topic wide enough for every worker loop to
+	// share load; 0 disables the startup and periodic partition check.
+	MinPartitions int `mapstructure:"min_partitions"`
 }
 
 type AIUsagePricingConfig struct {
@@ -667,6 +670,9 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileV.IsSet("task_queue.consumer_group") {
 		v.Set("task_queue.consumer_group", strings.TrimSpace(fileCfg.TaskQueue.ConsumerGroup))
+	}
+	if fileV.IsSet("task_queue.min_partitions") {
+		v.Set("task_queue.min_partitions", fileCfg.TaskQueue.MinPartitions)
 	}
 	return nil
 }
@@ -1205,6 +1211,7 @@ var cloudConfigKeyAliases = map[string]string{
 	"TASK_QUEUE_TOPIC":                         "task_queue.topic",
 	"TASK_QUEUE_BROKERS":                       "task_queue.brokers",
 	"TASK_QUEUE_CONSUMER_GROUP":                "task_queue.consumer_group",
+	"TASK_QUEUE_MIN_PARTITIONS":                "task_queue.min_partitions",
 	"OTEL_ENABLED":                             "otel.enabled",
 	"OTEL_TRACES_ENABLED":                      "otel.traces_enabled",
 	"OTEL_METRICS_ENABLED":                     "otel.metrics_enabled",
@@ -1254,8 +1261,14 @@ func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
 	if v.IsSet("task_queue.consumer_group") {
 		taskQueueCfg.ConsumerGroup = strings.TrimSpace(cfg.TaskQueue.ConsumerGroup)
 	}
+	if v.IsSet("task_queue.min_partitions") {
+		taskQueueCfg.MinPartitions = cfg.TaskQueue.MinPartitions
+	}
 	if taskQueueCfg.BufferSize <= 0 {
 		return fmt.Errorf("task_queue.buffer_size must be greater than 0")
+	}
+	if taskQueueCfg.MinPartitions < 0 {
+		return fmt.Errorf("task_queue.min_partitions must be greater than or equal to 0")
 	}
 	cfg.TaskQueue = taskQueueCfg
 	return nil
@@ -1273,6 +1286,7 @@ func defaultTaskQueueConfig() TaskQueueConfig {
 		BufferSize:    1024,
 		Topic:         "food-link-analysis-tasks",
 		ConsumerGroup: "food-link-workers",
+		MinPartitions: 12,
 	}
 }
 

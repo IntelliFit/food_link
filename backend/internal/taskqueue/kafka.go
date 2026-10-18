@@ -18,6 +18,7 @@ type KafkaConfig struct {
 	Brokers       []string
 	Topic         string
 	ConsumerGroup string
+	MinPartitions int
 }
 
 type KafkaQueue struct {
@@ -25,6 +26,7 @@ type KafkaQueue struct {
 	topic         string
 	consumerGroup string
 	writer        *kafka.Writer
+	stopGuard     context.CancelFunc
 
 	mu      sync.Mutex
 	readers map[*kafka.Reader]struct{}
@@ -44,7 +46,7 @@ func NewKafkaQueue(cfg KafkaConfig) (*KafkaQueue, error) {
 	if group == "" {
 		return nil, fmt.Errorf("task_queue.consumer_group must be set when task_queue.driver=kafka")
 	}
-	return &KafkaQueue{
+	q := &KafkaQueue{
 		brokers:       brokers,
 		topic:         topic,
 		consumerGroup: group,
@@ -55,8 +57,16 @@ func NewKafkaQueue(cfg KafkaConfig) (*KafkaQueue, error) {
 			RequiredAcks: kafka.RequireAll,
 			Async:        false,
 		},
-		readers: map[*kafka.Reader]struct{}{},
-	}, nil
+		readers:   map[*kafka.Reader]struct{}{},
+		stopGuard: func() {},
+	}
+	if cfg.MinPartitions > 0 {
+		guardCtx, cancel := context.WithCancel(context.Background())
+		q.stopGuard = cancel
+		admin := &kafka.Client{Addr: kafka.TCP(brokers...), Timeout: kafkaPartitionCheckTimeout}
+		go guardTopicPartitions(guardCtx, admin, topic, cfg.MinPartitions, kafkaPartitionCheckInterval)
+	}
+	return q, nil
 }
 
 func (q *KafkaQueue) PublishTask(ctx context.Context, msg TaskMessage) error {
@@ -98,6 +108,10 @@ func (q *KafkaQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-ch
 		MaxBytes:       10e6,
 		CommitInterval: 0,
 		StartOffset:    kafka.FirstOffset,
+		// Partitions added by the guard or an operator rebalance the group
+		// without restarting the pods.
+		WatchPartitionChanges:  true,
+		PartitionWatchInterval: kafkaPartitionWatchInterval,
 	})
 	q.readers[reader] = struct{}{}
 	q.mu.Unlock()
@@ -193,6 +207,9 @@ func (q *KafkaQueue) Close(ctx context.Context) error {
 		return nil
 	}
 	q.closed = true
+	if q.stopGuard != nil {
+		q.stopGuard()
+	}
 	readers := make([]*kafka.Reader, 0, len(q.readers))
 	for reader := range q.readers {
 		readers = append(readers, reader)
