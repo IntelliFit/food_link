@@ -69,6 +69,7 @@ import {
 import {
   buildCorrectionItemsPayload,
   formatCorrectionWeight,
+  hasCorrectionChanges,
   hasCorrectionWeightChanged,
   normalizeFoodNameForCorrection,
 } from './correction-payload'
@@ -2450,6 +2451,11 @@ function ResultPage() {
       return
     }
 
+    if (!hasCorrectionChanges(correctionItems, nutritionItems, additionalContext)) {
+      Taro.showToast({ title: '请先修改清单，或写明要纠正的内容', icon: 'none' })
+      return
+    }
+
     // 图片数量限制校验
     const draftImageCount = imagePaths.length > 0 ? imagePaths.length : (imagePath ? 1 : 0)
     if (draftImageCount > MAX_ANALYZE_IMAGES) {
@@ -2593,7 +2599,7 @@ function ResultPage() {
 
           Taro.hideLoading()
           setShowCorrectionDrawer(false)
-          setAdditionalContext('')
+          // 保留说明：纠错失败“返回修改”时用户可直接在原说明上调整。
           Taro.navigateTo({
             url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${taskId}&task_type=${nextTaskType}&execution_mode=${savedExecutionMode}&correction=1`
           })

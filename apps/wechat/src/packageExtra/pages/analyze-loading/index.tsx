@@ -1841,11 +1841,15 @@ function AnalyzeLoadingPage() {
       <View className='analyze-loading-page'>
         <View className='error-wrap'>
           <Text className='error-msg'>
-            {taskType === 'exercise' ? '分析失败：' : '识别失败：'}
+            {taskType === 'exercise' ? '分析失败：' : (isCorrectionMode ? '纠错未完成：' : '识别失败：')}
             {errorMessage}
           </Text>
           {errorTraceId ? (
             <Text selectable className='error-trace'>traceId: {errorTraceId}</Text>
+          ) : null}
+          {isCorrectionMode && taskType !== 'exercise' && Taro.getCurrentPages().length > 1 ? (
+            // 纠错失败时原结果页仍在页面栈中，返回即可按提示修改清单或说明后重提。
+            <Text className='btn-history' onClick={() => Taro.navigateBack()}>返回修改</Text>
           ) : null}
           <Text
             className='btn-history'

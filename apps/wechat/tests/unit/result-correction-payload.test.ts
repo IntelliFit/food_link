@@ -2,6 +2,7 @@ import {
   buildCorrectionItemsPayload,
   buildCorrectionPreviousResultItems,
   formatCorrectionWeight,
+  hasCorrectionChanges,
   hasCorrectionWeightChanged,
   normalizeCorrectionWeight,
   normalizeFoodNameForCorrection,
@@ -137,5 +138,25 @@ describe('result correction payload helpers', () => {
     expect(formatCorrectionWeight(52.5)).toBe('52.5')
     expect(hasCorrectionWeightChanged(52.5, 52.51)).toBe(false)
     expect(hasCorrectionWeightChanged(52.5, 53)).toBe(true)
+  })
+})
+
+describe('hasCorrectionChanges', () => {
+  const base = (id: number, name: string, weight: number) => ({
+    id, name, weight, originalWeight: weight, calorie: 100, protein: 1, carbs: 1, fat: 1, waterMl: 0,
+    nutrients: makeNutrients(),
+  }) as ResultCorrectionItem
+  const baseline = [base(1, '羊肉锅', 1500), base(2, '米饭', 180)]
+
+  it('blocks a submission with no list edit and no note', () => {
+    expect(hasCorrectionChanges(baseline.map((item) => ({ ...item })), baseline, '  ')).toBe(false)
+  })
+
+  it('accepts a note, a rename, a weight change, a deletion or an addition', () => {
+    expect(hasCorrectionChanges(baseline, baseline, '这是牛肉啊')).toBe(true)
+    expect(hasCorrectionChanges([{ ...baseline[0], name: '牛肉锅' }, baseline[1]], baseline, '')).toBe(true)
+    expect(hasCorrectionChanges([baseline[0], { ...baseline[1], weight: 100 }], baseline, '')).toBe(true)
+    expect(hasCorrectionChanges([baseline[0]], baseline, '')).toBe(true)
+    expect(hasCorrectionChanges([...baseline, base(99, '冰粉', 200)], baseline, '')).toBe(true)
   })
 })

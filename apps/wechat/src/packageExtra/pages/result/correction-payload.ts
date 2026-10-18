@@ -130,3 +130,21 @@ export function buildCorrectionItemsPayload<T extends ResultCorrectionItem>(
     }
   })
 }
+
+// 清单无任何改动且没有写说明时，不发起纠错（后端也会拒绝“无变化”的纠错）。
+export function hasCorrectionChanges<T extends ResultCorrectionItem>(
+  resolvedItems: T[],
+  baselineItems: T[],
+  note: string,
+): boolean {
+  if (note.trim()) return true
+  if (resolvedItems.length !== baselineItems.length) return true
+  const baselineMap = new Map(baselineItems.map((item) => [item.id, item]))
+  return resolvedItems.some((item) => {
+    const baseline = baselineMap.get(item.id)
+    if (!baseline) return true
+    return Boolean(item.nutritionEdited)
+      || normalizeFoodNameForCorrection(item.name) !== normalizeFoodNameForCorrection(baseline.name)
+      || hasCorrectionWeightChanged(item.weight, baseline.weight)
+  })
+}

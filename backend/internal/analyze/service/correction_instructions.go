@@ -19,7 +19,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-var ErrCorrectionInstructionsUnclear = errors.New("未能确定纠错说明对应的食物或修改内容，请在纠错清单中填写正确名称或重量")
+var ErrCorrectionInstructionsUnclear = errors.New("未能确定纠错说明对应的食物或修改内容，请写明是哪道菜，或直接在纠错清单中修改名称、重量，删除或添加食物")
 
 // ResolveCorrectionInstructions translates free text into edits of existing
 // items. The nutrition pass remains separate and cannot re-estimate the meal.
@@ -95,7 +95,7 @@ func (s *AnalyzeService) ResolveCorrectionInstructions(ctx context.Context, user
 		metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_instructions", outcome)
 		apm.RecordError(ctx, err)
 		logger.Warn(ctx, "食物纠错说明未能落实", slog.String("user_id", userID), slog.Int("item_count", len(items)), logger.Err(err))
-		return nil, err
+		return nil, userFacingCorrectionError(err)
 	}
 	metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_instructions", "passed")
 	logger.Info(ctx, "食物纠错说明已转换为定向修改", slog.String("user_id", userID), slog.Int("item_count", len(resolved)))
@@ -262,7 +262,7 @@ func correctionExplicitNumber(text string, amount float64, energy bool, targetIn
 	}
 	resolved[targetIndex] = map[string]any{"name": targetName}
 	for _, instruction := range correctionNumericInstructions(text, items, resolved) {
-		if instruction.index == targetIndex && instruction.energy == energy && math.Abs(instruction.amount-amount) <= 0.01 {
+		if instruction.index == targetIndex && instruction.energy == energy && correctionAmountMatches(instruction.amount, amount, energy) {
 			return true
 		}
 	}
@@ -284,6 +284,7 @@ func correctionNumericInstructions(text string, items, resolved []map[string]any
 	var instructions []correctionNumericInstruction
 	var targets map[int]bool
 	for _, clause := range regexp.MustCompile(`[，,；;。\n]`).Split(text, -1) {
+		clause = normalizeChineseWeightWords(clause)
 		named := map[int]bool{}
 		for index, item := range items {
 			names := []string{stringFromAny(item["name"]), stringFromAny(item["sourceName"])}
@@ -295,6 +296,9 @@ func correctionNumericInstructions(text string, items, resolved []map[string]any
 					named[index] = true
 				}
 			}
+		}
+		if len(named) == 0 {
+			named = correctionDishFormTargets(clause, items, resolved)
 		}
 		if len(named) > 0 {
 			targets = named
@@ -368,7 +372,7 @@ func validateCorrectionNumericCoverage(text string, items, resolved []map[string
 		if key[1] == 1 {
 			actual = correctionItemCalories(item)
 		}
-		if math.Abs(actual-amount) > 0.01 {
+		if !correctionAmountMatches(actual, amount, key[1] == 1) {
 			return ErrCorrectionInstructionsUnclear
 		}
 		if key[1] == 1 {
