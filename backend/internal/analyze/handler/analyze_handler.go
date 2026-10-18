@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	apm "food_link/backend/pkg/trace"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"go.opentelemetry.io/otel/attribute"
 	"log/slog"
 )
@@ -638,7 +640,7 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		Answers                 []service.PrecisionAnswerInput         `json:"answers"`
 		ContinueWithUncertainty bool                                   `json:"continue_with_uncertainty"`
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
+	if err := c.ShouldBindBodyWith(&body, binding.JSON); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -680,6 +682,21 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		ReferenceObject:         body.ReferenceObject,
 		Answers:                 body.Answers,
 		ContinueWithUncertainty: body.ContinueWithUncertainty,
+	}
+	var present map[string]json.RawMessage
+	if cached, ok := c.Get(gin.BodyBytesKey); ok {
+		if data, ok := cached.([]byte); ok {
+			_ = json.Unmarshal(data, &present)
+		}
+	}
+	input.ContinuationFields = map[string]bool{}
+	for key := range present {
+		input.ContinuationFields[key] = true
+	}
+	var optionFields map[string]json.RawMessage
+	_ = json.Unmarshal(present["precision_options"], &optionFields)
+	for key := range optionFields {
+		input.ContinuationFields["precision_options."+key] = true
 	}
 	if body.Date != nil {
 		input.Date = strings.TrimSpace(*body.Date)

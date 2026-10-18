@@ -8250,6 +8250,8 @@ export interface PublicFoodLibraryItem {
   type: PublicFoodLibraryType
   /** 采集来源/真实目录推导的场所类型，不以旧 common/campus 标签猜测 */
   venue_type?: 'university' | 'community' | 'corporate' | 'office_park' | ''
+  catalog_item_id?: string
+  venue_area_name?: string
   venue_organization_key?: string
   venue_organization_name?: string
   venue_canteen_key?: string
@@ -8391,7 +8393,10 @@ export interface CampusFoodCorrectionResult {
 export interface CampusCollectorApplication {
   id: string
   user_id: string
-  school_id: string
+  school_id?: string
+  venue_type?: 'university' | 'community' | 'corporate' | 'office_park'
+  organization_name?: string
+  scope_canteen_name?: string
   campus_id?: string | null
   canteen_id?: string | null
   applicant_note?: string
@@ -8402,7 +8407,10 @@ export interface CampusCollectorApplication {
 
 export interface CampusCollectorScope {
   id: string
-  school_id: string
+  school_id?: string
+  venue_type?: 'university' | 'community' | 'corporate' | 'office_park'
+  organization_name?: string
+  scope_canteen_name?: string
   school_name?: string
   campus_id?: string | null
   campus_name?: string
@@ -8709,7 +8717,10 @@ export async function getCampusFoodRevisions(
 }
 
 export async function applyCampusCollector(input: {
-  school_id: string
+  school_id?: string
+  venue_type?: 'university' | 'community' | 'corporate' | 'office_park'
+  organization_name?: string
+  canteen_name?: string
   campus_id?: string
   canteen_id?: string
   applicant_note?: string
@@ -8721,17 +8732,17 @@ export async function applyCampusCollector(input: {
 }
 
 export async function getCampusCollectorProfile(): Promise<CampusCollectorProfile> {
-  const response = await authenticatedRequest('/api/campus-food-collectors/profile', { method: 'GET', timeout: 10000 })
+  const response = await authenticatedRequest('/api/campus-food-collectors/profile?include_venues=1', { method: 'GET', timeout: 10000 })
   return response.data as CampusCollectorProfile
 }
 
 export interface CampusCollectorBatchInput {
   client_batch_key: string
   batch_name?: string
-  venue_type: 'university'
-  school_id: string
-  campus_id: string
-  canteen_id: string
+  venue_type: 'university' | 'community' | 'corporate' | 'office_park'
+  school_id?: string
+  campus_id?: string
+  canteen_id?: string
   default_window_id?: string
   organization_name: string
   area_name?: string
@@ -8757,6 +8768,21 @@ export interface CampusCollectorBatchInput {
     portion_description?: string
     notes?: string
   }>
+}
+
+export type CanteenSingleInput = Omit<CampusCollectorBatchInput, 'venue_type' | 'school_id' | 'campus_id' | 'canteen_id'> & {
+  venue_type: 'university' | 'community' | 'corporate' | 'office_park'
+  school_id?: string
+  campus_id?: string
+  canteen_id?: string
+}
+
+/** 单菜共建：仅上传资料；保存后由后台按最终菜名、照片和份量分析。 */
+export async function createCanteenFood(input: CanteenSingleInput): Promise<{ items: Array<{ id: string }> }> {
+  const response = await authenticatedRequest('/api/campus-food-collection/items', {
+    method: 'POST', data: input, timeout: 30000,
+  })
+  return response.data
 }
 
 export async function createCampusCollectorBatch(input: CampusCollectorBatchInput): Promise<{

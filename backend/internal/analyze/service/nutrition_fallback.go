@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
+	"food_link/backend/pkg/metrics"
 )
 
 const fallbackNutritionSourceKey = "_nutrition_source"
@@ -48,6 +51,7 @@ func (e *chainedNutritionFallbackEstimator) Estimate(ctx context.Context, candid
 	if len(expected) == 0 {
 		return map[int]map[string]any{}, nil
 	}
+	mode := nutritionMetricsExecutionMode(ctx)
 
 	runCtx, cancelAll := context.WithCancel(ctx)
 	defer cancelAll()
@@ -87,8 +91,10 @@ func (e *chainedNutritionFallbackEstimator) Estimate(ctx context.Context, candid
 				}
 				row, exists := result.rows[index]
 				if !exists || !usableNutritionFallbackRow(candidate.Name, row) {
+					metrics.ObserveAlgorithmGate(ctx, mode, "", "nutrition_fallback", "rejected")
 					continue
 				}
+				metrics.ObserveAlgorithmGate(ctx, mode, "", "nutrition_fallback", "passed")
 				merged[index] = row
 			}
 			if len(merged) == len(expected) {
@@ -104,8 +110,37 @@ func (e *chainedNutritionFallbackEstimator) Estimate(ctx context.Context, candid
 	return nil, err
 }
 
-func usableNutritionFallbackRow(_ string, row map[string]any) bool {
-	return len(row) > 0
+func nutritionMetricsExecutionMode(ctx context.Context) string {
+	if request, ok := ctx.Value(visionRequestKey{}).(*visionRequest); ok && request != nil {
+		return request.mode
+	}
+	return ""
+}
+
+func usableNutritionFallbackRow(name string, row map[string]any) bool {
+	values := make([]float64, 0, 4)
+	for _, key := range []string{"calories", "protein", "carbs", "fat"} {
+		value, valid := finiteNutritionNumber(row[key])
+		if !valid {
+			return false
+		}
+		values = append(values, value)
+	}
+	if values[1]+values[2]+values[3] == 0 {
+		return values[0] == 0 && foodrecorddomain.ZeroEnergyFood(name)
+	}
+	// Estimators return per-100g values. A malformed fast result must not win
+	// the race and cancel another provider that can still supply valid food.
+	return foodrecorddomain.ValidateFoodNutritionValues(name, 100, values[0], values[1], values[2], values[3]) == nil
+}
+
+func nutritionFallbackCoreFieldsValid(unit map[string]any) bool {
+	for _, key := range []string{"calories", "protein", "carbs", "fat"} {
+		if _, valid := finiteNutritionNumber(nutritionValue(unit, key)); !valid {
+			return false
+		}
+	}
+	return true
 }
 
 func tagFallbackSource(rows map[int]map[string]any, source string) {
@@ -233,7 +268,7 @@ func (e *QwenNutritionEstimator) Estimate(ctx context.Context, candidates []Unre
 		}
 		index := int(numberFromAny(row["index"]))
 		unit, ok := row["unitNutritionPer100g"].(map[string]any)
-		if !ok {
+		if !ok || !nutritionFallbackCoreFieldsValid(unit) {
 			continue
 		}
 		out[index] = normalizeFallbackUnitNutrition(candidateNames[index], coerceExtendedNutrients(unit))

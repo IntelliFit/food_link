@@ -86,7 +86,6 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
 
 .workspace-card,
 .selected-section,
-.config-card,
 .catalog-card {
   @include rm-card-surface;
   padding: $rm-s3;
@@ -1206,16 +1205,41 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   line-height: 36rpx;
 }
 
-.config-card {
-  padding-bottom: $rm-s2;
+.meal-preferences {
+  display: flex;
+  flex-direction: column;
+  gap: $rm-s2;
+  margin-bottom: $rm-s3;
 }
 
-.config-section {
-  margin-bottom: $rm-s4;
+.meal-preference-row {
+  display: flex;
+  align-items: flex-start;
+  gap: $rm-s2;
 }
 
-.config-section:last-child {
+.meal-preference-label {
+  flex: 0 0 104rpx;
+  font-size: 26rpx;
+  line-height: 56rpx;
   margin-bottom: 0;
+  font-weight: 600;
+}
+
+.meal-preferences .option-selector {
+  flex: 1;
+  min-width: 0;
+  gap: $rm-s1;
+}
+
+.meal-preferences .option-item {
+  padding: 10rpx 16rpx;
+  border-radius: 16rpx;
+}
+
+.meal-preferences .option-item text {
+  font-size: 24rpx;
+  line-height: 32rpx;
 }
 
 .loading-state,

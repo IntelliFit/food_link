@@ -29,7 +29,7 @@ describe('campus collector channel', () => {
     ;(getCampusCollectorProfile as jest.Mock).mockResolvedValue({ applications: [], active_scopes: [], can_batch: false })
     render(<CampusFoodCollectorPage />)
     await waitFor(() => expect(screen.getByText('申请批量采集通道')).toBeInTheDocument())
-    expect(screen.getByText('普通用户已经可以单菜上传；批量通道需按学校授权，不能访问后台其他数据。')).toBeInTheDocument()
+    expect(screen.getByText('批量通道按所在学校、社区、园区或公司授权。')).toBeInTheDocument()
   })
 
   it('shows shared location and multi-photo collection after approval', async () => {

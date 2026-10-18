@@ -128,6 +128,8 @@ type SubmitTaskInput struct {
 	SourceType              string                         `json:"source_type"`
 	ExtraPayload            map[string]any                 `json:"-"`
 	RetrySourceTaskID       string                         `json:"-"`
+	// ContinuationFields preserves omitted vs explicitly false/empty HTTP fields.
+	ContinuationFields map[string]bool `json:"-"`
 }
 
 type PrecisionOptionsInput struct {
@@ -169,6 +171,7 @@ type TaskListPage struct {
 
 // SubmitAnalyzeTask 是面向用户 API 的入口，必须走积分检查。
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	preparePrecisionContinuationFields(&input)
 	if input.CorrectionTargetIndex != nil {
 		return "", &errors.AppError{Code: 10002, Message: "单项重算请使用文本任务", HTTPStatus: 400}
 	}
@@ -283,6 +286,7 @@ func (s *TaskService) SubmitInternalAnalyzeTask(ctx context.Context, userID stri
 
 // SubmitTextTask 是面向用户 API 的入口，必须走积分检查。
 func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	preparePrecisionContinuationFields(&input)
 	if input.CorrectionTargetIndex != nil {
 		if input.PrecisionSessionID != nil {
 			return "", &errors.AppError{Code: 10002, Message: "单项重算不能附加精准会话", HTTPStatus: 400}
@@ -1019,15 +1023,7 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.task_type", task.TaskType),
 	)
-	failCtx, failCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer failCancel()
-	_, failErr := s.tasks.FailTask(failCtx, task.ID, "analysis task enqueue failed")
-	logger.Error(ctx, "分析任务入队失败", err,
-		slog.String("task_id", task.ID),
-		slog.String("task_type", task.TaskType),
-		logger.NamedErr("fail_update_error", failErr),
-	)
-	return fmt.Errorf("enqueue analysis task: %w", err)
+	return s.reconcileEnqueueFailure(task, err)
 }
 
 func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any, creditsInfo map[string]any, creditCost int, creditGroupID string) (string, error) {
@@ -1064,28 +1060,24 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		if existing.RoundIndex >= maxPrecisionRounds {
 			return "", &errors.AppError{Code: 10002, Message: "该精准模式会话已达到两轮免费补充上限", HTTPStatus: 400}
 		}
-		payload["execution_mode"] = existing.ExecutionMode
-		for _, key := range []string{"credit_group_id", "credit_usage", "capture_protocol", "precision_options", "capture_views", "video_capture", "reference_object"} {
-			if _, exists := payload[key]; exists {
-				continue
-			}
-			if value, ok := existing.LatestInputs[key]; ok {
-				payload[key] = value
-			}
+		mergedPayload := mergePrecisionContinuationPayload(input, payload, existing.LatestInputs)
+		// Keep the caller's map reference so submit tracing describes the same
+		// effective strategy that is persisted and executed by the worker.
+		clear(payload)
+		for key, value := range mergedPayload {
+			payload[key] = value
 		}
+		payload["execution_mode"] = existing.ExecutionMode
 		creditGroupID = stringFromAny(payload["credit_group_id"])
 		nextRound := existing.RoundIndex + 1
-		latestInputs := copyMap(existing.LatestInputs)
-		for key, value := range payload {
-			latestInputs[key] = value
-		}
+		latestInputs := copyMap(payload)
 		sessionUpdates := map[string]any{
 			"status":        "collecting",
 			"round_index":   nextRound,
 			"latest_inputs": latestInputs,
 			"updated_at":    time.Now(),
 		}
-		if references := precisionReferenceObjectsForSession(input, payload); len(references) > 0 || input.ReferenceObject != nil {
+		if references := precisionReferenceObjectsForSession(input, payload); len(references) > 0 || input.ReferenceObject != nil || input.ContinuationFields["reference_objects"] {
 			sessionUpdates["reference_objects"] = references
 		}
 		if err := s.precision.UpdateSession(ctx, existing.ID, sessionUpdates); err != nil {
@@ -1155,9 +1147,13 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		TextInput:  nil,
 		Payload:    payload,
 	}
-	if input.TextInput != "" {
-		text := input.TextInput
+	if text := stringFromAny(payload["text"]); text != "" {
 		task.TextInput = &text
+	}
+	if boolFromAny(payload["content_security_required"]) {
+		// The prestarted check may contain only the new reply. Monitor and final
+		// approval must cover the full merged evidence and retained constraints.
+		payload["content_security_input"] = AnalysisSecurityDocument(task)
 	}
 	if err := s.tasks.CreateTask(ctx, task); err != nil {
 		return "", err

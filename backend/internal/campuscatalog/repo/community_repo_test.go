@@ -171,6 +171,48 @@ func TestMarkCommunityAnalysisFailedUpdatesMatchingPublicProjection(t *testing.T
 	require.Equal(t, "failed", publicItem.NutritionStatus)
 }
 
+func TestLinkCommunityAnalysisTaskUpdatesPublicProjectionAndRejectsStaleVersion(t *testing.T) {
+	db := openCommunityRepoDB(t)
+	item := seedVersionedPublishedItem(t, db)
+	require.NoError(t, db.Model(&domain.CatalogItem{}).Where("id = ?", item.ID).Update("nutrition_status", "stale").Error)
+	repository := NewCatalogRepo(db)
+	linked, err := repository.LinkCommunityAnalysisTask(context.Background(), item.ID, item.Version, "new-task", time.Now())
+	require.NoError(t, err)
+	require.True(t, linked)
+	var projection publishedCatalogItem
+	require.NoError(t, db.First(&projection, "id = ?", item.ID).Error)
+	require.Equal(t, "new-task", *projection.AnalysisTaskID)
+	require.Equal(t, "stale", projection.NutritionStatus)
+	linked, err = repository.LinkCommunityAnalysisTask(context.Background(), item.ID, item.Version-1, "obsolete-task", time.Now())
+	require.NoError(t, err)
+	require.False(t, linked)
+	require.NoError(t, db.First(&projection, "id = ?", item.ID).Error)
+	require.Equal(t, "new-task", *projection.AnalysisTaskID)
+}
+
+func TestCompleteCommunityAnalysisPublishesNutritionForLinkedVersion(t *testing.T) {
+	db := openCommunityRepoDB(t)
+	item := seedVersionedPublishedItem(t, db)
+	require.NoError(t, db.Model(&domain.CatalogItem{}).Where("id = ?", item.ID).Update("nutrition_status", "stale").Error)
+	repository := NewCatalogRepo(db)
+	_, err := repository.LinkCommunityAnalysisTask(context.Background(), item.ID, item.Version, "ready-task", time.Now())
+	require.NoError(t, err)
+	require.NoError(t, repository.CompleteAnalyzedItemForVersion(context.Background(), item.ID, "ready-task", item.Version, map[string]any{
+		"totalCalories": 665.0, "totalProtein": 36.0,
+		"items": []map[string]any{{"name": item.Name, "micronutrient_analysis": "ai_precise_v1", "nutrients": map[string]any{"calories": 665.0, "protein": 36.0}}},
+	}, time.Now()))
+	var projection publishedCatalogItem
+	require.NoError(t, db.First(&projection, "id = ?", item.ID).Error)
+	require.Equal(t, "current", projection.NutritionStatus)
+	require.Equal(t, item.Version, projection.NutritionVersion)
+	require.Equal(t, 665.0, projection.TotalCalories)
+	linked, err := repository.LinkCommunityAnalysisTask(context.Background(), item.ID, item.Version, "ready-task", time.Now())
+	require.NoError(t, err)
+	require.True(t, linked, "已经完成的同一任务不能被迟到的关联操作标记失败")
+	require.NoError(t, db.First(&projection, "id = ?", item.ID).Error)
+	require.Equal(t, "current", projection.NutritionStatus)
+}
+
 func TestMarkCommunityAnalysisFailedIgnoresSupersededVersion(t *testing.T) {
 	db := openCommunityRepoDB(t)
 	item := seedVersionedPublishedItem(t, db)

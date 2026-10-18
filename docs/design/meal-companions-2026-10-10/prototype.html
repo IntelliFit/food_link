@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><title>食探 · 一起吃｜交互原型</title>
+<style>
+@font-face {
+  font-family: "iconfont"; /* Project id 5122763 */
+  src: url('data:font/woff2;base64,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') format('woff2');
+}
+
+.iconfont {
+  font-family: "iconfont" !important;
+  
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-youhuiquan:before {
+  content: "\e884";
+}
+
+.icon-nothing:before {
+  content: "\e725";
+}
+
+.icon-search:before {
+  content: "\e6b9";
+}
+
+.icon-foodshop:before {
+  content: "\e6bd";
+}
+
+.icon-close:before {
+  content: "\e646";
+}
+
+.icon-scan:before {
+  content: "\e69a";
+}
+
+.icon-comment:before {
+  content: "\e626";
+}
+
+.icon-collection_fill:before {
+  content: "\e6ea";
+}
+
+.icon-collection:before {
+  content: "\e6eb";
+}
+
+.icon-like_fill:before {
+  content: "\e707";
+}
+
+.icon-like:before {
+  content: "\e708";
+}
+
+.icon-tianjiahaoyou:before {
+  content: "\e7aa";
+}
+
+.icon-left:before {
+  content: "\e681";
+}
+
+.icon-right:before {
+  content: "\e683";
+}
+
+.icon-pengyouquan:before {
+  content: "\e8b4";
+}
+
+.icon-kcal:before {
+  content: "\e831";
+}
+
+.icon-zhongwu:before {
+  content: "\e82f";
+}
+
+.icon-zaoshang:before {
+  content: "\e718";
+}
+
+.icon-wanshang:before {
+  content: "\e607";
+}
+
+.icon-user:before {
+  content: "\e7ae";
+}
+
+.icon-weibiaoti1:before {
+  content: "\e625";
+}
+
+.icon-quanzi:before {
+  content: "\ee17";
+}
+
+.icon-shouye:before {
+  content: "\e606";
+}
+
+.icon-edit:before {
+  content: "\e7e1";
+}
+
+.icon-target:before {
+  content: "\e852";
+}
+
+.icon-all:before {
+  content: "\e755";
+}
+
+.icon-right-arrow:before {
+  content: "\e62f";
+}
+
+.icon-kefulan:before {
+  content: "\e62e";
+}
+
+.icon-guoqi1:before {
+  content: "\e605";
+}
+
+.icon-dumbbell:before {
+  content: "\e70d";
+}
+
+.icon-drink:before {
+  content: "\e645";
+}
+
+.icon-meat:before {
+  content: "\e99a";
+}
+
+.icon-egg:before {
+  content: "\e603";
+}
+
+.icon-rice:before {
+  content: "\e62d";
+}
+
+.icon-weight-scale:before {
+  content: "\eb6a";
+}
+
+.icon-share:before {
+  content: "\e86e";
+}
+
+.icon-download:before {
+  content: "\e66c";
+}
+
+.icon-wechat:before {
+  content: "\e883";
+}
+
+.icon-filter-filling:before {
+  content: "\e68a";
+}
+
+.icon-picture:before {
+  content: "\e6de";
+}
+
+.icon-send:before {
+  content: "\e888";
+}
+
+.icon-nannv-nv:before {
+  content: "\e61a";
+}
+
+.icon-nannv-nan:before {
+  content: "\e602";
+}
+
+.icon-jiesuo:before {
+  content: "\e669";
+}
+
+.icon-jiazaixiao:before {
+  content: "\e8bd";
+}
+
+.icon-shanchu:before {
+  content: "\e696";
+}
+
+.icon-tubiao-zhuzhuangtu:before {
+  content: "\eb96";
+}
+
+.icon-shuben:before {
+  content: "\e60b";
+}
+
+.icon-zhuzhuangtu:before {
+  content: "\e720";
+}
+
+.icon-jishiben:before {
+  content: "\e624";
+}
+
+.icon-a-144-lvye:before {
+  content: "\e8dc";
+}
+
+.icon-huore:before {
+  content: "\e601";
+}
+
+.icon-shuijue:before {
+  content: "\e66b";
+}
+
+.icon-yiliaohangyedeICON-:before {
+  content: "\e636";
+}
+
+.icon-weidenglu:before {
+  content: "\e759";
+}
+
+.icon-tianpingzuo:before {
+  content: "\f189";
+}
+
+.icon-juzhong:before {
+  content: "\e651";
+}
+
+.icon-zengji:before {
+  content: "\e652";
+}
+
+.icon-shouxieqianming:before {
+  content: "\e748";
+}
+
+.icon-wancan:before {
+  content: "\e6e7";
+}
+
+.icon-wucan:before {
+  content: "\e6e8";
+}
+
+.icon-lingshi:before {
+  content: "\e71f";
+}
+
+.icon-zaocan:before {
+  content: "\e617";
+}
+
+.icon-zaocan1:before {
+  content: "\10122";
+}
+
+.icon--yuyinshuruzhong:before {
+  content: "\e60a";
+}
+
+.icon-ic_detail:before {
+  content: "\e604";
+}
+
+.icon-shentinianling:before {
+  content: "\e88a";
+}
+
+.icon-canciguanli:before {
+  content: "\e654";
+}
+
+.icon-duoren:before {
+  content: "\e71d";
+}
+
+.icon-pinglun:before {
+  content: "\e891";
+}
+
+.icon-shiwu:before {
+  content: "\e631";
+}
+
+.icon-weibiaoti-_huabanfuben:before {
+  content: "\e616";
+}
+
+.icon-good:before {
+  content: "\e62c";
+}
+
+.icon-dizhi:before {
+  content: "\e6d9";
+}
+
+.icon-shangzhang:before {
+  content: "\ee32";
+}
+
+.icon-danbaizhi:before {
+  content: "\e62b";
+}
+
+.icon-zhifangyouheruhuazhifangzhipin:before {
+  content: "\e62a";
+}
+
+.icon-tanshui-dabiao:before {
+  content: "\e632";
+}
+
+.icon-shizhong:before {
+  content: "\e74f";
+}
+
+.icon-paizhao-xianxing:before {
+  content: "\e8d1";
+}
+
+.icon-xingzhuang-wenzi:before {
+  content: "\eb99";
+}
+
+
+:root{--bg:#f6f5ed;--surface:#fffef9;--green:#21543e;--ink:#243d31;--muted:#626f65;--soft:#edf1e7;--line:#e3e7dc;--mint:#58b696;--amber:#92601d}
+*{box-sizing:border-box}body{margin:0;background:#e8eae3;color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer;color:inherit;border:0;background:none}button:disabled{cursor:default;opacity:.52}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #64a78a;outline-offset:3px}button,a,input,select{-webkit-tap-highlight-color:transparent}a{color:var(--green)}h1,h2,h3,p{margin:0}h1{font-size:27px;line-height:1.4;letter-spacing:-.8px}h2{font-size:22px;line-height:1.4}h3{font-size:18px}small,.small{font-size:12px}.muted{color:var(--muted)}.iconfont{font-size:21px;line-height:1;display:inline-block;flex-shrink:0}.layout{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:250px 390px;gap:64px;justify-content:center;padding:32px 24px;align-items:start}.studio{padding-top:36px;position:sticky;top:24px}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}.studio h1{font-size:31px;margin:14px 0}.studio p{font-size:14px;color:var(--muted);margin-bottom:24px}.step{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border-radius:12px;margin:4px 0}.step.active{background:var(--green);color:white}.step span:first-child{font-size:12px;opacity:.65}.studio-controls{margin-top:26px;padding-top:20px;border-top:1px solid #ccd3c6}.studio-controls .btn{margin-bottom:8px;width:100%}.studio-note{margin-top:18px!important;font-size:12px!important}.device{width:390px;height:min(844px,calc(100dvh - 64px));min-height:610px;background:var(--bg);border-radius:24px;overflow:hidden;box-shadow:0 15px 50px #243d3114;position:relative;display:flex;flex-direction:column;border:1px solid #dbe0d3}.preview-label{height:26px;flex-shrink:0;background:#edf1e7;color:#677364;font-size:10px;letter-spacing:1px;text-align:center;line-height:26px}.app{min-height:0;flex:1;display:flex;flex-direction:column;position:relative}.screen{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#cad5c5 transparent}.padded{padding:20px 20px 120px}.topline{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}.brand{font-size:18px;font-weight:750;display:flex;align-items:center;gap:8px}.round-icon{height:40px;width:40px;border-radius:50%;display:grid;place-items:center;background:var(--soft)}.icon-button{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;position:relative}.dot{position:absolute;width:7px;height:7px;top:9px;right:9px;background:#c57845;border-radius:50%;border:2px solid var(--bg)}.tabs{display:flex;gap:28px;border-bottom:1px solid var(--line);margin-top:14px}.tabs button{font-size:18px;font-weight:650;padding:12px 0;position:relative;color:#8b9287}.tabs button.active{color:var(--green)}.tabs button.active:after{content:"";position:absolute;height:3px;border-radius:2px;background:var(--green);bottom:-1px;left:0;right:0}.filter-panel{padding:14px 0}.location{display:flex;align-items:center;gap:6px;font-weight:650;font-size:15px;padding:4px 0 12px}.select-row{display:grid;grid-template-columns:1fr 1fr 1fr 40px;gap:6px}.select-row select{width:100%;border:0;padding:8px 6px;background:var(--soft);border-radius:18px;color:var(--green);font-size:12px;min-height:36px}.select-row .icon-button{width:36px;height:36px}.my-strip{display:flex;width:100%;align-items:center;gap:8px;background:#e9eee1;border-radius:12px;padding:13px;margin-bottom:17px;font-size:13px;text-align:left}.my-strip .right{margin-left:auto}.card{background:var(--surface);border:1px solid #eeeee5;border-radius:17px;padding:17px;margin-bottom:12px}.author{display:flex;align-items:center;gap:10px;margin-bottom:13px}.avatar{height:36px;width:36px;border-radius:50%;background:#dce9dd;display:grid;place-items:center;color:#42634c;flex-shrink:0}.avatar.tan{background:#eee3d2;color:#8a6e45}.avatar.pink{background:#efdfda;color:#9b7164}.author-name{font-weight:650;font-size:14px}.author small{font-size:11px;color:var(--muted)}.author .icon-button{margin-left:auto;height:30px;width:30px}.card h3{margin-bottom:12px;line-height:1.4}.meta{display:flex;align-items:center;gap:8px;font-size:13px;margin:8px 0;color:#526054}.meta .iconfont{font-size:17px;color:#899582}.time{font-size:16px;font-weight:600;color:var(--ink)}.badge{font-size:11px;background:#fbefd7;color:var(--amber);border-radius:12px;padding:3px 8px;white-space:nowrap}.badge.green{color:var(--green);background:var(--soft)}.badge.gray{background:#eee;color:#777}.tags{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}.tag{font-size:11px;border-radius:12px;padding:3px 9px;background:var(--soft);color:#64785d}.card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:13px}.member-count{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--green);color:white;border-radius:11px;padding:10px 16px;min-height:44px;font-size:14px;font-weight:600}.btn.secondary{background:var(--soft);color:var(--green)}.btn.ghost{background:transparent;color:var(--green);border:1px solid var(--line)}.btn.danger{background:#f8e8e2;color:#98593e}.btn.wide{width:100%}.btn.small-btn{font-size:12px;min-height:36px;padding:8px 13px}.fab{position:absolute;right:18px;bottom:87px;box-shadow:0 5px 14px #21543e20;border-radius:24px;padding:12px 20px;z-index:3}.bottomnav{height:74px;flex-shrink:0;background:white;border-top:1px solid #e9ece5;display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;padding:7px 6px 5px;z-index:4}.bottomnav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#999f9a;font-size:10px;min-width:0}.bottomnav .iconfont{font-size:24px}.bottomnav .active{color:var(--mint)}.bottomnav .camera{height:54px;width:54px;margin:-17px auto 0;background:var(--mint);color:white;border-radius:50%;box-shadow:0 4px 12px #58b69635}.bottomnav .camera .iconfont{font-size:27px}.page-head{display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);gap:6px;flex-shrink:0;min-height:58px}.page-head h2{font-size:17px;flex:1;text-align:center}.page-head .spacer{width:44px}.page-content{padding:20px 20px 30px}.section-label{font-weight:700;font-size:15px;margin:20px 0 10px}.detail-title{margin:8px 0 20px}.hero-meta{padding:15px 18px;background:var(--surface);border-radius:14px}.hero-meta .meta{margin:12px 0;font-size:14px}.info-line{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.7}.divider{height:1px;background:var(--line);margin:18px 0}.action-bar{padding:12px 18px 16px;background:var(--surface);border-top:1px solid var(--line);display:flex;gap:8px;flex-shrink:0}.action-bar .btn{flex:1}.banner{background:#e9eee1;padding:14px;border-radius:12px;color:var(--green);font-size:13px;margin-bottom:16px}.rank-preview{margin:17px 0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px}.rank-heading{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:8px}.rank-heading strong{color:var(--green)}.rank-entries{display:grid;grid-template-columns:1fr 1fr}.rank-entries button{text-align:left;padding:5px 8px;min-height:56px}.rank-entries button+button{border-left:1px solid var(--line)}.rank-entries b{font-size:14px;display:block}.rank-entries small{font-size:10px;color:var(--muted);white-space:nowrap}.feed-plate{background:#edf0e6;border-radius:12px;padding:19px 17px;margin:10px 0;display:flex;gap:13px;align-items:center}.feed-plate .iconfont{font-size:40px;color:#8b9e77}.feed-plate strong{font-size:18px;display:block}.feed-plate span{font-size:12px;color:var(--muted)}.feed-actions{display:flex;gap:10px;justify-content:space-between;margin-top:12px}.feed-actions button{font-size:12px;display:flex;gap:5px;align-items:center;padding:7px}.feed-actions .liked{color:#b56e4b}.comment-preview{background:var(--soft);padding:10px;border-radius:8px;font-size:12px;margin-top:9px}.segment{display:flex;background:#e8ecdf;border-radius:12px;padding:4px;gap:4px;margin-bottom:17px}.segment button{flex:1;min-height:37px;font-size:13px;border-radius:9px}.segment .active{background:var(--surface);color:var(--green);font-weight:650;box-shadow:0 2px 4px #21543e08}.rank-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:17px}.rank-tabs button{padding:8px 14px;border-radius:18px;background:var(--soft);font-size:12px}.rank-tabs .active{background:var(--green);color:white}.ranking-row{display:flex;align-items:center;gap:12px;padding:17px 4px;border-bottom:1px solid var(--line)}.rank-num{width:22px;font-size:18px;font-weight:650;color:#9ea893}.ranking-row:first-child .rank-num{color:#b18745}.rank-value{margin-left:auto;text-align:right;font-size:15px;color:var(--green);font-weight:650}.rank-value small{display:block;font-weight:400;color:var(--muted);font-size:10px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:block;margin-bottom:17px}.field span{font-size:13px;font-weight:600;display:block;margin-bottom:7px}.field input,.field select,.field textarea,.comment-input{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:11px;color:var(--ink);min-width:0;font-size:14px}.field textarea{resize:vertical;min-height:85px}.field small{font-size:11px;color:var(--muted);display:block;margin-top:5px}.field input[type=checkbox]{width:auto}.error{color:#a64e35;font-size:13px;margin-bottom:12px}.room-heading{padding:16px;background:var(--soft);border-radius:12px}.room-heading p{font-size:12px;color:var(--muted);margin-top:5px}.system-line{text-align:center;font-size:11px;color:#899281;margin:20px 0}.bubble-row{display:flex;gap:9px;margin:15px 0}.bubble-row.self{flex-direction:row-reverse}.bubble{background:white;border-radius:0 13px 13px;padding:11px 13px;font-size:13px;max-width:255px}.self .bubble{background:#dfe9d7;border-radius:13px 0 13px 13px}.bubble-name{font-size:10px;color:var(--muted);margin-bottom:4px}.message-form{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);background:var(--surface);flex-shrink:0}.message-form input{min-width:0;flex:1;border:1px solid var(--line);padding:10px;border-radius:10px;background:white}.message-form .btn{padding:10px 13px}.empty{text-align:center;padding:55px 16px;color:var(--muted)}.empty .iconfont{display:block;font-size:43px;color:#a7b59e;margin-bottom:15px}.empty h3{color:var(--green);font-size:17px;margin-bottom:7px}.empty .btn{margin-top:22px}.overlay{position:absolute;inset:0;background:#142a2055;z-index:10;display:flex;align-items:flex-end;padding:12px}.sheet{width:100%;max-height:92%;overflow:auto;border-radius:20px;background:var(--surface);padding:22px}.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.sheet-head h2{font-size:20px}.sheet .btn+.btn{margin-top:9px}.toast{position:absolute;left:24px;right:24px;bottom:100px;border-radius:12px;background:#253d32f2;color:white;padding:13px;text-align:center;font-size:13px;z-index:20;box-shadow:0 4px 16px #243d3120}.toast:empty{display:none}.notice{border-bottom:1px solid var(--line);padding:16px 0;text-align:left;width:100%;display:block}.notice strong{display:block;font-size:14px}.notice p{font-size:12px;color:var(--muted);margin:5px 0}.quicklink{display:flex;align-items:center;justify-content:space-between;padding:15px 0;border-bottom:1px solid var(--line);width:100%;font-size:14px;text-align:left}.mini-controls{display:none}.chips{display:flex;gap:7px;flex-wrap:wrap}.chips button{padding:9px 12px;background:var(--soft);border-radius:9px;font-size:12px}.chips button.active{background:var(--green);color:white}.form-actions{display:flex;gap:8px}.form-actions button{flex:1}.demo-warning{padding:12px;border:1px dashed #c7d1bc;border-radius:12px;font-size:12px;color:var(--muted);margin-top:20px}.attendance{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}.attendance .form-actions{gap:5px}.attendance .btn{padding:7px 10px;min-height:34px;font-size:12px}.status-pill{font-size:11px;color:var(--green);background:var(--soft);padding:4px 8px;border-radius:10px}
+@media(max-width:760px){body{background:var(--bg)}.layout{display:block;padding:0;max-width:430px}.studio{display:none}.mini-controls{display:flex;align-items:center;gap:6px;height:38px;padding:0 10px;background:#e6eadf;font-size:10px;overflow:auto;white-space:nowrap;flex-shrink:0}.mini-controls button{font-size:11px;padding:5px 9px;border:1px solid #cbd4c1;border-radius:7px}.mini-controls button:last-child{margin-left:auto}.device{height:100dvh;width:100%;min-height:0;border:0;border-radius:0;box-shadow:none}.preview-label{display:none}.padded{padding:17px 17px 115px}}@media(max-height:690px) and (min-width:761px){.layout{padding-top:12px;padding-bottom:12px}.device{height:calc(100dvh - 24px);min-height:0}.studio{padding-top:0}}
+</style>
+</head>
+<body>
+<div class="layout">
+ <aside class="studio"><div class="eyebrow">FOODLINK / PRODUCT PREVIEW</div><h1>从一顿饭<br>开始认识。</h1><p>点击右侧体验。原型内全是虚构数据，所有操作只在本页生效。</p><nav id="tour" aria-label="原型页面"></nav><div class="studio-controls"><button class="btn secondary" data-action="simulate">模拟对方同意申请</button><button class="btn ghost" data-action="reset">重置演示</button></div><p class="studio-note">重点看看：排行榜够不够好找？<br>申请与确认是否清楚？<br>发起约饭要填的内容是否合适？</p><a class="small" href="concept.png" target="_blank" rel="noopener">查看原始概念图</a></aside>
+ <section class="device" aria-label="食探手机原型"><div class="preview-label">交互原型 · 虚构数据 · 不连接真实服务</div><div class="mini-controls"><span>交互演示</span><button data-action="simulate">模拟同意</button><button data-action="go" data-page="create">发起约饭</button><button data-action="reset">重置</button></div><main class="app" id="app"></main><div id="toast" class="toast" role="status" aria-live="polite"></div></section>
+</div>
+<script>
+'use strict';
+const $=s=>document.querySelector(s), esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon=n=>`<i class="iconfont icon-${n}" aria-hidden="true"></i>`;
+const avatar=(tone='')=>`<span class="avatar ${tone}">${icon('user')}</span>`;
+const seed=[
+ {id:1,host:'阿禾',title:'午休一起吃碗热乎的',area:'科技园',day:'今天',meal:'午餐',time:'12:15',place:'园区食堂一层',distance:0.4,budget:30,price:'20–30',payment:'各自付款',count:2,capacity:3,tags:['清淡一点','轻松聊聊'],note:'中午想吃面或盖饭，不赶时间，吃完可以一起散会儿步。',status:'open',application:'none'},
+ {id:2,host:'小林',title:'下班一起吃日料',area:'科技园',day:'今天',meal:'晚餐',time:'18:30',place:'东门商业街·和风食堂',distance:0.8,budget:80,price:'60–80',payment:'AA',count:2,capacity:4,tags:['都可以吃','聊聊日常'],note:'约个轻松的晚饭。菜单到店再选，预算每人 80 元以内。',status:'open',application:'none'},
+ {id:3,host:'七七',title:'找个搭子，食堂二楼见',area:'示例大学',day:'今天',meal:'午餐',time:'12:00',place:'南区食堂二层',distance:0.5,budget:25,price:'15–25',payment:'各自付款',count:1,capacity:3,tags:['校内可进','不吃辣'],note:'学校为演示地点，仅校内成员可进入。各点各的，一起坐下来吃。',status:'open',application:'none'},
+ {id:4,host:'我',title:'明天午餐，来两个新朋友',area:'科技园',day:'明天',meal:'午餐',time:'12:20',place:'园区食堂一层',distance:0.4,budget:35,price:'20–35',payment:'各自付款',count:1,capacity:3,tags:['轻松聊聊'],note:'我会提前到，大家各点各的就好。',status:'open',application:'owner',requests:[{name:'小夏',note:'我也在园区，明天一起！',state:'pending'}]},
+ {id:5,host:'周周',title:'今天吃一份清爽的午饭',area:'科技园',day:'今天',meal:'午餐',time:'12:30',place:'园区东门·轻食小馆',distance:0.9,budget:40,price:'30–40',payment:'各自付款',count:1,capacity:3,tags:['清爽一点','吃完散步'],note:'一起尝尝新开的轻食店，吃完回办公室。',status:'open',application:'none'}
+];
+let state,toastTimer;
+function fresh(){return{page:'community',tab:'find',area:'科技园',day:'今天',meal:'午餐',distance:1,budget:100,items:structuredClone(seed),selected:1,rankType:'user',rankFilter:'records',modal:null,history:[],likes:{},comments:{},messages:{},notices:[],myTab:'all',hidden:[],formError:'',draft:{title:'',day:'今天',time:'12:15',place:'园区食堂一层',budget:30,capacity:3,payment:'各自付款',scope:'片区公开',note:''}}}
+state=fresh();
+function current(){return state.items.find(x=>x.id===state.selected)}
+function toast(t){clearTimeout(toastTimer);$('#toast').textContent=t;toastTimer=setTimeout(()=>$('#toast').textContent='',3000)}
+function snapshot(){return{page:state.page,tab:state.tab,selected:state.selected}}
+function go(page,extra={}){state.history.push(snapshot());Object.assign(state,{page,modal:null},extra);render()}
+function back(){Object.assign(state,state.history.pop()||{page:'community',tab:'find'},{modal:null});render()}
+function titleBar(text){return`<header class="page-head"><button class="icon-button" data-action="back" aria-label="返回">${icon('left')}</button><h2>${text}</h2><span class="spacer"></span></header>`}
+function nav(){return`<nav class="bottomnav" aria-label="底部导航"><button data-action="go" data-page="home">${icon('shouye')}首页</button><button data-action="go" data-page="analysis">${icon('tubiao-zhuzhuangtu')}分析</button><button class="camera" data-action="go" data-page="record" aria-label="拍照记餐">${icon('paizhao-xianxing')}</button><button class="active" data-action="community">${icon('quanzi')}圈子</button><button data-action="go" data-page="profile">${icon('user')}我的</button></nav>`}
+function communityHeader(){return`<div class="topline"><div class="brand">${icon('a-144-lvye')} 食探 · 圈子</div><button class="icon-button" data-action="go" data-page="inbox" aria-label="消息">${icon('comment')}<span class="dot"></span></button></div><h1>${state.tab==='find'?'今天，找个人一起吃':'每一餐，都值得分享'}</h1><div class="tabs" role="tablist"><button role="tab" aria-selected="${state.tab==='find'}" class="${state.tab==='find'?'active':''}" data-action="tab" data-tab="find">找搭子</button><button role="tab" aria-selected="${state.tab==='feed'}" class="${state.tab==='feed'?'active':''}" data-action="tab" data-tab="feed">晒餐</button></div>`}
+function options(values,selected){return values.map(v=>`<option value="${esc(v)}" ${String(selected)===String(v)?'selected':''}>${esc(v)}</option>`).join('')}
+function card(x){let badge=x.status==='cancelled'?'已取消':x.application==='pending'?'待确认':x.application==='accepted'?'已加入':x.application==='owner'?'我发起的':x.capacity>x.count?`还差 ${x.capacity-x.count} 人`:'已满';return`<article class="card"><div class="author">${avatar(x.id%2?'':'tan')}<div><div class="author-name">${esc(x.host)}</div><small>${esc(x.area)} · 自填</small></div><button class="icon-button" data-action="more" data-id="${x.id}" aria-label="约饭更多操作">${icon('ic_detail')}</button></div><h3>${esc(x.title)}</h3><div class="meta time">${icon('shizhong')} ${x.day} ${esc(x.time)} <span class="badge ${x.application!=='none'?'green':''}">${badge}</span></div><div class="meta">${icon('dizhi')} ${esc(x.place)}</div><div class="meta">${icon('tianpingzuo')} ¥${esc(x.price)} / 人 · ${esc(x.payment)}</div><div class="tags">${x.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}<span class="tag">直线约 ${x.distance} km</span></div><div class="card-footer"><span class="member-count">${icon('duoren')} ${x.count}/${x.capacity} 人已确认</span><button class="btn small-btn" data-action="detail" data-id="${x.id}">查看约饭 ${icon('right')}</button></div></article>`}
+function community(){let list=state.items.filter(x=>x.status==='open'&&x.scope!=='仅邀请链接'&&!state.hidden.includes(x.id)&&x.count<x.capacity&&x.area===state.area&&(state.day==='不限日期'||x.day===state.day)&&(state.meal==='不限餐次'||x.meal===state.meal)&&x.distance<=state.distance&&x.budget<=state.budget);let pending=state.items.reduce((n,x)=>n+(x.requests||[]).filter(r=>r.state==='pending').length,0);return`<div class="screen padded">${communityHeader()}${state.tab==='feed'?feed():`<div class="filter-panel"><button class="location" data-action="location">${icon('dizhi')} ${esc(state.area)} ${icon('right')}<small class="muted">演示地点</small></button><div class="select-row"><select aria-label="日期筛选" data-filter="day">${options(['今天','明天','不限日期'],state.day)}</select><select aria-label="餐次筛选" data-filter="meal">${options(['午餐','晚餐','不限餐次'],state.meal)}</select><select aria-label="距离筛选" data-filter="distance"><option value="1" ${state.distance===1?'selected':''}>附近 1 km</option><option value="3" ${state.distance===3?'selected':''}>附近 3 km</option></select><button class="icon-button" data-action="filters" aria-label="更多筛选">${icon('filter-filling')}</button></div></div><button class="my-strip" data-action="go" data-page="mine">${icon('jishiben')} 我的约饭 <small class="muted">· ${pending?'有 '+pending+' 个待处理申请':'查看我的安排'}</small><span class="right">${icon('right')}</span></button>${list.length?list.map(card).join(''):`<div class="empty">${icon('duoren')}<h3>这会儿，还没有合适的约饭</h3><p class="small">换个时间看看，或自己发起一顿。</p><button class="btn secondary" data-action="clear-filters">放宽时间和预算</button></div>`}`}</div>${state.tab==='find'?`<button class="btn fab" data-action="go" data-page="create">${icon('edit')} 发起约饭</button>`:''}${nav()}`}
+function feed(){return`<div class="rank-preview"><div class="rank-heading"><strong>${icon('shangzhang')} 本周榜单</strong><span>10.05–10.11 · 示例</span></div><div class="rank-entries"><button data-action="rank" data-type="user"><b>用户榜 ${icon('right')}</b><small>全体记录 · 好友健康</small></button><button data-action="rank" data-type="food"><b>食物榜 ${icon('right')}</b><small>蛋白质 · 纤维 · 钙</small></button></div></div><p class="small muted" style="margin-bottom:14px">大家今天吃了什么</p>${[{id:1,name:'阿禾',text:'午饭吃舒服了，下午才有精神。',food:'鸡腿饭 + 时蔬',cal:'约 580 kcal',tag:'今天 · 午餐',comment:'小夏：这个搭配看着不错！'},{id:2,name:'小林',text:'周末也认真吃早餐。',food:'鸡蛋 · 牛奶 · 全麦面包',cal:'约 420 kcal',tag:'今天 · 早餐',comment:'七七：我也喜欢这个组合。'}].map(f=>`<article class="card"><div class="author">${avatar(f.id===1?'':'tan')}<div><div class="author-name">${f.name}</div><small>${f.tag}</small></div></div><p style="font-size:14px">${f.text}</p><div class="feed-plate">${icon('shiwu')}<div><strong>${f.food}</strong><span>${f.cal} · 作者选择公开</span></div></div><div class="feed-actions"><button data-action="like" data-id="${f.id}" class="${state.likes[f.id]?'liked':''}" aria-pressed="${!!state.likes[f.id]}">${icon(state.likes[f.id]?'like_fill':'like')} ${8+Number(!!state.likes[f.id])}</button><button data-action="comment" data-id="${f.id}">${icon('comment')} 评论 ${1+(state.comments[f.id]||[]).length}</button><button data-action="invite-from-feed">${icon('duoren')} 约下一顿</button></div><div class="comment-preview">${f.comment}${(state.comments[f.id]||[]).map(c=>`<div>我：${esc(c)}</div>`).join('')}</div></article>`).join('')}`}
+function detail(){const x=current();let action=x.status==='cancelled'?'<button class="btn secondary" disabled>这顿约饭已取消</button>':x.application==='owner'?'<button class="btn" data-action="go" data-page="manage">管理约饭</button><button class="btn secondary" data-action="go" data-page="room">进入房间</button>':x.application==='pending'?'<button class="btn secondary" data-action="withdraw">撤回申请</button><button class="btn" disabled>等待发起人确认</button>':x.application==='accepted'?'<button class="btn" data-action="go" data-page="room">进入约饭房间</button>':x.count>=x.capacity?'<button class="btn secondary" disabled>人数已满</button>':'<button class="btn" data-action="apply">申请加入这顿饭</button>';return`${titleBar('约饭详情')}<div class="screen page-content">${x.application==='pending'?'<div class="banner">申请已送达，等发起人确认后才能加入。<br><small>可用原型控制区「模拟同意」继续体验。</small></div>':''}${x.application==='accepted'?'<div class="banner">发起人已同意你的申请，一起吃顿好饭。</div>':''}<div class="author">${avatar()}<div><div class="author-name">${esc(x.host)}</div><small>${esc(x.area)} · 自填</small></div></div><h2 class="detail-title">${esc(x.title)}</h2><div class="hero-meta"><div class="meta time">${icon('shizhong')} ${x.day} ${esc(x.time)} · ${x.meal}</div><div class="meta">${icon('dizhi')} ${esc(x.place)}</div><div class="meta">${icon('tianpingzuo')} ¥${esc(x.price)} / 人 · ${esc(x.payment)}</div><div class="meta">${icon('duoren')} ${x.count}/${x.capacity} 人已确认（含发起人）</div></div><h3 class="section-label">这顿饭怎么吃</h3><p style="font-size:14px">${esc(x.note)}</p><div class="tags">${x.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div><h3 class="section-label">加入后</h3><p class="info-line">发起人确认后，进入这顿饭的专属房间。桌号、集合说明和成员讨论只对已确认成员开放。临时有事可以退出，并通知其他成员。</p><p class="info-line">${x.area==='示例大学'?'该食堂仅校内成员可进入。':'请在公共餐厅见面，餐费按约定到店支付。'}</p><div class="divider"></div><button class="quicklink" data-action="more" data-id="${x.id}">举报或屏蔽这条约饭 ${icon('right')}</button></div><div class="action-bar">${action}</div>`}
+function ranks(){const user=state.rankType==='user';let filters=user?[['records','全体记录'],['health','好友健康']]:[['protein','蛋白质'],['fiber','纤维'],['calcium','钙']];let rows=user?(state.rankFilter==='health'?[['小夏','86','健康分'],['阿禾','82','健康分'],['我','79','健康分']]:[['阿禾','18','条记录'],['小林','16','条记录'],['七七','14','条记录'],['我','11','条记录']]):state.rankFilter==='fiber'?[['鹰嘴豆','7.6','g / 100 g'],['燕麦','6.0','g / 100 g'],['西兰花','2.6','g / 100 g']]:state.rankFilter==='calcium'?[['豆腐','164','mg / 100 g'],['原味酸奶','118','mg / 100 g'],['纯牛奶','104','mg / 100 g']]:[['鸡胸肉','24.6','g / 100 g'],['鸡蛋','13.1','g / 100 g'],['豆腐','8.1','g / 100 g']];return`${titleBar('本周排行榜')}<div class="screen page-content"><p class="small muted" style="margin-bottom:14px">10 月 5 日 — 10 月 11 日</p><div class="segment"><button class="${user?'active':''}" data-action="rank-type" data-type="user">用户榜</button><button class="${!user?'active':''}" data-action="rank-type" data-type="food">食物榜</button></div><div class="rank-tabs">${filters.map(([id,label])=>`<button data-action="rank-filter" data-value="${id}" class="${state.rankFilter===id?'active':''}">${label}</button>`).join('')}</div><div class="banner">${user?'把每一餐认真记下来。':'从大家的餐盘里，发现营养好食物。'}</div>${rows.map((r,i)=>`<div class="ranking-row"><span class="rank-num">${i+1}</span>${avatar(i%2?'tan':'')}<strong style="font-size:14px">${r[0]}</strong><div class="rank-value">${r[1]}<small>${r[2]}</small></div>`).join('')}<div class="demo-warning">这里的名次、数值与计量口径只用于布局演示。正式版本沿用现有排行榜接口与规则，约饭不改变原有统计。</div></div>`}
+function create(){let d=state.draft;return`${titleBar('发起约饭')}<div class="screen page-content"><div class="banner">把时间、地点说清楚，就可以邀请人一起吃。</div><form id="create-form"><label class="field"><span>一句话邀约</span><input name="title" maxlength="35" value="${esc(d.title)}" placeholder="比如：午休一起吃碗热乎的" required></label><div class="form-grid"><label class="field"><span>哪一天</span><select name="day">${options(['今天','明天'],d.day)}</select></label><label class="field"><span>几点见</span><input name="time" type="time" value="${esc(d.time)}" required></label></div><label class="field"><span>在哪里吃</span><select name="place">${options(['园区食堂一层','园区东门·轻食小馆','东门商业街·和风食堂'],d.place)}</select><small>当前演示片区：科技园，均为虚构地点。</small></label><div class="form-grid"><label class="field"><span>人均预算上限 · 元</span><input name="budget" type="number" min="1" max="500" value="${d.budget}" required></label><label class="field"><span>总人数 · 含自己</span><select name="capacity">${options([2,3,4],d.capacity)}</select></label></div><div class="form-grid"><label class="field"><span>付款方式</span><select name="payment">${options(['各自付款','AA'],d.payment)}</select></label><label class="field"><span>谁可以看到</span><select name="scope">${options(['片区公开','仅邀请链接'],d.scope)}</select></label></div><label class="field"><span>补充说明 · 选填</span><textarea name="note" maxlength="200" placeholder="口味、聊天偏好，或碰面的安排…">${esc(d.note)}</textarea></label><p class="info-line" style="margin-bottom:18px">默认由你确认加入申请。发布后可以查看申请、与成员沟通或取消约饭。</p>${state.formError?`<p class="error" role="alert">${esc(state.formError)}</p>`:''}<button class="btn wide" type="submit">发布约饭</button></form></div>`}
+function mine(){let list=state.items.filter(x=>x.application!=='none');if(state.myTab==='owner')list=list.filter(x=>x.application==='owner');if(state.myTab==='joined')list=list.filter(x=>x.application!=='owner');return`${titleBar('我的约饭')}<div class="screen page-content"><div class="segment"><button class="${state.myTab==='all'?'active':''}" data-action="my-tab" data-value="all">全部</button><button class="${state.myTab==='owner'?'active':''}" data-action="my-tab" data-value="owner">我发起的</button><button class="${state.myTab==='joined'?'active':''}" data-action="my-tab" data-value="joined">我申请的</button></div>${list.length?list.map(card).join(''):'<div class="empty"><h3>还没有申请过约饭</h3><p>去找一顿你想参加的饭吧。</p><button class="btn" data-action="community">去找搭子</button></div>'}</div>`}
+function manage(){let x=current();return`${titleBar('管理约饭')}<div class="screen page-content"><div class="room-heading"><h3>${esc(x.title)}</h3><p>${x.day} ${esc(x.time)} · ${x.count}/${x.capacity} 人已确认</p></div><h3 class="section-label">加入申请</h3>${(x.requests||[]).length?(x.requests||[]).map((r,i)=>`<div class="attendance"><div><b>${esc(r.name)}</b><p class="small muted">${esc(r.note)}</p></div>${r.state==='pending'?`<div class="form-actions"><button class="btn secondary" data-action="request-reject" data-index="${i}">婉拒</button><button class="btn" data-action="request-accept" data-index="${i}" ${x.count>=x.capacity||x.status==='cancelled'?'disabled':''}>同意</button></div>`:`<span class="status-pill">${r.state==='accepted'?'已同意':'已婉拒'}</span>`}</div>`).join(''):'<p class="info-line">还没有申请，可以邀请朋友来参加。</p>'}<div class="divider"></div><button class="quicklink" data-action="go" data-page="room">进入约饭房间 ${icon('right')}</button><button class="quicklink" data-action="invite">邀请朋友 ${icon('share')}</button><button class="quicklink" data-action="cancel-meal" ${x.status==='cancelled'?'disabled':''}>${x.status==='cancelled'?'约饭已取消':'取消这顿约饭'} ${icon('right')}</button></div>`}
+function room(){let x=current();if(!['owner','accepted'].includes(x.application))return`${titleBar('约饭房间')}<div class="empty"><h3>获确认后即可进入</h3><button class="btn" data-action="detail" data-id="${x.id}">查看申请状态</button></div>`;return`${titleBar('这顿饭的房间')}<div class="screen page-content" id="room-scroll"><div class="room-heading"><h3>${esc(x.title)}</h3><p>${x.day} ${esc(x.time)} · ${esc(x.place)}</p><p>集合说明：餐厅入口右侧等，到了在这里说一声。</p></div>${x.status==='cancelled'?'<div class="banner" style="margin-top:12px">约饭已取消，讨论已关闭。</div>':''}<div class="system-line">仅已确认成员可见 · ${x.count} 人</div><div class="bubble-row">${avatar()}<div><div class="bubble-name">${esc(x.host==='我'?'小夏':x.host)}</div><div class="bubble">到时候见！我会提前几分钟到门口。</div></div></div>${(state.messages[x.id]||[]).map(t=>`<div class="bubble-row self">${avatar('tan')}<div><div class="bubble-name">我</div><div class="bubble">${esc(t)}</div></div></div>`).join('')}<div class="divider"></div><button class="quicklink" data-action="go" data-page="record">饭后记下这顿 ${icon('right')}</button><button class="quicklink" data-action="again">再约一次 ${icon('right')}</button>${x.application==='owner'?'<button class="quicklink" data-action="go" data-page="manage">管理这顿约饭 '+icon('right')+'</button>':'<button class="quicklink" data-action="leave">退出这顿约饭 '+icon('right')+'</button>'}</div><form class="message-form" id="message-form"><input name="message" aria-label="房间消息" placeholder="说一句，待会儿见…" maxlength="300" required ${x.status==='cancelled'?'disabled':''}><button class="btn" type="submit" ${x.status==='cancelled'?'disabled':''}>发送</button></form>`}
+function inbox(){return`${titleBar('消息')}<div class="screen page-content"><p class="small muted">约饭通知</p>${state.notices.map(n=>`<button class="notice" data-action="detail" data-id="${n.id}"><strong>${esc(n.title)}</strong><p>${esc(n.text)}</p><small>刚刚 · 查看约饭</small></button>`).join('')}<button class="notice" data-action="detail" data-id="4"><strong>小夏申请加入你的约饭</strong><p>明天午餐，来两个新朋友</p><small>查看并处理</small></button><div class="divider"></div><button class="quicklink" data-action="info" data-title="互动消息" data-text="这里承接现有圈子的点赞、评论与回复。原型中可以在晒餐页点赞和评论。">互动消息 ${icon('right')}</button><button class="quicklink" data-action="info" data-title="私信与好友" data-text="保留现有私信、好友管理和添加好友功能。约饭房间不要求先互加好友。">私信与好友 ${icon('right')}</button></div>`}
+function record(){return`${titleBar('记下这顿饭')}<div class="screen page-content"><div class="banner">吃完之后，把自己的那一份记下来。</div><div class="feed-plate">${icon('paizhao-xianxing')}<div><strong>拍照记餐</strong><span>原型演示，不打开相机</span></div></div><p class="info-line">正式版本接回现有识别与记餐流程。下面用一份示例记录体验分享设置。</p><div class="divider"></div><h3>鸡腿饭 + 时蔬</h3><p class="muted small">我的份量 · 约 580 kcal</p><form id="record-form" style="margin-top:22px"><label class="field"><span>这条记录的分享方式</span><select name="visibility"><option>仅自己可见</option><option>分享到晒餐</option></select></label><label class="field"><span><input type="checkbox" name="nutrition"> 分享时展示营养数据</span></label><button class="btn wide" type="submit">保存示例记录</button></form><p class="info-line">不会替同桌的人记账，也不会自动公开健康档案。</p></div>`}
+function other(){let p=state.page;return`${titleBar(p==='home'?'首页':p==='analysis'?'饮食分析':'我的')}<div class="screen page-content">${p==='home'?`<h2>下一餐，和谁一起吃？</h2><p class="info-line">这是首页与约饭的衔接示意。</p><div class="card" style="margin-top:20px"><h3>园区食堂 · 午餐建议</h3><p class="muted small">鸡腿饭 + 时蔬</p><button class="btn wide" style="margin-top:18px" data-action="invite-from-feed">找人一起吃</button></div>`:p==='analysis'?'<div class="empty">'+icon('tubiao-zhuzhuangtu')+'<h3>饮食分析沿用现有功能</h3><p class="small">本次原型聚焦圈子与约饭流程。</p><button class="btn" data-action="community">回到圈子</button></div>':`<div class="author">${avatar()}<div><h3>演示用户</h3><small>所有修改只在当前页面有效</small></div></div><button class="quicklink" data-action="go" data-page="mine">我的约饭 ${icon('right')}</button><button class="quicklink" data-action="rank" data-type="user">查看排行榜 ${icon('right')}</button><button class="quicklink" data-action="go" data-page="inbox">消息与好友 ${icon('right')}</button>`}</div>`}
+function modalView(){let m=state.modal;if(!m)return'';let content='';if(m.type==='location')content=`<p class="info-line" style="margin-bottom:15px">手动选择片区，不需要提供定位。</p><div class="chips">${['科技园','示例大学'].map(a=>`<button class="${state.area===a?'active':''}" data-action="choose-location" data-value="${a}">${a}</button>`).join('')}</div>`;if(m.type==='filters')content=`<form id="filter-form"><label class="field"><span>人均预算上限</span><select name="budget"><option value="100" ${state.budget===100?'selected':''}>不限（演示上限 100 元）</option><option value="30" ${state.budget===30?'selected':''}>30 元以内</option><option value="50" ${state.budget===50?'selected':''}>50 元以内</option></select></label><p class="info-line" style="margin-bottom:18px">已选择：${state.area} · ${state.day} · ${state.meal}</p><button class="btn wide" type="submit">应用筛选</button></form>`;if(m.type==='apply')content=`<p class="info-line" style="margin-bottom:15px">你将申请加入「${esc(current().title)}」。对方确认后才能进入房间。</p><form id="apply-form"><label class="field"><span>和发起人打个招呼 · 选填</span><textarea name="note" maxlength="100" placeholder="我也在附近，中午一起吃！"></textarea></label><button class="btn wide" type="submit">发送加入申请</button></form>`;if(m.type==='comment')content=`<form id="comment-form"><label class="field"><span>写下你的评论</span><textarea name="comment" maxlength="200" required placeholder="聊聊这顿饭…"></textarea></label><button class="btn wide" type="submit">发布评论</button></form>`;if(m.type==='info')content=`<p style="font-size:14px;margin-bottom:20px">${esc(m.text)}</p><button class="btn wide" data-action="close">知道了</button>`;if(m.type==='confirm')content=`<p style="font-size:14px;margin-bottom:20px">${esc(m.text)}</p><button class="btn wide danger" data-action="${m.confirm}">${esc(m.label)}</button><button class="btn wide secondary" data-action="close">先保留</button>`;if(m.type==='more')content=`<button class="quicklink" data-action="report">举报这条约饭 ${icon('right')}</button><button class="quicklink" data-action="hide-meal">不看这条约饭 ${icon('right')}</button><p class="info-line">原型只演示操作反馈，不发送真实举报。</p>`;return`<div class="overlay" data-action="overlay-close"><section class="sheet" role="dialog" aria-modal="true" aria-label="${esc(m.title)}"><div class="sheet-head"><h2>${esc(m.title)}</h2><button class="icon-button" data-action="close" aria-label="关闭">${icon('close')}</button></div>${content}</section></div>`}
+function render(){const views={community,detail,ranks,create,mine,manage,room,inbox,record};$('#app').innerHTML=(views[state.page]||other)()+modalView();$('#tour').innerHTML=[['community','找搭子','find'],['community','晒餐与排行榜','feed'],['create','发起约饭'],['mine','我的约饭'],['inbox','消息通知']].map(([p,t,tab],i)=>`<button class="step ${state.page===p&&(!tab||state.tab===tab)?'active':''}" data-action="tour" data-page="${p}" ${tab?`data-tab="${tab}"`:''}><span>0${i+1}</span><span>${t}</span></button>`).join('');if(state.modal){requestAnimationFrame(()=>$('.sheet textarea,.sheet select,.sheet button')?.focus())}}
+function openModal(m){state.modal=m;render()}
+function notify(title,text,id){state.notices.unshift({title,text,id})}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b||b.disabled)return;let a=b.dataset.action,x=current();if(a==='overlay-close'){if(e.target===b){state.modal=null;render()}return}if(a==='go')return go(b.dataset.page);if(a==='tour')return go(b.dataset.page,b.dataset.tab?{tab:b.dataset.tab}:{});if(a==='back')return back();if(a==='community')return go('community',{tab:'find'});if(a==='tab'){state.tab=b.dataset.tab;render();return}if(a==='detail')return go('detail',{selected:Number(b.dataset.id)});if(a==='close'){state.modal=null;render();return}if(a==='location')return openModal({type:'location',title:'选择你想约饭的片区'});if(a==='choose-location'){state.area=b.dataset.value;state.modal=null;render();return}if(a==='filters')return openModal({type:'filters',title:'更多筛选'});if(a==='clear-filters'){state.day='不限日期';state.meal='不限餐次';state.budget=100;render();return}if(a==='apply')return openModal({type:'apply',title:'一起吃顿饭'});if(a==='simulate'){let pending=state.items.find(y=>y.id===state.selected&&y.application==='pending')||state.items.find(y=>y.application==='pending');if(!pending)return toast('先选一顿饭，发送加入申请。');if(pending.status!=='open'||pending.count>=pending.capacity)return toast('这顿饭已不可加入。');pending.application='accepted';pending.count++;notify('加入申请已通过',pending.title,pending.id);go('detail',{selected:pending.id});toast('已模拟发起人同意，可进入约饭房间');return}if(a==='withdraw'){x.application='none';render();toast('申请已撤回');return}if(a==='rank')return go('ranks',{rankType:b.dataset.type,rankFilter:b.dataset.type==='user'?'records':'protein'});if(a==='rank-type'){state.rankType=b.dataset.type;state.rankFilter=state.rankType==='user'?'records':'protein';render();return}if(a==='rank-filter'){state.rankFilter=b.dataset.value;render();return}if(a==='like'){let id=b.dataset.id;state.likes[id]=!state.likes[id];const s=$('.screen').scrollTop;render();$('.screen').scrollTop=s;return}if(a==='comment')return openModal({type:'comment',title:'评论这顿饭',id:Number(b.dataset.id)});if(a==='my-tab'){state.myTab=b.dataset.value;render();return}if(a==='request-accept'||a==='request-reject'){let r=x.requests[Number(b.dataset.index)];if(r.state!=='pending')return;if(a==='request-accept'){if(x.count>=x.capacity)return toast('人数已满');r.state='accepted';x.count++}else r.state='rejected';render();toast(a==='request-accept'?'已同意，小夏加入了约饭':'已婉拒申请');return}if(a==='invite-from-feed'){state.draft.title='下一顿，找个人一起吃';return go('create')}if(a==='again'){state.draft={title:x.title,day:'明天',time:x.time,place:x.place,budget:x.budget,capacity:x.capacity,payment:x.payment,scope:'片区公开',note:x.note};return go('create')}if(a==='invite')return openModal({type:'info',title:'邀请朋友',text:`邀请卡片会包含「${x.title}」、${x.day} ${x.time}、${x.place} 和剩余名额。此处只预览说明，不生成公开链接或发送消息。`});if(a==='leave')return openModal({type:'confirm',title:'退出这顿约饭？',text:'你的名额会释放，其他成员将收到退出通知。',confirm:'leave-confirm',label:'确认退出'});if(a==='leave-confirm'){x.application='none';x.count=Math.max(1,x.count-1);state.modal=null;go('detail');toast('已退出约饭，名额已释放');return}if(a==='cancel-meal')return openModal({type:'confirm',title:'取消这顿约饭？',text:'活动将停止接受申请，已加入成员会收到取消通知。',confirm:'cancel-confirm',label:'确认取消约饭'});if(a==='cancel-confirm'){x.status='cancelled';notify('约饭已取消',x.title,x.id);state.modal=null;render();toast('约饭已取消');return}if(a==='more'){state.selected=Number(b.dataset.id);return openModal({type:'more',title:'约饭操作'})}if(a==='report'){state.modal=null;render();toast('已演示举报提交，未发送真实举报');return}if(a==='hide-meal'){state.hidden.push(state.selected);state.modal=null;go('community');toast('本次演示中已隐藏');return}if(a==='info')return openModal({type:'info',title:b.dataset.title,text:b.dataset.text});if(a==='reset'){state=fresh();render();toast('已恢复初始演示数据');return}});
+document.addEventListener('change',e=>{const el=e.target;if(el.dataset.filter){state[el.dataset.filter]=el.dataset.filter==='distance'?Number(el.value):el.value;render()}});
+document.addEventListener('input',e=>{if(e.target.form?.id==='create-form'){state.draft[e.target.name]=e.target.value}});
+document.addEventListener('submit',e=>{e.preventDefault();let f=e.target,d=new FormData(f),x=current();if(f.id==='apply-form'){if(x.status!=='open'||x.count>=x.capacity){state.modal=null;render();toast('这顿饭已不可加入');return}x.application='pending';x.applicationNote=String(d.get('note'));state.modal=null;render();toast('加入申请已送达');return}if(f.id==='filter-form'){state.budget=Number(d.get('budget'));state.modal=null;render();return}if(f.id==='comment-form'){let id=state.modal.id,t=String(d.get('comment')).trim();if(!t)return;state.comments[id]??=[];state.comments[id].push(t);state.modal=null;render();toast('评论已发布');return}if(f.id==='create-form'){let obj=Object.fromEntries(d),budget=Number(obj.budget),capacity=Number(obj.capacity),title=String(obj.title).trim();state.draft={...obj};if(!title||budget<1||budget>500||![2,3,4].includes(capacity)){state.formError='请检查标题、预算与人数。';render();return}let id=Math.max(...state.items.map(y=>y.id),5)+1;state.items.unshift({id,host:'我',title,area:'科技园',day:obj.day,meal:parseInt(obj.time)<16?'午餐':'晚餐',time:obj.time,place:obj.place,distance:0.4,budget,price:`≤${budget}`,payment:obj.payment,count:1,capacity,tags:[obj.scope],scope:obj.scope,note:obj.note||'一起轻松吃顿饭，欢迎加入。',status:'open',application:'owner',requests:[]});state.formError='';notify('约饭发布成功',title,id);go('detail',{selected:id});toast('演示约饭已发布');return}if(f.id==='message-form'){let t=String(d.get('message')).trim();if(!t||x.status==='cancelled'||!['owner','accepted'].includes(x.application))return;state.messages[x.id]??=[];state.messages[x.id].push(t);render();$('#room-scroll').scrollTop=$('#room-scroll').scrollHeight;return}if(f.id==='record-form'){go('community',{tab:'feed'});toast(d.get('visibility')==='分享到晒餐'?'已演示保存并分享；不会写入真实记录':'已演示保存为仅自己可见');return}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.modal){state.modal=null;render()}});
+render();
+</script>
+</body>
+</html>

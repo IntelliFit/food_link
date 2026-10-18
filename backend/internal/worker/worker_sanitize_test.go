@@ -162,6 +162,7 @@ func TestResolveScopedCorrection_PhotoListEditUsesDatabaseNutrition(t *testing.T
 	client := &workerCorrectionParseClient{}
 	analyze := analyzeservice.NewAnalyzeService(nil, client, nil)
 	resolver := newWorkerFakeNutritionResolver()
+	resolver.rice.FoodState, resolver.rice.WeightBasis = "cooked", "cooked"
 	resolver.rice.FiberPer100g, resolver.rice.SugarPer100g = 1, 1
 	resolver.rice.SaturatedFatPer100g, resolver.rice.SodiumMgPer100g = 1, 1
 	analyze.ConfigureNutritionResolver(resolver)
@@ -176,8 +177,8 @@ func TestResolveScopedCorrection_PhotoListEditUsesDatabaseNutrition(t *testing.T
 		CorrectionItems: []map[string]any{
 			{"sourceItemId": 2, "name": "杂粮饭", "weight": 180.0},
 			{"sourceItemId": 3, "name": "青椒炒肉丝", "weight": 35.0},
-			{"sourceItemId": 4, "name": "白米饭", "weight": 50.0},
-			{"itemId": 5, "name": "白米饭", "weight": 25.0},
+			{"sourceItemId": 4, "name": "白米饭", "weight": 50.0, "foodState": "cooked", "weightBasis": "as_served"},
+			{"itemId": 5, "name": "白米饭", "weight": 25.0, "foodState": "cooked", "weightBasis": "as_served"},
 		},
 	}, nil)
 	require.NoError(t, err, "拍照后的新增/改名应先解析再查库，不能因模型不输出营养而失败")
@@ -1102,7 +1103,7 @@ func TestParsePrecisionEstimateItems_MultiItems(t *testing.T) {
 	}
 }
 
-func TestParsePrecisionEstimateItems_FiltersToPlannedItems(t *testing.T) {
+func TestParsePrecisionEstimateItems_RejectsOffPlanItems(t *testing.T) {
 	items, err := parsePrecisionEstimateItems(map[string]any{
 		"items": []map[string]any{
 			{"name": "剁椒鱼块", "estimatedWeightGrams": 85},
@@ -1110,14 +1111,8 @@ func TestParsePrecisionEstimateItems_FiltersToPlannedItems(t *testing.T) {
 			{"name": "西兰花", "estimatedWeightGrams": 75},
 		},
 	}, []map[string]any{{"item_name": "剁椒鱼块"}}, nil)
-	if err != nil {
-		t.Fatalf("unexpected parse error: %v", err)
-	}
-	if len(items) != 1 {
-		t.Fatalf("expected one planned item, got %#v", items)
-	}
-	if got := stringFromMap(items[0], "name"); got != "剁椒鱼块" {
-		t.Fatalf("expected planned item preserved, got %s", got)
+	if err == nil || len(items) != 0 {
+		t.Fatalf("off-plan additions must fail instead of being silently filtered: items=%#v err=%v", items, err)
 	}
 }
 
@@ -1344,12 +1339,15 @@ func TestParsePrecisionRefinedItems_PreservesStateMetadataFromFallback(t *testin
 		"basisEvidence":        "餐碗内已煮熟",
 		"estimatedWeightGrams": 200,
 	}}
-	items, _ := parsePrecisionRefinedItems(map[string]any{
+	items, _, err := parsePrecisionRefinedItems(map[string]any{
 		"items": []map[string]any{{
 			"name":                 "米粉",
 			"estimatedWeightGrams": 220,
 		}},
 	}, fallback)
+	if err != nil {
+		t.Fatalf("unexpected refine error: %v", err)
+	}
 	if len(items) != 1 {
 		t.Fatalf("expected one refined item, got %#v", items)
 	}
@@ -1396,9 +1394,12 @@ func TestPrecisionPrompts_RequireStateQualifiedNutritionBasis(t *testing.T) {
 
 func TestParsePrecisionRefinedItems_UsesFallbackWhenNoItems(t *testing.T) {
 	fallback := []map[string]any{{"name": "白米饭", "estimatedWeightGrams": 180}}
-	items, notes := parsePrecisionRefinedItems(map[string]any{
+	items, notes, err := parsePrecisionRefinedItems(map[string]any{
 		"uncertaintyNotes": []any{"视角不清"},
 	}, fallback)
+	if err == nil {
+		t.Fatal("missing refinement items must be reported as an error")
+	}
 
 	if len(items) != 1 || stringFromMap(items[0], "name") != "白米饭" {
 		t.Fatalf("expected fallback items, got %#v", items)
@@ -1409,13 +1410,16 @@ func TestParsePrecisionRefinedItems_UsesFallbackWhenNoItems(t *testing.T) {
 }
 
 func TestParsePrecisionRefinedItems_ParsesWeights(t *testing.T) {
-	items, notes := parsePrecisionRefinedItems(map[string]any{
+	items, notes, err := parsePrecisionRefinedItems(map[string]any{
 		"items": []map[string]any{
 			{"name": "白米饭", "estimatedWeightGrams": 220},
 			{"name": "红烧肉", "weight": 95},
 		},
 		"uncertaintyNotes": []any{"米饭按碗深修正"},
 	}, nil)
+	if err != nil {
+		t.Fatalf("unexpected refine error: %v", err)
+	}
 
 	if len(items) != 2 {
 		t.Fatalf("expected refined items, got %#v", items)
@@ -1433,7 +1437,7 @@ func TestParsePrecisionRefinedItems_ParsesWeights(t *testing.T) {
 
 func TestParsePrecisionRefinedItems_DoesNotExpandBeyondFallback(t *testing.T) {
 	fallback := []map[string]any{{"name": "剁椒鱼块", "estimatedWeightGrams": 95}}
-	items, _ := parsePrecisionRefinedItems(map[string]any{
+	items, _, err := parsePrecisionRefinedItems(map[string]any{
 		"items": []map[string]any{
 			{"name": "剁椒鱼块", "estimatedWeightGrams": 85},
 			{"name": "米饭", "estimatedWeightGrams": 135},
@@ -1442,6 +1446,9 @@ func TestParsePrecisionRefinedItems_DoesNotExpandBeyondFallback(t *testing.T) {
 			{"name": "抄手", "estimatedWeightGrams": 65},
 		},
 	}, fallback)
+	if err == nil {
+		t.Fatal("off-plan refinement items must be reported as an error")
+	}
 
 	if len(items) != 1 {
 		t.Fatalf("expected refine to keep one fallback item, got %#v", items)
@@ -1449,8 +1456,8 @@ func TestParsePrecisionRefinedItems_DoesNotExpandBeyondFallback(t *testing.T) {
 	if got := stringFromMap(items[0], "name"); got != "剁椒鱼块" {
 		t.Fatalf("expected fallback-matched item, got %s", got)
 	}
-	if got, _ := floatFromAny(items[0]["estimatedWeightGrams"]); got != 85 {
-		t.Fatalf("expected refined planned weight, got %v", got)
+	if got, _ := floatFromAny(items[0]["estimatedWeightGrams"]); got != 95 {
+		t.Fatalf("expected original planned weight after rejected refinement, got %v", got)
 	}
 }
 

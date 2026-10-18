@@ -136,23 +136,26 @@ type Revision struct {
 func (Revision) TableName() string { return "campus_food_revisions" }
 
 type CollectorApplication struct {
-	ID            string     `gorm:"column:id" json:"id"`
-	UserID        string     `gorm:"column:user_id" json:"user_id"`
-	SchoolID      string     `gorm:"column:school_id" json:"school_id"`
-	CampusID      *string    `gorm:"column:campus_id" json:"campus_id,omitempty"`
-	CanteenID     *string    `gorm:"column:canteen_id" json:"canteen_id,omitempty"`
-	ApplicantNote string     `gorm:"column:applicant_note" json:"applicant_note,omitempty"`
-	Status        string     `gorm:"column:status" json:"status"`
-	ReviewNote    string     `gorm:"column:review_note" json:"review_note,omitempty"`
-	ReviewedBy    *string    `gorm:"column:reviewed_by" json:"reviewed_by,omitempty"`
-	ReviewedAt    *time.Time `gorm:"column:reviewed_at" json:"reviewed_at,omitempty"`
-	CreatedAt     *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
-	UpdatedAt     *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
-	UserNickname  string     `gorm:"column:user_nickname;->;-:migration" json:"user_nickname,omitempty"`
-	UserTelephone string     `gorm:"column:user_telephone;->;-:migration" json:"user_telephone,omitempty"`
-	SchoolName    string     `gorm:"column:school_name;->;-:migration" json:"school_name,omitempty"`
-	CampusName    string     `gorm:"column:campus_name;->;-:migration" json:"campus_name,omitempty"`
-	CanteenName   string     `gorm:"column:canteen_name;->;-:migration" json:"canteen_name,omitempty"`
+	ID               string     `gorm:"column:id" json:"id"`
+	UserID           string     `gorm:"column:user_id" json:"user_id"`
+	SchoolID         string     `gorm:"column:school_id;default:null" json:"school_id,omitempty"`
+	VenueType        string     `gorm:"column:venue_type;default:university" json:"venue_type"`
+	OrganizationName string     `gorm:"column:organization_name" json:"organization_name,omitempty"`
+	ScopeCanteenName string     `gorm:"column:scope_canteen_name" json:"scope_canteen_name,omitempty"`
+	CampusID         *string    `gorm:"column:campus_id" json:"campus_id,omitempty"`
+	CanteenID        *string    `gorm:"column:canteen_id" json:"canteen_id,omitempty"`
+	ApplicantNote    string     `gorm:"column:applicant_note" json:"applicant_note,omitempty"`
+	Status           string     `gorm:"column:status" json:"status"`
+	ReviewNote       string     `gorm:"column:review_note" json:"review_note,omitempty"`
+	ReviewedBy       *string    `gorm:"column:reviewed_by" json:"reviewed_by,omitempty"`
+	ReviewedAt       *time.Time `gorm:"column:reviewed_at" json:"reviewed_at,omitempty"`
+	CreatedAt        *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt        *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	UserNickname     string     `gorm:"column:user_nickname;->;-:migration" json:"user_nickname,omitempty"`
+	UserTelephone    string     `gorm:"column:user_telephone;->;-:migration" json:"user_telephone,omitempty"`
+	SchoolName       string     `gorm:"column:school_name;->;-:migration" json:"school_name,omitempty"`
+	CampusName       string     `gorm:"column:campus_name;->;-:migration" json:"campus_name,omitempty"`
+	CanteenName      string     `gorm:"column:canteen_name;->;-:migration" json:"canteen_name,omitempty"`
 }
 
 func (CollectorApplication) TableName() string { return "campus_collector_applications" }
@@ -161,7 +164,10 @@ type CollectorScope struct {
 	ID               string     `gorm:"column:id" json:"id"`
 	UserID           string     `gorm:"column:user_id" json:"user_id"`
 	ApplicationID    *string    `gorm:"column:application_id" json:"application_id,omitempty"`
-	SchoolID         string     `gorm:"column:school_id" json:"school_id"`
+	SchoolID         string     `gorm:"column:school_id;default:null" json:"school_id,omitempty"`
+	VenueType        string     `gorm:"column:venue_type;default:university" json:"venue_type"`
+	OrganizationName string     `gorm:"column:organization_name" json:"organization_name,omitempty"`
+	ScopeCanteenName string     `gorm:"column:scope_canteen_name" json:"scope_canteen_name,omitempty"`
 	CampusID         *string    `gorm:"column:campus_id" json:"campus_id,omitempty"`
 	CanteenID        *string    `gorm:"column:canteen_id" json:"canteen_id,omitempty"`
 	Status           string     `gorm:"column:status" json:"status"`

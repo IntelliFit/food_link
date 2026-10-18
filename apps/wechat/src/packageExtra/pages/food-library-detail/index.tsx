@@ -1,7 +1,7 @@
 import { withAuth } from '../../../utils/withAuth'
 import { View, Text, ScrollView, Image, Textarea } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
+import Taro, { useDidShow, useDidHide, useRouter, useShareAppMessage } from '@tarojs/taro'
 import {
   getCampusFoodDetail,
   getCampusFoodRevisions,
@@ -65,6 +65,7 @@ function fmtPriceDisplay(item: PublicFoodLibraryItem): string {
 
 function getCampusLocationText(item: PublicFoodLibraryItem): string {
   if (item.campus_location_text) return item.campus_location_text
+  if (item.catalog_item_id && item.venue_type !== 'university') return item.detail_address || item.merchant_address || '食堂地点待补充'
   const parts = [
     item.school_name,
     item.campus_name,
@@ -88,7 +89,7 @@ function needsNutritionUpdate(item: PublicFoodLibraryItem): boolean {
 }
 
 function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
-  return item.type === 'campus' || !!item.is_campus_food
+  return item.type === 'campus' || !!item.is_campus_food || !!item.catalog_item_id
 }
 
 type MicronutrientKey = Exclude<keyof Nutrients, 'calories' | 'protein' | 'carbs' | 'fat' | 'waterMl' | 'water_ml' | 'sodium_mg'>
@@ -196,6 +197,9 @@ function FoodLibraryDetailPage() {
   const [revisionTotal, setRevisionTotal] = useState(0)
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
   const sceneRef = useRef(router.params.scene || '')
+  const [pageVisible, setPageVisible] = useState(true)
+  const refreshingRef = useRef(false)
+  useDidHide(() => setPageVisible(false))
 
   // 加载详情
   useEffect(() => {
@@ -211,14 +215,14 @@ function FoodLibraryDetailPage() {
   useShareAppMessage(() => {
     if (!item) return { title: '食探 - 发现健康餐' }
     const title = item.food_name || item.description || '来看看这道菜'
-    const path = `${extraPkgUrl('/pages/food-library-detail/index')}?id=${item.id}${isCampusFoodItem(item) ? '&scene=campus' : ''}`
+    const path = `${extraPkgUrl('/pages/food-library-detail/index')}?id=${item.id}${item.type === 'campus' || item.is_campus_food ? '&scene=campus' : ''}`
     const imageUrl = item.image_path || ''
     return { title, path, imageUrl }
   })
 
   // 分析中状态轮询：仅在详情页且当前 item 处于分析中时才轮询
   useEffect(() => {
-    if (!item || !isAnalyzingItem(item)) {
+    if (!pageVisible || !item || !(isAnalyzingItem(item) || (isCampusFoodItem(item) && campusNutritionState(item).pending && !campusNutritionState(item).estimated))) {
       if (pollTimerRef.current) {
         clearInterval(pollTimerRef.current)
         pollTimerRef.current = null
@@ -227,7 +231,7 @@ function FoodLibraryDetailPage() {
     }
     if (pollTimerRef.current) return
     pollTimerRef.current = setInterval(() => {
-      loadDetail()
+      void loadDetail(true)
     }, 8000)
     return () => {
       if (pollTimerRef.current) {
@@ -235,10 +239,12 @@ function FoodLibraryDetailPage() {
         pollTimerRef.current = null
       }
     }
-  }, [item])
+  }, [item, pageVisible])
 
-  const loadDetail = useCallback(async () => {
-    setLoading(true)
+  const loadDetail = useCallback(async (silent = false) => {
+    if (silent && refreshingRef.current) return
+    refreshingRef.current = true
+    if (!silent) setLoading(true)
     try {
       const shouldPreferCampus = sceneRef.current === 'campus'
       if (shouldPreferCampus) {
@@ -247,20 +253,22 @@ function FoodLibraryDetailPage() {
         return
       }
       const data = await getPublicFoodLibraryItem(itemId)
-      if (isCampusFoodItem(data)) {
+      if (data.type === 'campus' || data.is_campus_food) {
         const detail = await getCampusFoodDetail(itemId)
         setItem({ ...detail.item, ...detail.metrics })
         return
       }
       setItem(data)
     } catch (e: any) {
-      await showUnifiedApiError(e, '加载失败')
+      if (!silent) await showUnifiedApiError(e, '加载失败')
     } finally {
-      setLoading(false)
+      refreshingRef.current = false
+      if (!silent) setLoading(false)
     }
   }, [itemId])
 
   useDidShow(() => {
+    if (!pageVisible) setPageVisible(true)
     if (Taro.getStorageSync('food_library_need_refresh') === '1') {
       Taro.removeStorageSync('food_library_need_refresh')
       setRevisions([])
@@ -667,7 +675,6 @@ function FoodLibraryDetailPage() {
     : (item.image_path ? [item.image_path] : [])
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
   const isOwner = Boolean(currentUserId && item.user_id === currentUserId)
-  const analyzing = isAnalyzingItem(item)
   const analysisFailed = isAnalysisFailedItem(item)
   const nutrition = campusNutritionState(item)
   const nutritionPrefix = isCampusFoodItem(item) && (nutrition.estimated || nutrition.pending) ? '约 ' : ''
@@ -782,7 +789,7 @@ function FoodLibraryDetailPage() {
           <Text className='info-title'>{item.food_name || item.description || '健康餐'}</Text>
           <View className='info-calories-badge'>
             <Text className='iconfont icon-huore info-calories-icon' />
-            <Text className='info-calories'>{nutritionPending ? '营养待更新' : `${nutritionPrefix}${item.total_calories.toFixed(0)} kcal`}</Text>
+            <Text className='info-calories'>{nutritionPending ? (analysisFailed ? '营养分析未完成' : nutrition.pending ? '营养分析中' : '营养待补充') : `${nutritionPrefix}${item.total_calories.toFixed(0)} kcal`}</Text>
           </View>
         </View>
         {item.description && (
@@ -847,9 +854,8 @@ function FoodLibraryDetailPage() {
               </View>
             )}
             {nutrition.estimated && <Text className='campus-analysis-tip'>营养估算：按{item.portion_description || '当前份量'}提供参考值；实际配方、糖度、冰量和加料会影响结果，精确微量营养待核验。</Text>}
-            {analyzing && <Text className='campus-analysis-tip'>营养信息待更新，完成后自动更新。</Text>}
-            {nutritionPending && <Text className='campus-analysis-tip'>营养信息待更新，暂不建议一键记录。</Text>}
-            {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>菜品资料已生效，但营养重算失败；稍后可重试或继续修正。</Text>}
+            {nutritionPending && !analysisFailed && <Text className='campus-analysis-tip'>{nutrition.pending ? '菜品已发布，后台正在分析营养。完成后这里会自动更新，也可以先离开。' : '菜品已发布，营养信息尚未补充。'}</Text>}
+            {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>菜品已发布，但营养分析未完成，不是上传失败。你仍可补充照片、修正信息。</Text>}
           </View>
         )}
         <View className='nutrients-row'>
@@ -1001,7 +1007,7 @@ function FoodLibraryDetailPage() {
         <View className='bottom-bar-row1'>
           {isCampusFoodItem(item) && (
             <View className={`action-btn quick-record-btn ${isCampusFoodItem(item) && !nutrition.canRecord ? 'disabled' : ''}`} onClick={handleQuickRecord}>
-              <Text className='action-text'>{isCampusFoodItem(item) && !nutrition.canRecord ? '营养待核验' : '一键记录'}</Text>
+              <Text className='action-text'>{isCampusFoodItem(item) && !nutrition.canRecord ? (nutrition.pending ? '营养分析中' : '营养待补充') : '一键记录'}</Text>
             </View>
           )}
           <View className='bottom-bar-actions'>

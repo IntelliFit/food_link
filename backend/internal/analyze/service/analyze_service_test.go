@@ -3192,7 +3192,7 @@ func TestChainedNutritionFallbackEstimatorMergesCompleteRowsAcrossProviders(t *t
 	assert.Equal(t, "coffee_generated", rows[2][fallbackNutritionSourceKey])
 }
 
-func TestChainedNutritionFallbackEstimatorAcceptsZeroNutritionReturnedByModel(t *testing.T) {
+func TestChainedNutritionFallbackEstimatorRejectsZeroNutritionForNonZeroFood(t *testing.T) {
 	zero := &delayedNutritionFallbackEstimator{
 		rows: map[int]map[string]any{0: {
 			"calories": 0.0,
@@ -3206,9 +3206,8 @@ func TestChainedNutritionFallbackEstimatorAcceptsZeroNutritionReturnedByModel(t 
 	)
 
 	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{Index: 0, Name: "麦当劳板烧双蛋汉堡", EstimatedWeightGrams: 300}}, "")
-	require.NoError(t, err)
-	require.Len(t, rows, 1)
-	assert.Equal(t, "zero_generated", rows[0][fallbackNutritionSourceKey])
+	require.ErrorContains(t, err, "0/1")
+	require.Empty(t, rows)
 }
 
 func TestChainedNutritionFallbackEstimatorAcceptsBrandedPlainDrinkingWater(t *testing.T) {
@@ -3579,9 +3578,10 @@ func TestQwenNutritionEstimatorUsesNoThinkingClient(t *testing.T) {
 		"items": []any{map[string]any{
 			"index": 0,
 			"unitNutritionPer100g": map[string]any{
-				"protein": 10.0,
-				"carbs":   20.0,
-				"fat":     8.0,
+				"calories": 192.0,
+				"protein":  10.0,
+				"carbs":    20.0,
+				"fat":      8.0,
 			},
 		}},
 	}}

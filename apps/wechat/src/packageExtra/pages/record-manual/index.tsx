@@ -1490,6 +1490,39 @@ function RecordManualPage() {
             ))}
           </View>}
 
+          {!pickerMode && (
+            <View className='meal-preferences'>
+              <View className='meal-preference-row'>
+                <Text className='section-title meal-preference-label'>饮食目标</Text>
+                <View className='option-selector'>
+                  {DIET_GOALS.map((goal) => (
+                    <View
+                      key={goal.value}
+                      className={`option-item ${dietGoal === goal.value ? 'active' : ''}`}
+                      onClick={() => setDietGoal(goal.value)}
+                    >
+                      <Text>{goal.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+              <View className='meal-preference-row'>
+                <Text className='section-title meal-preference-label'>运动时机</Text>
+                <View className='option-selector'>
+                  {ACTIVITY_TIMINGS.map((timing) => (
+                    <View
+                      key={timing.value}
+                      className={`option-item ${activityTiming === timing.value ? 'active' : ''}`}
+                      onClick={() => setActivityTiming(timing.value)}
+                    >
+                      <Text>{timing.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          )}
+
           <View className='search-bar primary'>
             <Text className='iconfont icon-sousuo search-icon' />
             <Input
@@ -1745,39 +1778,6 @@ function RecordManualPage() {
             )}
           </View>
         </View>
-
-        {!pickerMode && selectedItems.length > 0 && (
-          <View className='config-card'>
-            <View className='config-section'>
-              <Text className='section-title'>饮食目标</Text>
-              <View className='option-selector'>
-                {DIET_GOALS.map((goal) => (
-                  <View
-                    key={goal.value}
-                    className={`option-item ${dietGoal === goal.value ? 'active' : ''}`}
-                    onClick={() => setDietGoal(goal.value)}
-                  >
-                    <Text>{goal.label}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-            <View className='config-section'>
-              <Text className='section-title'>运动时机</Text>
-              <View className='option-selector'>
-                {ACTIVITY_TIMINGS.map((timing) => (
-                  <View
-                    key={timing.value}
-                    className={`option-item ${activityTiming === timing.value ? 'active' : ''}`}
-                    onClick={() => setActivityTiming(timing.value)}
-                  >
-                    <Text>{timing.label}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-        )}
 
         <View className='bottom-space' />
       </ScrollView>

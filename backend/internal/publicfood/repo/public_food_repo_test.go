@@ -6,20 +6,46 @@ import (
 	"time"
 
 	analyzedomain "food_link/backend/internal/analyze/domain"
+	catalogdomain "food_link/backend/internal/campuscatalog/domain"
 	frienddomain "food_link/backend/internal/friend/domain"
 	"food_link/backend/internal/publicfood/domain"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"food_link/backend/pkg/testdb"
 
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func TestGetItemReadsLinkedCatalogTaskForLegacyProjection(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	require.NoError(t, db.AutoMigrate(&domain.PublicFoodItem{}, &analyzedomain.AnalysisTask{}, &catalogdomain.CollectionBatch{}, &catalogdomain.CatalogItem{}))
+	require.NoError(t, db.Exec("CREATE TABLE schools (name TEXT, status TEXT, logo_url TEXT)").Error)
+	batchID, itemID := uuid.NewString(), uuid.NewString()
+	require.NoError(t, db.Create(&catalogdomain.CollectionBatch{ID: batchID, VenueType: "community"}).Error)
+	taskID := uuid.NewString()
+	require.NoError(t, db.Create(&catalogdomain.CatalogItem{ID: itemID, BatchID: batchID, OrganizationName: "青年社区", CanteenName: "邻里食堂", AnalysisTaskID: &taskID}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{ID: itemID, FoodName: "青菜", Status: "published", Type: "common", NutritionStatus: "pending"}).Error)
+	item, err := NewPublicFoodRepo(db).GetItem(context.Background(), itemID)
+	require.NoError(t, err)
+	require.Equal(t, itemID, item.CatalogItemID)
+	require.Equal(t, taskID, *item.AnalysisTaskID)
+	require.Equal(t, "pending", item.AnalysisStatus)
+	require.Equal(t, "community", item.VenueType)
+	require.Equal(t, "青年社区", item.VenueOrganizationName)
+}
 
 func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
 	db := testdb.New(t)
+	require.NoError(t, db.AutoMigrate(&catalogdomain.CollectionBatch{}, &catalogdomain.CatalogItem{}))
 	require.NoError(t, db.AutoMigrate(&domain.PublicFoodItem{}, &domain.PublicFoodComment{}, &analyzedomain.AnalysisTask{}, &frienddomain.UserBlock{}))
 	require.NoError(t, db.Exec(`
 		ALTER TABLE analysis_tasks ALTER COLUMN result TYPE jsonb USING result::jsonb

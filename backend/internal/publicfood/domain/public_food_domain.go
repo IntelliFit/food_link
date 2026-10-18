@@ -69,6 +69,8 @@ type PublicFoodItem struct {
 	AnalysisError      string     `gorm:"column:analysis_error;->" json:"analysis_error,omitempty"`
 	// Derived from the collection source/directory, never a public-library column.
 	VenueType             string `gorm:"column:venue_type;->;-:migration" json:"venue_type,omitempty"`
+	CatalogItemID         string `gorm:"column:catalog_item_id;->;-:migration" json:"catalog_item_id,omitempty"`
+	VenueAreaName         string `gorm:"column:venue_area_name;->;-:migration" json:"venue_area_name,omitempty"`
 	VenueOrganizationKey  string `gorm:"column:venue_organization_key;->;-:migration" json:"venue_organization_key,omitempty"`
 	VenueOrganizationName string `gorm:"column:venue_organization_name;->;-:migration" json:"venue_organization_name,omitempty"`
 	VenueCanteenKey       string `gorm:"column:venue_canteen_key;->;-:migration" json:"venue_canteen_key,omitempty"`

@@ -868,6 +868,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/campus-food-collectors/applications", authmw.RequireJWT(jwtSvc), campusCommunityHandler.ApplyCollector)
 	engine.GET("/api/campus-food-collectors/profile", authmw.RequireJWT(jwtSvc), campusCommunityHandler.CollectorProfile)
 	engine.POST("/api/campus-food-collection/batches", authmw.RequireJWT(jwtSvc), contentGuard(3), campusCommunityHandler.CreateCollectorBatch)
+	engine.POST("/api/campus-food-collection/items", authmw.RequireJWT(jwtSvc), contentGuard(3), campusCommunityHandler.CreateSingle)
 	engine.PUT("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), contentGuard(3), publicFoodHandler.Update)
 	engine.DELETE("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Delete)
 	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)

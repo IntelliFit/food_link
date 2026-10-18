@@ -1,5 +1,5 @@
 import { Image, Input, ScrollView, Text, Textarea, View } from '@tarojs/components'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { useEffect, useRef, useState } from 'react'
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -24,6 +24,17 @@ import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFa
 import './index.scss'
 
 const MAX_BATCH_ENTRIES = 30
+const VENUE_OPTIONS = [
+  { value: 'university', label: '校园食堂', organization: '学校' },
+  { value: 'community', label: '社区食堂', organization: '社区' },
+  { value: 'office_park', label: '园区食堂', organization: '园区' },
+  { value: 'corporate', label: '公司食堂', organization: '公司' },
+] as const
+type VenueType = typeof VENUE_OPTIONS[number]['value']
+const placeKey = (value?: string) => {
+  const name = (value || '').trim().toLowerCase()
+  return name === '北京ai原点社区' ? 'ai原点社区' : name
+}
 
 interface DraftEntry {
   id: string
@@ -37,6 +48,13 @@ interface DraftEntry {
 function CampusFoodCollectorPage() {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
+  const params = useRouter().params || {}
+  const [venueType, setVenueType] = useState<VenueType>(() => VENUE_OPTIONS.find(item => item.value === params.venue_type)?.value || 'university')
+  const isCampus = venueType === 'university'
+  const [organizationName, setOrganizationName] = useState(params.organization_name || '')
+  const [areaName, setAreaName] = useState('')
+  const [venueCanteenName, setVenueCanteenName] = useState(params.canteen_name || '')
+  const initializedScope = useRef(false)
   const [profile, setProfile] = useState<CampusCollectorProfile | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [selectedSchool, setSelectedSchool] = useState<SchoolItem | null>(null)
@@ -65,19 +83,8 @@ function CampusFoodCollectorPage() {
     try {
       const nextProfile = await getCampusCollectorProfile()
       setProfile(nextProfile)
-      const preferredScope = nextProfile.active_scopes?.[0]
-      if (preferredScope) {
-        setSelectedSchool({ id: preferredScope.school_id, name: preferredScope.school_name || '已授权学校' })
-        setSelectedCampus(preferredScope.campus_id ? {
-          id: preferredScope.campus_id, school_id: preferredScope.school_id, name: preferredScope.campus_name || '已授权校区',
-        } : null)
-        setSelectedCanteen(preferredScope.canteen_id ? {
-          id: preferredScope.canteen_id, school_id: preferredScope.school_id, campus_id: preferredScope.campus_id,
-          campus_name: preferredScope.campus_name, name: preferredScope.canteen_name || '已授权食堂',
-        } : null)
-      }
     } catch (error) {
-      console.error('读取校园采集员资料失败', error)
+      console.error('读取食堂采集员资料失败', error)
     } finally {
       setProfileLoading(false)
     }
@@ -92,11 +99,24 @@ function CampusFoodCollectorPage() {
     applyThemeNavigationBar(scheme, { lightBackground: '#f7faf8', darkBackground: '#0d1512' })
   }, [scheme])
 
-  const chooseSchool = (school: SchoolItem) => {
-    if (profile?.can_batch && !profile.active_scopes.some(scope => scope.school_id === school.id)) {
-      Taro.showToast({ title: '该学校不在授权范围', icon: 'none' })
-      return
+  useEffect(() => {
+    if (initializedScope.current) return
+    const scope = profile?.active_scopes?.find(item => (item.venue_type || 'university') === venueType
+      && (venueType === 'university' || !organizationName || placeKey(item.organization_name) === placeKey(organizationName)))
+    if (!scope) return
+    initializedScope.current = true
+    if (venueType !== 'university') {
+      setOrganizationName(scope.organization_name || '')
+      setVenueCanteenName(scope.scope_canteen_name || scope.canteen_name || '')
+    } else {
+      if (!scope.school_id) return
+      setSelectedSchool({ id: scope.school_id, name: scope.school_name || '已授权学校' })
+      setSelectedCampus(scope.campus_id ? { id: scope.campus_id, school_id: scope.school_id, name: scope.campus_name || '已授权校区' } : null)
+      setSelectedCanteen(scope.canteen_id ? { id: scope.canteen_id, school_id: scope.school_id, campus_id: scope.campus_id, name: scope.canteen_name || '已授权食堂' } : null)
     }
+  }, [profile, venueType, organizationName])
+
+  const chooseSchool = (school: SchoolItem) => {
     setSelectedSchool(school)
     setSelectedCampus(null)
     setSelectedCanteen(null)
@@ -106,12 +126,6 @@ function CampusFoodCollectorPage() {
   }
 
   const chooseCampus = (campus: SchoolCampusItem) => {
-    if (profile?.can_batch && !profile.active_scopes.some(scope => (
-      scope.school_id === campus.school_id && (!scope.campus_id || scope.campus_id === campus.id)
-    ))) {
-      Taro.showToast({ title: '该校区不在授权范围', icon: 'none' })
-      return
-    }
     setSelectedCampus(campus)
     setSelectedCanteen(null)
     setFloor('')
@@ -123,14 +137,6 @@ function CampusFoodCollectorPage() {
     const resolvedCampus = campus || selectedCampus
     if (!resolvedCampus) {
       Taro.showToast({ title: '请先选择校区', icon: 'none' })
-      return
-    }
-    if (profile?.can_batch && !profile.active_scopes.some(scope => (
-      scope.school_id === canteen.school_id
-      && (!scope.campus_id || scope.campus_id === resolvedCampus.id)
-      && (!scope.canteen_id || scope.canteen_id === canteen.id)
-    ))) {
-      Taro.showToast({ title: '该食堂不在授权范围', icon: 'none' })
       return
     }
     setSelectedCampus(resolvedCampus)
@@ -145,16 +151,19 @@ function CampusFoodCollectorPage() {
   }
 
   const submitApplication = async () => {
-    if (!selectedSchool?.id || applying) {
-      if (!selectedSchool?.id) Taro.showToast({ title: '请先选择学校', icon: 'none' })
+    if ((isCampus ? !selectedSchool?.id : !organizationName.trim()) || applying) {
+      if (!applying) Taro.showToast({ title: isCampus ? '请先选择学校' : '请填写社区、园区或公司名称', icon: 'none' })
       return
     }
     setApplying(true)
     try {
       await applyCampusCollector({
-        school_id: selectedSchool.id,
-        campus_id: selectedCampus?.id,
-        canteen_id: selectedCanteen?.id,
+        venue_type: venueType,
+        school_id: isCampus ? selectedSchool?.id : undefined,
+        campus_id: isCampus ? selectedCampus?.id : undefined,
+        canteen_id: isCampus ? selectedCanteen?.id : undefined,
+        organization_name: !isCampus ? organizationName.trim() : undefined,
+        canteen_name: !isCampus ? venueCanteenName.trim() || undefined : undefined,
         applicant_note: applicationNote.trim() || undefined,
       })
       Taro.showToast({ title: '申请已提交', icon: 'success' })
@@ -207,10 +216,11 @@ function CampusFoodCollectorPage() {
 
   const submitBatch = async () => {
     if (submitting) return
-    if (!selectedSchool?.id || !selectedCampus?.id || !selectedCanteen?.id) {
-      Taro.showToast({ title: '请选择学校、校区和食堂', icon: 'none' })
+    if (isCampus ? !selectedSchool?.id || !selectedCampus?.id || !selectedCanteen?.id : !organizationName.trim() || !venueCanteenName.trim()) {
+      Taro.showToast({ title: isCampus ? '请选择学校、校区和食堂' : '请填写机构和食堂名称', icon: 'none' })
       return
     }
+    if (!canBatchHere) { Taro.showToast({ title: '请先申请当前食堂范围的批量权限', icon: 'none' }); return }
     if (!entries.length) {
       Taro.showToast({ title: '请先连续拍照或多选图片', icon: 'none' })
       return
@@ -222,7 +232,7 @@ function CampusFoodCollectorPage() {
     }
     const { confirm } = await Taro.showModal({
       title: `发布 ${entries.length} 道菜`,
-      content: '学校、校区、食堂等公共信息只提交一次；每道菜会立即建立版本并在后台分析营养。',
+      content: '地点信息只提交一次；每道菜会立即建立版本并在后台分析营养。',
       confirmText: '立即发布',
     })
     if (!confirm) return
@@ -231,10 +241,10 @@ function CampusFoodCollectorPage() {
       const now = new Date()
       await createCampusCollectorBatch({
         client_batch_key: clientBatchKey,
-        batch_name: `${selectedSchool.name}-${selectedCanteen.name}-${now.toISOString().slice(0, 10)}`,
-        venue_type: 'university',
-        school_id: selectedSchool.id, campus_id: selectedCampus.id, canteen_id: selectedCanteen.id,
-        organization_name: selectedSchool.name, area_name: selectedCampus.name, canteen_name: selectedCanteen.name,
+        batch_name: `${isCampus ? selectedSchool?.name : organizationName}-${isCampus ? selectedCanteen?.name : venueCanteenName}-${now.toISOString().slice(0, 10)}`,
+        venue_type: venueType,
+        school_id: isCampus ? selectedSchool?.id : undefined, campus_id: isCampus ? selectedCampus?.id : undefined, canteen_id: isCampus ? selectedCanteen?.id : undefined,
+        organization_name: isCampus ? selectedSchool!.name : organizationName.trim(), area_name: isCampus ? selectedCampus!.name : areaName.trim(), canteen_name: isCampus ? selectedCanteen!.name : venueCanteenName.trim(),
         default_floor: floor || undefined, default_window_name: windowName.trim() || undefined,
         default_window_layout: 'unknown', default_service_mode: 'unknown', captured_at: now.toISOString(),
         source_note: batchNote.trim() || undefined,
@@ -257,21 +267,48 @@ function CampusFoodCollectorPage() {
     }
   }
 
-  const pendingApplication = profile?.applications?.find(item => item.status === 'pending')
+  const matchingScope = (scope: NonNullable<CampusCollectorProfile['active_scopes']>[number]) => (
+    (scope.venue_type || 'university') === venueType && (isCampus
+      ? (!selectedSchool || scope.school_id === selectedSchool.id)
+        && (!selectedCampus || !scope.campus_id || scope.campus_id === selectedCampus.id)
+        && (!selectedCanteen || !scope.canteen_id || scope.canteen_id === selectedCanteen.id)
+      : placeKey(scope.organization_name) === placeKey(organizationName)
+        && (!scope.scope_canteen_name || placeKey(scope.scope_canteen_name) === placeKey(venueCanteenName)))
+  )
+  const canBatchHere = !!profile?.active_scopes?.some(matchingScope)
+  const pendingApplication = profile?.applications?.find(item => item.status === 'pending' && (item.venue_type || 'university') === venueType
+    && (isCampus ? !selectedSchool || item.school_id === selectedSchool.id : placeKey(item.organization_name) === placeKey(organizationName)))
+  const genericFields = (application = false) => <>
+    <View className='collector-field'><Text className='collector-label'>{VENUE_OPTIONS.find(item => item.value === venueType)?.organization}名称 *</Text><Input className='collector-input' maxlength={200} placeholder='填写名称' value={organizationName} onInput={event => setOrganizationName(event.detail.value)} /></View>
+    <View className='collector-field'><Text className='collector-label'>食堂{application ? '（可选范围）' : ' *'}</Text><Input className='collector-input' maxlength={200} placeholder={application ? '留空为该机构全部食堂' : '填写食堂名称'} value={venueCanteenName} onInput={event => setVenueCanteenName(event.detail.value)} /></View>
+    {!application && <View className='collector-field'><Text className='collector-label'>楼宇 / 区域</Text><Input className='collector-input' maxlength={200} placeholder='可不填' value={areaName} onInput={event => setAreaName(event.detail.value)} /></View>}
+  </>
 
   return (
       <View className={`collector-page ${isDark ? 'collector-page--dark' : ''}`}>
         <View className='collector-hero'>
-          <Text className='collector-title'>校园代理批量采集</Text>
-          <Text className='collector-subtitle'>一次选择学校、食堂、楼层和窗口，再连续拍照录入多道菜。菜名和清晰照片必填，价格与份量可以后补。</Text>
+          <Text className='collector-title'>食堂批量上传</Text>
+          <Text className='collector-subtitle'>地点只填一次，连续拍照或多选上传。菜名和照片必填，价格与份量可以后补。</Text>
+        </View>
+        <View className='collector-venue-types'>
+          {VENUE_OPTIONS.map(option => (
+            <View
+              key={option.value}
+              className={`collector-venue-type ${venueType === option.value ? 'active' : ''}`}
+              onClick={() => {
+                if (entries.length || submitting || uploading) { Taro.showToast({ title: '请先提交或移除本批次菜品', icon: 'none' }); return }
+                setVenueType(option.value); setOrganizationName(''); setVenueCanteenName(''); initializedScope.current = false
+              }}
+            ><Text>{option.label}</Text></View>
+          ))}
         </View>
 
         {profileLoading ? (
           <View className='collector-loading'><View className='collector-spinner' /></View>
-        ) : !profile?.can_batch ? (
+        ) : !canBatchHere ? (
           <View className='collector-card'>
             <Text className='collector-card-title'>{pendingApplication ? '申请审核中' : '申请批量采集通道'}</Text>
-            <Text className='collector-card-desc'>普通用户已经可以单菜上传；批量通道需按学校授权，不能访问后台其他数据。</Text>
+            <Text className='collector-card-desc'>批量通道按所在学校、社区、园区或公司授权。</Text>
             {pendingApplication ? (
               <View className='collector-status-row'>
                 <Text className='collector-status-dot' />
@@ -279,6 +316,7 @@ function CampusFoodCollectorPage() {
               </View>
             ) : (
               <>
+                {isCampus ? <>
                 <View className='collector-field' onClick={() => setShowSchoolPicker(true)}>
                   <Text className='collector-label'>学校 *</Text><Text className='collector-value'>{selectedSchool?.name || '请选择'}</Text>
                 </View>
@@ -288,7 +326,8 @@ function CampusFoodCollectorPage() {
                 <View className='collector-field' onClick={() => selectedSchool ? setShowCanteenPicker(true) : setShowSchoolPicker(true)}>
                   <Text className='collector-label'>食堂（可选范围）</Text><Text className='collector-value'>{selectedCanteen?.name || '所选范围全部食堂'}</Text>
                 </View>
-                <Textarea className='collector-textarea' maxlength={500} placeholder='说明你负责的学校、预计采集食堂等（可选）' value={applicationNote} onInput={event => setApplicationNote(event.detail.value)} />
+                </> : genericFields(true)}
+                <Textarea className='collector-textarea' maxlength={500} placeholder='说明你负责的食堂和采集安排（可选）' value={applicationNote} onInput={event => setApplicationNote(event.detail.value)} />
                 <View className={`collector-primary ${applying ? 'disabled' : ''}`} onClick={() => void submitApplication()}>
                   {applying ? <View className='collector-spinner collector-spinner--light' /> : <Text>提交申请</Text>}
                 </View>
@@ -302,11 +341,12 @@ function CampusFoodCollectorPage() {
                 <Text className='collector-card-title'>本次公共信息</Text>
                 <Text className='collector-scope-badge'>已授权批量通道</Text>
               </View>
-              <View className='collector-field' onClick={() => setShowSchoolPicker(true)}><Text className='collector-label'>学校 *</Text><Text className='collector-value'>{selectedSchool?.name || '请选择'}</Text></View>
+              {isCampus ? <><View className='collector-field' onClick={() => setShowSchoolPicker(true)}><Text className='collector-label'>学校 *</Text><Text className='collector-value'>{selectedSchool?.name || '请选择'}</Text></View>
               <View className='collector-field' onClick={() => selectedSchool ? setShowCampusPicker(true) : setShowSchoolPicker(true)}><Text className='collector-label'>校区 *</Text><Text className='collector-value'>{selectedCampus?.name || '请选择'}</Text></View>
               <View className='collector-field' onClick={() => selectedSchool ? setShowCanteenPicker(true) : setShowSchoolPicker(true)}><Text className='collector-label'>食堂 *</Text><Text className='collector-value'>{selectedCanteen?.name || '请选择'}</Text></View>
+              </> : genericFields()}
               <View className='collector-inline'>
-                <View className='collector-field collector-field--half' onClick={() => selectedCanteen ? setShowFloorPicker(true) : undefined}><Text className='collector-label'>楼层</Text><Text className='collector-value'>{floor || '可不填'}</Text></View>
+                <View className='collector-field collector-field--half' onClick={() => isCampus && selectedCanteen ? setShowFloorPicker(true) : undefined}><Text className='collector-label'>楼层</Text>{isCampus ? <Text className='collector-value'>{floor || '可不填'}</Text> : <Input className='collector-input' placeholder='可不填' value={floor} onInput={event => setFloor(event.detail.value)} />}</View>
                 <View className='collector-field collector-field--half'><Text className='collector-label'>窗口</Text><Input className='collector-input' placeholder='可不填' value={windowName} onInput={event => setWindowName(event.detail.value)} /></View>
               </View>
               <Textarea className='collector-textarea' maxlength={500} placeholder='本批次备注（可选）' value={batchNote} onInput={event => setBatchNote(event.detail.value)} />

@@ -1,0 +1,436 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "uid": "foodlink-algorithm-audit",
+  "title": "FoodLink 识别算法：执行与质量门禁",
+  "description": "现有指标已在2026-10-17只读确认以otel_前缀导出。新增算法指标须部署后才有数据。完成率、格式通过率不等于识别/营养准确率。此文件未导入线上Grafana。",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "Asia/Shanghai",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "backend",
+        "type": "query",
+        "label": "后端环境",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(otel_food_link_food_analysis_total, exported_job)",
+          "refId": "var-backend"
+        },
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": "food_link-backend-(main|dev)",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "通用LLM封装调用（不含balanced主视觉）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (stage, status) (rate(otel_food_link_llm_calls_total{exported_job=~\"$backend\"}[5m]))",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "通用LLM封装 P95 秒数（不含balanced主视觉）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(otel_food_link_llm_call_duration_seconds_bucket{exported_job=~\"$backend\"}[5m])))",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "各处理阶段 P95 秒数",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, phase) (rate(otel_food_link_analysis_phase_duration_seconds_bucket{exported_job=~\"$backend\"}[5m])))",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "工作任务 P95 秒数（含精准子任务）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, task_type) (rate(otel_food_link_worker_task_duration_seconds_bucket{exported_job=~\"$backend\"}[5m])))",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "营养解析条目（不代表营养准确率）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (engine, status) (rate(otel_food_link_nutrition_resolve_items_total{exported_job=~\"$backend\"}[5m]))",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "视觉渠道结果（取消单列）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (upstream, status) (rate(otel_food_link_vision_channel_calls_total{exported_job=~\"$backend\"}[5m]))",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "新：纠错与营养门禁（待后端部署）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (gate, outcome) (increase(otel_food_link_algorithm_gates_total{exported_job=~\"$backend\",gate!=\"task_outcome\"}[15m]))",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "新：任务终态（不代表内容正确）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(otel_food_link_algorithm_gates_total{exported_job=~\"$backend\",gate=\"task_outcome\"}[5m]))",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "新：状态或重量口径未报告的条目比例",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(otel_food_link_algorithm_result_items_total{exported_job=~\"$backend\",task_type=~\"food|food_text|precision_aggregate\",condition=\"missing_state\"}[15m])) / clamp_min(sum(rate(otel_food_link_algorithm_result_items_total{exported_job=~\"$backend\",task_type=~\"food|food_text|precision_aggregate\",condition=\"total\"}[15m])), 0.000001)",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "新：输出中无效/缺信息条目数量",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (condition, task_type) (increase(otel_food_link_algorithm_result_items_total{exported_job=~\"$backend\",condition!=\"total\"}[15m]))",
+          "legendFormat": "{{stage}}{{phase}}{{engine}}{{upstream}} {{gate}} {{outcome}}{{status}}{{condition}}{{task_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "视觉渠道 P95 秒数（含balanced主视觉）",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, upstream, status) (rate(otel_food_link_vision_channel_duration_seconds_bucket{exported_job=~\"$backend\"}[5m])))",
+          "legendFormat": "{{upstream}} {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "description": "执行统计不代表识别准确率。无数据保持No data，待部署的新序列不应解释为零问题。"
+    }
+  ]
+}

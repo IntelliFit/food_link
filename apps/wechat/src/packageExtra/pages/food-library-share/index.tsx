@@ -141,7 +141,7 @@ function FoodLibrarySharePage() {
   const [membershipLoading, setMembershipLoading] = useState(false);
 
   // 校园食堂信息
-  const [isCampusFood, setIsCampusFood] = useState(campusMode);
+  const [isCampusFood] = useState(campusMode);
   const [schoolId, setSchoolId] = useState("");
   const [schoolName, setSchoolName] = useState("");
   const [selectedSchool, setSelectedSchool] = useState<SchoolItem | null>(null);
@@ -171,6 +171,11 @@ function FoodLibrarySharePage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [locatingHomemadeCity, setLocatingHomemadeCity] = useState(false);
   const isCampusMember = !!membershipStatus?.is_pro;
+
+  // 兼容旧链接：食堂共建统一进入专用表单，不再走通用拍照估算流程。
+  useEffect(() => {
+    if (campusMode) Taro.redirectTo({ url: `${extraPkgUrl('/pages/campus-food-share/index')}?scope=campus` });
+  }, [campusMode]);
 
   // 加载最近记录
   useEffect(() => {
@@ -980,6 +985,8 @@ function FoodLibrarySharePage() {
 
   const { scheme } = useAppColorScheme();
 
+  if (campusMode) return <View className='share-page'><View className='btn-spinner' /></View>;
+
   if (isCampusFood && membershipLoading) {
     return (
       <View
@@ -1192,14 +1199,7 @@ function FoodLibrarySharePage() {
             <View
               className={`switch-btn ${isCampusFood ? "active" : ""}`}
               onClick={() => {
-                if (!isCampusFood && !isCampusMember) {
-                  Taro.showToast({ title: "校园食堂为会员专属", icon: "none" });
-                  Taro.navigateTo({
-                    url: `${extraPkgUrl("/pages/pro-membership/index")}?source=campus_canteen`,
-                  });
-                  return;
-                }
-                setIsCampusFood(!isCampusFood);
+                Taro.navigateTo({ url: `${extraPkgUrl('/pages/campus-food-share/index')}?scope=campus` });
               }}
             >
               <View className='switch-dot' />

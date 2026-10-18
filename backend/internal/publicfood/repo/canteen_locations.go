@@ -10,10 +10,16 @@ import (
 
 // These are read-time source labels, not new persisted directory records.
 const canteenOrganizationRawSQL = `COALESCE(NULLIF(BTRIM(venue_item.organization_name), ''), NULLIF(BTRIM(venue_batch.organization_name), ''), NULLIF(BTRIM(venue_school.name), ''), NULLIF(BTRIM(p.school_name), ''), NULLIF(BTRIM(p.merchant_name), ''), '')`
-const canteenCitySQL = `REGEXP_REPLACE(BTRIM(COALESCE(p.city, '')), '市$', '')`
-const canteenOrganizationSQL = `CASE WHEN LENGTH(` + canteenCitySQL + `) > 0 AND LEFT(` + canteenOrganizationRawSQL + `, LENGTH(` + canteenCitySQL + `)) = ` + canteenCitySQL + ` THEN BTRIM(SUBSTRING(` + canteenOrganizationRawSQL + ` FROM LENGTH(` + canteenCitySQL + `) + 1)) ELSE ` + canteenOrganizationRawSQL + ` END`
+const canteenRawCitySQL = `REGEXP_REPLACE(BTRIM(COALESCE(p.city, '')), '市$', '')`
+
+// Confirmed aliases of the same Beijing venue. Legacy imports often omit city
+// or district, so their identity must not depend on that optional metadata.
+// A matching name explicitly located in another city remains a separate venue.
+const canteenYuandianAliasSQL = `(` + canteenRawCitySQL + ` IN ('', '北京') AND UPPER(REGEXP_REPLACE(` + canteenOrganizationRawSQL + `, '\s+', '', 'g')) IN ('AI原点社区', '北京AI原点社区'))`
+const canteenCitySQL = `CASE WHEN ` + canteenYuandianAliasSQL + ` THEN '北京' ELSE ` + canteenRawCitySQL + ` END`
+const canteenOrganizationSQL = `CASE WHEN ` + canteenYuandianAliasSQL + ` THEN 'AI原点社区' WHEN LENGTH(` + canteenCitySQL + `) > 0 AND LEFT(` + canteenOrganizationRawSQL + `, LENGTH(` + canteenCitySQL + `)) = ` + canteenCitySQL + ` THEN BTRIM(SUBSTRING(` + canteenOrganizationRawSQL + ` FROM LENGTH(` + canteenCitySQL + `) + 1)) ELSE ` + canteenOrganizationRawSQL + ` END`
 const canteenNameSQL = `REGEXP_REPLACE(COALESCE(NULLIF(BTRIM(p.canteen_name), ''), NULLIF(BTRIM(venue_item.canteen_name), ''), NULLIF(BTRIM(venue_batch.canteen_name), ''), NULLIF(BTRIM(p.merchant_name), ''), '食堂'), '\s*[（(]名称待确认[）)]\s*$', '')`
-const canteenOrganizationKeySQL = `MD5(JSONB_BUILD_ARRAY(` + canteenOrganizationSQL + `, ` + canteenCitySQL + `, BTRIM(COALESCE(p.district, '')))::text)`
+const canteenOrganizationKeySQL = `MD5(JSONB_BUILD_ARRAY(` + canteenOrganizationSQL + `, ` + canteenCitySQL + `, CASE WHEN ` + canteenYuandianAliasSQL + ` THEN '' ELSE BTRIM(COALESCE(p.district, '')) END)::text)`
 const canteenKeySQL = `MD5(JSONB_BUILD_ARRAY(` + canteenOrganizationKeySQL + `, ` + canteenNameSQL + `)::text)`
 
 func withCanteenScope(q *gorm.DB, scope string) (*gorm.DB, error) {
@@ -44,7 +50,7 @@ func (r *PublicFoodRepo) ListCanteenLocations(ctx context.Context, viewerUserID 
 		return nil, err
 	}
 	q = q.Select(`p.id, ` + canteenOrganizationKeySQL + ` AS organization_key, ` + canteenOrganizationSQL + ` AS organization_name,
-		COALESCE(p.city, '') AS city, COALESCE(p.district, '') AS district,
+		` + canteenCitySQL + ` AS city, COALESCE(p.district, '') AS district,
 		` + canteenKeySQL + ` AS canteen_key, ` + canteenNameSQL + ` AS canteen_name,
 		COALESCE(NULLIF(p.detail_address, ''), NULLIF(p.merchant_address, ''), p.campus_location_text, '') AS address`).
 		Where("(" + canteenOrganizationSQL + ") <> ''")

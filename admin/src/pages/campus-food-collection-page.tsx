@@ -80,11 +80,14 @@ type CatalogItem = {
 }
 
 type CollectorApplication = {
+  venue_type?: string
+  organization_name?: string
+  scope_canteen_name?: string
   id: string
   user_id: string
   user_nickname?: string
   user_telephone?: string
-  school_id: string
+  school_id?: string
   school_name?: string
   campus_id?: string
   campus_name?: string
@@ -919,7 +922,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
         <section className='detail-panel space-y-5 p-6'>
           <div className='editor-header'>
             <div>
-              <h2>校园代理批量通道</h2>
+              <h2>食堂批量上传授权</h2>
               <p>这里只审核人员与采集范围。普通用户单菜上传和已授权代理的菜品会即时生效，不逐条预审。</p>
             </div>
             <div className='actions' style={{ marginTop: 0 }}>
@@ -940,7 +943,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
           </div>
           <div className='flex flex-wrap items-center gap-2 text-sm'>
             <span className='pill active'>{collectorTotal} 条申请</span>
-            <span className='muted'>授权可精确到学校、校区或食堂；到期时间留空表示长期有效。</span>
+            <span className='muted'>支持校园、社区、园区及公司食堂；到期时间留空表示长期有效。</span>
           </div>
           {collectorApplications.length ? (
             <div className='grid gap-3'>
@@ -954,7 +957,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
                           {collectorApplicationStatusLabel(application.status)}
                         </span>
                       </div>
-                      <p className='mt-1 text-sm'>{[application.school_name || shortID(application.school_id), application.campus_name, application.canteen_name].filter(Boolean).join(' · ')}</p>
+                      <p className='mt-1 text-sm'>{[({ university: '校园', community: '社区', office_park: '园区', corporate: '公司' } as Record<string, string>)[application.venue_type || 'university'], application.organization_name || application.school_name || shortID(application.school_id || ''), application.campus_name, application.scope_canteen_name || application.canteen_name].filter(Boolean).join(' · ')}</p>
                       <p className='muted mt-1 text-xs'>申请于 {formatDateTime(application.created_at)} · 用户 {shortID(application.user_id)}</p>
                       {application.applicant_note ? <p className='mt-2 text-sm'>申请说明：{application.applicant_note}</p> : null}
                       {application.review_note ? <p className='muted mt-1 text-sm'>审核说明：{application.review_note}</p> : null}

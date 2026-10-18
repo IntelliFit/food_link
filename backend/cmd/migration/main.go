@@ -37,6 +37,7 @@ func main() {
 	onlyFoodRecordMood := flag.Bool("only-food-record-mood", false, "only add the optional food-record eating mood column and constraint")
 	onlyManualFoodSausage := flag.Bool("only-manual-food-sausage", false, "only reclassify Taiwanese grilled sausage as an independently packaged 38g food and relink historical records")
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
+	onlyCanteenCollectors := flag.Bool("only-canteen-collectors", false, "only extend collector authorization to community, office park and corporate canteens")
 	onlySupplements := flag.Bool("only-supplements", false, "only add supplement catalog, cabinet, intake schema, and catalog seeds")
 	onlySupplementFeed := flag.Bool("only-supplement-feed", false, "only add supplement intake feed visibility and update feed interaction target constraints")
 	onlySupplementProduct := flag.Bool("only-supplement-feed-product", false, "only add optional supplement bottle identity snapshots")
@@ -62,6 +63,9 @@ func main() {
 		log.Fatal("补剂恢复参数须与 --restore-supplement-feed 一起使用")
 	}
 	selectedOnlyModes := 0
+	if *onlyCanteenCollectors {
+		selectedOnlyModes++
+	}
 	if *onlyProductUpdates {
 		selectedOnlyModes++
 	}
@@ -279,6 +283,8 @@ func main() {
 		migrateErr = migration.MigrateManualFoodSausage(ctx, db, cfg.Database.Schema)
 	} else if *onlyCampusCatalogPublishing {
 		migrateErr = migration.MigrateCampusCatalogPublishing(ctx, db, cfg.Database.Schema)
+	} else if *onlyCanteenCollectors {
+		migrateErr = migration.MigrateCanteenCollectors(ctx, db, cfg.Database.Schema)
 	} else if *onlySupplements {
 		migrateErr = migration.MigrateSupplements(ctx, db, cfg.Database.Schema)
 	} else if *onlySupplementFeed {

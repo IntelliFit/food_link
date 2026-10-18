@@ -7,7 +7,7 @@ export function campusNutritionState(item: PublicFoodLibraryItem) {
   const failed = status === 'failed' || status === 'timed_out'
   const stale = status === 'stale'
   const pending = status === 'pending' || status === 'processing' || stale
-  const analyzing = status === 'processing' || (status === 'pending' && !!item.analysis_task_id)
+  const analyzing = status === 'processing' || ((status === 'pending' || stale) && !!item.analysis_task_id)
   // Catalog imports carry macro estimates, but do not submit an analysis task.
   // An edited/recalculating version must not reuse the original estimate as current.
   const estimated = hasNutrition && !failed && !stale && !item.analysis_task_id &&

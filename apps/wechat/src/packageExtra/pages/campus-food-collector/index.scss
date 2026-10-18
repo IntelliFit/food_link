@@ -53,3 +53,7 @@
 }
 
 @keyframes collector-spin { to { transform: rotate(360deg); } }
+.collector-venue-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; margin-bottom: 20rpx; }
+.collector-venue-type { padding: 18rpx 8rpx; border: 2rpx solid #dce6e0; border-radius: 14rpx; text-align: center; font-size: 26rpx; }
+.collector-venue-type.active { border-color: #14815d; background: #eaf5ef; color: #0f7754; }
+.collector-page--dark .collector-venue-type.active { background: #203d31; color: #b7ead2; }
