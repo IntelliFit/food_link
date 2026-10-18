@@ -154,6 +154,9 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 				existing.AlreadySaved = true
 				return existing, nil
 			}
+			if err := s.rejectCorrectionOfRecordedMeal(ctx, userID, task); err != nil {
+				return nil, err
+			}
 		}
 	}
 	input.ImagePaths = s.normalizeImagePaths(input.ImagePaths)

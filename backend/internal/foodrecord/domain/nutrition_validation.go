@@ -12,7 +12,35 @@ func ZeroEnergyFood(name string) bool {
 	case "水", "白水", "白开水", "饮用水", "纯净水", "矿泉水", "苏打水", "无糖苏打水", "无糖气泡水", "茶", "清茶", "绿茶", "红茶", "乌龙茶", "无糖茶", "无糖茶水", "黑咖啡", "美式咖啡", "无糖黑咖啡":
 		return true
 	}
-	return false
+	return plainBottledWater(name)
+}
+
+// 模型常给出带品牌或包装的名称（如“农夫山泉饮用天然水”“怡宝纯净水”），
+// 这类无添加的饮用水本就是零热量；带口味、糖、果汁或功能成分的“水”不算。
+var (
+	plainWaterKinds    = []string{"天然水", "矿泉水", "纯净水", "饮用水", "蒸馏水", "矿物质水"}
+	flavouredWaterHint = []string{"味", "果", "汁", "糖", "蜜", "柠檬", "柚", "椰", "维生素", "电解质", "运动", "能量", "茶", "奶", "乳", "豆", "饮料", "甜", "酸"}
+)
+
+func plainBottledWater(name string) bool {
+	name = strings.TrimSpace(name)
+	matched := false
+	for _, kind := range plainWaterKinds {
+		if strings.Contains(name, kind) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return false
+	}
+	unsweetened := strings.ReplaceAll(name, "无糖", "")
+	for _, hint := range flavouredWaterHint {
+		if strings.Contains(unsweetened, hint) {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidateFoodNutritionValues is shared by analysis and the recording boundary.

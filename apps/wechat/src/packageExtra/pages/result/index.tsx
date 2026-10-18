@@ -73,6 +73,7 @@ import {
   hasCorrectionWeightChanged,
   normalizeFoodNameForCorrection,
 } from './correction-payload'
+import { scaleCaloriesForWeight } from './weight-adjust'
 import {
   convertApiFoodItemsToNutritionItems,
   normalizeItemNutrients,
@@ -894,7 +895,7 @@ function ResultPage() {
     resolutionState: AnalysisResolutionState,
     extra?: { sourceTaskId?: string; sourceRecordId?: string; beforeResult?: Record<string, unknown>; afterResult?: Record<string, unknown> }
   ) => {
-    const sourceTaskId = extra?.sourceTaskId || String(Taro.getStorageSync('analyzeSourceTaskId') || '')
+    const sourceTaskId = extra?.sourceTaskId || recordContext.taskId
     const sourceRecordId = extra?.sourceRecordId || ''
     if (!sourceTaskId && !sourceRecordId) return
     const key = `${sourceTaskId}:${sourceRecordId}:${feedbackType}`
@@ -1360,6 +1361,11 @@ function ResultPage() {
           const nextFat = item.fat * weightScale
           const nextWaterMl = item.waterMl * weightScale
           const nextNutrients = scaleNutrients(item.nutrients, weightScale)
+          const nextCalories = scaleCaloriesForWeight(
+            item.calorie,
+            weightScale,
+            calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
+          )
           // ratio 保持不变，重新计算 intake
           const newIntake = Math.round(newWeight * (item.ratio / 100))
           return {
@@ -1367,14 +1373,14 @@ function ResultPage() {
             weight: newWeight,
             intake: newIntake,
             // 重量变化时，同步更新该食物对应的营养值
-            calorie: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
+            calorie: nextCalories,
             protein: nextProtein,
             carbs: nextCarbs,
             fat: nextFat,
             waterMl: nextWaterMl,
             nutrients: {
               ...nextNutrients,
-              calories: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
+              calories: nextCalories,
               protein: nextProtein,
               carbs: nextCarbs,
               fat: nextFat,
@@ -1700,7 +1706,8 @@ function ResultPage() {
   const syncEditedAnalyzeResult = async (items: NutritionItem[]) => {
     const nextResult = buildAnalyzeResultFromItems(items)
     Taro.setStorageSync('analyzeResult', JSON.stringify(nextResult))
-    const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId')
+    // 用本页打开时的任务：纠错后旧结果页仍在栈中，全局缓存已指向新任务。
+    const sourceTaskId = recordContext.taskId
     if (!sourceTaskId) return
     try {
       await updateAnalysisTaskResult(sourceTaskId, nextResult)
@@ -1786,7 +1793,7 @@ function ResultPage() {
           index: targetIndex,
           name,
           weight,
-          sourceTaskId: Taro.getStorageSync('analyzeSourceTaskId') || undefined,
+          sourceTaskId: recordContext.taskId || undefined,
           isCurrent: () => foodEditorMountedRef.current,
         })
         if (!foodEditorMountedRef.current) return
@@ -2308,7 +2315,7 @@ function ResultPage() {
               meal_type: mealType,
               tags: ['自定义'],
 			  is_favorite: true,
-			  source_task_id: String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim() || undefined,
+			  source_task_id: recordContext.taskId || undefined,
             })
 			setSavedRecipeId(createdRecipe.id)
 
@@ -2384,6 +2391,11 @@ function ResultPage() {
 
   // 打开纠错抽屉
   const openCorrectionDrawer = () => {
+    // 已记录的餐再纠错会生成新任务并可能被记第二次；与食物库入口一致，引导到记录详情修改。
+    if (isAnalyzeSessionCommitted() || committedRecordId) {
+      Taro.showToast({ title: '该餐已记录，请在记录详情修改', icon: 'none' })
+      return
+    }
     // 拷贝当前营养项到纠错列表
     setCorrectionItems(JSON.parse(JSON.stringify(nutritionItems)))
     setAdditionalContext('')
@@ -2483,7 +2495,7 @@ function ResultPage() {
           const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
           const savedExecutionMode = normalizeRuntimeExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
           const savedAnalysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY), savedExecutionMode)
-          const correctionSourceTaskId = String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim()
+          const correctionSourceTaskId = recordContext.taskId
           const previousResult: AnalyzeResponse = {
             description,
             insight: healthAdvice,

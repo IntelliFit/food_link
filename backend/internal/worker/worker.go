@@ -2372,13 +2372,8 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	if roundIndex <= 0 {
 		roundIndex = 1
 	}
-	sourceType := stringFromMap(task.Payload, "source_type")
-	if sourceType == "" {
-		sourceType = session.SourceType
-	}
-	if sourceType != "text" {
-		sourceType = "image"
-	}
+	hasImages := len(task.ImagePaths) > 0 || (task.ImageURL != nil && strings.TrimSpace(*task.ImageURL) != "")
+	sourceType := precisionPlanSourceType(stringFromMap(task.Payload, "source_type"), session.SourceType, hasImages)
 	latestInputs := copyAnyMap(session.LatestInputs)
 	for _, key := range []string{"analysis_engine", "execution_mode", "precise_micronutrients"} {
 		if _, exists := latestInputs[key]; !exists {
