@@ -75,6 +75,12 @@ func (h *AuthHandler) AdminAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		account, ok := h.currentAccount(c)
 		if ok {
+			if !adminRouteAllowed(account.Role, c.Request.Method, c.FullPath()) {
+				logger.Warn(c.Request.Context(), "管理员接口权限不足", slog.String("admin_id", account.ID), slog.String("role", account.Role), slog.String("route", c.FullPath()))
+				response.Error(c, &commonerrors.AppError{Code: 20003, Message: "无权访问此功能", HTTPStatus: http.StatusForbidden})
+				c.Abort()
+				return
+			}
 			c.Set("admin_account_id", account.ID)
 			c.Set("admin_username", account.Username)
 			c.Next()
@@ -138,7 +144,12 @@ func parseAdminSessionToken(token string) string {
 func adminAccountPayload(account *domain.AdminAccount) gin.H {
 	return gin.H{
 		"id":           account.ID,
+		"role":         account.Role,
 		"username":     account.Username,
 		"display_name": account.DisplayName,
 	}
+}
+
+func adminRouteAllowed(role, method, path string) bool {
+	return role == domain.RoleAdmin || (role == domain.RoleAnalyticsViewer && method == http.MethodGet && path == "/api/admin/analytics")
 }

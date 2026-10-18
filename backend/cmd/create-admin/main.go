@@ -25,6 +25,7 @@ func main() {
 	displayName := flag.String("display-name", "", "admin display name")
 	password := flag.String("password", "", "admin password; if omitted, prompt from terminal")
 	reset := flag.Bool("reset", false, "reset password if admin already exists")
+	role := flag.String("role", "admin", "admin or analytics_viewer")
 	timeout := flag.Duration("timeout", 2*time.Minute, "operation timeout")
 	flag.Parse()
 
@@ -56,6 +57,7 @@ func main() {
 	repo := adminrepo.NewAdminAccountRepo(db)
 	svc := adminservice.NewAuthService(repo)
 	account, err := svc.CreateOrResetAdmin(ctx, adminservice.CreateAdminInput{
+		Role:        *role,
 		Username:    *username,
 		Password:    adminPassword,
 		DisplayName: *displayName,
@@ -69,6 +71,9 @@ func main() {
 
 func resolvePassword(flagPassword string) (string, error) {
 	password := strings.TrimSpace(flagPassword)
+	if password == "" {
+		password = strings.TrimSpace(os.Getenv("ADMIN_ACCOUNT_PASSWORD"))
+	}
 	if password != "" {
 		return password, nil
 	}

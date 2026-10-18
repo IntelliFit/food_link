@@ -126,6 +126,7 @@ type UserFeedbackDO struct {
 func (UserFeedbackDO) TableName() string { return "user_feedback" }
 
 type AdminAccountDO struct {
+	Role         string     `gorm:"column:role;type:text;not null;default:'admin';check:admin_account_role_valid,role IN ('admin','analytics_viewer')"`
 	ID           string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	Username     string     `gorm:"column:username;type:text;not null;uniqueIndex:idx_admin_accounts_username"`
 	DisplayName  string     `gorm:"column:display_name;type:text;not null;default:''"`
@@ -2173,6 +2174,9 @@ func AllModels() []any {
 		&UserNutritionPlanDefaultDO{},
 		&UserFeedbackDO{},
 		&AdminAccountDO{},
+		&AnalyticsActivityDO{},
+		&AnalyticsDailyDO{},
+		&AnalyticsStateDO{},
 		&UserPetDO{},
 		&UserPetEventDO{},
 		&UserPetDailyScoreDO{},

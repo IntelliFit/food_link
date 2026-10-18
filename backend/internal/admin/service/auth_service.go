@@ -26,6 +26,7 @@ type LoginResult struct {
 }
 
 type CreateAdminInput struct {
+	Role        string
 	Username    string
 	Password    string
 	DisplayName string
@@ -63,6 +64,12 @@ func (s *AuthService) GetActiveAccount(ctx context.Context, id string) (*domain.
 }
 
 func (s *AuthService) CreateOrResetAdmin(ctx context.Context, input CreateAdminInput) (*domain.AdminAccount, error) {
+	if input.Role == "" {
+		input.Role = domain.RoleAdmin
+	}
+	if input.Role != domain.RoleAdmin && input.Role != domain.RoleAnalyticsViewer {
+		return nil, fmt.Errorf("不支持的管理员角色")
+	}
 	username := normalizeUsername(input.Username)
 	if username == "" {
 		return nil, fmt.Errorf("管理员用户名不能为空")
@@ -76,6 +83,9 @@ func (s *AuthService) CreateOrResetAdmin(ctx context.Context, input CreateAdminI
 		return nil, err
 	}
 	if existing != nil {
+		if existing.Role != input.Role {
+			return nil, fmt.Errorf("已有账号角色不同，禁止通过密码重置修改权限")
+		}
 		if !input.Reset {
 			return nil, fmt.Errorf("管理员账号 %q 已存在，如需重置密码请添加 -reset", username)
 		}
@@ -86,6 +96,7 @@ func (s *AuthService) CreateOrResetAdmin(ctx context.Context, input CreateAdminI
 		displayName = username
 	}
 	return s.repo.Create(ctx, &domain.AdminAccount{
+		Role:         input.Role,
 		Username:     username,
 		DisplayName:  displayName,
 		PasswordHash: passwordHash,

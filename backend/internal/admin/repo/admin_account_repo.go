@@ -11,6 +11,7 @@ import (
 )
 
 type AdminAccountModel struct {
+	Role         string     `gorm:"column:role;type:text;not null;default:'admin'"`
 	ID           string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	Username     string     `gorm:"column:username;type:text;not null;uniqueIndex:idx_admin_accounts_username"`
 	DisplayName  string     `gorm:"column:display_name;type:text;not null;default:''"`
@@ -67,6 +68,7 @@ func (r *AdminAccountRepo) FindByID(ctx context.Context, id string) (*domain.Adm
 
 func (r *AdminAccountRepo) Create(ctx context.Context, account *domain.AdminAccount) (*domain.AdminAccount, error) {
 	model := AdminAccountModel{
+		Role:         account.Role,
 		Username:     account.Username,
 		DisplayName:  account.DisplayName,
 		PasswordHash: account.PasswordHash,
@@ -102,6 +104,7 @@ func (r *AdminAccountRepo) TouchLastLogin(ctx context.Context, id string) error 
 
 func adminAccountFromModel(model AdminAccountModel) *domain.AdminAccount {
 	return &domain.AdminAccount{
+		Role:         model.Role,
 		ID:           model.ID,
 		Username:     model.Username,
 		DisplayName:  model.DisplayName,
