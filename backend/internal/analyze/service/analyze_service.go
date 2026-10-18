@@ -5246,7 +5246,10 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	prompt := buildPrompt(input, user, executionMode)
 	provider, model := resolveModelConfig(input.ModelName)
 	var client LLMClient
-	if strings.TrimSpace(input.ModelName) == "" {
+	defaultTextRoute := strings.TrimSpace(input.ModelName) == "" && (s.textDefaultGeminiAvailable() || s.dashscopeClient != nil)
+	if defaultTextRoute {
+		provider, model = "gemini", gemini3FlashModel
+	} else if strings.TrimSpace(input.ModelName) == "" {
 		if s.dashscopeClient != nil {
 			provider = "qwen"
 			model = qwen38FlashModel
@@ -5277,7 +5280,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	} else {
 		client = s.doubaoClient
 	}
-	if isFastExecutionMode(executionMode) && s.dashscopeClient != nil {
+	if !defaultTextRoute && isFastExecutionMode(executionMode) && s.dashscopeClient != nil {
 		client = s.dashscopeClient
 		provider, model = "qwen", fastTextModel
 	}
@@ -5300,7 +5303,17 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	parsed, err := analyzeWithJSONParseRetry(ctx, "food_text", provider, model, func(callCtx context.Context) (map[string]any, error) {
 		var raw map[string]any
 		var callErr error
-		if isFastExecutionMode(executionMode) {
+		if defaultTextRoute {
+			// Fast and standard text share the evaluated default route; the routed
+			// call validates each channel's result so an invalid answer hedges.
+			raw, provider, model, callErr = s.runDefaultTextModel(callCtx, prompt, textNutritionJSONSchema(analysisEngineProducesNutrition(input.AnalysisEngine)), func(candidate map[string]any) error {
+				_, err := normalizeAndValidateTextResult(candidate, input)
+				return err
+			})
+			if callErr != nil {
+				return nil, callErr
+			}
+		} else if isFastExecutionMode(executionMode) {
 			raw, callErr = newAnalyzeWithImagesWithoutThinkingModelCall(client, prompt, nil, model)(callCtx)
 		} else if structured, ok := client.(interface {
 			AnalyzeTextWithJSONSchema(context.Context, string, string, map[string]any) (map[string]any, error)

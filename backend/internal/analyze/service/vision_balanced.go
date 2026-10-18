@@ -215,6 +215,17 @@ func (s *AnalyzeService) selectBalancedVisionModel(mode, _ string) string {
 // passes business validation wins and the others are cancelled. It never
 // retries the same channel or downgrades to a domestic/Lite model.
 func (s *AnalyzeService) runBalancedGeminiVision(ctx context.Context, stage, primaryUpstream, primaryModel, prompt string, imageURLs []string, temperature float64, validate func(map[string]any) error) (geminiVisionHedgeOutcome, error) {
+	payloadCheck := validateBalancedFoodPayload
+	if primaryModel != gemini3FlashModel {
+		payloadCheck = validateBalancedPrecisionPayload
+	}
+	return s.runBalancedGeminiChannels(ctx, stage, primaryUpstream, primaryModel, prompt, imageURLs, temperature, validate, payloadCheck)
+}
+
+// runBalancedGeminiChannels is the shared channel scheduler. payloadCheck is the
+// caller's shape gate applied after validate; text analysis passes nil because
+// its validator already normalizes and checks the text result shape.
+func (s *AnalyzeService) runBalancedGeminiChannels(ctx context.Context, stage, primaryUpstream, primaryModel, prompt string, imageURLs []string, temperature float64, validate, payloadCheck func(map[string]any) error) (geminiVisionHedgeOutcome, error) {
 	r := s.visionChannels
 	req, _ := ctx.Value(visionRequestKey{}).(*visionRequest)
 	if req == nil {
@@ -256,7 +267,7 @@ func (s *AnalyzeService) runBalancedGeminiVision(ctx context.Context, stage, pri
 				slog.String("stage", stage), slog.String("upstream", p.upstream), slog.String("model", p.model),
 				slog.String("reason", reason), slog.Int("attempt", started), slog.Duration("response_wait", wait))
 			go func() {
-				results <- s.callBalancedVisionChannel(hedgeCtx, req, stage, p, key, wait, prompt, imageURLs, temperature, validate, precision)
+				results <- s.callBalancedVisionChannel(hedgeCtx, req, stage, p, key, wait, prompt, imageURLs, temperature, validate, payloadCheck)
 			}()
 			resetTimer(timer, r.balancedHedgeDelay(key, fallbackDelay, time.Now()))
 			return true
@@ -301,7 +312,7 @@ func (s *AnalyzeService) runBalancedGeminiVision(ctx context.Context, stage, pri
 
 // callBalancedVisionChannel runs one attempt with its own response budget and
 // records the outcome for circuit breaking, hedge timing and metrics.
-func (s *AnalyzeService) callBalancedVisionChannel(ctx context.Context, req *visionRequest, stage string, p channelPlan, key string, wait time.Duration, prompt string, imageURLs []string, temperature float64, validate func(map[string]any) error, precision bool) channelResult {
+func (s *AnalyzeService) callBalancedVisionChannel(ctx context.Context, req *visionRequest, stage string, p channelPlan, key string, wait time.Duration, prompt string, imageURLs []string, temperature float64, validate, payloadCheck func(map[string]any) error) channelResult {
 	attemptCtx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	u := &visionUsage{}
@@ -311,12 +322,8 @@ func (s *AnalyzeService) callBalancedVisionChannel(ctx context.Context, req *vis
 	if err == nil && validate != nil {
 		err = validate(parsed)
 	}
-	if err == nil {
-		if precision {
-			err = validateBalancedPrecisionPayload(parsed)
-		} else {
-			err = validateBalancedFoodPayload(parsed)
-		}
+	if err == nil && payloadCheck != nil {
+		err = payloadCheck(parsed)
 	}
 	// Reject a late completion, even if the HTTP client returned no error.
 	if err == nil {

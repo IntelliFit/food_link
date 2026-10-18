@@ -143,6 +143,15 @@ func (c *OfoxAIClient) AnalyzeTextWithJSONSchema(ctx context.Context, prompt, mo
 	})
 }
 
+// AnalyzeTextWithJSONSchemaWithoutThinking is the latency-bounded fallback for
+// default text analysis when no Gemini channel answers.
+func (c *OfoxAIClient) AnalyzeTextWithJSONSchemaWithoutThinking(ctx context.Context, prompt, model string, schema map[string]any) (map[string]any, error) {
+	return c.analyzeWithImagesAndTemperature(ctx, prompt, nil, 0, model, map[string]any{
+		"response_format": map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "food_text_nutrition", "strict": true, "schema": schema}},
+		"enable_thinking": false,
+	})
+}
+
 func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
 	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, modelName, nil)
 }
