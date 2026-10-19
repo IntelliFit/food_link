@@ -43,6 +43,8 @@ func plainBottledWater(name string) bool {
 	return true
 }
 
+const maxFoodEnergyDensityKcalPerGram = 9.0
+
 // ValidateFoodNutritionValues is shared by analysis and the recording boundary.
 func ValidateFoodNutritionValues(name string, weight, calories, protein, carbs, fat float64) error {
 	name = strings.TrimSpace(name)
@@ -59,6 +61,10 @@ func ValidateFoodNutritionValues(name string, weight, calories, protein, carbs, 
 	macroMassTolerance := math.Max(0.1, weight*0.02)
 	if protein+carbs+fat > weight+macroMassTolerance {
 		return fmt.Errorf("食物「%s」三大营养素总量超过可食重量，请重新分析", name)
+	}
+	// 纯油脂约 9 kcal/g，是食物能量密度的物理上限；只填热量的条目也不能超过它。
+	if calories > weight*maxFoodEnergyDensityKcalPerGram+math.Max(1, calories*0.02) {
+		return fmt.Errorf("食物「%s」热量超过同等重量纯油脂，请检查份量或重量", name)
 	}
 	if calories == 0 && !ZeroEnergyFood(name) {
 		return fmt.Errorf("食物「%s」缺少有效热量，请重新分析", name)

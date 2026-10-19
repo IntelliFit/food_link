@@ -737,7 +737,7 @@ func (r *ManualFoodRepo) listRecentItems(ctx context.Context, userID string, lim
 			result.DefaultWeightGrams = 100
 		}
 		if result.Source == "public_library" && result.DefaultWeightGrams <= 0 {
-			result.DefaultWeightGrams = 1
+			result.DefaultWeightGrams = publicFoodFallbackWeightGrams
 		}
 		result.SourceLabel = sourceLabel(result.Source)
 		result.Category = inferManualFoodCategory(result.Title, result.Source)
@@ -1167,20 +1167,12 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 		subtitleParts = append(subtitleParts, desc)
 	}
 	portionLabel := "1份"
-	defaultWeight := 1.0
 	if item.Items != nil && len(item.Items) == 1 {
 		if label := strings.TrimSpace(fmt.Sprintf("%v", item.Items[0]["manual_portion_label"])); label != "" && label != "<nil>" {
 			portionLabel = label
 		}
-		if intake := numberFromAny(item.Items[0]["intake"]); intake > 0 {
-			defaultWeight = intake
-		} else if weight := numberFromAny(item.Items[0]["weight"]); weight > 0 {
-			defaultWeight = weight
-		}
 	}
-	if defaultWeight <= 0 && item.TotalCalories > 0 {
-		defaultWeight = 1
-	}
+	defaultWeight := publicFoodPortionWeightGrams(item.Items)
 	highlights := make([]string, 0, 2)
 	if item.TotalProtein >= 20 {
 		highlights = append(highlights, fmt.Sprintf("蛋白 %.0fg", item.TotalProtein))
@@ -1228,10 +1220,7 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 		if it == nil {
 			continue
 		}
-		intake := numberFromAny(it["intake"])
-		if intake <= 0 {
-			intake = numberFromAny(it["weight"])
-		}
+		intake := publicFoodItemWeightGrams(it)
 		if intake <= 0 {
 			continue
 		}
@@ -1239,7 +1228,7 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 		nutrients := manualFoodNutrientsFromAny(it["nutrients"])
 		totalNutrients = sumManualFoodNutrients(totalNutrients, nutrients)
 	}
-	if totalIntake > 0 {
+	if totalIntake > 0 && totalNutrients.Calories > 0 {
 		per100Scale := 100 / totalIntake
 		nutrientsPer100g := scaleManualFoodNutrients(totalNutrients, per100Scale)
 		result.NutrientsPer100g = &nutrientsPer100g
@@ -2524,7 +2513,7 @@ func applyManualFoodServingProfile(item *domain.ManualFoodResult) {
 			item.PortionLabel = "1份"
 		}
 		if item.DefaultWeightGrams <= 0 {
-			item.DefaultWeightGrams = 1
+			item.DefaultWeightGrams = publicFoodFallbackWeightGrams
 		}
 		item.ServingPresets = servingPresets(item.DefaultWeightGrams, "份", []float64{0.5, 1, 1.5, 2})
 		return

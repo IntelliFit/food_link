@@ -401,7 +401,8 @@ function inferServingProfile(item: ManualFoodSearchResult): {
   }
 
   if (item.source === 'public_library') {
-    const defaultWeight = positiveWeightGrams(item.default_weight_grams, 1)
+    // 兜底不能是 1g：否则「1份」会被当成 1 克，营养密度被放大百倍。
+    const defaultWeight = positiveWeightGrams(item.default_weight_grams, 100)
     return {
       defaultWeight,
       displayUnit: 'serving',

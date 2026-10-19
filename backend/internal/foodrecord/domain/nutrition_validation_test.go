@@ -22,6 +22,9 @@ func TestValidateFoodNutritionValuesRespectsEdibleMass(t *testing.T) {
 		{name: "宏量300克", weight: 100, calories: 1700, p: 100, c: 100, f: 100, wantError: true},
 		{name: "整份量边界", weight: 1500, calories: 8500, p: 800, c: 800, f: 100, wantError: true},
 		{name: "非有限宏量", weight: 100, calories: 100, p: math.NaN(), wantError: true},
+		{name: "纯油脂上限", weight: 100, calories: 899, f: 99.9},
+		{name: "只填热量但超过油脂密度", weight: 1, calories: 72, wantError: true},
+		{name: "一份被当成一克", weight: 120, calories: 8640, p: 768, c: 84, f: 576, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := ValidateFoodNutritionValues(tc.name, tc.weight, tc.calories, tc.p, tc.c, tc.f)
