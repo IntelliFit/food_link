@@ -15,6 +15,8 @@ type CreateRequest struct {
 	Budget      int       `json:"budget"`
 	Payment     string    `json:"payment"`
 	Capacity    int       `json:"capacity"`
+	// DurationMinutes is the planned meal length; 0 keeps the legacy 90-minute default.
+	DurationMinutes int `json:"duration_minutes"`
 }
 type Profile struct {
 	UserID   string `json:"user_id"`
@@ -49,6 +51,7 @@ type Meetup struct {
 	OwnStatus      string        `json:"own_status"`
 	OwnRevision    int           `json:"own_revision"`
 	CanEnterRoom   bool          `json:"can_enter_room"`
+	CanExtend      bool          `json:"can_extend"`
 	Members        []Profile     `json:"members"`
 	Applications   []Participant `json:"applications,omitempty"`
 	ManagedMembers []Participant `json:"managed_members,omitempty"`
@@ -83,6 +86,10 @@ type RespondRequest struct {
 type MessageRequest struct {
 	RequestID string `json:"request_id"`
 	Content   string `json:"content"`
+}
+type ExtendRequest struct {
+	RequestID string `json:"request_id"`
+	Minutes   int    `json:"minutes"`
 }
 type ReportRequest struct {
 	EventID string `json:"event_id"`

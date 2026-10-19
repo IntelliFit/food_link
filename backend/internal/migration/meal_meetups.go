@@ -23,7 +23,7 @@ func ensureMealMeetupConstraints(ctx context.Context, db *gorm.DB) error {
 	constraints := [][3]string{
 		{"meal_meetups", "meal_meetup_status", "CHECK (status IN ('active','cancelled','hidden'))"},
 		{"meal_meetups", "meal_meetup_times", "CHECK (ends_at > starts_at)"},
-		{"meal_meetups", "meal_meetup_payment", "CHECK (payment IN ('aa','separate'))"},
+		{"meal_meetups", "meal_meetup_payment_v2", "CHECK (payment IN ('aa','separate','host_treat','negotiate'))"},
 		{"meal_meetups", "meal_meetup_meal", "CHECK (meal_type IN ('breakfast','lunch','dinner'))"},
 		{"meal_meetups", "meal_meetup_coordinates", "CHECK ((latitude IS NULL AND longitude IS NULL) OR (latitude IS NOT NULL AND longitude IS NOT NULL AND latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180))"},
 		{"meal_meetups", "meal_meetup_host_fk", "FOREIGN KEY (host_user_id) REFERENCES weapp_user(id) ON DELETE CASCADE"},
@@ -39,6 +39,10 @@ func ensureMealMeetupConstraints(ctx context.Context, db *gorm.DB) error {
 		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 			return fmt.Errorf("约饭约束 %s: %w", c[1], err)
 		}
+	}
+	// The v2 constraint above is already enforced, so the narrower legacy payment check can go.
+	if err := db.WithContext(ctx).Exec("ALTER TABLE meal_meetups DROP CONSTRAINT IF EXISTS meal_meetup_payment").Error; err != nil {
+		return fmt.Errorf("约饭约束 meal_meetup_payment: %w", err)
 	}
 	return nil
 }

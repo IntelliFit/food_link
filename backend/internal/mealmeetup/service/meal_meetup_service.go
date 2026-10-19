@@ -47,6 +47,29 @@ func denied() error {
 	return &commonerrors.AppError{Code: 20003, Message: "暂时无法访问这场约饭", HTTPStatus: 403}
 }
 func validKey(key string) bool { _, err := uuid.Parse(key); return err == nil }
+
+const (
+	defaultDurationMinutes = 90
+	// joinGrace keeps applications and approvals open briefly after the start so late arrivals can still be seated.
+	joinGrace = 20 * time.Minute
+	// extendGrace lets the host reopen a room shortly after it closed.
+	extendGrace = 30 * time.Minute
+	// maxMealSpan caps start-to-close, including every extension.
+	maxMealSpan = 4 * time.Hour
+)
+
+var (
+	durationChoices  = map[int]bool{60: true, 90: true, 120: true, 180: true}
+	extensionChoices = map[int]bool{30: true, 60: true, 120: true}
+	paymentChoices   = map[string]bool{"aa": true, "separate": true, "host_treat": true, "negotiate": true}
+)
+
+func joinCutoff(row *migrationdo.MealMeetupDO) time.Time { return row.StartsAt.Add(joinGrace) }
+
+// canExtend reports whether the host may still push the closing time back.
+func canExtend(row *migrationdo.MealMeetupDO, now time.Time) bool {
+	return row.Status == "active" && now.Before(row.EndsAt.Add(extendGrace)) && row.EndsAt.Before(row.StartsAt.Add(maxMealSpan))
+}
 func validCoordinates(lat, lng *float64) bool {
 	if lat == nil && lng == nil {
 		return true
@@ -77,8 +100,15 @@ func (s *Service) Create(ctx context.Context, userID string, req domain.CreateRe
 	if err != nil {
 		return "", bad("地点时区无效")
 	}
-	if !validKey(req.RequestID) || req.Title == "" || !limited(req.Title, 60) || !limited(req.Description, 500) || req.VenueName == "" || !limited(req.VenueName, 120) || req.Address == "" || !limited(req.Address, 240) || !validCoordinates(req.Latitude, req.Longitude) || req.Capacity < 2 || req.Capacity > 4 || req.Budget < 0 || req.Budget > 2000 || (req.Payment != "aa" && req.Payment != "separate") {
-		return "", bad("请检查标题、公共地点、预算和2–4人的人数设置")
+	if !validKey(req.RequestID) || req.Title == "" || !limited(req.Title, 60) || !limited(req.Description, 500) || req.VenueName == "" || !limited(req.VenueName, 120) || req.Address == "" || !limited(req.Address, 240) || !validCoordinates(req.Latitude, req.Longitude) || req.Capacity < 2 || req.Capacity > 4 || req.Budget < 0 || req.Budget > 2000 || !paymentChoices[req.Payment] {
+		return "", bad("请检查标题、公共地点、预算、付款方式和2–4人的人数设置")
+	}
+	if req.DurationMinutes != 0 && !durationChoices[req.DurationMinutes] {
+		return "", bad("预计用餐时长无效")
+	}
+	duration := time.Duration(defaultDurationMinutes) * time.Minute
+	if req.DurationMinutes != 0 {
+		duration = time.Duration(req.DurationMinutes) * time.Minute
 	}
 	raw, _ := json.Marshal(req)
 	sum := sha256.Sum256(raw)
@@ -111,7 +141,7 @@ func (s *Service) Create(ctx context.Context, userID string, req domain.CreateRe
 		} else if hour < 16 {
 			meal = "lunch"
 		}
-		row := &migrationdo.MealMeetupDO{ID: uuid.NewString(), HostUserID: userID, RequestID: req.RequestID, RequestHash: hash, Title: req.Title, Description: req.Description, VenueName: req.VenueName, Address: req.Address, Latitude: req.Latitude, Longitude: req.Longitude, StartsAt: req.StartsAt, EndsAt: req.StartsAt.Add(90 * time.Minute), Timezone: req.Timezone, MealType: meal, Budget: req.Budget, Payment: req.Payment, Capacity: req.Capacity, Status: "active", CreatedAt: now, UpdatedAt: now}
+		row := &migrationdo.MealMeetupDO{ID: uuid.NewString(), HostUserID: userID, RequestID: req.RequestID, RequestHash: hash, Title: req.Title, Description: req.Description, VenueName: req.VenueName, Address: req.Address, Latitude: req.Latitude, Longitude: req.Longitude, StartsAt: req.StartsAt, EndsAt: req.StartsAt.Add(duration), Timezone: req.Timezone, MealType: meal, Budget: req.Budget, Payment: req.Payment, Capacity: req.Capacity, Status: "active", CreatedAt: now, UpdatedAt: now}
 		created, e := tx.Create(ctx, row)
 		if e != nil {
 			return e
@@ -172,7 +202,8 @@ func (s *Service) List(ctx context.Context, userID string, mine bool, q domain.L
 			return nil, bad("日期无效")
 		}
 	}
-	rows, err := s.repo.List(ctx, userID, mine, q, s.now())
+	// Discovery keeps a meetup listed until its late-join window closes; the repo filters on starts_at > the time given.
+	rows, err := s.repo.List(ctx, userID, mine, q, s.now().Add(-joinGrace))
 	if err != nil {
 		logger.Error(ctx, "查询约饭列表失败", err, slog.String("user_id", userID), slog.Bool("mine", mine))
 		return nil, err
@@ -255,10 +286,14 @@ func (s *Service) view(ctx context.Context, tx *repo.Repo, row *migrationdo.Meal
 	if status == "active" {
 		if !s.now().Before(row.EndsAt) {
 			status = "ended"
-		} else if !s.now().Before(row.StartsAt) {
-			status = "started"
 		} else if len(ids) >= row.Capacity {
-			status = "full"
+			if s.now().Before(row.StartsAt) {
+				status = "full"
+			} else {
+				status = "started"
+			}
+		} else if !s.now().Before(joinCutoff(row)) {
+			status = "started"
 		}
 	}
 	view := &domain.Meetup{ID: row.ID, Host: profile(row.HostUserID), Title: row.Title, Description: row.Description, VenueName: row.VenueName, Address: row.Address, Latitude: row.Latitude, Longitude: row.Longitude, StartsAt: row.StartsAt, EndsAt: row.EndsAt, Timezone: row.Timezone, MealType: row.MealType, Budget: row.Budget, Payment: row.Payment, Capacity: row.Capacity, MemberCount: len(ids), Status: status, IsHost: host, OwnStatus: "none", Members: []domain.Profile{}}
@@ -269,6 +304,7 @@ func (s *Service) view(ctx context.Context, tx *repo.Repo, row *migrationdo.Meal
 	if host {
 		view.OwnStatus = "host"
 	}
+	view.CanExtend = host && canExtend(row, s.now())
 	member := host || (own != nil && own.Status == "accepted")
 	if row.Status == "hidden" && !member {
 		return nil, commonerrors.ErrNotFound
@@ -300,7 +336,8 @@ func (s *Service) view(ctx context.Context, tx *repo.Repo, row *migrationdo.Meal
 func (s *Service) Detail(ctx context.Context, userID, id string) (*domain.Meetup, error) {
 	var view *domain.Meetup
 	err := s.repo.Transaction(ctx, func(tx *repo.Repo) error {
-		row, err := tx.Get(ctx, id, true)
+		// Plain read: members poll this, so it must not queue behind writers on the activity row.
+		row, err := tx.Get(ctx, id, false)
 		if err != nil {
 			return err
 		}
@@ -369,7 +406,7 @@ func (s *Service) Apply(ctx context.Context, userID, id string, req domain.Apply
 		if p != nil && (p.Status == "rejected" || p.Status == "removed") {
 			return denied()
 		}
-		if row.Status != "active" || !now.Before(row.StartsAt) {
+		if row.Status != "active" || !now.Before(joinCutoff(row)) {
 			return conflict("这场约饭已停止报名")
 		}
 		ids := acceptedIDs(row, ps)
@@ -424,7 +461,7 @@ func (s *Service) Respond(ctx context.Context, userID, id, applicantID string, r
 		if (req.Action == "remove" && p.Status != "accepted") || (req.Action != "remove" && p.Status != "pending") {
 			return conflict("申请状态已变化，请刷新")
 		}
-		if row.Status != "active" || !now.Before(row.StartsAt) {
+		if row.Status != "active" || !now.Before(joinCutoff(row)) {
 			return conflict("约饭已停止处理申请")
 		}
 		if target == "accepted" {
@@ -530,7 +567,35 @@ func (s *Service) Cancel(ctx context.Context, userID, id string) error {
 		return s.cancel(ctx, tx, row, ps, userID, "cancelled", now)
 	})
 }
-func (s *Service) mutate(ctx context.Context, userID, id, action string, fn func(*repo.Repo, *migrationdo.MealMeetupDO, []migrationdo.MealMeetupParticipantDO, time.Time) error) error {
+
+type meetupAction func(*repo.Repo, *migrationdo.MealMeetupDO, []migrationdo.MealMeetupParticipantDO, time.Time) error
+
+// read runs a polling-safe action without locking the activity row or logging every poll as a state change.
+func (s *Service) read(ctx context.Context, userID, id, action string, fn meetupAction) error {
+	if userID == "" {
+		return commonerrors.ErrUnauthorized
+	}
+	err := s.repo.Transaction(ctx, func(tx *repo.Repo) error {
+		row, err := tx.Get(ctx, id, false)
+		if err != nil {
+			return err
+		}
+		ps, err := tx.Participants(ctx, id)
+		if err != nil {
+			return err
+		}
+		return fn(tx, row, ps, s.now())
+	})
+	if err != nil {
+		if _, ok := err.(*commonerrors.AppError); ok {
+			logger.Warn(ctx, "约饭读取未完成", slog.String("user_id", userID), slog.String("meetup_id", id), slog.String("action", action))
+		} else {
+			logger.Error(ctx, "约饭读取失败", err, slog.String("user_id", userID), slog.String("meetup_id", id), slog.String("action", action))
+		}
+	}
+	return err
+}
+func (s *Service) mutate(ctx context.Context, userID, id, action string, fn meetupAction) error {
 	if userID == "" {
 		return commonerrors.ErrUnauthorized
 	}
@@ -556,6 +621,62 @@ func (s *Service) mutate(ctx context.Context, userID, id, action string, fn func
 	}
 	return err
 }
+
+// Extend moves the room's closing time back; only the host may call it, and replays of one request_id are no-ops.
+func (s *Service) Extend(ctx context.Context, userID, id string, req domain.ExtendRequest) error {
+	if !validKey(req.RequestID) || !extensionChoices[req.Minutes] {
+		return bad("延长时长无效")
+	}
+	return s.mutate(ctx, userID, id, "延长", func(tx *repo.Repo, row *migrationdo.MealMeetupDO, ps []migrationdo.MealMeetupParticipantDO, now time.Time) error {
+		if row.HostUserID != userID {
+			return denied()
+		}
+		if old, err := tx.EventByRequest(ctx, id, userID, req.RequestID); err == nil {
+			if old.Kind != "extended" {
+				return conflict("延长请求已变更")
+			}
+			return nil
+		} else if !repo.IsMissing(err) {
+			return err
+		}
+		if row.Status != "active" {
+			return conflict("这场约饭已取消，无法延长")
+		}
+		if !now.Before(row.EndsAt.Add(extendGrace)) {
+			return conflict("房间关闭已超过30分钟，无法再延长")
+		}
+		next := row.EndsAt
+		if now.After(next) {
+			next = now
+		}
+		next = next.Add(time.Duration(req.Minutes) * time.Minute)
+		if limit := row.StartsAt.Add(maxMealSpan); next.After(limit) {
+			next = limit
+		}
+		if !next.After(row.EndsAt) || !next.After(now) {
+			return conflict("已延长到最长时间（开始后4小时）")
+		}
+		if err := tx.SetEndsAt(ctx, row.ID, next, now); err != nil {
+			return err
+		}
+		zone, err := time.LoadLocation(row.Timezone)
+		if err != nil {
+			zone = time.FixedZone("CST", 8*3600)
+		}
+		content := fmt.Sprintf("发起人把这顿饭延长到 %s，房间已重新开放", next.In(zone).Format("15:04"))
+		event, err := tx.AddEvent(ctx, id, userID, "extended", content, &req.RequestID, now)
+		if err != nil {
+			return err
+		}
+		members := []string{}
+		for _, p := range ps {
+			if p.Status == "accepted" {
+				members = append(members, p.UserID)
+			}
+		}
+		return s.notice(ctx, tx, row, event, members, content+"。")
+	})
+}
 func (s *Service) room(ctx context.Context, tx *repo.Repo, row *migrationdo.MealMeetupDO, ps []migrationdo.MealMeetupParticipantDO, userID string, write bool, now time.Time) error {
 	p := participant(ps, userID)
 	if row.HostUserID != userID && (p == nil || p.Status != "accepted") {
@@ -571,7 +692,7 @@ func (s *Service) room(ctx context.Context, tx *repo.Repo, row *migrationdo.Meal
 }
 func (s *Service) Messages(ctx context.Context, userID, id string) ([]domain.Event, error) {
 	out := []domain.Event{}
-	err := s.mutate(ctx, userID, id, "读取房间", func(tx *repo.Repo, row *migrationdo.MealMeetupDO, ps []migrationdo.MealMeetupParticipantDO, now time.Time) error {
+	err := s.read(ctx, userID, id, "读取房间", func(tx *repo.Repo, row *migrationdo.MealMeetupDO, ps []migrationdo.MealMeetupParticipantDO, now time.Time) error {
 		if err := s.room(ctx, tx, row, ps, userID, false, now); err != nil {
 			return err
 		}

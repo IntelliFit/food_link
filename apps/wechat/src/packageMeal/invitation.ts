@@ -1,5 +1,5 @@
 import Taro from '@tarojs/taro'
-import { mealPath, mealWhen, type MealMeetup } from '../utils/meal-meetup'
+import { mealBudgetLabel, mealPath, mealWhen, type MealMeetup } from '../utils/meal-meetup'
 
 export type MealInvitation = {
   title: string
@@ -17,7 +17,7 @@ export function getMealInvitation(row?: MealMeetup, now = Date.now()): MealInvit
   const remaining = Math.max(0, row.capacity - row.member_count)
   if (!remaining) return
   const when = `${mealWhen(row.starts_at)} · 北京时间`
-  const budget = `${row.budget ? `人均 ${row.budget} 元以内` : '预算一起商量'} · ${row.payment === 'aa' ? 'AA' : '各自付款'}`
+  const budget = mealBudgetLabel(row)
   const places = `还差 ${remaining} 位 · 共 ${row.capacity} 人`
   const shareTitle = `还差${remaining}位！${mealWhen(row.starts_at)}，${row.venue_name.slice(0, 24)}一起吃饭`
   return {

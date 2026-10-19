@@ -29,6 +29,7 @@ func (h *Handler) Register(read, write *gin.RouterGroup) {
 	write.POST("/:id/applications/:user_id/respond", h.Respond)
 	write.POST("/:id/leave", h.Leave)
 	write.POST("/:id/cancel", h.Cancel)
+	write.POST("/:id/extend", h.Extend)
 	write.GET("/:id/messages", h.Messages)
 	write.POST("/:id/messages", h.SendMessage)
 	write.POST("/:id/reports", h.Report)
@@ -160,6 +161,16 @@ func (h *Handler) Cancel(c *gin.Context) {
 		return
 	}
 	h.finish(c, gin.H{"success": true}, h.svc.Cancel(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("id")))
+}
+func (h *Handler) Extend(c *gin.Context) {
+	if !h.begin(c) {
+		return
+	}
+	var req domain.ExtendRequest
+	if !bind(c, &req) {
+		return
+	}
+	h.finish(c, gin.H{"success": true}, h.svc.Extend(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("id"), req))
 }
 func (h *Handler) Messages(c *gin.Context) {
 	if !h.begin(c) {

@@ -3,7 +3,7 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAccessToken } from '../../../utils/api'
 import { redirectToLogin } from '../../../utils/withAuth'
-import { chinaDate, MEAL_CHANGED, mealPath, mealRequest, mealStatus, mealWhen, type MealMeetup } from '../../../utils/meal-meetup'
+import { chinaDate, MEAL_CHANGED, mealBudgetLabel, mealPath, mealRequest, mealStatus, mealWhen, type MealMeetup } from '../../../utils/meal-meetup'
 import './MealMeetupList.scss'
 
 export function MealMeetupList() {
@@ -83,7 +83,7 @@ export function MealMeetupList() {
         {rows.map((row) => <View key={row.id} className='meal-card' onClick={() => { void Taro.navigateTo({ url: mealPath('detail', row.id) }) }}>
           <View className='meal-card-top'><Text>{mealWhen(row.starts_at)} · 北京时间</Text><Text className='meal-capacity'>{row.member_count}/{row.capacity}人</Text></View>
           <Text className='meal-card-title'>{row.title}</Text><Text className='meal-venue'>{row.venue_name}</Text><Text className='meal-address'>{row.address}</Text>
-          <View className='meal-card-tags'><Text>人均 {row.budget ? `${row.budget}元以内` : '协商'}</Text><Text>{row.payment === 'aa' ? 'AA' : '各自付款'}</Text><Text>{mealStatus[row.own_status] || mealStatus[row.status]}</Text></View>
+          <View className='meal-card-tags'><Text>{mealBudgetLabel(row)}</Text><Text>{mealStatus[row.own_status] || mealStatus[row.status]}</Text></View>
           <View className='meal-card-bottom'><Text>{row.host.nickname} 发起</Text><Text className='meal-card-action'>{row.own_status === 'pending' ? '查看申请' : row.can_enter_room ? '查看约饭' : row.status === 'full' ? '查看详情' : '一起吃 ›'}</Text></View>
         </View>)}
         {more && rows.length > 0 && <Button className='meal-more' disabled={loading} onClick={() => { void load(true) }}>查看更多</Button>}

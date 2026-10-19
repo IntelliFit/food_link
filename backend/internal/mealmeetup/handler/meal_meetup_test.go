@@ -293,8 +293,133 @@ func TestMealMeetupHTTPAndStateBoundaries(t *testing.T) {
 		_, err := closed.Create(ctx, users[0], newReq(3))
 		require.Error(t, err)
 		apply(id, users[1], uuid.NewString())
-		require.NoError(t, db.Model(&migrationdo.MealMeetupDO{}).Where("id = ?", id).Update("starts_at", time.Now().Add(-time.Minute)).Error)
+		require.NoError(t, db.Model(&migrationdo.MealMeetupDO{}).Where("id = ?", id).Update("starts_at", time.Now().Add(-21*time.Minute)).Error) // past the 20-minute late-join grace
 		require.Equal(t, 409, respond(id, users[1], "accept", 1))
+	})
+	// shift moves a meetup relative to now so time-window rules can be exercised without waiting.
+	shift := func(id string, startsAgo, endsIn time.Duration) {
+		require.NoError(t, db.Model(&migrationdo.MealMeetupDO{}).Where("id = ?", id).Updates(map[string]any{"starts_at": time.Now().Add(-startsAgo), "ends_at": time.Now().Add(endsIn)}).Error)
+	}
+	endsAt := func(id string) time.Time {
+		var row migrationdo.MealMeetupDO
+		require.NoError(t, db.First(&row, "id = ?", id).Error)
+		return row.EndsAt
+	}
+	extend := func(user, id string, key string, minutes int) int {
+		status, _ := call(user, "POST", "/"+id+"/extend", domain.ExtendRequest{RequestID: key, Minutes: minutes})
+		return status
+	}
+	t.Run("migration replaces the legacy payment check and stays repeatable", func(t *testing.T) {
+		require.NoError(t, db.Exec("ALTER TABLE meal_meetups ADD CONSTRAINT meal_meetup_payment CHECK (payment IN ('aa','separate'))").Error)
+		require.NoError(t, migration.MigrateMealMeetups(ctx, db, "public"))
+		require.NoError(t, migration.MigrateMealMeetups(ctx, db, "public"))
+		var legacy, current int64
+		require.NoError(t, db.Raw("SELECT count(*) FROM pg_constraint WHERE conname = 'meal_meetup_payment' AND conrelid = 'meal_meetups'::regclass").Scan(&legacy).Error)
+		require.NoError(t, db.Raw("SELECT count(*) FROM pg_constraint WHERE conname = 'meal_meetup_payment_v2' AND conrelid = 'meal_meetups'::regclass").Scan(&current).Error)
+		require.Zero(t, legacy)
+		require.EqualValues(t, 1, current)
+	})
+	t.Run("duration and payment choices are validated", func(t *testing.T) {
+		req := newReq(3)
+		req.DurationMinutes = 120
+		req.Payment = "host_treat"
+		status, body := call(users[0], "POST", "", req)
+		require.Equal(t, 200, status, body)
+		id := body["data"].(map[string]any)["id"].(string)
+		var row migrationdo.MealMeetupDO
+		require.NoError(t, db.First(&row, "id = ?", id).Error)
+		require.Equal(t, 120*time.Minute, row.EndsAt.Sub(row.StartsAt))
+		require.Equal(t, "host_treat", row.Payment)
+		req = newReq(3)
+		req.DurationMinutes = 45
+		status, _ = call(users[0], "POST", "", req)
+		require.Equal(t, 400, status)
+		req = newReq(3)
+		req.Payment = "guest_treat"
+		status, _ = call(users[0], "POST", "", req)
+		require.Equal(t, 400, status)
+		legacy := create(3)              // no duration keeps the 90-minute default
+		row = migrationdo.MealMeetupDO{} // First would otherwise reuse the previous primary key
+		require.NoError(t, db.First(&row, "id = ?", legacy).Error)
+		require.Equal(t, 90*time.Minute, row.EndsAt.Sub(row.StartsAt))
+	})
+	t.Run("host can extend a closed room within the grace window and the cap holds", func(t *testing.T) {
+		id := create(3)
+		apply(id, users[1], uuid.NewString())
+		require.Equal(t, 200, respond(id, users[1], "accept", 1))
+		shift(id, 61*time.Minute, -time.Minute) // closed one minute ago
+		require.Error(t, svc.SendMessage(ctx, users[1], id, domain.MessageRequest{RequestID: uuid.NewString(), Content: "还能发吗"}))
+		view, err := svc.Detail(ctx, users[0], id)
+		require.NoError(t, err)
+		require.Equal(t, "ended", view.Status)
+		require.True(t, view.CanExtend)
+		view, err = svc.Detail(ctx, users[1], id)
+		require.NoError(t, err)
+		require.False(t, view.CanExtend)
+		key := uuid.NewString()
+		require.Equal(t, 403, extend(users[1], id, uuid.NewString(), 30))
+		require.Equal(t, 400, extend(users[0], id, uuid.NewString(), 45))
+		require.Equal(t, 200, extend(users[0], id, key, 30))
+		once := endsAt(id)
+		require.True(t, once.After(time.Now().Add(25*time.Minute)))
+		require.Equal(t, 200, extend(users[0], id, key, 30)) // replay is a no-op
+		require.True(t, endsAt(id).Equal(once))
+		require.NoError(t, svc.SendMessage(ctx, users[1], id, domain.MessageRequest{RequestID: uuid.NewString(), Content: "延长后可以发"}))
+		messages, err := svc.Messages(ctx, users[1], id)
+		require.NoError(t, err)
+		kinds := []string{}
+		for _, m := range messages {
+			kinds = append(kinds, m.Kind)
+		}
+		require.Contains(t, kinds, "extended")
+		var notices int64
+		require.NoError(t, db.Model(&migrationdo.PrivateMessageDO{}).Where("receiver_id = ? AND content LIKE ?", users[1], "发起人把这顿饭延长到%").Count(&notices).Error)
+		require.EqualValues(t, 1, notices)
+
+		shift(id, 230*time.Minute, 5*time.Minute) // 10 minutes of headroom under the 4-hour cap
+		require.Equal(t, 200, extend(users[0], id, uuid.NewString(), 120))
+		capped := endsAt(id)
+		require.WithinDuration(t, time.Now().Add(10*time.Minute), capped, 5*time.Second)
+		require.Equal(t, 409, extend(users[0], id, uuid.NewString(), 30))
+		require.True(t, endsAt(id).Equal(capped))
+	})
+	t.Run("a room closed beyond the grace window or cancelled cannot be extended", func(t *testing.T) {
+		id := create(3)
+		shift(id, 121*time.Minute, -31*time.Minute)
+		require.Equal(t, 409, extend(users[0], id, uuid.NewString(), 30))
+		id = create(3)
+		require.NoError(t, svc.Cancel(ctx, users[0], id))
+		require.Equal(t, 409, extend(users[0], id, uuid.NewString(), 30))
+	})
+	t.Run("late joiners are accepted inside the grace window only", func(t *testing.T) {
+		id := create(3)
+		shift(id, 10*time.Minute, 80*time.Minute)
+		view, err := svc.Detail(ctx, users[3], id)
+		require.NoError(t, err)
+		require.Equal(t, "active", view.Status)
+		apply(id, users[1], uuid.NewString())
+		require.Equal(t, 200, respond(id, users[1], "accept", 1))
+		shift(id, 25*time.Minute, 65*time.Minute)
+		view, err = svc.Detail(ctx, users[3], id)
+		require.NoError(t, err)
+		require.Equal(t, "started", view.Status)
+		require.Error(t, svc.Apply(ctx, users[2], id, domain.ApplyRequest{RequestID: uuid.NewString()}))
+	})
+	t.Run("budget filter excludes unagreed budgets", func(t *testing.T) {
+		req := newReq(3)
+		req.Title = "预算待定的饭局"
+		req.Budget = 0
+		req.Payment = "negotiate"
+		status, body := call(users[0], "POST", "", req)
+		require.Equal(t, 200, status, body)
+		hidden := body["data"].(map[string]any)["id"].(string)
+		rows, err := svc.List(ctx, users[5], false, domain.ListQuery{Keyword: "预算待定的饭局", Budget: 50, Limit: 30})
+		require.NoError(t, err)
+		require.Empty(t, rows)
+		rows, err = svc.List(ctx, users[5], false, domain.ListQuery{Keyword: "预算待定的饭局", Limit: 30})
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		require.Equal(t, hidden, rows[0].ID)
 	})
 	t.Run("reports capture the correct resource and admin hiding closes discussion", func(t *testing.T) {
 		id := create(3)

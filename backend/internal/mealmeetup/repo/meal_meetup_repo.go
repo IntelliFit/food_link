@@ -41,6 +41,9 @@ func (r *Repo) Create(ctx context.Context, row *migrationdo.MealMeetupDO) (bool,
 func (r *Repo) SetStatus(ctx context.Context, id, status string, now time.Time) error {
 	return r.db.WithContext(ctx).Model(&migrationdo.MealMeetupDO{}).Where("id = ?", id).Updates(map[string]any{"status": status, "updated_at": now}).Error
 }
+func (r *Repo) SetEndsAt(ctx context.Context, id string, endsAt, now time.Time) error {
+	return r.db.WithContext(ctx).Model(&migrationdo.MealMeetupDO{}).Where("id = ?", id).Updates(map[string]any{"ends_at": endsAt, "updated_at": now}).Error
+}
 func (r *Repo) Participants(ctx context.Context, id string) ([]migrationdo.MealMeetupParticipantDO, error) {
 	rows := []migrationdo.MealMeetupParticipantDO{}
 	err := r.db.WithContext(ctx).Where("meetup_id = ?", id).Order("created_at, id").Find(&rows).Error
@@ -91,7 +94,8 @@ func (r *Repo) List(ctx context.Context, userID string, mine bool, q domain.List
 		db = db.Where("meal_type = ?", q.MealType)
 	}
 	if q.Budget > 0 {
-		db = db.Where("budget <= ?", q.Budget)
+		// Budget 0 means "to be agreed", which must not pass a numeric ceiling.
+		db = db.Where("budget > 0 AND budget <= ?", q.Budget)
 	}
 	if q.Date != "" {
 		zone, err := time.LoadLocation(q.Timezone)

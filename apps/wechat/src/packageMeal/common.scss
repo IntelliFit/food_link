@@ -15,7 +15,7 @@
 .meal-picker { flex: 1; min-width: 0; }
 .meal-picker-field { display: flex; align-items: center; min-height: 88px; padding: 0 22px; }
 .meal-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-.meal-choice { display: flex; gap: 16px; margin: 16px 0; }
+.meal-choice { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; }
 .meal-choice text { padding: 12px 24px; border-radius: 20px; font-size: 26px; background: #edf1e7; }
 .meal-choice .selected { background: #21543e; color: #fff; }
 .meal-primary { background: #21543e; color: #fff; border-radius: 22px; font-size: 28px; margin: 18px 0; }
@@ -31,7 +31,23 @@
 .meal-message { padding: 22px; border-radius: 22px; background: #fffef9; margin-bottom: 18px; word-break: break-word; }
 .meal-message-system { padding: 12px; font-size: 24px; text-align: center; color: #626f65; }
 .meal-message-report { font-size: 22px; color: #626f65; text-align: right; }
-.meal-room-scroll { height: calc(100vh - 330px); min-height: 400px; }
+.meal-room-page { display: flex; flex-direction: column; height: 100vh; min-height: 0; overflow: hidden; padding-bottom: 0; }
+.meal-room-title { margin-bottom: 8px; }
+.meal-room-meta { flex: none; }
+.meal-room-extend { color: #21543e; font-weight: 600; }
+.meal-room-notice { flex: none; margin: 12px 0; padding: 14px 18px; font-size: 24px; }
+.meal-room-scroll { flex: 1; height: 0; min-height: 200px; }
+.meal-composer { flex: none; padding: 12px 0 calc(16px + env(safe-area-inset-bottom)); background: #f6f5ed; }
+.meal-quick { white-space: nowrap; margin-bottom: 12px; }
+.meal-quick-chip { display: inline-block; margin-right: 14px; padding: 10px 22px; border-radius: 28px; font-size: 24px; background: #edf1e7; color: #21543e; }
+.meal-quick-chip.is-disabled { opacity: .5; }
+.meal-composer-row { display: flex; align-items: flex-end; gap: 14px; }
+.meal-emoji-toggle { flex: none; width: 76px; height: 76px; line-height: 76px; text-align: center; font-size: 40px; border-radius: 50%; background: #edf1e7; }
+.meal-composer-input { flex: 1; min-height: 76px; max-height: 220px; padding: 18px 22px; box-sizing: border-box; border-radius: 22px; background: #fffef9; border: 1px solid #e3e8dc; font-size: 28px; line-height: 1.5; color: #243d31; }
+.meal-composer-send { flex: none; width: 128px; height: 76px; line-height: 76px; padding: 0; margin: 0; background: #21543e; color: #fff; border-radius: 22px; font-size: 28px; }
+.meal-composer-send::after { border: 0; }
+.meal-emoji-panel { display: flex; flex-wrap: wrap; margin-top: 12px; padding: 8px 0; max-height: 360px; overflow-y: auto; border-top: 1px solid #e3e8dc; }
+.meal-emoji { width: 12.5%; height: 80px; line-height: 80px; text-align: center; font-size: 44px; }
 .meal-invite-card { border-top: 8px solid #21543e; }
 .meal-invite-eyebrow { display: block; margin-bottom: 24px; color: #567150; font-size: 24px; font-weight: 600; }
 .meal-invite-actions { margin-top: 24px; padding-top: 24px; border-top: 2px dashed #d8e0d1; }

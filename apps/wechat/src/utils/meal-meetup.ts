@@ -2,23 +2,41 @@ import Taro from '@tarojs/taro'
 import { clearAllStorage, getAccessToken, publicRequest } from './api'
 import { redirectToLogin } from './withAuth'
 
+export type MealPayment = 'aa' | 'separate' | 'host_treat' | 'negotiate'
 export type MealProfile = { user_id: string; nickname: string; avatar: string }
 export type MealParticipation = MealProfile & { status: string; revision: number; note: string }
 export type MealMeetup = {
   id: string; host: MealProfile; title: string; description: string
   venue_name: string; address: string; latitude?: number; longitude?: number
   starts_at: string; ends_at: string; timezone: string; meal_type: string
-  budget: number; payment: 'aa' | 'separate'; capacity: number; member_count: number
+  budget: number; payment: MealPayment; capacity: number; member_count: number
   status: string; is_host: boolean; own_status: string; own_revision: number
-  can_enter_room: boolean; members: MealProfile[]; applications?: MealParticipation[]; managed_members?: MealParticipation[]
+  can_enter_room: boolean; can_extend?: boolean; members: MealProfile[]; applications?: MealParticipation[]; managed_members?: MealParticipation[]
 }
 export type MealEvent = { id: string; actor: MealProfile; kind: string; content: string; created_at: string }
 export type CreateMealMeetup = {
   request_id: string; title: string; description: string; venue_name: string; address: string
   latitude?: number; longitude?: number; starts_at: string; timezone: string
-  budget: number; payment: 'aa' | 'separate'; capacity: number
+  budget: number; payment: MealPayment; capacity: number; duration_minutes: number
 }
 export const MEAL_CHANGED = 'meal-meetup-changed'
+export const MEAL_PAYMENT_OPTIONS: ReadonlyArray<{ value: MealPayment; label: string }> = [
+  { value: 'aa', label: 'AA' }, { value: 'separate', label: '各自付款' },
+  { value: 'host_treat', label: '我请客' }, { value: 'negotiate', label: '到店商量' },
+]
+export const MEAL_REPORT_REASONS: ReadonlyArray<{ value: 'spam' | 'harassment' | 'unsafe' | 'other'; label: string }> = [
+  { value: 'spam', label: '垃圾广告' }, { value: 'harassment', label: '骚扰或不友善' },
+  { value: 'unsafe', label: '地点或活动不安全' }, { value: 'other', label: '其他' },
+]
+export const MEAL_DURATION_OPTIONS = [60, 90, 120, 180] as const
+export const MEAL_EXTEND_OPTIONS = [30, 60, 120] as const
+// Unknown values (a newer server) fall back to neutral text instead of being mislabelled.
+export const mealPaymentLabel = (payment: string): string => MEAL_PAYMENT_OPTIONS.find((o) => o.value === payment)?.label ?? '付款方式见详情'
+export function mealBudgetLabel(row: Pick<MealMeetup, 'budget' | 'payment'>): string {
+  if (row.payment === 'negotiate') return '到店商量'
+  if (row.payment === 'host_treat') return row.budget ? `我请客 · 约人均${row.budget}元` : '我请客'
+  return `${row.budget ? `人均${row.budget}元以内` : '人均预算协商'} · ${mealPaymentLabel(row.payment)}`
+}
 export const mealPath = (page: 'detail' | 'create' | 'mine' | 'room', id?: string) =>
   `/packageMeal/pages/${page}/index${id ? `?id=${encodeURIComponent(id)}` : ''}`
 export function mealRequestKey(): string {
