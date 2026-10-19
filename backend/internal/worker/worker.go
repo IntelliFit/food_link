@@ -3950,7 +3950,7 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 func buildPrecisionItemEstimatePromptFromPayload(sourceType string, payload map[string]any, textInput, additionalContext string, referenceObjects []map[string]any) (string, error) {
 	items := extractItems(payload["items_to_estimate"])
 	if len(items) > 1 {
-		return buildPrecisionItemEstimatePromptMulti(sourceType, items, textInput, additionalContext, referenceObjects), nil
+		return withPrecisionInlineNutrition(buildPrecisionItemEstimatePromptMulti(sourceType, items, textInput, additionalContext, referenceObjects)), nil
 	}
 	itemName := stringFromMap(payload, "item_name")
 	if itemName == "" && len(items) == 1 {
@@ -3992,7 +3992,7 @@ func buildPrecisionItemEstimatePromptFromPayload(sourceType string, payload map[
 	if len(items) == 1 {
 		itemKey = firstNonEmptyString(items[0], "item_key")
 	}
-	return buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, textInput, additionalContext, referenceObjects, itemKey), nil
+	return withPrecisionInlineNutrition(buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, textInput, additionalContext, referenceObjects, itemKey)), nil
 }
 
 func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawInput, additionalContext string, referenceObjects []map[string]any, itemKeys ...string) string {
@@ -4301,6 +4301,9 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 					"basisEvidence":        firstNonEmptyString(raw, "basisEvidence", "basis_evidence"),
 					"estimatedWeightGrams": weight,
 				}
+				if nutrients := inlinePrecisionNutrients(raw); nutrients != nil {
+					item["nutrients"] = nutrients
+				}
 				items = append(items, normalizePrecisionStateMetadata(item, "name"))
 			}
 		}
@@ -4323,6 +4326,9 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 		"weightBasis":          firstNonEmptyString(itemPayload, "weightBasis", "weight_basis"),
 		"basisEvidence":        firstNonEmptyString(itemPayload, "basisEvidence", "basis_evidence"),
 		"estimatedWeightGrams": weight,
+	}
+	if nutrients := inlinePrecisionNutrients(itemPayload); nutrients != nil {
+		item["nutrients"] = nutrients
 	}
 	return []map[string]any{normalizePrecisionStateMetadata(item, "name")}, nil
 }

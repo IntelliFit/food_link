@@ -44,7 +44,10 @@ type channelSample struct {
 }
 
 type channelHealth struct {
-	samples   []channelSample
+	samples []channelSample
+	// abandoned records attempts cancelled after another channel won; their
+	// elapsed time is a lower bound on this channel's current latency.
+	abandoned []channelSample
 	failures  int
 	openUntil time.Time
 	probe     bool
@@ -166,8 +169,21 @@ func (r *visionChannelRouter) record(key string, duration time.Duration, err err
 	defer r.mu.Unlock()
 	h := r.state(key)
 	h.probe = false
-	// Losing a race is expected; it is neither a failure nor a fast success.
+	// Losing a race is expected; it is neither a failure nor a fast success,
+	// but the time it had already spent shows how slow the channel is now.
 	if errors.Is(err, context.Canceled) {
+		if duration >= time.Second {
+			kept := h.abandoned[:0]
+			for _, sample := range h.abandoned {
+				if now.Sub(sample.at) < 5*time.Minute {
+					kept = append(kept, sample)
+				}
+			}
+			h.abandoned = append(kept, channelSample{now, duration, false})
+			if len(h.abandoned) > 64 {
+				h.abandoned = h.abandoned[len(h.abandoned)-64:]
+			}
+		}
 		return false
 	}
 	samples := h.samples[:0]

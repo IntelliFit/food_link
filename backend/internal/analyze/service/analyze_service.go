@@ -1046,6 +1046,12 @@ func (s *AnalyzeService) ApplyDBFirstToItems(ctx context.Context, items []map[st
 
 const preciseMicronutrientAnalysisMarker = "ai_precise_v1"
 
+// PreciseMicronutrientKeys lists the micronutrient fields every complete
+// nutrition profile carries.
+func PreciseMicronutrientKeys() []string {
+	return append([]string(nil), preciseMicronutrientKeys...)
+}
+
 var preciseMicronutrientKeys = []string{
 	"fiber", "sugar", "saturatedFat", "cholesterolMg", "sodiumMg", "potassiumMg", "calciumMg", "ironMg", "magnesiumMg", "zincMg",
 	"vitaminARaeMcg", "vitaminCMg", "vitaminDMcg", "vitaminEMg", "vitaminKMcg", "thiaminMg", "riboflavinMg", "niacinMg", "vitaminB6Mg", "folateMcg", "vitaminB12Mcg",

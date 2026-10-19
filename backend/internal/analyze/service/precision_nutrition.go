@@ -22,9 +22,13 @@ func (s *AnalyzeService) ApplyPrecisionNutrition(ctx context.Context, items []ma
 		if nutritionWeightFromItem(item) <= 0 {
 			return nil, fmt.Errorf("精准模式食物重量无效，请重新分析")
 		}
-		// Weight-only precision models have no independent nutrition yet. Build
-		// it from the full portion context before considering any library rows.
-		if analysisEngineProducesNutrition(engine) && len(mapFromAny(item["nutrients"])) == 0 {
+		// The estimate call returns nutrition for its own weight. Keep it only when
+		// it passes the plausibility gate; otherwise estimate this item separately
+		// so one implausible answer cannot fail the whole group.
+		if n := mapFromAny(item["nutrients"]); len(n) > 0 && foodrecorddomain.ValidateFoodNutritionValues(stringFromAny(item["name"]), nutritionWeightFromItem(item), numberFromAny(n["calories"]), numberFromAny(n["protein"]), numberFromAny(n["carbs"]), numberFromAny(n["fat"])) != nil {
+			delete(prepared[index], "nutrients")
+		}
+		if analysisEngineProducesNutrition(engine) && len(mapFromAny(prepared[index]["nutrients"])) == 0 {
 			candidates = append(candidates, nutritionFallbackForItem(index, item, stringFromAny(item["name"])))
 		}
 	}

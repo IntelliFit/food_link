@@ -33,7 +33,31 @@ var (
 	balancedHedgeDelayMax       = 25 * time.Second
 )
 
+// channelPrior is the 14-day production baseline (2026-10-18) used until a
+// channel has enough recent samples: valid-response p50 and failure rate.
+type channelPrior struct {
+	latency     time.Duration
+	failureRate float64
+}
+
+var (
+	balancedOrdinaryPriors = map[string]channelPrior{
+		geminiOpenLuxUpstream: {9500 * time.Millisecond, 0.03},
+		geminiA6Upstream:      {9600 * time.Millisecond, 0.12},
+		geminiPrimaryUpstream: {24300 * time.Millisecond, 0.10},
+	}
+	balancedPrecisionPriors = map[string]channelPrior{
+		geminiPrimaryUpstream: {17100 * time.Millisecond, 0},
+		geminiOpenLuxUpstream: {15100 * time.Millisecond, 0.09},
+		geminiA6Upstream:      {11300 * time.Millisecond, 0.42},
+	}
+)
+
 const (
+	// balancedFailurePenalty approximates what a failed attempt costs: the wait
+	// before switching plus the next channel's answer.
+	balancedFailurePenalty       = 25 * time.Second
+	balancedLatencyMinSample     = 3
 	balancedHealthWindow         = 5 * time.Minute
 	balancedHealthMinSamples     = 5
 	balancedUnhealthyFailureRate = 0.2
@@ -129,18 +153,73 @@ func (s *AnalyzeService) orderedBalancedPlans(mode string, precision bool) []cha
 		}
 		return len(priority)
 	}
+	priors := balancedOrdinaryPriors
+	if precision {
+		priors = balancedPrecisionPriors
+	}
 	now := time.Now()
 	healthy := make(map[string]bool, len(plans))
+	score := make(map[string]time.Duration, len(plans))
 	for _, p := range plans {
-		healthy[p.upstream] = s.visionChannels.recentlyHealthy(channelKey(mode, p.upstream, p.model), now)
+		key := channelKey(mode, p.upstream, p.model)
+		healthy[p.upstream] = s.visionChannels.recentlyHealthy(key, now)
+		score[p.upstream] = s.visionChannels.expectedTimeToValid(key, priors[p.upstream], now)
 	}
 	sort.SliceStable(plans, func(i, j int) bool {
-		if healthy[plans[i].upstream] != healthy[plans[j].upstream] {
-			return healthy[plans[i].upstream]
+		a, b := plans[i].upstream, plans[j].upstream
+		if healthy[a] != healthy[b] {
+			return healthy[a]
 		}
-		return rank(plans[i].upstream) < rank(plans[j].upstream)
+		if score[a] != score[b] {
+			return score[a] < score[b]
+		}
+		return rank(a) < rank(b)
 	})
 	return plans
+}
+
+// expectedTimeToValid estimates how long the channel takes to deliver a usable
+// answer: its recent latency plus failures weighted by the cost of switching.
+// Attempts abandoned to a faster channel count with the time they had already
+// spent, so a channel that turns slow without failing loses the lead within a
+// few calls. Too few recent samples fall back to the production prior.
+func (r *visionChannelRouter) expectedTimeToValid(key string, prior channelPrior, now time.Time) time.Duration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	h := r.health[key]
+	latencies := []time.Duration{}
+	valid, failed := 0, 0
+	if h != nil {
+		for _, sample := range h.samples {
+			if now.Sub(sample.at) >= balancedHealthWindow {
+				continue
+			}
+			if sample.valid {
+				valid++
+				latencies = append(latencies, sample.duration)
+			} else {
+				failed++
+			}
+		}
+		for _, sample := range h.abandoned {
+			if now.Sub(sample.at) < balancedHealthWindow {
+				latencies = append(latencies, sample.duration)
+			}
+		}
+	}
+	if len(latencies)+failed < balancedLatencyMinSample {
+		return prior.latency + time.Duration(prior.failureRate*float64(balancedFailurePenalty))
+	}
+	latency := prior.latency
+	if len(latencies) > 0 {
+		sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
+		latency = latencies[len(latencies)/2]
+	}
+	failureRate := 0.0
+	if valid+failed > 0 {
+		failureRate = float64(failed) / float64(valid+failed)
+	}
+	return latency + time.Duration(failureRate*float64(balancedFailurePenalty))
 }
 
 // recentlyHealthy reports whether a channel may lead: its circuit is closed and

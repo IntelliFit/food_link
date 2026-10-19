@@ -147,3 +147,28 @@ func TestBalancedVisionSelectsLeadingChannelForEveryTask(t *testing.T) {
 		require.Equal(t, gemini35FlashModel, s.SelectFoodImageModel(precisionExecutionMode, key))
 	}
 }
+
+func TestBalancedVisionDemotesChannelThatTurnsSlowWithoutFailing(t *testing.T) {
+	c := balancedChannels{wanjie35: &channelFixture{}, openluxPrecision: &channelFixture{}, a6: &channelFixture{}}
+	s := newBalancedRoutingService(t, c)
+	require.Equal(t, gemini35FlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"), "the production prior leads with Wanjie")
+
+	key := channelKey(precisionExecutionMode, geminiPrimaryUpstream, gemini35FlashModel)
+	now := time.Now()
+	// Wanjie keeps losing hedges after 35s instead of failing.
+	for i := 0; i < 3; i++ {
+		s.visionChannels.record(key, 35*time.Second, context.Canceled, now)
+	}
+	require.Equal(t, "openlux:"+relayGemini37FlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"))
+}
+
+func TestBalancedVisionKeepsPriorUntilEnoughSamples(t *testing.T) {
+	c := balancedChannels{wanjie: &channelFixture{}, openlux: &channelFixture{}, a6: &channelFixture{}}
+	s := newBalancedRoutingService(t, c)
+	key := channelKey(defaultExecutionMode, geminiOpenLuxUpstream, gemini3FlashModel)
+	s.visionChannels.record(key, 30*time.Second, nil, time.Now())
+	s.visionChannels.record(key, 30*time.Second, nil, time.Now())
+	require.Equal(t, openLuxGemini3Route, s.SelectFoodImageModel(defaultExecutionMode, "task"), "two slow samples are not yet evidence")
+	s.visionChannels.record(key, 30*time.Second, nil, time.Now())
+	require.Equal(t, "a6:"+gemini3FlashModel, s.SelectFoodImageModel(defaultExecutionMode, "task"))
+}

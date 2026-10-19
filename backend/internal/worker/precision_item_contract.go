@@ -17,6 +17,7 @@ func precisionEstimatePromptExample(items []map[string]any) string {
 			"weightBasis":          firstNonEmptyString(item, "weightBasis", "weight_basis"),
 			"basisEvidence":        firstNonEmptyString(item, "basisEvidence", "basis_evidence"),
 			"estimatedWeightGrams": 180,
+			"nutrients":            precisionNutrientsExample(),
 		})
 	}
 	data, _ := json.Marshal(examples)
