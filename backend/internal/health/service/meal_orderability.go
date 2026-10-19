@@ -8,7 +8,7 @@ import (
 var (
 	mealDependentItemPattern = regexp.MustCompile(`锅底|汤底|火锅底料|蘸料|自助调料|餐位费|开锅费|起锅费|加购|加料|火锅食材|涮菜`)
 	mealRequiredOrderPattern = regexp.MustCompile(`不能单点|不可单点|不单卖|需另(?:点|购|付)|必须另|(?:不|未)(?:含|包含|包括)(?:锅底|汤底)|(?:锅底|汤底|调料|蘸料|餐位)(?:费|费用)?另(?:算|点|付|收)|搭配主餐购买|仅限加购`)
-	mealHotpotVenuePattern   = regexp.MustCompile(`火锅|涮锅|涮肉`)
+	mealHotpotVenuePattern   = regexp.MustCompile(`火锅|涮锅|涮肉|涮羊肉|涮牛肉|涮菜|麻辣烫|冒菜|串串香|荤豆花`)
 	mealIncludedBasePattern  = regexp.MustCompile(`(?:已含|包含|含有|含)[^。；;]{0,12}(?:锅底|汤底|底料)|(?:锅底|汤底|底料)[^。；;]{0,8}(?:已含|已计入|包含在)`)
 	mealBundlePattern        = regexp.MustCompile(`套餐|套饭|单人餐|双人餐|整餐`)
 	mealPreparedMainPattern  = regexp.MustCompile(`臊子面|打卤面|阳春面|清汤面|热干面|炸酱面|拌面|炒面|炒饭|拌饭|盖饭|盖浇饭|煲仔饭|馅饼|汉堡|肉夹馍`)
@@ -125,4 +125,14 @@ func mealSearchPage(candidates []DietRecommendationCandidate, limit int, complet
 		}
 	}
 	return out
+}
+
+// mealOrderingCheckFails reads the model's ordering verdict. Not ready to order always fails.
+// Unconfirmed mandatory fees fail only when a price would be shown as the meal's total: with
+// no known price the card shows none (most delivery merchants), so nothing misleads the user.
+func mealOrderingCheckFails(check *mealOrderingCheck, c DietRecommendationCandidate) bool {
+	if check == nil || c.Source == "food_record" {
+		return false
+	}
+	return !check.ReadyToOrder || !check.MandatoryCostsIncluded && c.Price > 0
 }

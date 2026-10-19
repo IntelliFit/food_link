@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 import PetChatPage from '../../src/packageExtra/pages/pet-chat/index'
-import { compressImagePathForUpload, estimatePetChat, streamGeneratePetChat, uploadAnalyzeImageFile } from '../../src/utils/api'
+import { compressImagePathForUpload, estimatePetChat, getStatsSummary, streamGeneratePetChat, uploadAnalyzeImageFile } from '../../src/utils/api'
 import { rememberMealLocation } from '../../src/utils/meal-location'
 import { chooseImageWithPrivacy } from '../../src/utils/weapp-privacy'
 
@@ -317,5 +317,73 @@ describe('pet chat credit cost', () => {
       },
       undefined,
     )
+  })
+  // The server answers a thank-you for free while the recommendation is still the card the
+  // conversation is about; the page must show the same cost and keep the meal conversation going.
+  it('prices a thank-you after a recommendation at zero and keeps the meal conversation going', async () => {
+    // The Taro Input is mocked as a plain <input>; call the page's handler with a Taro-style event.
+    const typeText = (value: string) => {
+      const textbox = screen.getByRole('textbox') as unknown as Record<string, { onInput: (event: unknown) => void }>
+      const propsKey = Object.keys(textbox).find((key) => key.startsWith('__reactProps')) as string
+      act(() => {
+        textbox[propsKey].onInput({ detail: { value } })
+      })
+    }
+    ;(getStatsSummary as jest.Mock).mockResolvedValue(null)
+    render(<PetChatPage />)
+    fireEvent.click(screen.getByText('今天吃什么'))
+    fireEvent.click(screen.getByLabelText('发送'))
+    const callbacks = (streamGeneratePetChat as jest.Mock).mock.calls[0][4]
+    await act(async () => {
+      callbacks.onDietResult({ recommendation: {
+        scene: 'eat_out', title: '推荐', summary: '已核对', generated_by: 'qwen3.8-flash', ai_used: true,
+        calorie_remaining: 600, macro_gaps: { calories: 600, protein: 40, carbs: 80, fat: 20 },
+        recommendations: [{ title: '牛肉饭', source: 'public_food_library', source_id: 'food-1', calories: 500, protein: 30, carbs: 60, fat: 12, items: [] }],
+      } })
+      callbacks.onChunk('已核对')
+      callbacks.onDone({ session_id: 'session-1' })
+    })
+    ;(estimatePetChat as jest.Mock).mockClear()
+    ;(getStatsSummary as jest.Mock).mockClear()
+
+    typeText('谢谢😊')
+    expect(screen.getByRole('textbox')).toHaveValue('谢谢😊')
+    await act(async () => {
+      jest.advanceTimersByTime(350)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    // Priced at zero on the page itself: no server estimate, nothing pending, sending is allowed.
+    expect(estimatePetChat).not.toHaveBeenCalled()
+    expect(screen.queryByText(/预计消耗/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('发送'))
+    expect(streamGeneratePetChat).toHaveBeenCalledTimes(2)
+    await act(async () => {
+      const reply = (streamGeneratePetChat as jest.Mock).mock.calls[1][4]
+      reply.onChunk('不客气～')
+      reply.onDone({ session_id: 'session-1', credits_charged: 0, billing_status: 'free_acknowledgement' })
+    })
+    expect(screen.getByText('不客气～')).toBeInTheDocument()
+    expect(getStatsSummary).not.toHaveBeenCalled()
+
+    // A thank-you does not end the meal conversation: a follow-up is still a meal turn.
+    typeText('换一批')
+    await act(async () => {
+      jest.advanceTimersByTime(350)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(estimatePetChat).not.toHaveBeenCalled()
+    expect(screen.getByText('预计消耗 1 积分')).toBeInTheDocument()
+
+    // An analysis of the user's own intake is not a meal turn: the server's estimate applies.
+    typeText('我最近蛋白质摄入够吗')
+    await act(async () => {
+      jest.advanceTimersByTime(350)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(estimatePetChat).toHaveBeenCalledWith('我最近蛋白质摄入够吗', 'week', false, [])
+    expect(screen.getByText('预计消耗 3 积分')).toBeInTheDocument()
   })
 })

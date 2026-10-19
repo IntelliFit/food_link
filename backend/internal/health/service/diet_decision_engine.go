@@ -44,6 +44,9 @@ type dietDecisionContext struct {
 	Constraints     CampusDietRecommendationConstraints
 	Allergies       []string
 	DietPreferences []string
+	// When set, the portfolio applies the same variety policy as the final validation: dishes
+	// shown earlier (the stored recommendation memory) yield to equally healthy alternatives.
+	varietyState *campusDietAgentRunState
 }
 
 type dietDecisionEvaluation struct {
@@ -102,6 +105,7 @@ func dietDecisionContextFromCampusState(state *campusDietAgentRunState) dietDeci
 	return dietDecisionContext{
 		Basis:           state.MealContext.DecisionBasis,
 		RecentFoods:     state.PersonalContext.FoodFrequency,
+		varietyState:    state,
 		EngineVersion:   defaultIfEmpty(state.EngineVersion, state.MealContext.EngineVersion),
 		Goal:            goal,
 		MealType:        state.MealContext.MealType,

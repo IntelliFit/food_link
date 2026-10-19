@@ -264,6 +264,9 @@ func mealHarnessEmptyResult(state *campusDietAgentRunState, reason string) *Camp
 		answer = "现有记录里有单道菜，但还没找到能核算份量、总价并满足这次条件的完整一餐。我不会把单道配菜当作吃饱的方案。你愿意调整预算，还是换一个就餐地点？"
 	} else if state.SearchAttempted && state.Constraints.Scene == "takeout" {
 		answer = "在本次范围和条件下，现有餐食库没有检索到位置与餐食资料足够的校外商家选项；这不代表当地没有商家。你愿意提供一个具体店名或换个地点吗？"
+		if state.Location != nil && state.TakeoutCoverage.Measured {
+			answer = mealTakeoutGapAnswer(state)
+		}
 	}
 	if gap := mealOrderingGap(state); gap != "" && state.SearchAttempted {
 		answer = gap
@@ -315,7 +318,9 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 				continue
 			}
 		}
-		if !isHistory && state.Constraints.Scene == "takeout" && (candidate.IsCampusFood || candidate.MerchantName == "") {
+		// Takeout means ordinary merchants. A canteen is somewhere to eat, not something
+		// that is delivered, unless the user named that very venue.
+		if !isHistory && state.Constraints.Scene == "takeout" && (candidate.IsCampusFood || candidate.MerchantName == "" || state.Constraints.CanteenName == "" && domain.IsCanteenVenue(candidate)) {
 			continue
 		}
 		if !isHistory && state.Constraints.Scene == "campus" && !candidate.IsCampusFood {

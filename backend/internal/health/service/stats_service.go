@@ -80,7 +80,10 @@ type StatsService struct {
 	cfg              *config.Config
 	client           *http.Client
 	deepSeekBaseURL  string
-	nutritionPlans   interface {
+	// mealRouterOff keeps meal routing and acknowledgement wording to the fast rules and fixed
+	// replies (tests whose scripted models answer Agent calls only).
+	mealRouterOff  bool
+	nutritionPlans interface {
 		ResolveRange(context.Context, string, string, string) (map[string]userdomain.NutritionDay, error)
 	}
 }
@@ -1003,6 +1006,9 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 	input, err = s.normalizePetChatInput(input)
 	if err != nil {
 		return nil, err
+	}
+	if reply, ok := s.petChatAcknowledgementReply(ctx, userID, input); ok {
+		return s.streamPetChatAcknowledgement(ctx, userID, input, reply)
 	}
 	if s.shouldUseCampusDietAgent(ctx, userID, input) && !s.petChatHasHistoricalImageQuestion(ctx, userID, input) {
 		return s.GenerateCampusDietAgentStream(ctx, userID, input)
@@ -2488,6 +2494,7 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 13. 对缺失记录要说“当前记录里没有”，不要推断用户实际没吃、没训练或没有某个习惯。必要时用一句自然的追问补齐关键信息。
 14. 使用适合聊天气泡的纯文本；不要 Markdown、JSON、代码块或表格，不要输出 #、*、**、_、反引号等格式符号。
 15. 可以读取系统提供的具体日期、餐次、食品份量和营养明细。问某一天或某餐时优先引用对应记录，不用周/月均值替代；同一餐可能有多条记录。查询失败、未查询、查无记录、字段缺失须区分，不能声称“系统只能看7天汇总”或“新记录未同步”。未确认识别任务不属于已保存摄入。只提供部分食品营养时只能称已知部分合计，不能当作完整该餐的营养。不要输出record_id、内部JSON、工具名或权限标志。
+16. 这里看不到餐食库。附近食堂、商家和外卖的推荐由同一对话里的选餐功能按已收录的学校食堂和附近商家完成；不要声称“只能看到校园食堂的数据”“没有商家数据”，也不要说能替用户下单。用户想要具体推荐时，请他直接说想吃什么，或说“推荐附近的外卖”。
 `,
 		companion.Name,
 		companion.Personality,

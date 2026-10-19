@@ -33,6 +33,7 @@ import { PetAvatar } from '../../../components/PetAvatar'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { PetMarkdown } from './pet-markdown'
 import { MealSuggestions } from './MealSuggestions'
+import { answerAsksQuestion, isCompoundMealFollowUp, isFreeMealAcknowledgement, releasesVenueLimit, requestsOtherVenue } from './meal-routing'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { chooseImageWithPrivacy, ensureWeappPrivacyAuthorized, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { currentMealLocation, rememberMealLocation } from '../../../utils/meal-location'
@@ -50,6 +51,10 @@ type ChatMessage = {
   actions?: string[]
   recommendation?: DietRecommendationResult
   imageUrls?: string[]
+  // The server's billing mark for the stored message (free_acknowledgement, …).
+  billingStatus?: string
+  // A question that failed before the server stored it.
+  unsent?: boolean
 }
 
 type PendingChatImage = {
@@ -98,15 +103,34 @@ export function isDietRecommendationQuestion(question: string): boolean {
 
 export type DietRecommendationIntent = 'initial' | 'refine' | 'more' | 'location' | 'compare' | 'context'
 
+// The server's campusDietAgentFoodQuestion: a meal request, or a request for another venue.
+function isMealFoodQuestion(question: string): boolean {
+  return isDietRecommendationQuestion(question) || requestsOtherVenue(question)
+}
+
 function leavesMealConversation(question: string): boolean {
   return /(?:不一定|不要|不用|不需要|不想|别|停止|先不)(?:再|要|是|只|仅|给我|帮我|总是|一直|都|每次){0,6}(?:推荐|建议|聊|谈|选|考虑)?(?:饮食|餐食|食物|吃的|吃什么|饭菜|菜)(?:了|给我|这些|建议|推荐|方面)?(?:$|[，。？！!?；;])|换个话题|(?:其他|别的)(?:的|方面的|通用|生活|健康){0,3}建议/.test(question)
-    || (/洗澡|洗浴|泡澡|洗脸|冷热交替|睡觉|拉伸|热身|心情|情绪/.test(question) && !isDietRecommendationQuestion(question))
+    || (/洗澡|洗浴|泡澡|洗脸|冷热交替|睡觉|拉伸|热身|心情|情绪/.test(question) && !isMealFoodQuestion(question))
     || (/训练计划|运动计划|训练怎么|训练建议|怎么练|跑步计划|睡眠|作息|喝水|补剂|体检|体重趋势/.test(question) && !/吃|菜|餐|食堂|饮食|热量|蛋白|碳水|脂肪/.test(question))
+}
+
+// After a recommendation the user often answers it ("我都说了食堂不是外卖", "我就是需要附近商家的呀，
+// 你给我点呗"). It needs both a correcting/demanding cue and a word about where to eat or the
+// recommendation, exactly like the server's mealFeedbackOnRecommendation, so a question about the
+// user's own eating ("我需要多吃蛋白质吗") is not one.
+const MEAL_FEEDBACK_CUE = /不是|我都说了|我说了|说了多少遍|不对|不行|不要|别再|怎么还|怎么又|还在|又在|老是|我就是|我要的是|我要的|我想要|我就要|你给我|(?:给我|帮我)(?:点|推荐|找|选)|能不能给我|可不可以给我|麻烦你|(?:需要|一直|总是|还是|别)(?:再)?(?:给我)?(?:推荐|推)/
+const MEAL_FEEDBACK_NOUN = /食堂|商家|外卖|店|餐厅|餐馆|推荐|附近|这家|那家/
+
+function isMealFeedbackOnRecommendation(question: string): boolean {
+  return MEAL_FEEDBACK_CUE.test(question) && MEAL_FEEDBACK_NOUN.test(question) && !leavesMealConversation(question)
 }
 
 function isMealFollowUpQuestion(question: string): boolean {
   // Keep the same positive-evidence boundary as shouldUseCampusDietAgent.
-  return isDietRecommendationQuestion(question)
+  return isMealFoodQuestion(question)
+    || isMealFeedbackOnRecommendation(question)
+    || (isCompoundMealFollowUp(question) && !leavesMealConversation(question))
+    || releasesVenueLimit(question)
     || /这道菜|这份(?:饭|餐)|这些菜|这(?:几|[一二两三四五六七八九十0-9０-９]+)个(?:菜|餐|选项)|你推荐(?:的(?:菜|餐|饭|饮食)|这些)|这个(?:套餐|组合)|这(?:餐|顿)|那(?:餐|顿)|(?:其他|别的|更多)(?:的)?选择|刚才那几个[^，。？！!?；;]{0,10}(?:哪个|更适合|减脂)|(?:这些|它们)[^，。？！!?；;]{0,12}(?:太贵|价格|热量|蛋白|碳水|脂肪|营养)/.test(question)
     || /^(?:那|再|请|麻烦|帮我)?(?:换(?:一份|一餐|一道|一个|一批|几个|几份|几道|两份|三种)(?:选择|推荐)?|再来(?:一批|一份|几个|一组)|还有(?:什么|别的|其他)?(?:选择|推荐)?(?:吗)?|更多(?:选择|推荐)?|其他的?|别的)(?:吧|吗|呢|呀|啊)?[?？。!！]*$/.test(question)
     || /^(?:这些|这几个|这几道|这份|它|各自|分别)?(?:在哪(?:里|个食堂)?|哪里|位置(?:在哪)?|几楼|楼层|窗口|档口|怎么去|多少钱|价格(?:是多少)?|热量(?:是多少)?|多少卡|蛋白(?:质)?(?:多少)?|碳水(?:多少)?|脂肪(?:多少)?|营养(?:怎么样)?|份量|分量|来源|核对来源|为什么(?:这么推荐|推荐这些|适合我)?)(?:呢|吗|啊)?[?？。!！]*$/.test(question)
@@ -127,7 +151,7 @@ export function classifyDietRecommendationIntent(question: string, hasActiveReco
     if (/刚才|前面|上面|这些|这(?:几|三|五|[0-9０-９]+)个|你推荐的|那几个|各自|分别|解释|为什么|热量|卡路里|蛋白|碳水|脂肪|营养|价格/.test(normalized)) return 'context'
     return 'context'
   }
-  return isDietRecommendationQuestion(question) ? 'initial' : null
+  return isMealFoodQuestion(question) ? 'initial' : null
 }
 
 function recommendationSourceIDs(result?: DietRecommendationResult): string[] {
@@ -138,12 +162,30 @@ function recommendationSourceIDs(result?: DietRecommendationResult): string[] {
   return Array.from(new Set(ids))
 }
 
-function activeDietRecommendationContext(messages: ChatMessage[]): { latest?: DietRecommendationResult; sourceIDs: string[] } {
+const FREE_ACKNOWLEDGEMENT_STATUS = 'free_acknowledgement'
+
+// lastAnswer is the latest real answer. Like the server, the walk looks straight through the free
+// replies to a thank-you (by the server's own billing mark) and through turns the server never stored.
+export function activeDietRecommendationContext(messages: ChatMessage[]): { latest?: DietRecommendationResult; sourceIDs: string[]; lastAnswer: string } {
   let latest: DietRecommendationResult | undefined
   let sourceIDs: string[] = []
   let mealTurn = true
+  let lastAnswer = ''
   for (const message of messages) {
-    if (message.role === 'user') mealTurn = Boolean(classifyDietRecommendationIntent(message.text, true))
+    if (message.kind === 'local' || message.unsent || message.billingStatus === FREE_ACKNOWLEDGEMENT_STATUS) continue
+    if (message.role === 'user') {
+      mealTurn = Boolean(classifyDietRecommendationIntent(message.text, true))
+    } else {
+      lastAnswer = message.text
+    }
+    // A card means the server answered that turn as a meal turn, whatever the page's rules
+    // thought of its wording (the server may ask the model about wording it does not know).
+    if (message.recommendation) {
+      mealTurn = true
+      latest = message.recommendation
+      sourceIDs = Array.from(new Set([...sourceIDs, ...recommendationSourceIDs(message.recommendation)]))
+      continue
+    }
     if (!mealTurn || (message.role === 'pet' && !message.recommendation && message.kind !== 'intro')) {
       latest = undefined
       sourceIDs = []
@@ -155,7 +197,7 @@ function activeDietRecommendationContext(messages: ChatMessage[]): { latest?: Di
       continue
     }
   }
-  return { latest, sourceIDs }
+  return { latest, sourceIDs, lastAnswer }
 }
 
 export function inferMealType(question: string, now = new Date()): 'breakfast' | 'lunch' | 'dinner' {
@@ -219,6 +261,7 @@ function mapHistoryMessage(item: PetChatHistoryMessage): ChatMessage {
     actions: Array.isArray(meta.actions) ? meta.actions.map(String) : undefined,
     recommendation,
     imageUrls: Array.isArray(meta.image_urls) ? meta.image_urls.map(String).filter(Boolean).slice(0, PET_CHAT_MAX_IMAGES) : undefined,
+    billingStatus: typeof meta.billing_status === 'string' ? meta.billing_status : undefined,
   }
 }
 
@@ -333,6 +376,7 @@ function PetChatPage() {
     [messages],
   )
   const latestDietRecommendation = activeDietContext.latest
+  const lastMealAnswerAsks = answerAsksQuestion(activeDietContext.lastAnswer)
   const isEmptyConversation = !lastAnalysis && !sessionID && messages.length === 1 && messages[0]?.kind === 'intro'
   const latestMessageID = messages.length > 0 ? `pet-chat-message-${messages[messages.length - 1].id}` : ''
   const imageUploading = pendingImages.some((item) => item.uploading)
@@ -419,6 +463,12 @@ function PetChatPage() {
       setEstimatingCredits(false)
       return
     }
+    // The server answers an acknowledgement for free while the latest card still has options.
+    if (readyImageURLs.length === 0 && latestDietRecommendation?.recommendations?.length && sessionID && isFreeMealAcknowledgement(question, lastMealAnswerAsks)) {
+      setEstimatedCredits(0)
+      setEstimatingCredits(false)
+      return
+    }
     if (readyImageURLs.length === 0 && classifyDietRecommendationIntent(question, Boolean(latestDietRecommendation || (homeMealContext && !sessionID)))) {
       setEstimatedCredits(homeMealContext || mealUnlocked ? 0 : 1)
       setEstimatingCredits(false)
@@ -443,7 +493,7 @@ function PetChatPage() {
     }, 350)
 
     return () => clearTimeout(timer)
-  }, [activeRange, draftQuestion, enableThinking, homeMealContext, latestDietRecommendation, mealUnlocked, readyImageURLs, sessionID])
+  }, [activeRange, draftQuestion, enableThinking, homeMealContext, lastMealAnswerAsks, latestDietRecommendation, mealUnlocked, readyImageURLs, sessionID])
 
   const appendMessage = useCallback((message: ChatMessage) => {
     setMessages((prev) => [...prev, message])
@@ -520,7 +570,8 @@ function PetChatPage() {
     streamingDietRecommendationRef.current = null
 
     setActiveRange(range)
-    appendMessage({ id: nextID('user'), role: 'user', text: question, imageUrls })
+    const userMessageID = nextID('user')
+    appendMessage({ id: userMessageID, role: 'user', text: question, imageUrls })
     const streamingMessageID = nextID('pet-stream')
     appendMessage({ id: streamingMessageID, role: 'pet', kind: 'analysis', text: '' })
 
@@ -555,20 +606,23 @@ function PetChatPage() {
         if (meta.session_id) setSessionID(meta.session_id)
         const finalText = streamingTextRef.current || '我看完了，但这次没有生成足够明确的结论。可以先多记录几餐再试。'
         const recommendation = streamingDietRecommendationRef.current || undefined
+        const freeReply = meta.billing_status === FREE_ACKNOWLEDGEMENT_STATUS
+        if (freeReply) updateMessage(userMessageID, (current) => ({ ...current, billingStatus: FREE_ACKNOWLEDGEMENT_STATUS }))
         const message: ChatMessage = {
           id: streamingMessageID,
           role: 'pet',
           kind: recommendation ? 'diet_recommendation' : 'analysis',
           text: finalText,
-          clues: recommendation ? undefined : buildClues(nextSummary, finalText),
-          actions: recommendation ? undefined : buildActions(question),
+          clues: recommendation || freeReply ? undefined : buildClues(nextSummary, finalText),
+          actions: recommendation || freeReply ? undefined : buildActions(question),
           recommendation,
+          billingStatus: freeReply ? FREE_ACKNOWLEDGEMENT_STATUS : undefined,
         }
         if (homeMealContext && recommendation && meta.credits_charged > 0) setMealUnlocked(true)
         setLastAnalysis(message)
         updateMessage(streamingMessageID, () => message)
         finish()
-        if (!recommendation && !nextSummary) {
+        if (!recommendation && !freeReply && !nextSummary) {
           getStatsSummary(range)
             .then((next) => {
               nextSummary = next
@@ -583,6 +637,7 @@ function PetChatPage() {
       },
       onError: async (error) => {
         await showUnifiedApiError(error, `${petName}分析失败`)
+        updateMessage(userMessageID, (current) => ({ ...current, unsent: true }))
         updateMessage(streamingMessageID, () => ({
           id: nextID('pet'),
           role: 'pet',

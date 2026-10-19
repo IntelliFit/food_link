@@ -208,6 +208,29 @@ func applyMealRequirementUpdates(state *campusDietAgentRunState, raw string) (in
 			} else {
 				continue
 			}
+		case "training":
+			// The model reads timing the fast rules miss ("待会儿要去打场羽毛球赛"); the quoted
+			// words must still be about exercise.
+			if !mealUpdateTrainingWords.MatchString(evidence) {
+				continue
+			}
+			switch {
+			case update.Action == "clear":
+				state.Constraints.Training = ""
+			case update.Action == "set" && (update.Value == "pre" || update.Value == "post"):
+				state.Constraints.Training = update.Value
+			default:
+				continue
+			}
+		case "scene":
+			// "我在家不想出门" asks for delivery although it never says 外卖.
+			if update.Action != "set" || !mealUpdateSceneWords.MatchString(evidence) || (update.Value != "takeout" && update.Value != "campus" && update.Value != "any") {
+				continue
+			}
+			state.Constraints.Scene = update.Value
+			if update.Value == "takeout" {
+				state.Constraints.CanteenName = ""
+			}
 		case "option_count":
 			n, err := strconv.Atoi(update.Value)
 			if err != nil || n < 1 || n > 3 || mealExplicitOptionCount(evidence) != n || update.Action != "set" {
@@ -230,7 +253,7 @@ func mealRequirementUpdateSchema() map[string]any {
 	return map[string]any{"type": "array", "maxItems": 16, "items": map[string]any{
 		"type": "object", "additionalProperties": false,
 		"properties": map[string]any{
-			"field":    map[string]any{"type": "string", "enum": []string{"avoid_food", "prefer_food", "canteen_name", "option_count"}},
+			"field":    map[string]any{"type": "string", "enum": []string{"avoid_food", "prefer_food", "canteen_name", "option_count", "training", "scene"}, "description": "training的value为pre（马上要运动）或post（刚运动完），action=clear取消；scene的value为takeout（外卖/校外商家）、campus（食堂）或any"},
 			"action":   map[string]any{"type": "string", "enum": []string{"add", "remove", "set", "clear"}},
 			"value":    map[string]any{"type": "string"},
 			"evidence": map[string]any{"type": "string", "description": "必须逐字引用本轮用户原话中支持这项变更的片段，不能引用历史或推测"},
@@ -244,3 +267,8 @@ func mealStateOptionLimit(state *campusDietAgentRunState) int {
 	}
 	return mealRequestedOptionLimit(state.Question)
 }
+
+var (
+	mealUpdateTrainingWords = regexp.MustCompile(`练|健身|运动|跑|球|游泳|骑|爬山|瑜伽|训练|撸铁|锻炼|拳|操|舞|比赛|跳绳|徒步|滑雪|攀岩`)
+	mealUpdateSceneWords    = regexp.MustCompile(`外卖|商家|店|食堂|学校|校园|校内|校外|家|宿舍|公司|出门|附近|送`)
+)

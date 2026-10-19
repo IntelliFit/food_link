@@ -326,7 +326,7 @@ func mealValidateFinalSelections(state *campusDietAgentRunState, final campusDie
 		if campusDietAgentIsSearchIntent(state.Intent) && state.Constraints.CompleteMeal && !mealHasEvidenceStructure(candidate) {
 			continue
 		}
-		if state.Constraints.CompleteMeal && candidate.Source != "food_record" && selection.OrderingCheck != nil && (!selection.OrderingCheck.ReadyToOrder || !selection.OrderingCheck.MandatoryCostsIncluded) {
+		if state.Constraints.CompleteMeal && mealOrderingCheckFails(selection.OrderingCheck, candidate) {
 			continue
 		}
 		if mealIsMoreRepeat(state, candidate) {
@@ -405,7 +405,78 @@ func mealAnswerMentionsOtherChoice(state *campusDietAgentRunState, answer string
 			}
 		}
 	}
+	// Models also paraphrase a dish and name its place ("吉旺角茶餐厅的牛肉滑蛋饭套餐"): a venue
+	// searched this turn but not among the selected options is another choice too. Venues the
+	// user excluded may be named ("已排除X").
+	selectedVenues := map[string]bool{}
+	for _, candidate := range selected {
+		selectedVenues[mealVenueCore(candidate)] = true
+	}
+	for _, candidate := range state.Candidates {
+		venue := mealVenueCore(candidate)
+		if len([]rune(venue)) < 3 || selectedVenues[venue] || !strings.Contains(answer, venue) {
+			continue
+		}
+		excluded := false
+		for _, name := range state.Constraints.ExcludedCanteens {
+			excluded = excluded || strings.Contains(name, venue) || strings.Contains(venue, domain.DiningVenueKey(name))
+		}
+		if !excluded {
+			return true
+		}
+	}
 	return false
+}
+
+var mealVenueBranch = regexp.MustCompile(`[（(].*$`)
+
+// mealVenueCore is the name people use for a venue: "吉旺角茶餐厅（五道口店）" -> "吉旺角茶餐厅".
+func mealVenueCore(c DietRecommendationCandidate) string {
+	return strings.TrimSpace(mealVenueBranch.ReplaceAllString(mealCleanVenueName(defaultIfEmpty(c.CanteenName, c.MerchantName)), ""))
+}
+
+// mealEngineChoiceAnswer describes, in plain words, the options the engine chose when it
+// replaced the model's picks; the model's own text described other dishes.
+// mealEngineChoiceAnswerFor first acknowledges what the user asked for this meal.
+func mealEngineChoiceAnswerFor(state *campusDietAgentRunState, candidates []DietRecommendationCandidate) string {
+	return mealChoiceLead(state) + mealEngineChoiceAnswer(candidates)
+}
+
+// mealChoiceLead acknowledges this meal's conditions in one sentence, or is empty.
+func mealChoiceLead(state *campusDietAgentRunState) string {
+	lead := []string{}
+	switch state.Constraints.Training {
+	case "pre":
+		lead = append(lead, "你一会要训练，这餐以主食为主、少油")
+	case "post":
+		lead = append(lead, "你刚练完，这餐蛋白和主食都要够")
+	}
+	if limit := state.Constraints.MaxPrice; limit != nil {
+		lead = append(lead, "都按"+formatCampusDietNumber(*limit)+"元以内筛的")
+	}
+	if len(state.Constraints.ExcludedCanteens) > 0 {
+		names := make([]string, 0, len(state.Constraints.ExcludedCanteens))
+		for _, name := range state.Constraints.ExcludedCanteens {
+			names = append(names, mealCleanVenueName(name))
+		}
+		lead = append(lead, "已排除"+strings.Join(slices.Compact(names), "、"))
+	}
+	if len(lead) == 0 {
+		return ""
+	}
+	return strings.Join(lead, "，") + "。"
+}
+
+func mealEngineChoiceAnswer(candidates []DietRecommendationCandidate) string {
+	parts := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		if venue := mealVenueCore(c); venue != "" {
+			parts = append(parts, c.Title+"（"+venue+"）")
+		} else {
+			parts = append(parts, c.Title)
+		}
+	}
+	return "按你这餐的营养目标重新核对后，选了这几份：" + strings.Join(parts, "、") + "。价格、份量和当天供应请以窗口或商家为准。"
 }
 
 func mealAgentFinalEvidence(state *campusDietAgentRunState) string {

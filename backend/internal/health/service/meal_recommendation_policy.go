@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-var mealCampusDenied = regexp.MustCompile(`(?:不要|不去|不进|不能|没法|无法|不方便)[^，。；！？,;!?]{0,16}(?:学校|校园|校内|食堂)|不在[^，。；！？,;!?]{0,16}食堂(?:吃|就餐|消费)|(?:只看|只要|只吃|仅看|仅限)[^，。；！？,;!?]{0,8}(?:校外|外卖|商家)`)
+var mealCampusDenied = regexp.MustCompile(`(?:不要|不去|不想|不进|不能|没法|无法|不方便)[^，。；！？,;!?]{0,16}(?:学校|校园|校内|食堂)|不在[^，。；！？,;!?]{0,16}食堂(?:吃|就餐|消费)|(?:只看|只要|只吃|仅看|仅限)[^，。；！？,;!?]{0,8}(?:校外|外卖|商家)`)
 var mealCampusConfirmed = regexp.MustCompile(`(?:可以|能够|能|方便)在[^，。；！？,;!?]{0,16}食堂(?:吃|就餐|消费)|(?:就在|已经在|正在)[^，。；！？,;!?]{0,12}食堂(?:吃|就餐|点餐)`)
 var mealRelocation = regexp.MustCompile(`外地|出差|离开.{0,10}(?:学校|大学|校园)|换了(?:城市|学校|位置)|换到|现在不在|不在常用学校`)
 
@@ -82,6 +82,10 @@ func mealExplicitScene(q string) string {
 		return "any"
 	}
 	if strings.Contains(q, "外卖") || regexp.MustCompile(`只.{0,4}校外|只.{0,4}商家`).MatchString(q) {
+		return "takeout"
+	}
+	// "我就是需要附近商家的呀" / "给我找几家附近的店": merchants, not canteens.
+	if regexp.MustCompile(`(?:要|需要|找|推荐|给我|想吃)[^，。；！？,;!?]{0,6}(?:商家|店)|附近(?:的)?(?:商家|店)`).MatchString(q) && !regexp.MustCompile(`食堂|校园|学校`).MatchString(q) {
 		return "takeout"
 	}
 	if regexp.MustCompile(`(?:想|要|去|在|只看|只吃).{0,10}食堂|校内吃|(?:清华|大学|学校|本校)食堂`).MatchString(q) {

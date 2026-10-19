@@ -36,6 +36,18 @@ func DiningVenueKey(value string) string {
 	return value
 }
 
+// IsCanteenVenue is true for a place to eat in (a school, community or company
+// canteen) as opposed to an ordinary restaurant. The catalogue stores some canteens
+// as placeholder "merchants" such as "AI原点社区食堂（名称待确认）"; they are not
+// takeout merchants whatever table they were imported into.
+func IsCanteenVenue(candidate DietRecommendationCandidate) bool {
+	return candidate.IsCampusFood || strings.TrimSpace(candidate.CanteenName) != "" || canteenMerchantName.MatchString(candidate.MerchantName)
+}
+
+// Words that make a "merchant" a canteen; 名称待确认 marks rows imported from the canteen
+// directory before the venue was confirmed.
+var canteenMerchantName = regexp.MustCompile(`食堂|饭堂|(?:职工|员工|学生|教工|社区)餐厅|名称待确认`)
+
 func MatchesDiningVenue(name string, candidate DietRecommendationCandidate) bool {
 	school, _ := DiningVenueParts(name)
 	if school != "" && strings.Join(strings.Fields(candidate.SchoolName), "") != school {

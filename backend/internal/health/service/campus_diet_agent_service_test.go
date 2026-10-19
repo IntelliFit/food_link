@@ -410,6 +410,7 @@ func newCampusDietAgentTestService(repo *mockStatsRepo, baseURL string) *StatsSe
 	cfg.External.DashScopeBaseURL = baseURL
 	svc := NewStatsService(repo, nil, cfg)
 	svc.client = &http.Client{}
+	svc.mealRouterOff = true // scripted models answer agent calls only
 	return svc
 }
 

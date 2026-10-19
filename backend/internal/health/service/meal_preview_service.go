@@ -81,8 +81,10 @@ func (s *StatsService) PreviewMeals(ctx context.Context, userID string, input Me
 	return s.hybridMealRecommendation(ctx, state)
 }
 
+var mealHistoryQuestionPattern = regexp.MustCompile(`历史.*(?:餐|吃|饮食|记录)|过去.*(?:吃|餐|记录)|吃过|记录过的餐|本人.*餐|记录(?:里|中)|核对.{0,6}日期`)
+
 func mealHistoryQuestion(q string) bool {
-	return regexp.MustCompile(`历史.*(?:餐|吃|饮食|记录)|过去.*(?:吃|餐|记录)|吃过|记录过的餐|本人.*餐|记录(?:里|中)|核对.{0,6}日期`).MatchString(q)
+	return mealHistoryQuestionPattern.MatchString(q)
 }
 
 type groundedMeal struct {

@@ -113,6 +113,7 @@ type CampusDietRecommendationConstraints struct {
 	Scene              string                           `json:"scene,omitempty"`
 	RadiusKM           float64                          `json:"radius_km,omitempty"`
 	Goal               string                           `json:"goal,omitempty"`
+	Training           string                           `json:"training,omitempty"` // "pre" / "post": timing around this meal only
 	MaxCalories        *float64                         `json:"max_calories,omitempty"`
 	MaxPrice           *float64                         `json:"max_price,omitempty"`
 	MinProtein         *float64                         `json:"min_protein,omitempty"`

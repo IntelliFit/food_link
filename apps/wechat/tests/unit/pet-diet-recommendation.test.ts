@@ -36,6 +36,25 @@ describe('pet campus diet recommendation helpers', () => {
     expect(classifyDietRecommendationIntent('还有没有其他选择？', false)).toBeNull()
   })
 
+  // Production screenshot 2026-10-17: after a recommendation the user answers it. Those turns stay in
+  // the meal conversation on the server, so the cost shown before sending must follow the same rule.
+  it('keeps complaints and short demands about the recommendation in the meal conversation', () => {
+    for (const question of [
+      'AI原点社区食堂不是外卖啊 食堂这个食堂不是外卖 继续推荐其他的',
+      '我都说了AI原点社区食堂不是外卖，你还在继续推荐这个AI原点社区食堂，你是傻逼吗?',
+      '我就是需要附近商家的呀，你给我点呗，你给我推荐呗',
+      '不是这个，换商家',
+      '你怎么又推荐食堂',
+      '我要的是外卖不是食堂',
+    ]) {
+      expect(classifyDietRecommendationIntent(question, true)).not.toBeNull()
+    }
+    for (const question of ['你是傻逼吗', '我想洗澡，热水还是冷水？', '不一定是饮食，其他的通用建议也可以', '我不是很饿，想睡觉']) {
+      expect(classifyDietRecommendationIntent(question, true)).toBeNull()
+    }
+    expect(classifyDietRecommendationIntent('我就是需要附近商家的呀，你给我点呗', false)).toBeNull()
+  })
+
   it('infers explicit meal wording before falling back to the current meal window', () => {
     expect(inferMealType('早餐吃什么', new Date(2026, 7, 22, 19, 0))).toBe('breakfast')
     expect(inferMealType('今天吃什么', new Date(2026, 7, 22, 12, 15))).toBe('lunch')

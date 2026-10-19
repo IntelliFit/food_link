@@ -13,6 +13,19 @@ import (
 	"strings"
 )
 
+var (
+	// 例 is the usual order unit of a Chinese dish ("元/例"); 份/碗/盘/套/餐 likewise.
+	mealServingUnitPattern      = regexp.MustCompile(`^(?:元\s*/\s*|每)?(?:份|碗|盘|套|套餐|餐|例|小例|中例|大例)(?:元)?$`)
+	mealStapleStructurePattern  = regexp.MustCompile(`米饭|拌饭|盖饭|盖浇饭|鸡饭|牛肉饭|滑蛋饭|炒饭|煲仔饭|石锅饭|鳗鱼饭|面条|面包|意面|荞麦面|牛肉面|臊子面|打卤面|阳春面|清汤面|拉面|拌面|炒面|生煎|烧麦|烧卖|汉堡|鸡肉卷|肉夹馍|煎饼|馅饼|米粉|米线|土豆粉|馒头|包子|饺|馄饨|杂粮|红薯|燕麦|粥|饭|花卷|烧饼|饭团|凉皮|面片`)
+	mealCornStaplePattern       = regexp.MustCompile(`(?:^|[ +])(?:蒸|煮|烤|甜)?玉米(?:棒|段)?(?:$|[ +])`)
+	mealProteinStructurePattern = regexp.MustCompile(`肉|鸡|牛|猪|鱼|虾|蛋|豆腐|豆皮|豆干|奶|排骨|鸭|羊`)
+	// Noodle, dumpling-soup and rice-noodle bowls are named in endless regional ways. Only the
+	// dish name and its items are read for these; batter and gluten dishes are not noodles.
+	mealNoodleNamePattern = regexp.MustCompile(`面|抄手|烩饼|炒饼|刀削|拉条|疙瘩`)
+	mealNotNoodlePattern  = regexp.MustCompile(`面筋|面托|面糊|面皮|面粉`)
+	mealNoodleBowlPattern = regexp.MustCompile(`面|粉|抄手|馄饨|饺|米线|河粉|烩饼|炒饼|拉条`)
+)
+
 // Composition is a data-backed serving calculation, not a medical satiety claim.
 // Never invent a rice price or silently interpret a per-weight price as a meal.
 func mealKnownServing(c DietRecommendationCandidate) bool {
@@ -22,7 +35,7 @@ func mealKnownServing(c DietRecommendationCandidate) bool {
 	// Absence of a unit is not evidence of a portion price. Catalog nutrition
 	// (often estimated per reference serving) must not supply the missing unit.
 	unit := strings.TrimSpace(c.PriceUnit)
-	return c.Price > 0 && regexp.MustCompile(`^(?:元\s*/\s*|每)?(?:份|碗|盘|套|套餐|餐)(?:元)?$`).MatchString(unit)
+	return c.Price > 0 && mealServingUnitPattern.MatchString(unit)
 }
 
 func mealHasStructure(c DietRecommendationCandidate) bool {
@@ -35,16 +48,22 @@ func mealHasNamedStructure(c DietRecommendationCandidate) bool {
 	for _, item := range c.Items {
 		text += " " + item.Name
 	}
-	staple := regexp.MustCompile(`米饭|拌饭|盖饭|盖浇饭|鸡饭|牛肉饭|滑蛋饭|炒饭|煲仔饭|石锅饭|鳗鱼饭|面条|面包|意面|荞麦面|牛肉面|臊子面|打卤面|阳春面|清汤面|拉面|拌面|炒面|生煎|烧麦|烧卖|汉堡|鸡肉卷|肉夹馍|煎饼|馅饼|米粉|米线|土豆粉|馒头|包子|饺|馄饨|杂粮|红薯|燕麦|粥|饭`).MatchString(text)
+	staple := mealStapleStructurePattern.MatchString(text)
 	// Corn inside a stir-fry is not evidence of an included staple serving.
 	// A separately recorded cob can still supply the staple in a real combo.
-	staple = staple || regexp.MustCompile(`(?:^|[ +])(?:蒸|煮|烤|甜)?玉米(?:棒|段)?(?:$|[ +])`).MatchString(text)
-	protein := regexp.MustCompile(`肉|鸡|牛|猪|鱼|虾|蛋|豆腐|豆皮|豆干|奶|排骨|鸭|羊`).MatchString(text)
+	staple = staple || mealCornStaplePattern.MatchString(text)
+	// Noodles, dumpling soups and rice noodles by any regional name, from the dish name only.
+	noodleText := mealNotNoodlePattern.ReplaceAllString(text, "")
+	staple = staple || mealNoodleNamePattern.MatchString(noodleText)
+	protein := mealProteinStructurePattern.MatchString(text)
+	// A bowl of noodles or dumplings whose recorded protein shows toppings is a meal even
+	// when its name lists none; plain noodles (a few grams of protein) are not.
+	toppedBowl := c.Protein >= 15 && mealNoodleBowlPattern.MatchString(noodleText)
 	// A cooked noodle bowl is a main dish even when its name does not contain
 	// 肉/蛋/豆. Known nutrition and explicit user minimums are checked separately;
 	// bare rice, dough, a pot base or hotpot dumplings do not get this exemption.
 	staple = staple || strings.Contains(c.Title, "肉饼") || strings.Contains(c.Title, "鸡蛋堡") || strings.Contains(c.Title, "香菇油菜包")
-	return staple && (protein || mealPreparedMainPattern.MatchString(c.Title) || strings.Contains(c.Title, "香菇油菜包"))
+	return staple && (protein || toppedBowl || mealPreparedMainPattern.MatchString(c.Title) || strings.Contains(c.Title, "香菇油菜包"))
 }
 
 func mealSamePlace(a, b DietRecommendationCandidate) bool {
@@ -89,43 +108,56 @@ func mealFloorKey(floor string) string {
 	return strings.TrimRight(floor, "F层楼")
 }
 
-func registerMealPlan(state *campusDietAgentRunState, components []DietRecommendationCandidate) (DietRecommendationCandidate, error) {
+// Each part is checked on its own. The user's whole-meal minimum protein and a
+// required staple belong to the assembled meal, not to every side dish.
+func validateMealComponents(state *campusDietAgentRunState, components []DietRecommendationCandidate) error {
 	if len(components) < 2 || len(components) > 4 {
-		return DietRecommendationCandidate{}, fmt.Errorf("一餐需要2至4个真实条目")
+		return fmt.Errorf("一餐需要2至4个真实条目")
 	}
-	ids, titles := []string{}, []string{}
-	combined := components[0]
-	combined.Calories, combined.Protein, combined.Carbs, combined.Fat, combined.Price = 0, 0, 0, 0, 0
-	combined.Items = nil
-	vectors := []nutritionagg.Vector{}
 	componentState := *state
 	componentState.Constraints.MinProtein = nil    // the user's minimum applies to the whole meal, not each side
 	componentState.Constraints.RequiredStaple = "" // staple requirement applies to the composed meal, not each side
+	seen := map[string]bool{}
 	fullMeals := 0
 	for _, c := range components {
 		if risk := mealOrderingRisk(c); risk != "" {
-			return DietRecommendationCandidate{}, fmt.Errorf("%s：%s。请检索能直接点单的主餐或有完整必选费用证据的套餐，不要只加配菜标价", c.Title, risk)
+			return fmt.Errorf("%s：%s。请检索能直接点单的主餐或有完整必选费用证据的套餐，不要只加配菜标价", c.Title, risk)
 		}
 		if mealHasStructure(c) {
 			fullMeals++
 			if fullMeals > 1 {
-				return DietRecommendationCandidate{}, fmt.Errorf("不要把两份完整主餐叠加为一餐；请选择一份主餐搭配配菜")
+				return fmt.Errorf("不要把两份完整主餐叠加为一餐；请选择一份主餐搭配配菜")
 			}
 		}
 		if c.Source == "meal_plan" || !mealKnownServing(c) {
-			return DietRecommendationCandidate{}, fmt.Errorf("组合只接受份价已知的原始条目，不能将按两单价当作整份")
+			return fmt.Errorf("组合只接受份价已知的原始条目，不能将按两单价当作整份")
 		}
 		if !mealSamePlace(components[0], c) {
-			return DietRecommendationCandidate{}, fmt.Errorf("组合须在同一食堂且有同层依据，或同一具明确地址的商家购买；不跨食堂或楼层拼餐")
+			return fmt.Errorf("组合须在同一食堂且有同层依据，或同一具明确地址的商家购买；不跨食堂或楼层拼餐")
 		}
 		if len(mealHarnessRank(&componentState, []DietRecommendationCandidate{c})) == 0 {
-			return DietRecommendationCandidate{}, fmt.Errorf("组合中的菜品不符合本餐条件")
+			return fmt.Errorf("组合中的菜品不符合本餐条件")
 		}
-		for _, id := range ids {
-			if id == c.SourceID {
-				return DietRecommendationCandidate{}, fmt.Errorf("不要重复叠加同一条目")
-			}
+		if seen[c.SourceID] {
+			return fmt.Errorf("不要重复叠加同一条目")
 		}
+		seen[c.SourceID] = true
+	}
+	return nil
+}
+
+// composeMealPlan totals already-validated parts and checks the assembled meal.
+// It does not register anything in the run state.
+func composeMealPlan(state *campusDietAgentRunState, components []DietRecommendationCandidate) (DietRecommendationCandidate, error) {
+	if len(components) < 2 || len(components) > 4 {
+		return DietRecommendationCandidate{}, fmt.Errorf("一餐需要2至4个真实条目")
+	}
+	ids, titles := make([]string, 0, len(components)), make([]string, 0, len(components))
+	combined := components[0]
+	combined.Calories, combined.Protein, combined.Carbs, combined.Fat, combined.Price = 0, 0, 0, 0, 0
+	combined.Items = nil
+	vectors := make([]nutritionagg.Vector, 0, len(components))
+	for _, c := range components {
 		ids, titles = append(ids, c.SourceID), append(titles, c.Title)
 		combined.Calories += c.Calories
 		combined.Protein += c.Protein
@@ -133,7 +165,7 @@ func registerMealPlan(state *campusDietAgentRunState, components []DietRecommend
 		combined.Fat += c.Fat
 		combined.Price += c.Price
 		vectors = append(vectors, c.Nutrients)
-		combined.Items = append(combined.Items, DietRecommendationFoodItem{Name: c.Title, Amount: "1个库内记录份量", Source: c.Source, SourceID: c.SourceID})
+		combined.Items = append(combined.Items, DietRecommendationFoodItem{Name: c.Title, Amount: mealPartAmount(c), Source: c.Source, SourceID: c.SourceID})
 	}
 	for _, total := range []*float64{&combined.Calories, &combined.Protein, &combined.Carbs, &combined.Fat, &combined.Price} {
 		*total = math.Round(*total*100) / 100
@@ -166,18 +198,122 @@ func registerMealPlan(state *campusDietAgentRunState, components []DietRecommend
 	combined.PriceUnit = "元/餐"
 	combined.Description = "按各1个库内记录份量合计；实际份量、供应及配料需向窗口确认"
 	combined.NutritionBasis = "library_estimate"
+	// The first part's portion text and supply periods do not describe the assembled
+	// meal. Say only what holds for every part.
+	combined.PortionDescription = ""
+	combined.MealPeriods = mealCommonPeriods(components)
+	for _, c := range components {
+		if c.ImagePath != "" && mealComboRoleOf(c) != mealRoleStaple {
+			combined.ImagePath = c.ImagePath
+			break
+		}
+	}
 	if len(mealHarnessRank(state, []DietRecommendationCandidate{combined})) == 0 {
 		return DietRecommendationCandidate{}, fmt.Errorf("整餐合计不满足本餐营养或其它硬约束")
 	}
+	return combined, nil
+}
+
+// buildMealPlan validates the parts and totals them without touching the state.
+func buildMealPlan(state *campusDietAgentRunState, components []DietRecommendationCandidate) (DietRecommendationCandidate, error) {
+	if err := validateMealComponents(state, components); err != nil {
+		return DietRecommendationCandidate{}, err
+	}
+	return composeMealPlan(state, components)
+}
+
+func registerMealPlan(state *campusDietAgentRunState, components []DietRecommendationCandidate) (DietRecommendationCandidate, error) {
+	combined, err := buildMealPlan(state, components)
+	if err != nil {
+		return DietRecommendationCandidate{}, err
+	}
+	registerBuiltMealPlan(state, combined, components)
+	return combined, nil
+}
+
+func registerBuiltMealPlan(state *campusDietAgentRunState, plan DietRecommendationCandidate, components []DietRecommendationCandidate) {
 	if state.MealPlans == nil {
 		state.MealPlans = map[string][]DietRecommendationCandidate{}
 	}
 	if state.Candidates == nil {
 		state.Candidates = map[string]DietRecommendationCandidate{}
 	}
-	state.MealPlans[combined.SourceID] = components
-	state.Candidates[combined.SourceID] = combined
-	return combined, nil
+	state.MealPlans[plan.SourceID] = components
+	state.Candidates[plan.SourceID] = plan
+}
+
+// The distinct windows and floors a meal is bought at, in component order; windows
+// counts the counters that must be queued at.
+func mealPurchasePoints(components []DietRecommendationCandidate) (labels []string, windows int) {
+	seenKeys, seenLabels := map[string]bool{}, map[string]bool{}
+	for _, c := range components {
+		if key := mealWindowKey(c); key != "" {
+			seenKeys[key] = true
+		}
+		if label := mealWindowLabel(c); label != "" && !seenLabels[label] {
+			seenLabels[label] = true
+			labels = append(labels, label)
+		}
+	}
+	return labels, len(seenKeys)
+}
+
+// What the card shows beside each dish of an assembled meal: one recorded serving, its price
+// and the window it is bought at, e.g. 1份 · ¥2 · 主食窗口（1F）.
+func mealPartAmount(c DietRecommendationCandidate) string {
+	parts := []string{"1份"}
+	if c.Price > 0 {
+		parts = append(parts, "¥"+formatCampusDietNumber(c.Price))
+	}
+	if label := mealWindowLabel(c); label != "" {
+		parts = append(parts, label)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func mealWindowKey(c DietRecommendationCandidate) string {
+	if c.WindowID != "" {
+		return "id:" + c.WindowID
+	}
+	if c.WindowName != "" {
+		return "name:" + c.WindowName
+	}
+	return ""
+}
+
+// The label users see for where a part is sold, e.g. 家常菜窗口（1F）.
+func mealWindowLabel(c DietRecommendationCandidate) string {
+	name := strings.TrimSpace(c.WindowName)
+	if name == "" {
+		return ""
+	}
+	if floor := strings.TrimSpace(c.Floor); floor != "" {
+		return name + "（" + floor + "）"
+	}
+	return name
+}
+
+func mealCommonPeriods(components []DietRecommendationCandidate) []string {
+	var common map[string]bool
+	for _, c := range components {
+		if len(c.MealPeriods) == 0 {
+			return []string{} // one part with unknown supply hours leaves the whole meal unknown
+		}
+		current := map[string]bool{}
+		for _, period := range c.MealPeriods {
+			if common == nil || common[period] {
+				current[period] = true
+			}
+		}
+		common = current
+	}
+	out := []string{}
+	for _, period := range []string{"breakfast", "lunch", "dinner"} {
+		if common[period] {
+			out = append(out, period)
+		}
+	}
+	return out
 }
 
 func composeMealTool(state *campusDietAgentRunState, raw string) (map[string]any, error) {
@@ -246,83 +382,21 @@ func mealOriginalSourceIDs(ids []string) []string {
 	return out
 }
 
+// mealComboSearchLimit is how many assembled meals a search hands to the ranking;
+// the final selection then picks the few shown.
+const mealComboSearchLimit = 12
+
 // Build bounded, purchasable combinations before ranking whole meals. Ranking
 // sides as if each were lunch otherwise rewards a low-calorie mushroom dish.
 // Only real portion-priced rows participate; no invented rice, price or menu.
+// The assembly itself (roles, same canteen and floor, nutrition, variety) lives in
+// searchMealOptions; this keeps the signature the search tools call.
 func mealBuildCombinations(state *campusDietAgentRunState, candidates []DietRecommendationCandidate) []DietRecommendationCandidate {
-	componentState := *state
-	componentState.Constraints.MinProtein = nil
-	componentState.Constraints.RequiredStaple = ""
-	groups := map[string][]DietRecommendationCandidate{}
-	for _, c := range mealHarnessRank(&componentState, candidates) {
-		if c.Source == "food_record" || c.Source == "meal_plan" || !mealKnownServing(c) || mealOrderingRisk(c) != "" || mealHasEvidenceStructure(c) {
-			continue
-		}
-		venue := domain.DiningVenueKey(defaultIfEmpty(c.CanteenName, c.MerchantName))
-		if venue == "" {
-			continue
-		}
-		area := defaultIfEmpty(c.SchoolID, defaultIfEmpty(c.SchoolName, c.Address))
-		floor := mealFloorKey(c.Floor)
-		if floor == "" {
-			floor = defaultIfEmpty(c.WindowID, c.WindowName)
-		}
-		key := strings.Join([]string{area, c.CampusID, venue, floor}, "|")
-		groups[key] = append(groups[key], c)
+	report := searchMealOptions(state, candidates, mealComboSearchLimit, false)
+	plans := make([]DietRecommendationCandidate, 0, len(report.Combos))
+	for _, combo := range report.Combos {
+		registerBuiltMealPlan(state, combo.Plan, combo.Components)
+		plans = append(plans, combo.Plan)
 	}
-	keys := make([]string, 0, len(groups))
-	for key := range groups {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	result := []DietRecommendationCandidate{}
-	staplePattern := regexp.MustCompile(`^(?:白|杂粮|糙米|黑米|紫米|小份|大份)?(?:米饭|饭)|^(?:蒸|煮)?(?:红薯|玉米|馒头)|燕麦粥`)
-	proteinPattern := regexp.MustCompile(`肉|鸡|牛|猪|鱼|虾|蛋|豆腐|豆干|奶|排骨|鸭|羊`)
-	vegetablePattern := regexp.MustCompile(`青菜|油菜|白菜|包菜|西兰花|芥兰|菠菜|生菜|黄瓜|番茄|西红柿|菌|菇|木耳|豆芽|茄子|冬瓜|海带`)
-	for _, key := range keys {
-		var staples, proteins, vegetables []DietRecommendationCandidate
-		seen := map[string]bool{}
-		for _, c := range groups[key] {
-			if seen[c.Title] {
-				continue
-			}
-			seen[c.Title] = true
-			switch {
-			case staplePattern.MatchString(c.Title) && len(staples) < 2:
-				staples = append(staples, c)
-			case proteinPattern.MatchString(strings.ReplaceAll(c.Title, "鱼香", "")) && len(proteins) < 6:
-				proteins = append(proteins, c)
-			case vegetablePattern.MatchString(c.Title) && len(vegetables) < 4:
-				vegetables = append(vegetables, c)
-			}
-		}
-		scratch := *state
-		scratch.Candidates, scratch.MealPlans = nil, nil
-		plans := []DietRecommendationCandidate{}
-		for _, staple := range staples {
-			for _, protein := range proteins {
-				parts := []DietRecommendationCandidate{staple, protein}
-				if plan, err := registerMealPlan(&scratch, parts); err == nil {
-					plans = append(plans, plan)
-				}
-				for _, vegetable := range vegetables {
-					if plan, err := registerMealPlan(&scratch, append(slices.Clone(parts), vegetable)); err == nil {
-						plans = append(plans, plan)
-					}
-				}
-			}
-		}
-		plans = mealHarnessRank(state, plans)
-		if len(plans) > 6 {
-			plans = plans[:6]
-		}
-		if state.MealPlans == nil {
-			state.MealPlans = map[string][]DietRecommendationCandidate{}
-		}
-		for _, plan := range plans {
-			state.MealPlans[plan.SourceID] = scratch.MealPlans[plan.SourceID]
-		}
-		result = append(result, plans...)
-	}
-	return result
+	return plans
 }
