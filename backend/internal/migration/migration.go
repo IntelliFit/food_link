@@ -182,6 +182,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := MigrateCanteenCollectorScopes(ctx, db); err != nil {
 		return err
 	}
+	if err := MigrateCanteenCaptureTables(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureMealMeetupConstraints(ctx, db); err != nil {
 		return err
 	}
@@ -790,10 +793,10 @@ func ensureCampusCommunityConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("public_food_library", "public_food_library_nutrition_version_check", `nutrition_source_version >= 0 AND nutrition_source_version <= content_version`),
 		dropAndAddCheck("public_food_library", "public_food_library_nutrition_status_check", `nutrition_status = ANY (ARRAY['pending'::text,'current'::text,'stale'::text,'failed'::text])`),
 		dropAndAddCheck("public_food_library", "public_food_library_availability_status_check", `availability_status = ANY (ARRAY['available'::text,'temporarily_unavailable'::text,'discontinued'::text,'unknown'::text])`),
-		dropAndAddCheck("campus_food_collection_batches", "campus_food_collection_batches_source_channel_check", `source_channel = ANY (ARRAY['admin_batch'::text,'user_single'::text,'collector_batch'::text,'legacy_public'::text,'import'::text])`),
+		dropAndAddCheck("campus_food_collection_batches", "campus_food_collection_batches_source_channel_check", campusSourceChannelCheck),
 		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_version_check", `version >= 1`),
 		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_nutrition_version_check", `nutrition_source_version >= 0 AND nutrition_source_version <= version`),
-		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_source_channel_check", `source_channel = ANY (ARRAY['admin_batch'::text,'user_single'::text,'collector_batch'::text,'legacy_public'::text,'import'::text])`),
+		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_source_channel_check", campusSourceChannelCheck),
 		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_nutrition_status_check", `nutrition_status = ANY (ARRAY['pending'::text,'current'::text,'stale'::text,'failed'::text])`),
 		dropAndAddCheck("campus_food_catalog_items", "campus_food_catalog_items_availability_status_check", `availability_status = ANY (ARRAY['available'::text,'temporarily_unavailable'::text,'discontinued'::text,'unknown'::text])`),
 		dropAndAddCheck("campus_food_revisions", "campus_food_revisions_version_check", `base_version >= 0 AND result_version = base_version + 1`),

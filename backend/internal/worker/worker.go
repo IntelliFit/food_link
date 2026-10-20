@@ -83,6 +83,7 @@ var supportedTaskTypes = []string{
 	"packaged_product_extract",
 	"expiry_recognize",
 	"expiry_notification",
+	"canteen_menu_extract",
 }
 
 func SupportedTaskTypes() []string {
@@ -102,6 +103,7 @@ type Runner struct {
 	notifier        expiryNotificationProcessor
 	exercise        *healthservice.ExerciseService
 	customFocus     customFocusProcessor
+	canteenCapture  canteenCaptureProcessor
 	nutrition       *foodrecordservice.FoodNutritionService
 	autoRecorder    analysisAutoRecorder
 	contentSecurity *contentsecurity.Service
@@ -144,6 +146,11 @@ type analysisAutoRecorder interface {
 
 type customFocusProcessor interface {
 	ProcessCustomFocusTask(ctx context.Context, userID, statsRange, focusID string) (map[string]any, error)
+}
+
+// canteenCaptureProcessor reads one window capture session's menu photos.
+type canteenCaptureProcessor interface {
+	ProcessCaptureExtractionTask(ctx context.Context, taskID string, payload map[string]any) (map[string]any, error)
 }
 
 type expiryNotificationProcessor interface {
@@ -223,6 +230,10 @@ func (r *Runner) ConfigureAutoRecorder(recorder analysisAutoRecorder) {
 
 func (r *Runner) ConfigureCustomFocusProcessor(processor customFocusProcessor) {
 	r.customFocus = processor
+}
+
+func (r *Runner) ConfigureCanteenCaptureProcessor(processor canteenCaptureProcessor) {
+	r.canteenCapture = processor
 }
 
 func (r *Runner) Run(ctx context.Context, opts Options) error {
@@ -975,6 +986,8 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 			err = r.processPackagedProductExtract(taskCtx, task)
 		case "expiry_recognize":
 			err = r.processExpiryRecognize(taskCtx, task)
+		case "canteen_menu_extract":
+			err = r.processCanteenMenuExtract(taskCtx, task)
 		default:
 			err = fmt.Errorf("unsupported worker task_type: %s", task.TaskType)
 		}
@@ -5266,6 +5279,17 @@ func (r *Runner) processCustomFocus(ctx context.Context, task *domain.AnalysisTa
 		return fmt.Errorf("custom focus task missing focus_id")
 	}
 	result, err := r.customFocus.ProcessCustomFocusTask(ctx, task.UserID, statsRange, focusID)
+	if err != nil {
+		return err
+	}
+	return r.completeTask(ctx, task, result)
+}
+
+func (r *Runner) processCanteenMenuExtract(ctx context.Context, task *domain.AnalysisTask) error {
+	if r.canteenCapture == nil {
+		return fmt.Errorf("canteen menu extract worker dependencies are not initialized")
+	}
+	result, err := r.canteenCapture.ProcessCaptureExtractionTask(ctx, task.ID, task.Payload)
 	if err != nil {
 		return err
 	}

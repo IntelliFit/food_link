@@ -500,6 +500,22 @@ func New(cfg *config.Config) (*App, error) {
 		campuscatalogservice.NewInternalAnalysisUserResolver(userRepo),
 	)
 	campusCommunityHandler := campuscataloghandler.NewCommunityHandler(campusCatalogSvc)
+	// Window capture: the primary model reads menus, a model from another
+	// provider re-reads them, and only items both agree on are published.
+	var capturePrimary campuscatalogservice.CaptureVisionClient = ofoxAIClient
+	if gemini35Client != nil {
+		capturePrimary = gemini35Client
+	}
+	campusCatalogSvc.ConfigureCapture(campuscatalogservice.CaptureDeps{
+		Repo:        campusCatalogRepo,
+		Extractor:   campuscatalogservice.NewCaptureExtractor(capturePrimary, doubaoClient),
+		Tasks:       analyzeTaskRepo,
+		Queue:       taskQueue,
+		Rules:       captureRewardRules(cfg.CanteenCapture),
+		Membership:  membershipSvc,
+		Publication: contentSecurity,
+	})
+	captureHandler := campuscataloghandler.NewCaptureHandler(campusCatalogSvc)
 	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo, storageClient)
 	publicFoodSvc.ConfigureTaskPublisher(taskQueue)
 	publicFoodSvc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
@@ -575,7 +591,7 @@ func New(cfg *config.Config) (*App, error) {
 		taskQueue:       taskQueue,
 		contentSecurity: contentSecurity,
 	}
-	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campusCatalogRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, statsSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
+	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campusCatalogRepo, campusCatalogSvc, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, statsSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
 		analyticsCtx, cancel := context.WithCancel(context.Background())
 		app.analyticsCancel = cancel
@@ -869,6 +885,16 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/campus-food-collectors/profile", authmw.RequireJWT(jwtSvc), campusCommunityHandler.CollectorProfile)
 	engine.POST("/api/campus-food-collection/batches", authmw.RequireJWT(jwtSvc), contentGuard(3), campusCommunityHandler.CreateCollectorBatch)
 	engine.POST("/api/campus-food-collection/items", authmw.RequireJWT(jwtSvc), contentGuard(3), campusCommunityHandler.CreateSingle)
+	engine.POST("/api/canteen-capture/sessions", authmw.RequireJWT(jwtSvc), captureHandler.CreateSession)
+	engine.GET("/api/canteen-capture/sessions/:session_id", authmw.RequireJWT(jwtSvc), captureHandler.GetSession)
+	engine.POST("/api/canteen-capture/sessions/:session_id/assets", authmw.RequireJWT(jwtSvc), captureHandler.UploadAsset)
+	engine.PATCH("/api/canteen-capture/sessions/:session_id/assets/:asset_id", authmw.RequireJWT(jwtSvc), captureHandler.UpdateAsset)
+	engine.POST("/api/canteen-capture/sessions/:session_id/extract", authmw.RequireJWT(jwtSvc), captureHandler.Extract)
+	engine.POST("/api/canteen-capture/sessions/:session_id/submit", authmw.RequireJWT(jwtSvc), captureHandler.Submit)
+	engine.GET("/api/canteen-capture/windows", authmw.RequireJWT(jwtSvc), captureHandler.Windows)
+	engine.GET("/api/canteen-capture/earnings", authmw.RequireJWT(jwtSvc), captureHandler.Earnings)
+	engine.POST("/api/canteen-capture/earnings/membership", authmw.RequireJWT(jwtSvc), captureHandler.RedeemMembership)
+	engine.POST("/api/canteen-capture/earnings/withdrawals", authmw.RequireJWT(jwtSvc), captureHandler.Withdraw)
 	engine.PUT("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), contentGuard(3), publicFoodHandler.Update)
 	engine.DELETE("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Delete)
 	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)
@@ -1179,6 +1205,7 @@ func (a *App) startEmbeddedWorker(
 	precisionRepo *analyzerepo.PrecisionRepo,
 	publicFoodRepo *publicfoodrepo.PublicFoodRepo,
 	campusCatalogRepo *campuscatalogrepo.CatalogRepo,
+	campusCatalogSvc *campuscatalogservice.CatalogService,
 	analyzeSvc *analyzeservice.AnalyzeService,
 	ocrSvc *userservice.OCRService,
 	healthDocRepo *userrepo.HealthDocumentRepo,
@@ -1227,6 +1254,7 @@ func (a *App) startEmbeddedWorker(
 	runner.ConfigureAutoRecorder(foodRecordSvc)
 	runner.ConfigureContentSecurity(a.contentSecurity)
 	runner.ConfigureCustomFocusProcessor(statsSvc)
+	runner.ConfigureCanteenCaptureProcessor(campusCatalogSvc)
 
 	workerCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
+	"food_link/backend/internal/membership/domain"
 	"food_link/backend/pkg/logger"
 )
 
@@ -26,4 +28,25 @@ func (s *MembershipService) paidExpiryWithAppliedGrants(ctx context.Context, use
 		return *grantExpiry, nil
 	}
 	return paidExpiry, nil
+}
+
+// GrantCaptureMembership extends membership bought with canteen capture
+// earnings. The source key makes a retried redemption a no-op.
+func (s *MembershipService) GrantCaptureMembership(ctx context.Context, userID, sourceKey, planCode string, days int, meta map[string]any) error {
+	plan, err := s.repo.GetPlanByCode(ctx, planCode)
+	if err != nil {
+		return err
+	}
+	if plan == nil {
+		return fmt.Errorf("membership plan %s not found", planCode)
+	}
+	dailyCredits := plan.DailyCredits
+	if dailyCredits <= 0 {
+		dailyCredits = trialDailyCredits
+	}
+	_, _, _, err = s.repo.GrantMembership(ctx, domain.MembershipGrantInput{
+		UserID: userID, SourceType: "canteen_capture_redeem", SourceKey: sourceKey,
+		PlanCode: planCode, DailyCredits: dailyCredits, GrantDays: days, Meta: meta,
+	})
+	return err
 }

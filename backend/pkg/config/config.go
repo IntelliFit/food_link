@@ -44,6 +44,7 @@ type Config struct {
 	TaskQueue      TaskQueueConfig      `mapstructure:"task_queue"`
 	AIUsagePricing AIUsagePricingConfig `mapstructure:"ai_usage_pricing"`
 	Apollo         ApolloConfig         `mapstructure:"apollo"`
+	CanteenCapture CanteenCaptureConfig `mapstructure:"canteen_capture"`
 }
 
 type PushConfig struct {
@@ -264,6 +265,26 @@ type WechatXPayConfig struct {
 	AppKey       string `mapstructure:"app_key"`
 	Sandbox      bool   `mapstructure:"sandbox"`
 	MessageToken string `mapstructure:"message_token"`
+}
+
+// CanteenCaptureConfig sets window capture rewards in fen. Zero amounts mean
+// the amounts are not announced yet; rewards are then recorded as pending and
+// priced once the amounts are set.
+type CanteenCaptureConfig struct {
+	WindowRewardCents   int64                            `mapstructure:"window_reward_cents"`
+	PhotoHalfBonusCents int64                            `mapstructure:"photo_half_bonus_cents"`
+	PhotoFullBonusCents int64                            `mapstructure:"photo_full_bonus_cents"`
+	WithdrawMinCents    int64                            `mapstructure:"withdraw_min_cents"`
+	DisableAutoPublish  bool                             `mapstructure:"disable_auto_publish"`
+	MembershipOptions   []CanteenCaptureMembershipOption `mapstructure:"membership_options"`
+}
+
+type CanteenCaptureMembershipOption struct {
+	Code      string `mapstructure:"code"`
+	Title     string `mapstructure:"title"`
+	PlanCode  string `mapstructure:"plan_code"`
+	Days      int    `mapstructure:"days"`
+	CostCents int64  `mapstructure:"cost_cents"`
 }
 
 type WorkerConfig struct {

@@ -119,6 +119,15 @@ func NewOfoxAIClient(apiKey, model string, baseURLs ...string) *OfoxAIClient {
 	}
 }
 
+// SetImageHTTPClient replaces the client used to download images for Gemini
+// native requests. Offline evaluation tools use it to trust a local HTTPS
+// photo server; the server never calls it.
+func (c *OfoxAIClient) SetImageHTTPClient(client *http.Client) {
+	if client != nil {
+		c.imageClient = client
+	}
+}
+
 func (c *OfoxAIClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
 	imageURLs := []string{}
 	if strings.TrimSpace(imageURL) != "" {

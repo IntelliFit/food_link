@@ -68,6 +68,7 @@ type CatalogService struct {
 	storage       *storage.Client
 	analyzeTasks  CatalogAnalyzeTaskSubmitter
 	analysisUsers CatalogAnalysisUserResolver
+	capture       *captureDeps
 }
 
 func (s *CatalogService) ConfigureAnalysis(submitter CatalogAnalyzeTaskSubmitter, users CatalogAnalysisUserResolver) {
@@ -126,6 +127,9 @@ type CreateCatalogItemInput struct {
 	SourceFilename     string         `json:"source_filename"`
 	RawText            string         `json:"raw_text"`
 	Notes              string         `json:"notes"`
+	// EvidenceImagePaths is server-set (never bound from client JSON): photos
+	// that support the entry without being its dish photo, such as a menu.
+	EvidenceImagePaths []string `json:"-"`
 }
 
 // UpdateCatalogItemInput deliberately matches the editable fields used during
@@ -214,6 +218,12 @@ type batchActor struct {
 	UserID        string
 	SourceChannel string
 	RequireScope  bool
+	// AllowNoImage lets window capture publish menu lines that have no dish
+	// photo; their menu photos are kept as revision evidence instead.
+	AllowNoImage bool
+	// SkipNutrition lists entry types that must not start a dish nutrition
+	// task (a combo rule is not one dish).
+	SkipNutrition map[string]bool
 }
 
 type communityBatchRepository interface {
@@ -380,7 +390,7 @@ func (s *CatalogService) createBatch(ctx context.Context, actor batchActor, inpu
 			return nil, itemErr
 		}
 		if actor.UserID != "" {
-			if strings.TrimSpace(item.Name) == "" || len(item.ImagePaths) == 0 {
+			if strings.TrimSpace(item.Name) == "" || (len(item.ImagePaths) == 0 && !actor.AllowNoImage) {
 				return nil, badRequest(fmt.Sprintf("第 %d 条必须包含菜品名称和至少一张清晰照片", index+1))
 			}
 			item.Status = "published"
@@ -400,7 +410,7 @@ func (s *CatalogService) createBatch(ctx context.Context, actor batchActor, inpu
 				ID: uuid.NewString(), CatalogItemID: items[index].ID, BaseVersion: 0, ResultVersion: 1,
 				ActorType: "user", ActorUserID: stringPointer(actor.UserID), ActionType: "create",
 				BeforeSnapshot: map[string]any{}, ProposedPatch: catalogEditableSnapshot(items[index]), AfterSnapshot: catalogEditableSnapshot(items[index]),
-				ChangedFields: changedSnapshotFields(map[string]any{}, catalogEditableSnapshot(items[index])), EvidenceImagePaths: append([]string{}, items[index].ImagePaths...),
+				ChangedFields: changedSnapshotFields(map[string]any{}, catalogEditableSnapshot(items[index])), EvidenceImagePaths: revisionEvidence(items[index].ImagePaths, input.Entries[index].EvidenceImagePaths),
 				CreatedAt: &now,
 			})
 		}
@@ -418,6 +428,9 @@ func (s *CatalogService) createBatch(ctx context.Context, actor batchActor, inpu
 	if actor.UserID != "" {
 		communityRepo := s.repo.(communityBatchRepository)
 		for index := range items {
+			if actor.SkipNutrition[items[index].EntryType] {
+				continue
+			}
 			s.queueCommunityNutritionRefresh(ctx, communityRepo, actor.UserID, &items[index])
 		}
 	}
