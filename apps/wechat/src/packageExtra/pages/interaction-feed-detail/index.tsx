@@ -262,6 +262,7 @@ export function InteractionFeedDetailPage() {
   const [microsExpanded, setMicrosExpanded] = useState(false)
   const [manualFoodsExpanded, setManualFoodsExpanded] = useState(false)
   const [deletingCommentIds, setDeletingCommentIds] = useState<Set<string>>(() => new Set())
+  const [isGuest, setIsGuest] = useState(() => !getAccessToken())
   const likePendingRef = useRef(false)
   const INITIAL_VISIBLE_MANUAL_FOODS = 3
   const routeInitializationRef = useRef('')
@@ -297,18 +298,6 @@ export function InteractionFeedDetailPage() {
       setFeedItem(null)
       setDetailCommitPending(false)
       setLoading(false)
-      return
-    }
-    if (!getAccessToken()) {
-      setFeedItem(null)
-      setDetailCommitPending(false)
-      setLoading(false)
-      const query = [
-        `targetType=${encodeURIComponent(nextTargetType)}`,
-        `targetId=${encodeURIComponent(nextRecordId)}`,
-        `recordId=${encodeURIComponent(nextRecordId)}`,
-      ].join('&')
-      redirectToLogin(`${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}`)
       return
     }
     setDetailCommitPending(false)
@@ -405,6 +394,14 @@ export function InteractionFeedDetailPage() {
   })
 
   Taro.useDidShow(() => {
+    const guestNow = !getAccessToken()
+    if (isGuest && !guestNow && routeInitializationRef.current) {
+      const [routeTargetType, routeRecordId] = routeInitializationRef.current.split(':')
+      setIsGuest(false)
+      if (routeRecordId) void loadDetail(routeRecordId, routeTargetType as CommunityFeedTargetType)
+      return
+    }
+    if (guestNow !== isGuest) setIsGuest(guestNow)
     if (routeInitializationRef.current) return
     const pages = Taro.getCurrentPages()
     const current = pages[pages.length - 1]
@@ -414,8 +411,16 @@ export function InteractionFeedDetailPage() {
     }
   })
 
+  /** 未登录可完整浏览详情；点赞、评论、举报等互动由用户主动点击时再去登录。 */
+  const requireLoginForAction = useCallback((): boolean => {
+    if (getAccessToken()) return true
+    redirectToLogin()
+    return false
+  }, [])
+
   const handleLike = useCallback(async () => {
     if (!feedItem || likePendingRef.current) return
+    if (!requireLoginForAction()) return
     likePendingRef.current = true
     const prev = feedItem
     const previousLikeCount = Number(feedItem.like_count)
@@ -440,12 +445,13 @@ export function InteractionFeedDetailPage() {
     } finally {
       likePendingRef.current = false
     }
-  }, [feedItem])
+  }, [feedItem, requireLoginForAction])
 
   const openComposer = useCallback((reply?: FeedCommentItem | null) => {
+    if (!requireLoginForAction()) return
     setReplyTargetComment(reply || null)
     setComposerVisible(true)
-  }, [])
+  }, [requireLoginForAction])
 
   const closeComposer = useCallback(() => {
     setComposerVisible(false)
@@ -524,6 +530,10 @@ export function InteractionFeedDetailPage() {
 
   const handleViewDetail = useCallback((id: string) => {
     if (!id) return
+    if (isGuest) {
+      Taro.showToast({ title: '登录后可查看完整记录', icon: 'none' })
+      return
+    }
     if (targetType === 'supplement_intake') return
     if (targetType === 'exercise_log') {
       const dateText = String(feedItem?.record?.record_time || feedItem?.record?.created_at || '').slice(0, 10)
@@ -535,15 +545,19 @@ export function InteractionFeedDetailPage() {
       return
     }
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(id)}` })
-  }, [targetType, feedItem])
+  }, [targetType, feedItem, isGuest])
 
   const handleManualFoodCardClick = useCallback((row: ManualFoodSourceItem & { displayName: string; sourceLabel: string; imageUrl: string }) => {
     const manualSourceId = (row as any).manual_source_id as string | undefined
     const manualSource = String(row.manual_source || '')
     if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
+      if (isGuest) {
+        Taro.showToast({ title: '登录后可查看食物详情', icon: 'none' })
+        return
+      }
       Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
     }
-  }, [])
+  }, [isGuest])
 
   const handleDeleteFeedItem = useCallback(async () => {
     if (!feedItem) return
@@ -595,7 +609,7 @@ export function InteractionFeedDetailPage() {
   const handleFeedActionSelect = useCallback((id: string) => {
     if (!feedItem) return
     if (!feedItem.is_mine) {
-      if (id === 'report') setReportVisible(true)
+      if (id === 'report' && requireLoginForAction()) setReportVisible(true)
       return
     }
     const ttype = getFeedTargetType(feedItem)
@@ -628,7 +642,7 @@ export function InteractionFeedDetailPage() {
         }
       })
     }
-  }, [feedItem, handleDeleteFeedItem])
+  }, [feedItem, handleDeleteFeedItem, requireLoginForAction])
 
   const toggleFeedTextExpanded = useCallback((key: string): void => {
     setFeedTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -885,6 +899,15 @@ export function InteractionFeedDetailPage() {
                       </View>
                     </View>
 
+                    {isGuest ? (
+                      <View className='feed-guest-login-tip'>
+                        <Text className='feed-guest-login-tip-text'>登录后可点赞和评论</Text>
+                        <View className='feed-guest-login-tip-btn' onClick={() => redirectToLogin()}>
+                          <Text className='feed-guest-login-tip-btn-text'>去登录</Text>
+                        </View>
+                      </View>
+                    ) : null}
+
                     {(feedItem.comments?.length || 0) > 0 ? (
                       <View className='feed-comments'>
                         {(feedItem.comments || []).map((c) => (
@@ -938,7 +961,7 @@ export function InteractionFeedDetailPage() {
                       </View>
                     ) : (
                       <View className='feed-empty'>
-                        <Text className='feed-empty-text'>还没有评论，来抢沙发</Text>
+                        <Text className='feed-empty-text'>{isGuest ? '还没有评论' : '还没有评论，来抢沙发'}</Text>
                       </View>
                     )}
                   </View>
@@ -947,8 +970,8 @@ export function InteractionFeedDetailPage() {
                   <FeedReportMask
                     visible
                     onReport={() => {
-                      setReportVisible(true)
                       setReportMaskVisible(false)
+                      if (requireLoginForAction()) setReportVisible(true)
                     }}
                     onCancel={() => setReportMaskVisible(false)}
                   />

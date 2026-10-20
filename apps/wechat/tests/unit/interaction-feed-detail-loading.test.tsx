@@ -6,8 +6,11 @@ import {
   communityGetComments,
   communityGetFeedContext,
   communityDeleteComment,
+  communityLike,
+  getAccessToken,
   type CommunityFeedItem,
 } from '../../src/utils/api'
+import { redirectToLogin } from '../../src/utils/withAuth'
 
 jest.mock('../../src/utils/withAuth', () => ({
   withAuth: (Component: unknown) => Component,
@@ -97,6 +100,7 @@ describe('InteractionFeedDetailPage loading', () => {
     ;(Taro.getStorageSync as jest.Mock).mockImplementation((key: string) => key === 'user_id' ? 'user-2' : '')
     ;(Taro.showModal as jest.Mock).mockResolvedValue({ confirm: true })
     ;(Taro as any).previewImage = jest.fn()
+    ;(getAccessToken as jest.Mock).mockReturnValue('test-token')
   })
 
   afterEach(() => {
@@ -183,5 +187,44 @@ describe('InteractionFeedDetailPage loading', () => {
 
     expect(communityDeleteComment).toHaveBeenCalledWith('record-1', 'comment-1', 'food_record')
     expect(view.queryByText('看着真香')).not.toBeInTheDocument()
+  })
+
+  describe('without login', () => {
+    const renderGuestDetail = async () => {
+      ;(getAccessToken as jest.Mock).mockReturnValue('')
+      ;(Taro.getStorageSync as jest.Mock).mockReturnValue('')
+      const view = render(<InteractionFeedDetailPage />)
+      await act(async () => {
+        loadPage?.({ targetType: 'food_record', targetId: 'record-1', recordId: 'record-1' })
+        await Promise.resolve()
+      })
+      await act(async () => {
+        jest.advanceTimersByTime(80)
+        await Promise.resolve()
+      })
+      return view
+    }
+
+    it('shows the full post and comments without asking to log in', async () => {
+      const view = await renderGuestDetail()
+
+      expect(communityGetFeedContext).toHaveBeenCalledWith('record-1', 5, 'food_record')
+      expect(view.getByText('烤脆骨肉筋串')).toBeInTheDocument()
+      expect(view.getByText('看着真香')).toBeInTheDocument()
+      expect(view.getByText('登录后可点赞和评论')).toBeInTheDocument()
+      expect(redirectToLogin).not.toHaveBeenCalled()
+    })
+
+    it('asks to log in only when the user taps like or comment', async () => {
+      const view = await renderGuestDetail()
+
+      fireEvent.click(view.container.querySelector('.icon-good')!.parentElement!)
+      expect(communityLike).not.toHaveBeenCalled()
+      expect(redirectToLogin).toHaveBeenCalledTimes(1)
+
+      fireEvent.click(view.getByText('评论 1'))
+      expect(redirectToLogin).toHaveBeenCalledTimes(2)
+      expect(view.container.querySelector('.comment-bottom-bar.visible')).not.toBeInTheDocument()
+    })
   })
 })

@@ -7891,9 +7891,16 @@ export async function communityHideFeed(recordId: string, targetType: CommunityF
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '操作失败')
 }
 
+/** 动态详情与评论允许未登录浏览：有登录态时照常鉴权，否则匿名读取公开内容。 */
+function communityReadRequest(url: string): Promise<any> {
+  return getAccessToken()
+    ? authenticatedRequest(url, { method: 'GET' })
+    : publicRequest(url, { method: 'GET' })
+}
+
 /** 某条动态的评论列表 */
 export async function communityGetComments(recordId: string, targetType: CommunityFeedTargetType = 'food_record'): Promise<{ list: FeedCommentItem[] }> {
-  const response = await authenticatedRequest(`${communityFeedTargetPath(recordId, targetType)}/comments`, { method: 'GET' })
+  const response = await communityReadRequest(`${communityFeedTargetPath(recordId, targetType)}/comments`)
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取评论失败')
   return response.data as { list: FeedCommentItem[] }
 }
@@ -7904,9 +7911,8 @@ export async function communityGetFeedContext(
   commentsLimit: number = 5,
   targetType: CommunityFeedTargetType = 'food_record'
 ): Promise<{ item: CommunityFeedItem }> {
-  const response = await authenticatedRequest(
-    `${communityFeedTargetPath(recordId, targetType)}/context?comments_limit=${Math.max(0, commentsLimit)}`,
-    { method: 'GET' }
+  const response = await communityReadRequest(
+    `${communityFeedTargetPath(recordId, targetType)}/context?comments_limit=${Math.max(0, commentsLimit)}`
   )
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态上下文失败')
   return response.data as { item: CommunityFeedItem }

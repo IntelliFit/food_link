@@ -710,6 +710,35 @@ func TestFeedContextAllowed(t *testing.T) {
 	assert.Equal(t, "owner", result.Reason)
 }
 
+func TestFeedTargetContextGuestCanViewPublicPost(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		getFeedRecord: &repo.FeedRecord{ID: "r1", UserID: "u2"},
+		listComments:  []domain.FeedComment{{ID: "c1", UserID: "u3", RecordID: boolStringPtr("r1"), Content: "nice"}},
+		profiles:      map[string]*repo.UserProfile{"u2": {ID: "u2", Nickname: "Bob"}},
+	}
+	mockUser := &mockUserRepo{findByIDUser: &authrepo.User{ID: "u2", PublicRecords: boolPtr(true)}}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, mockUser)
+	result, err := svc.FeedTargetContext(context.Background(), "", "food_record", "r1")
+	assert.NoError(t, err)
+	assert.True(t, result.Allowed)
+	assert.Equal(t, "public", result.Reason)
+	assert.False(t, result.IsMine)
+	assert.False(t, result.Liked)
+}
+
+func TestFeedTargetContextGuestCannotViewFriendsOnlyPost(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		getFeedRecord: &repo.FeedRecord{ID: "r1", UserID: "u2"},
+		isFriend:      true,
+	}
+	mockUser := &mockUserRepo{findByIDUser: &authrepo.User{ID: "u2", PublicRecords: boolPtr(false)}}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, mockUser)
+	result, err := svc.FeedTargetContext(context.Background(), "", "food_record", "r1")
+	assert.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, "forbidden", result.Reason)
+}
+
 func TestFeedContextHiddenFromFeedNotFound(t *testing.T) {
 	mockFeed := &mockFeedRepo{
 		getFeedRecord: &repo.FeedRecord{ID: "r1", UserID: "u1", HiddenFromFeed: true},
