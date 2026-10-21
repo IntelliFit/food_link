@@ -44,6 +44,8 @@ const extraSubpackagePages = [
   'pages/campus-canteen/index',
   'pages/campus-food-share/index',
   'pages/campus-food-collector/index',
+  'pages/canteen-capture/index',
+  'pages/canteen-earnings/index',
   'pages/feedback/index',
   'pages/reward-center/index',
   'pages/food-contribution/index',

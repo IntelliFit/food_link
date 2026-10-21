@@ -3133,6 +3133,20 @@ export async function uploadAnalyzeImageFile(
   localPath: string,
   uploadPath = '/api/upload-analyze-image-file'
 ): Promise<{ imageUrl: string }> {
+  const payload = await uploadAuthenticatedFile(localPath, uploadPath)
+  const imageUrl = String(payload?.imageUrl || payload?.image_url || payload?.url || '').trim()
+  if (!imageUrl) {
+    throw new Error('上传图片失败：服务端未返回图片地址')
+  }
+  return { imageUrl }
+}
+
+/** 登录态文件上传，可附带表单字段；返回服务端 data 载荷。 */
+export async function uploadAuthenticatedFile(
+  localPath: string,
+  uploadPath: string,
+  formData: Record<string, string> = {}
+): Promise<Record<string, any> | null> {
   // 开发者工具 webview 渲染会返回 http://tmp 或 http://usr；它们虽然长得像
   // HTTP URL，实际是 uploadFile 可读取的本地虚拟路径，必须保留原样。
   const filePath = String(localPath || '').trim()
@@ -3150,6 +3164,7 @@ export async function uploadAnalyzeImageFile(
         url: uploadUrl,
         filePath,
         name: 'file',
+        formData,
         header: withNgrokBypassHeaders({
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         }),
@@ -3173,12 +3188,7 @@ export async function uploadAnalyzeImageFile(
       response?.header as Record<string, any> | undefined
     )
   }
-
-  const imageUrl = String(payload?.imageUrl || payload?.image_url || payload?.url || '').trim()
-  if (!imageUrl) {
-    throw new Error('上传图片失败：服务端未返回图片地址')
-  }
-  return { imageUrl }
+  return payload
 }
 
 /**

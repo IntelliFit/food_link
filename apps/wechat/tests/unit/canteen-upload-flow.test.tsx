@@ -54,7 +54,7 @@ it('exposes upload in the default all-canteen view and never opens the generic f
   render(<CanteenPage />)
   fireEvent.click(screen.getByText('上传菜品'))
   expect(Taro.navigateTo).toHaveBeenCalledWith({ url: '/packageExtra/pages/campus-food-share/index?scope=all' })
-  expect(screen.getByText('批量上传')).toBeInTheDocument()
+  expect(screen.getByText('采集领奖励')).toBeInTheDocument()
   expect(screen.queryByText('地点纠错')).not.toBeInTheDocument()
 })
 

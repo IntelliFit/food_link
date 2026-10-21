@@ -457,13 +457,20 @@ function CampusCanteenPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/campus-food-share/index')}?${query}` });
   };
 
+  // Window capture replaces the old per-photo batch form: one window per
+  // session, menus are read automatically and collectors earn a reward.
   const goCollector = () => {
     const context: Record<string, string> = { venue_type: communityScope ? 'community' : 'university' };
     if (communityScope) Object.assign(context, {
       organization_name: selectedOrganization?.name || '', canteen_name: selectedCommunityCanteen?.canteen_name || '',
     });
+    if (campusScope) Object.assign(context, {
+      school_id: selectedSchool?.id || '', school_name: selectedSchool?.name || '',
+      campus_id: selectedCampus?.id || '', campus_name: selectedCampus?.name || '',
+      canteen_id: selectedCanteen?.id || '', canteen_name: selectedCanteen?.name || '',
+    });
     const query = Object.entries(context).filter(([, value]) => value).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&');
-    Taro.navigateTo({ url: `${extraPkgUrl('/pages/campus-food-collector/index')}?${query}` });
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/canteen-capture/index')}?${query}` });
   };
 
   const openCanteenPicker = () => {
@@ -677,7 +684,7 @@ function CampusCanteenPage() {
         <View className='campus-browse-header'>
           <View className='canteen-upload-actions'>
             <Button id='canteen-upload' className='canteen-upload-primary' onClick={goUpload}><Plus /><Text>上传菜品</Text></Button>
-            <Button id='canteen-batch-upload' className='canteen-upload-secondary' onClick={goCollector}>批量上传</Button>
+            <Button id='canteen-batch-upload' className='canteen-upload-secondary' onClick={goCollector}>采集领奖励</Button>
           </View>
           <View className='canteen-scope-tabs'>
             {([["all", "全部食堂"], ["campus", "校园"], ["community", "社区·园区"]] as const).map(([value, label]) => (

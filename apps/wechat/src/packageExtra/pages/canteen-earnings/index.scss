@@ -1,0 +1,34 @@
+.earn-page { min-height: 100vh; background: #f7faf8; color: #1f3029; }
+.earn-scroll { height: 100vh; padding: 24rpx; box-sizing: border-box; }
+.earn-card { margin-bottom: 20rpx; padding: 28rpx; border: 2rpx solid #e5ece8; border-radius: 24rpx; background: #fff; }
+.earn-balance { border-color: #f3dfc4; background: #fffaf2; }
+.earn-label { display: block; color: #9a4b12; font-size: 25rpx; }
+.earn-amount { display: block; margin-top: 8rpx; color: #9a4b12; font-size: 56rpx; font-weight: 750; }
+.earn-meta { display: block; margin-top: 10rpx; color: #74837b; font-size: 23rpx; line-height: 36rpx; }
+.earn-title { display: block; margin-bottom: 8rpx; font-size: 30rpx; font-weight: 700; }
+.earn-line { display: block; margin-top: 10rpx; color: #53635b; font-size: 24rpx; line-height: 38rpx; }
+.earn-row { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; padding: 20rpx 0; border-top: 2rpx solid #edf1ef; }
+.earn-row-main { flex: 1; min-width: 0; }
+.earn-row-title { display: block; font-size: 27rpx; }
+.earn-row-sub { display: block; margin-top: 4rpx; color: #74837b; font-size: 22rpx; }
+.earn-row-amount { font-size: 27rpx; font-weight: 650; }
+.earn-input { flex: 1; height: 68rpx; padding: 0 18rpx; border-radius: 12rpx; background: #f5f8f6; font-size: 26rpx; }
+.earn-action { display: flex; align-items: center; justify-content: center; min-width: 140rpx; min-height: 64rpx; padding: 0 18rpx; border-radius: 14rpx; background: #14815d; color: #fff; font-size: 25rpx; }
+.earn-action.disabled { opacity: .45; pointer-events: none; }
+.earn-primary { display: flex; align-items: center; justify-content: center; height: 80rpx; margin-top: 22rpx; border-radius: 18rpx; background: #14815d; color: #fff; font-size: 27rpx; font-weight: 650; }
+.earn-loading { display: flex; align-items: center; justify-content: center; min-height: 400rpx; }
+.earn-spinner { width: 30rpx; height: 30rpx; border: 4rpx solid rgb(20 129 93 / 20%); border-top-color: #14815d; border-radius: 50%; animation: earn-spin .8s linear infinite; }
+.earn-spinner--light { border-color: rgb(255 255 255 / 30%); border-top-color: #fff; }
+.earn-safe-area { height: calc(40rpx + env(safe-area-inset-bottom)); }
+@keyframes earn-spin { to { transform: rotate(360deg); } }
+
+.earn-page--dark {
+  background: #0d1512;
+  color: #edf7f2;
+  .earn-card { border-color: rgb(255 255 255 / 8%); background: #151f1b; }
+  .earn-balance { border-color: rgb(245 158 11 / 30%); background: #2a2116; }
+  .earn-label, .earn-amount { color: #fbbf72; }
+  .earn-meta, .earn-row-sub, .earn-line { color: rgb(222 239 231 / 60%); }
+  .earn-row { border-color: rgb(255 255 255 / 8%); }
+  .earn-input { background: rgb(255 255 255 / 6%); color: #edf7f2; }
+}
