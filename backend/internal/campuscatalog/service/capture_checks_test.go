@@ -225,3 +225,47 @@ func TestReconcileCapturePassesRejectsInvalidValues(t *testing.T) {
 	assertCaptureStatus(t, findCaptureItem(t, items, "12345"), domain.CaptureItemException, domain.ReasonNameInvalid)
 	assertCaptureStatus(t, findCaptureItem(t, items, "豪华大餐"), domain.CaptureItemException, domain.ReasonPriceOutOfRange)
 }
+
+// Mirrors IMG_20260713_182720_1: when the primary reads a self-select price
+// list as ingredients and the verifier calls them dishes, the safe reading
+// (ingredient, never a public dish) wins without a review.
+func TestReconcileCapturePassesPrimaryIngredientWins(t *testing.T) {
+	lines := [][]string{{"土豆 0.8元", "西兰花 1.0元"}}
+	primary := capturePassWith(lines, capturePassItem{ImageIndex: 0, Name: "土豆", Prices: []float64{0.8}, Kind: "ingredient"})
+	verifier := capturePassWith(lines, dishItem(0, "土豆", 0.8))
+	items := reconcileCapturePasses([]string{"a"}, primary, verifier)
+	assertCaptureStatus(t, items[0], domain.CaptureItemPassed)
+	if items[0].Kind != domain.CaptureKindIngredient {
+		t.Fatalf("kind = %s, want ingredient", items[0].Kind)
+	}
+}
+
+// Mirrors IMG_20260713_182720_1 when both models call the add-on prices
+// dishes: the board rule stops them, the self-select window type keeps them.
+func TestSelfSelectBoardIsNeverPublishedAsDishes(t *testing.T) {
+	lines := [][]string{{"土豆 0.8元", "大白菜 0.8元", "生菜 0.8元", "青笋 1.0元", "西兰花 1.0元", "腐竹 1.0元"}}
+	names := map[string]float64{"土豆": 0.8, "大白菜": 0.8, "生菜": 0.8, "青笋": 1, "西兰花": 1, "腐竹": 1}
+	passItems := []capturePassItem{}
+	for name, price := range names {
+		passItems = append(passItems, dishItem(0, name, price))
+	}
+	items := reconcileCapturePasses([]string{"a"}, capturePassWith(lines, passItems...), capturePassWith(lines, passItems...))
+	for _, item := range items {
+		assertCaptureStatus(t, item, domain.CaptureItemException, domain.ReasonSelfSelectSuspect)
+	}
+	for _, item := range applyCaptureServiceMode(items, "self_select") {
+		assertCaptureStatus(t, item, domain.CaptureItemPassed)
+		if item.Kind != domain.CaptureKindIngredient {
+			t.Fatalf("%s kind = %s, want ingredient", item.Name, item.Kind)
+		}
+	}
+}
+
+func TestCheapBreakfastLinesAreNotTreatedAsBoardBelowThreshold(t *testing.T) {
+	lines := [][]string{{"肉包 2元", "菜包 1.5元", "豆浆 1.5元", "油条 2元", "鸡蛋 1元"}}
+	passItems := []capturePassItem{dishItem(0, "肉包", 2), dishItem(0, "菜包", 1.5), dishItem(0, "豆浆", 1.5), dishItem(0, "油条", 2), dishItem(0, "鸡蛋", 1)}
+	items := reconcileCapturePasses([]string{"a"}, capturePassWith(lines, passItems...), capturePassWith(lines, passItems...))
+	for _, item := range items {
+		assertCaptureStatus(t, item, domain.CaptureItemPassed)
+	}
+}

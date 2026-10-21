@@ -43,6 +43,10 @@ func (f *fakeCaptureTasks) CreateTask(_ context.Context, task *analyzedomain.Ana
 
 func (f *fakeCaptureTasks) FailTask(context.Context, string, string) (bool, error) { return true, nil }
 
+func (f *fakeCaptureTasks) CompleteTask(context.Context, string, map[string]any) (bool, error) {
+	return true, nil
+}
+
 type fakeCaptureQueue struct{ published []taskqueue.TaskMessage }
 
 func (f *fakeCaptureQueue) PublishTask(_ context.Context, msg taskqueue.TaskMessage) error {
@@ -331,4 +335,24 @@ func TestCaptureExceptionsResolvedByLocalAgent(t *testing.T) {
 	var count int64
 	require.NoError(t, h.db.Model(&domain.CatalogItem{}).Where("source_channel = ? AND name = ?", captureSourceChannel, "蟹黄包").Count(&count).Error)
 	require.Equal(t, int64(1), count)
+}
+
+func TestRunCaptureExtractionNowProcessesTheSessionsTask(t *testing.T) {
+	h := newCaptureHarness(t)
+	ctx := context.Background()
+	userID := uuid.NewString()
+	session := h.openSession(t, userID, "上海风味")
+	h.upload(t, userID, session.Session.ID, "menu", "", "", "menu-a")
+	_, err := h.svc.StartCaptureExtraction(ctx, userID, session.Session.ID)
+	require.NoError(t, err)
+
+	result, err := h.svc.RunCaptureExtractionNow(ctx, session.Session.ID)
+	require.NoError(t, err)
+	require.Equal(t, 3, result["passed"])
+	view, err := h.svc.GetCaptureSession(ctx, userID, session.Session.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.CaptureStatusExtracted, view.Session.Status)
+
+	_, err = h.svc.RunCaptureExtractionNow(ctx, session.Session.ID)
+	require.ErrorContains(t, err, "不在识别中")
 }

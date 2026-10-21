@@ -140,8 +140,19 @@ func modelOf(pass *capturePass) string {
 	return pass.Model
 }
 
+// captureCallAttempts retries a slow or flaky model call once; dense menus
+// can approach the client's per-request timeout.
+const captureCallAttempts = 2
+
 func runCapturePass(ctx context.Context, client CaptureVisionClient, prompt string, imageURLs []string) (*capturePass, error) {
-	raw, meta, err := client.AnalyzeWithImagesAndTemperatureMeta(ctx, prompt, imageURLs, 0)
+	var raw, meta map[string]any
+	var err error
+	for attempt := 0; attempt < captureCallAttempts; attempt++ {
+		raw, meta, err = client.AnalyzeWithImagesAndTemperatureMeta(ctx, prompt, imageURLs, 0)
+		if err == nil || ctx.Err() != nil {
+			break
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -189,10 +200,10 @@ func (p *capturePass) image(index int) (capturePassImage, bool) {
 func buildCapturePrimaryPrompt(imageCount int) string {
 	return fmt.Sprintf(`你是食堂菜单录入员。输入是同一个食堂窗口的 %d 张照片，按输入顺序编号 0 到 %d。只记录照片里真实写出的文字，不要推测、不要补全。
 返回严格 JSON，不要 Markdown，不要解释：
-{"images":[{"index":0,"is_menu":true,"readable":true,"lines":["逐行原文"],"note":""}],
+{"images":[{"index":0,"is_menu":true,"readable":true,"note":""}],
  "items":[{"image_index":0,"name":"菜名原文","price_text":"价格原文","prices":[11],"unit":"","kind":"dish","option_groups":[{"title":"","choices":[""]}]}]}
 规则：
-1. images 每张照片一条。lines 按从上到下、从左到右逐行抄写照片中所有可读文字，保留原文。
+1. images 每张照片一条，只说明是否菜单、是否看得清。
 2. 每个有名称的售卖项输出一条 item。name 只写图上的菜名原文（括号内容也照抄），不要加规格、分类或口味。
 3. prices 只写图上紧挨这一项的数字；有多个价格档就全部列出；没写价格就是空数组。套餐价不能写给套餐里的可选菜。
 4. unit 只在图上明确写了计价单位（如 份、两、个、斤、100g）时填写；只写了“元”就留空。
@@ -331,4 +342,9 @@ func boolOr(value *bool, fallback bool) bool {
 		return fallback
 	}
 	return *value
+}
+
+// ApplyCaptureWindowType exposes the window-type rule to offline evaluation.
+func ApplyCaptureWindowType(items []domain.CaptureItem, serviceMode string) []domain.CaptureItem {
+	return applyCaptureServiceMode(items, serviceMode)
 }

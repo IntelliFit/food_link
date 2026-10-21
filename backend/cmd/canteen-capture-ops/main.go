@@ -36,6 +36,9 @@ Commands
   withdrawals       [-status requested|paid|cancelled]
   review-withdrawal -id LEDGER_ID -decision paid|rejected [-note TEXT] --confirm-db TARGET
   release-rewards   --confirm-db TARGET   (after reward amounts are configured)
+  process-session   -session SESSION_ID --confirm-db TARGET
+      Reads one session's menus in this process when no worker handles the
+      canteen_menu_extract task (local tests, or a backlog after an outage).
 
 How a local agent settles exceptions
   1. list-exceptions into a fresh folder under D:\CodexWork\canteen-capture.
@@ -65,6 +68,7 @@ func main() {
 	ledgerID := flags.String("id", "", "withdrawal ledger id")
 	decision := flags.String("decision", "", "paid or rejected")
 	note := flags.String("note", "", "review note")
+	sessionID := flags.String("session", "", "capture session id for process-session")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		log.Fatal(err)
 	}
@@ -77,7 +81,7 @@ func main() {
 		schema = "public"
 	}
 	target := fmt.Sprintf("%s/%s/%s", cfg.Database.Host, cfg.Database.Name, schema)
-	writes := map[string]bool{"resolve": true, "review-withdrawal": true, "release-rewards": true}
+	writes := map[string]bool{"resolve": true, "review-withdrawal": true, "release-rewards": true, "process-session": true}
 	if writes[command] && strings.TrimSpace(*confirmDB) != target {
 		log.Fatalf("写入保护未通过：--confirm-db 必须为 %q", target)
 	}
@@ -109,6 +113,8 @@ func main() {
 		err = printJSON(svc.ListCaptureWithdrawals(ctx, *status, *limit))
 	case "review-withdrawal":
 		err = svc.ReviewCaptureWithdrawal(ctx, *ledgerID, *decision, *note)
+	case "process-session":
+		err = printJSON(svc.RunCaptureExtractionNow(ctx, *sessionID))
 	case "release-rewards":
 		var count int
 		count, err = svc.ReleaseRatePendingCaptureRewards(ctx, 1000)

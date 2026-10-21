@@ -506,9 +506,15 @@ func New(cfg *config.Config) (*App, error) {
 	if gemini35Client != nil {
 		capturePrimary = gemini35Client
 	}
+	// Qwen reads Chinese menus well and is a different vendor from Gemini,
+	// which keeps the two readings independent.
+	var captureVerifier campuscatalogservice.CaptureVisionClient = doubaoClient
+	if dashscopeClient != nil {
+		captureVerifier = dashscopeClient
+	}
 	campusCatalogSvc.ConfigureCapture(campuscatalogservice.CaptureDeps{
 		Repo:        campusCatalogRepo,
-		Extractor:   campuscatalogservice.NewCaptureExtractor(capturePrimary, doubaoClient),
+		Extractor:   campuscatalogservice.NewCaptureExtractor(capturePrimary, captureVerifier),
 		Tasks:       analyzeTaskRepo,
 		Queue:       taskQueue,
 		Rules:       captureRewardRules(cfg.CanteenCapture),

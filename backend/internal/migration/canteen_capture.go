@@ -12,6 +12,10 @@ import (
 // batches and items; canteen_capture is the window capture flow.
 const campusSourceChannelCheck = `source_channel = ANY (ARRAY['admin_batch'::text,'user_single'::text,'collector_batch'::text,'legacy_public'::text,'import'::text,'canteen_capture'::text])`
 
+// analysisTaskTypeCheck lists every analysis_tasks.task_type the workers
+// accept, plus their _debug variants; canteen_menu_extract reads capture menus.
+const analysisTaskTypeCheck = `task_type = ANY (ARRAY['food'::text,'food_text'::text,'precision_plan'::text,'precision_item_estimate'::text,'precision_aggregate'::text,'health_report'::text,'public_food_library_text'::text,'exercise'::text,'custom_focus'::text,'expiry_recognize'::text,'expiry_notification'::text,'packaged_nutrition_label'::text,'packaged_product_extract'::text,'canteen_menu_extract'::text]) OR task_type ~ '^(food|food_text|precision_plan|precision_item_estimate|precision_aggregate|health_report|public_food_library_text|exercise|custom_focus|expiry_recognize|expiry_notification|packaged_nutrition_label|packaged_product_extract)_debug(_[a-z0-9_]+)?$'`
+
 // MigrateCanteenCapture adds the window capture sessions, their photos and the
 // collector earnings ledger, and allows the canteen_capture source channel on
 // the existing catalog tables. It never rewrites existing rows.
@@ -45,6 +49,14 @@ WHERE entry_type = 'window_reward' AND status IN ('confirmed','rate_pending')`
 	} {
 		if err := db.WithContext(ctx).Exec(check).Error; err != nil {
 			return fmt.Errorf("extend campus source channels: %w", err)
+		}
+	}
+	// The menu reading task is stored in analysis_tasks, whose CHECK lists the
+	// task types the workers accept.
+	if db.Migrator().HasTable("analysis_tasks") {
+		check := dropAndAddCheck("analysis_tasks", "analysis_tasks_task_type_check", analysisTaskTypeCheck)
+		if err := db.WithContext(ctx).Exec(check).Error; err != nil {
+			return fmt.Errorf("allow canteen menu extract tasks: %w", err)
 		}
 	}
 	return nil

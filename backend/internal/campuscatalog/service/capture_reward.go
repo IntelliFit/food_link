@@ -195,16 +195,16 @@ func captureEstimateFromLedger(rules CaptureRewardRules, entry *domain.Collector
 
 // CaptureEarnings is the collector's wallet page.
 type CaptureEarnings struct {
-	Totals            campusrepo.LedgerTotals        `json:"totals"`
-	RatesPublished    bool                           `json:"rates_published"`
-	WindowCents       int64                          `json:"window_cents"`
-	PhotoHalfCents    int64                          `json:"photo_half_cents"`
-	PhotoFullCents    int64                          `json:"photo_full_cents"`
-	WithdrawMinCents  int64                          `json:"withdraw_min_cents"`
-	MembershipOptions []CaptureMembershipOption      `json:"membership_options"`
-	Entries           []domain.CollectorLedgerEntry  `json:"entries"`
-	Sessions          []domain.CaptureSession        `json:"sessions"`
-	SessionTotal      int64                          `json:"session_total"`
+	Totals            campusrepo.LedgerTotals       `json:"totals"`
+	RatesPublished    bool                          `json:"rates_published"`
+	WindowCents       int64                         `json:"window_cents"`
+	PhotoHalfCents    int64                         `json:"photo_half_cents"`
+	PhotoFullCents    int64                         `json:"photo_full_cents"`
+	WithdrawMinCents  int64                         `json:"withdraw_min_cents"`
+	MembershipOptions []CaptureMembershipOption     `json:"membership_options"`
+	Entries           []domain.CollectorLedgerEntry `json:"entries"`
+	Sessions          []domain.CaptureSession       `json:"sessions"`
+	SessionTotal      int64                         `json:"session_total"`
 }
 
 func (s *CatalogService) GetCaptureEarnings(ctx context.Context, userID string) (*CaptureEarnings, error) {

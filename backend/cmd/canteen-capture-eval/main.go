@@ -29,6 +29,8 @@ import (
 	"food_link/backend/pkg/config"
 )
 
+var useWindowType *bool
+
 type truthItem struct {
 	Name   string    `json:"name"`
 	Prices []float64 `json:"prices"`
@@ -36,9 +38,11 @@ type truthItem struct {
 }
 
 type truthCase struct {
-	Window string      `json:"window"`
-	Photos []string    `json:"photos"`
-	Items  []truthItem `json:"items"`
+	Window string `json:"window"`
+	// ServiceMode is the window type a collector would pick on site.
+	ServiceMode string      `json:"service_mode"`
+	Photos      []string    `json:"photos"`
+	Items       []truthItem `json:"items"`
 }
 
 // urlRewriter lets one extractor serve two providers: Gemini native requests
@@ -67,6 +71,7 @@ func main() {
 	reportPath := flag.String("report", "", "optional JSON report path")
 	only := flag.String("only", "", "evaluate only this window")
 	verifierFlag := flag.String("verifier", "dashscope", "verifier model client: dashscope or doubao")
+	useWindowType = flag.Bool("window-type", true, "apply each case's service_mode as the collector's window type")
 	flag.Parse()
 	if *photosDir == "" || *truthPath == "" {
 		log.Fatal("必须指定 -photos 和 -truth")
@@ -156,6 +161,9 @@ func evaluate(item truthCase, base, photosDir string, primary, verifier catalogs
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 	extraction, err := extractor.Extract(ctx, item.Photos, urls)
+	if err == nil && *useWindowType {
+		extraction.Items = catalogservice.ApplyCaptureWindowType(extraction.Items, item.ServiceMode)
+	}
 	if err != nil {
 		log.Printf("[%s] 识别失败: %v", item.Window, err)
 		return map[string]any{"window": item.Window, "error": err.Error(), "truth": len(item.Items), "passed": 0,

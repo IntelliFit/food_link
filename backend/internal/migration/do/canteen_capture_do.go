@@ -18,6 +18,7 @@ type CanteenCaptureSessionDO struct {
 	Floor              string         `gorm:"column:floor;type:text;not null;default:''"`
 	WindowName         string         `gorm:"column:window_name;type:text;not null"`
 	WindowKey          string         `gorm:"column:window_key;type:text;not null;index:idx_canteen_capture_sessions_window_key"`
+	ServiceMode        string         `gorm:"column:service_mode;type:text;not null;default:'unknown';check:canteen_capture_sessions_service_mode_valid,service_mode IN ('unknown','fixed_portion','combo','self_select')"`
 	Status             string         `gorm:"column:status;type:text;not null;default:'draft';index:idx_canteen_capture_sessions_status;check:canteen_capture_sessions_status_valid,status IN ('draft','extracting','extracted','extract_failed','submitted')"`
 	ExtractTaskID      *string        `gorm:"column:extract_task_id;type:uuid"`
 	ExtractError       string         `gorm:"column:extract_error;type:text;not null;default:''"`

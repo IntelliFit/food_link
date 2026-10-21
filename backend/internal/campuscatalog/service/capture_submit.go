@@ -272,7 +272,11 @@ func (s *CatalogService) publishCaptureItems(ctx context.Context, deps *captureD
 			item.Status, item.Reasons = domain.CaptureItemException, uniqueStrings(append(item.Reasons, "AUTO_PUBLISH_OFF"))
 			continue
 		}
-		entries = append(entries, captureCatalogEntry(*item, keyByAsset, menuKeys))
+		entry := captureCatalogEntry(*item, keyByAsset, menuKeys)
+		if entry.ServiceMode == "" && session.ServiceMode != "unknown" && session.ServiceMode != "" {
+			entry.ServiceMode = session.ServiceMode
+		}
+		entries = append(entries, entry)
 		indexes = append(indexes, index)
 	}
 	if len(entries) == 0 {
@@ -329,7 +333,7 @@ func (s *CatalogService) checkCapturePublication(ctx context.Context, deps *capt
 func captureCatalogEntry(item domain.CaptureItem, keyByAsset map[string]string, menuKeys []string) CreateCatalogItemInput {
 	entry := CreateCatalogItemInput{
 		Name: item.Name, PriceUnit: item.PriceUnit, Notes: item.Note,
-		RawText: strings.TrimSpace(item.Name + " " + firstNonEmpty(item.PriceText, formatCapturePrices(item.Prices))),
+		RawText:   strings.TrimSpace(item.Name + " " + firstNonEmpty(item.PriceText, formatCapturePrices(item.Prices))),
 		PriceText: firstNonEmpty(item.PriceText, formatCapturePrices(item.Prices)), PriceOptions: map[string]any{},
 	}
 	for _, id := range item.DishAssetIDs {

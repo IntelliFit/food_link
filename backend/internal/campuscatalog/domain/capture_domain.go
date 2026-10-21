@@ -21,6 +21,7 @@ type CaptureSession struct {
 	Floor              string             `gorm:"column:floor" json:"floor,omitempty"`
 	WindowName         string             `gorm:"column:window_name" json:"window_name"`
 	WindowKey          string             `gorm:"column:window_key" json:"window_key"`
+	ServiceMode        string             `gorm:"column:service_mode" json:"service_mode"`
 	Status             string             `gorm:"column:status" json:"status"`
 	ExtractTaskID      *string            `gorm:"column:extract_task_id" json:"extract_task_id,omitempty"`
 	ExtractError       string             `gorm:"column:extract_error" json:"extract_error,omitempty"`
@@ -80,15 +81,15 @@ func (CollectorLedgerEntry) TableName() string { return "canteen_collector_ledge
 // CaptureExtraction is the stored result of the two independent model passes
 // plus the deterministic checks. It is evidence, not catalog truth.
 type CaptureExtraction struct {
-	Version     int                  `json:"version"`
-	Items       []CaptureItem        `json:"items"`
-	Images      []CaptureImageResult `json:"images"`
-	Models      []string             `json:"models,omitempty"`
+	Version int                  `json:"version"`
+	Items   []CaptureItem        `json:"items"`
+	Images  []CaptureImageResult `json:"images"`
+	Models  []string             `json:"models,omitempty"`
 	// Errors records per-photo model failures so a missing verification is
 	// visible instead of silently turning every item into an exception.
-	Errors      []string             `json:"errors,omitempty"`
-	DurationMs  int64                `json:"duration_ms,omitempty"`
-	CompletedAt *time.Time           `json:"completed_at,omitempty"`
+	Errors      []string   `json:"errors,omitempty"`
+	DurationMs  int64      `json:"duration_ms,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
 type CaptureImageResult struct {
@@ -178,4 +179,5 @@ const (
 	ReasonNameInvalid       = "NAME_INVALID"
 	ReasonOptionsUngrounded = "OPTIONS_NOT_GROUNDED"
 	ReasonVerifierFailed    = "VERIFIER_FAILED"
+	ReasonSelfSelectSuspect = "SELF_SELECT_SUSPECTED"
 )

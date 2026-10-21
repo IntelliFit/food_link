@@ -81,8 +81,12 @@ func reconcileCapturePasses(assetIDs []string, primary, verifier *capturePass) [
 			item.Reasons = append(item.Reasons, domain.ReasonPassesDisagree)
 		} else {
 			matchedVerifier[match] = true
-			other := verifier.Items[match]
-			if normalizeCaptureKind(other.Kind) != item.Kind {
+			other := normalizeCaptureKind(verifier.Items[match].Kind)
+			// A primary "ingredient" read as "dish" by the verifier is kept as
+			// window price information, which never becomes a public dish, so
+			// it needs no review. The reverse could hide a real dish.
+			ingredientKept := item.Kind == domain.CaptureKindIngredient && other == domain.CaptureKindDish
+			if other != item.Kind && !ingredientKept {
 				item.Reasons = append(item.Reasons, domain.ReasonKindDisagree)
 			}
 		}
@@ -103,7 +107,71 @@ func reconcileCapturePasses(assetIDs []string, primary, verifier *capturePass) [
 			items = append(items, finalizeCaptureItem(item))
 		}
 	}
-	return mergeCaptureDuplicates(items)
+	return mergeCaptureDuplicates(flagSelfSelectBoards(items))
+}
+
+// A photo where most priced lines cost at most 1.5 元 is almost always a
+// self-select add-on board (麻辣烫/香锅 vegetables), whose lines are not
+// dishes. Both models were seen calling such lines dishes, so these never
+// auto-publish as dishes; the window type or a reviewer decides.
+const (
+	captureBoardMinItems  = 5
+	captureBoardLowPrice  = 1.5
+	captureBoardLowShare  = 0.7
+	captureSelfSelectMaxP = 3.0
+)
+
+func flagSelfSelectBoards(items []domain.CaptureItem) []domain.CaptureItem {
+	priced, low := map[string]int{}, map[string]int{}
+	for _, item := range items {
+		if item.Kind == domain.CaptureKindCombo || len(item.Prices) == 0 || len(item.AssetIDs) == 0 {
+			continue
+		}
+		asset := item.AssetIDs[0]
+		priced[asset]++
+		if item.Prices[len(item.Prices)-1] <= captureBoardLowPrice {
+			low[asset]++
+		}
+	}
+	for index := range items {
+		item := &items[index]
+		if item.Kind != domain.CaptureKindDish || len(item.AssetIDs) == 0 {
+			continue
+		}
+		asset := item.AssetIDs[0]
+		if priced[asset] >= captureBoardMinItems && float64(low[asset]) >= captureBoardLowShare*float64(priced[asset]) {
+			item.Reasons = uniqueStrings(append(item.Reasons, domain.ReasonSelfSelectSuspect))
+			item.Status = domain.CaptureItemException
+		}
+	}
+	return items
+}
+
+// applyCaptureServiceMode uses the window type the collector picked. In a
+// self-select window cheap lines are add-on prices: they are kept as window
+// information instead of being reviewed or published as dishes.
+func applyCaptureServiceMode(items []domain.CaptureItem, serviceMode string) []domain.CaptureItem {
+	if serviceMode != "self_select" {
+		return items
+	}
+	for index := range items {
+		item := &items[index]
+		if item.Kind != domain.CaptureKindDish || len(item.Prices) == 0 || item.Prices[len(item.Prices)-1] > captureSelfSelectMaxP {
+			continue
+		}
+		item.Kind = domain.CaptureKindIngredient
+		remaining := []string{}
+		for _, reason := range item.Reasons {
+			if reason != domain.ReasonSelfSelectSuspect && reason != domain.ReasonKindDisagree {
+				remaining = append(remaining, reason)
+			}
+		}
+		item.Reasons = remaining
+		if len(remaining) == 0 {
+			item.Status = domain.CaptureItemPassed
+		}
+	}
+	return items
 }
 
 func newCaptureItem(raw capturePassItem, assetIDs []string) domain.CaptureItem {

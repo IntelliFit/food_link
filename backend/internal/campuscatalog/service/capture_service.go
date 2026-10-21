@@ -57,6 +57,7 @@ type captureRepository interface {
 type captureTaskStore interface {
 	CreateTask(ctx context.Context, task *analyzedomain.AnalysisTask) error
 	FailTask(ctx context.Context, taskID string, errorMsg string) (bool, error)
+	CompleteTask(ctx context.Context, taskID string, result map[string]any) (bool, error)
 }
 
 // CapturePublicationChecker runs the platform content check (text and
@@ -76,10 +77,10 @@ type CaptureMembershipGranter interface {
 type CaptureImageUploader func(ctx context.Context, userID, keyPrefix, sourceFilename, contentType string, data []byte) (string, error)
 
 type captureDeps struct {
-	repo       captureRepository
-	extractor  *CaptureExtractor
-	tasks      captureTaskStore
-	queue      taskqueue.Publisher
+	repo        captureRepository
+	extractor   *CaptureExtractor
+	tasks       captureTaskStore
+	queue       taskqueue.Publisher
 	rules       CaptureRewardRules
 	membership  CaptureMembershipGranter
 	publication CapturePublicationChecker
@@ -87,10 +88,10 @@ type captureDeps struct {
 }
 
 type CaptureDeps struct {
-	Repo       captureRepository
-	Extractor  *CaptureExtractor
-	Tasks      captureTaskStore
-	Queue      taskqueue.Publisher
+	Repo        captureRepository
+	Extractor   *CaptureExtractor
+	Tasks       captureTaskStore
+	Queue       taskqueue.Publisher
 	Rules       CaptureRewardRules
 	Membership  CaptureMembershipGranter
 	Publication CapturePublicationChecker
@@ -127,7 +128,12 @@ type CaptureSessionInput struct {
 	CanteenName      string  `json:"canteen_name"`
 	Floor            string  `json:"floor"`
 	WindowName       string  `json:"window_name"`
+	// ServiceMode is the optional window type the collector sees on site:
+	// fixed_portion, combo, self_select or unknown.
+	ServiceMode string `json:"service_mode"`
 }
+
+var captureServiceModes = enumSet("unknown", "fixed_portion", "combo", "self_select")
 
 // CreateCaptureSession opens (or returns, on retry) a session for one window.
 // Anyone signed in may collect; university windows must match the directory.
@@ -152,8 +158,12 @@ func (s *CatalogService) CreateCaptureSession(ctx context.Context, userID string
 	if utf8.RuneCountInString(windowName) > 40 || utf8.RuneCountInString(floor) > 20 {
 		return nil, badRequest("窗口名称最多 40 个字，楼层最多 20 个字")
 	}
+	serviceMode, ok := normalizeEnum(input.ServiceMode, "unknown", captureServiceModes)
+	if !ok {
+		return nil, badRequest("窗口类型不正确")
+	}
 	session := &domain.CaptureSession{
-		ID: uuid.NewString(), ClientSessionKey: clientKey, UserID: userID,
+		ID: uuid.NewString(), ClientSessionKey: clientKey, UserID: userID, ServiceMode: serviceMode,
 		Floor: floor, WindowName: windowName, Status: domain.CaptureStatusDraft,
 		ExceptionStatus: domain.CaptureExceptionNone,
 	}
@@ -483,6 +493,7 @@ func (s *CatalogService) ProcessCaptureExtractionTask(ctx context.Context, taskI
 		s.markCaptureExtractFailed(ctx, deps, session.ID, taskID, "菜单识别暂时失败，请稍后重试")
 		return nil, err
 	}
+	extraction.Items = applyCaptureServiceMode(extraction.Items, session.ServiceMode)
 	passed, exceptions := countCaptureItems(extraction.Items)
 	extractionJSON, err := captureExtractionJSON(extraction)
 	if err != nil {
@@ -498,6 +509,36 @@ func (s *CatalogService) ProcessCaptureExtractionTask(ctx context.Context, taskI
 	logger.Info(ctx, "窗口菜单识别完成", slog.String("session_id", session.ID), slog.String("task_id", taskID),
 		slog.Int("passed", passed), slog.Int("exceptions", exceptions), slog.Int64("duration_ms", extraction.DurationMs), slog.Bool("saved", changed))
 	return map[string]any{"session_id": session.ID, "passed": passed, "exceptions": exceptions, "saved": changed}, nil
+}
+
+// RunCaptureExtractionNow reads one session's menus in the calling process
+// and settles its task row. Ops use it where no worker handles the task type
+// (a local test, or a backlog after an outage); the worker path is unchanged.
+func (s *CatalogService) RunCaptureExtractionNow(ctx context.Context, sessionID string) (map[string]any, error) {
+	deps, err := s.captureReady()
+	if err != nil {
+		return nil, err
+	}
+	session, err := deps.repo.GetCaptureSession(ctx, strings.TrimSpace(sessionID))
+	if err != nil {
+		return nil, err
+	}
+	if session == nil || session.Status != domain.CaptureStatusExtracting || pointerValue(session.ExtractTaskID) == "" {
+		return nil, badRequest("该采集不在识别中")
+	}
+	taskID := pointerValue(session.ExtractTaskID)
+	result, err := s.ProcessCaptureExtractionTask(ctx, taskID, map[string]any{"session_id": session.ID})
+	if deps.tasks == nil {
+		return result, err
+	}
+	if err != nil {
+		_, _ = deps.tasks.FailTask(context.WithoutCancel(ctx), taskID, err.Error())
+		return nil, err
+	}
+	if _, completeErr := deps.tasks.CompleteTask(ctx, taskID, result); completeErr != nil {
+		logger.Warn(ctx, "窗口菜单识别已完成但任务状态未更新", slog.String("task_id", taskID), logger.Err(completeErr))
+	}
+	return result, nil
 }
 
 func countCaptureItems(items []domain.CaptureItem) (passed, exceptions int) {
