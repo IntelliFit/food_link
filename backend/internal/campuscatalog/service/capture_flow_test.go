@@ -11,6 +11,7 @@ import (
 	"food_link/backend/internal/migration"
 	migrationdo "food_link/backend/internal/migration/do"
 	"food_link/backend/internal/taskqueue"
+	"food_link/backend/pkg/storage"
 	"food_link/backend/pkg/testdb"
 
 	"github.com/google/uuid"
@@ -100,18 +101,24 @@ type captureHarness struct {
 }
 
 func newCaptureHarness(t *testing.T) *captureHarness {
+	return newCaptureHarnessWith(t, nil, nil)
+}
+
+// newCaptureHarnessWith adds object storage and a content checker, which the
+// default harness leaves out.
+func newCaptureHarnessWith(t *testing.T, store *storage.Client, publication CapturePublicationChecker) *captureHarness {
 	t.Helper()
 	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&migrationdo.CampusFoodCollectionBatchDO{}, &migrationdo.CampusFoodCatalogItemDO{},
 		&migrationdo.CampusFoodRevisionDO{}, &migrationdo.PublicFoodItemDO{}))
 	require.NoError(t, migration.MigrateCanteenCaptureTables(context.Background(), db))
-	svc := NewCatalogService(campusrepo.NewCatalogRepo(db), nil)
+	svc := NewCatalogService(campusrepo.NewCatalogRepo(db), store)
 	harness := &captureHarness{db: db, svc: svc, tasks: &fakeCaptureTasks{}, membership: &fakeCaptureMembership{}}
 	svc.ConfigureCapture(CaptureDeps{
 		Repo: campusrepo.NewCatalogRepo(db), Extractor: shanghaiMenuVision(), Tasks: harness.tasks, Queue: &fakeCaptureQueue{},
 		Rules: CaptureRewardRules{WindowCents: 300, PhotoHalfCents: 100, PhotoFullCents: 200, WithdrawMinCents: 500,
 			MembershipOptions: []CaptureMembershipOption{{Code: "m7", Title: "7天会员", PlanCode: "light_monthly", Days: 7, CostCents: 300}}},
-		Membership: harness.membership,
+		Membership: harness.membership, Publication: publication,
 		Upload: func(_ context.Context, _, prefix, _, _ string, data []byte) (string, error) {
 			return prefix + "/" + uuid.NewString() + "-" + string(data) + ".jpg", nil
 		},

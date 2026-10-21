@@ -61,10 +61,20 @@ type captureTaskStore interface {
 }
 
 // CapturePublicationChecker runs the platform content check (text and
-// images) before capture items become public.
+// images) before capture items become public. StartDocument only submits the
+// images; WeChat answers asynchronously, and CheckPublication reuses that
+// answer for the same user, scene and image URL.
 type CapturePublicationChecker interface {
 	CheckPublication(ctx context.Context, userID string, scene int, doc map[string]any, store *storage.Client) error
+	StartDocument(ctx context.Context, userID string, scene int, doc map[string]any, store *storage.Client) error
 }
+
+// captureContentScene is the WeChat content-check scene for catalog posts.
+const captureContentScene = 3
+
+// captureReviewStartTimeout bounds a dish photo's background review start,
+// which outlives the upload request.
+const captureReviewStartTimeout = 20 * time.Second
 
 // CaptureMembershipGranter extends a collector's membership when they spend
 // earnings on it. The source key makes a retried grant a no-op.
@@ -320,8 +330,29 @@ func (s *CatalogService) UploadCaptureAsset(ctx context.Context, userID, session
 	if err != nil {
 		return nil, err
 	}
+	if saved.Kind == domain.CaptureAssetDish {
+		s.startCaptureImageReview(ctx, deps, session.UserID, saved.ObjectKey)
+	}
 	s.resolveCaptureAssetURL(saved)
 	return saved, nil
+}
+
+// startCaptureImageReview submits a dish photo to the WeChat image check in
+// the background, so a window with many photos has its answers by submit.
+// Submit still runs the blocking check; if this start fails, submit sends it.
+func (s *CatalogService) startCaptureImageReview(ctx context.Context, deps *captureDeps, userID, objectKey string) {
+	if deps.publication == nil || strings.TrimSpace(objectKey) == "" {
+		return
+	}
+	doc := map[string]any{"image_paths": s.captureImageURLs([]string{objectKey})}
+	reviewCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), captureReviewStartTimeout)
+	go func() {
+		defer cancel()
+		if err := deps.publication.StartDocument(reviewCtx, userID, captureContentScene, doc, s.storage); err != nil {
+			logger.Warn(reviewCtx, "窗口采集实物照预审提交失败，提交时会再次审核", slog.String("user_id", userID),
+				slog.String("object_key", objectKey), logger.Err(err))
+		}
+	}()
 }
 
 func captureAssetLimit(assets []domain.CaptureAsset, kind string) error {
@@ -384,7 +415,18 @@ func (s *CatalogService) UpdateCaptureAsset(ctx context.Context, userID, session
 	if !changed {
 		return nil, notFound("照片不存在")
 	}
-	return s.buildCaptureView(ctx, deps, session)
+	view, err := s.buildCaptureView(ctx, deps, session)
+	if err != nil {
+		return nil, err
+	}
+	if updates["kind"] == domain.CaptureAssetDish {
+		for _, asset := range view.Assets {
+			if asset.ID == strings.TrimSpace(assetID) {
+				s.startCaptureImageReview(ctx, deps, session.UserID, asset.ObjectKey)
+			}
+		}
+	}
+	return view, nil
 }
 
 // StartCaptureExtraction queues the two-pass menu reading for all current

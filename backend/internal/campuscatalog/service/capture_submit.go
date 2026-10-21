@@ -321,13 +321,18 @@ func (s *CatalogService) checkCapturePublication(ctx context.Context, deps *capt
 	}
 	docEntries := make([]any, 0, len(entries))
 	for _, entry := range entries {
-		images := entry.ImagePaths
-		if s.storage != nil {
-			images = s.storage.ResolveReferenceURLs("food-images", images)
-		}
-		docEntries = append(docEntries, map[string]any{"name": entry.Name, "notes": entry.Notes, "image_paths": images})
+		docEntries = append(docEntries, map[string]any{"name": entry.Name, "notes": entry.Notes, "image_paths": s.captureImageURLs(entry.ImagePaths)})
 	}
-	return deps.publication.CheckPublication(ctx, userID, 3, map[string]any{"entries": docEntries}, s.storage)
+	return deps.publication.CheckPublication(ctx, userID, captureContentScene, map[string]any{"entries": docEntries}, s.storage)
+}
+
+// captureImageURLs is the one place that turns photo keys into the URLs the
+// content check sees, so a review begun at upload matches the one at submit.
+func (s *CatalogService) captureImageURLs(keys []string) []string {
+	if s.storage == nil {
+		return keys
+	}
+	return s.storage.ResolveReferenceURLs("food-images", keys)
 }
 
 func captureCatalogEntry(item domain.CaptureItem, keyByAsset map[string]string, menuKeys []string) CreateCatalogItemInput {
