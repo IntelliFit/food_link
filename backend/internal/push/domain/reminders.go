@@ -116,6 +116,9 @@ type Message struct {
 }
 
 // Lock-screen copy deliberately excludes health metrics, private food names and AI billing.
+// These are time-sensitive, user-visible notifications. Normal Android delivery
+// can be deferred in Doze until after the reminder's short TTL has expired.
+// High transport priority does not override channel settings or quiet hours.
 func BuildMessage(token, userID string, o Occurrence, ttl int) Message {
 	title, body, route := "记下今天的饮食", "方便时记录一下今天吃了什么，给自己留一份饮食参考。", "DayRecord"
 	if o.Kind == "meal" {
@@ -125,5 +128,5 @@ func BuildMessage(token, userID string, o Occurrence, ttl int) Message {
 		title, body, route = "检查一下食物保质期", "有尚未处理的食物临近标注日期。请核对标签和保存状况；变质或过期食物不要食用。", "Expiry"
 	}
 	tag := o.Kind + "-" + o.MealType + "-" + o.Date
-	return Message{To: token, Title: title, Body: body, Sound: "default", Priority: "normal", ChannelID: ChannelID, TTL: ttl, Tag: tag, CollapseID: tag, Data: map[string]any{"source": "foodlink-reminder", "route": route, "user_id": userID, "date": o.Date, "meal_type": o.MealType}}
+	return Message{To: token, Title: title, Body: body, Sound: "default", Priority: "high", ChannelID: ChannelID, TTL: ttl, Tag: tag, CollapseID: tag, Data: map[string]any{"source": "foodlink-reminder", "route": route, "user_id": userID, "date": o.Date, "meal_type": o.MealType}}
 }

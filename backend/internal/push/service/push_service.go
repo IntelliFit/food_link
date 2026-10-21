@@ -233,10 +233,15 @@ func (s *Service) Dispatch(ctx context.Context, now time.Time) (bool, error) {
 	if ttl <= 0 {
 		return cancel("Expired")
 	}
-	ticket, code := s.expo.Send(ctx, domain.BuildMessage(device.Token, job.UserID, o, ttl))
+	message := domain.BuildMessage(device.Token, job.UserID, o, ttl)
+	logger.Info(ctx, "开始投递 APP 业务提醒",
+		slog.String("user_id", job.UserID), slog.String("job_id", job.ID),
+		slog.String("kind", job.Kind), slog.String("meal_type", job.MealType),
+		slog.String("push_priority", message.Priority), slog.Int("ttl_seconds", message.TTL))
+	ticket, code := s.expo.Send(ctx, message)
 	if code == "" {
 		check := now.Add(15 * time.Minute)
-		logger.Info(ctx, "提醒已被推送服务接受", slog.String("job_id", job.ID), slog.String("kind", job.Kind))
+		logger.Info(ctx, "提醒已被推送服务接受", slog.String("job_id", job.ID), slog.String("kind", job.Kind), slog.String("push_priority", message.Priority))
 		return true, s.finish(ctx, job, map[string]any{"status": "accepted", "ticket_id": ticket, "accepted_at": now, "receipt_check_at": check, "last_code": ""})
 	}
 	if code == "DeviceNotRegistered" {
