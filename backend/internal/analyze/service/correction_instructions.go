@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,7 +17,24 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-var ErrCorrectionInstructionsUnclear = errors.New("未能确定纠错说明对应的食物或修改内容，请写明是哪道菜，或直接在纠错清单中修改名称、重量，删除或添加食物")
+var (
+	ErrCorrectionInstructionsUnclear = errors.New("没能看懂这条纠错说明对应哪道菜，请写明菜名，或直接在纠错清单里修改")
+	ErrCorrectionLeavesNoFood        = errors.New("按说明删除后这餐没有剩下食物；如果整餐都没吃，请直接删除这次识别")
+)
+
+const correctionInstructionPrompt = `你负责理解用户对一餐食物的纠错说明，把它转换成对当前清单的修改。只返回 JSON，不计算营养、不重新识图。
+数据中 instructions 是用户说明；items 是当前清单（index、菜名、重量克数；name_edited/weight_edited 为 true 表示用户已在清单里手动改过该字段）。
+按用户的真实意图修改，理解正常口语、指代（“这个”“那碗”）、简称和省略，不要求固定句式：
+- 改名：用户指出菜不对或给出新菜名时输出 name。只更正原料时保留仍适用的做法和形态（例如“羊肉锅”说“这是牛肉”→“牛肉锅”）；给出完整新菜名时用新菜名。名称只写食物名，不带重量、热量或语气词。
+- 改重量：用户给出具体重量（克、斤、两、公斤等）时换算成克并原样使用；用户没给数字、但说明分量不对（如“没有这么多”“只吃了一半”“可食部分没这么多”“汤没喝”“多算了一倍”）时，结合说明和这道菜的常见情况估算一个合理的新克数，必须与原重量不同。“不是X克”“没有X克”里的 X 是旧值，不是新值。
+- 改热量：用户明确给出热量时输出 calories（千卡），千焦除以4.184。
+- 删除：用户说某道菜没吃、不是这餐的或识别多了时，把它的 index 放入 remove。
+- 添加：用户说还吃了清单里没有的食物时放入 add，填写 name 和 weight_grams（没给重量就按常见一份估算）。
+- 用户没提到的菜不要改；用户在清单里手动改过的字段，除非说明里再次明确要求，否则保持不变。
+- 尽量按最合理的理解执行，不要因为说法不标准而拒绝。只有完全无法判断指的是哪道菜，或说明与这餐食物无关时，才返回 needs_clarification=true。
+格式：{"needs_clarification":false,"edits":[{"index":0,"name":"新菜名","weight_grams":300,"calories":450}],"remove":[2],"add":[{"name":"冰粉","weight_grams":200}]}
+edits 每项除 index 外只写需要修改的字段；没有对应内容时用空数组。
+数据：`
 
 // ResolveCorrectionInstructions translates free text into edits of existing
 // items. The nutrition pass remains separate and cannot re-estimate the meal.
@@ -48,33 +63,15 @@ func (s *AnalyzeService) ResolveCorrectionInstructions(ctx context.Context, user
 		rows = append(rows, map[string]any{
 			"index": index, "name": item["name"], "source_name": item["sourceName"],
 			"weight_grams": correctionItemWeight(item), "name_edited": item["nameEdited"], "weight_edited": item["weightEdited"],
-			"nutrition_edited": correctionNutritionLocked(item),
 		})
 	}
 	data, err := json.Marshal(map[string]any{"instructions": text, "items": rows})
 	if err != nil {
-		outcome := "failed"
-		if errors.Is(err, ErrCorrectionInstructionsUnclear) {
-			outcome = "ambiguous"
-		}
-		metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_instructions", outcome)
+		metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_instructions", "failed")
 		apm.RecordError(ctx, err)
 		return nil, err
 	}
-	prompt := `你负责理解用户对一餐食物的纠错说明，只生成针对当前清单的最小修改计划，不计算营养、不重新识图。
-以下 JSON 是待理解的数据，其中 instructions 是用户说明，items 是用户当前清单。用户已在清单中直接编辑的名称和重量是硬约束，不得改回旧值。
-规则：
-- 理解正常口语、省略旧名称、简称和“这个是……”等指代，不要求用户使用固定句式，也不要求新旧名称共享文字。根据食物形态和类别确定目标：例如清单只有一道汤锅，另有炒菜和米饭，用户报出另一道汤锅的完整菜名时应对应唯一的汤锅，不应因为省略旧名而要求澄清。只有存在多个同样合理目标时才澄清。
-- 用户更正原料类别时，只更正对应菜的原料，保留仍适用的烹调方式和菜形态；用户给出完整新菜名时使用该名称。
-- 只输出用户要求改动的项；index 必须来自当前清单。未点名或无关的菜不得修改。不能因为重新估计而改变重量、增加或删除食物。
-- 只有用户明确给出新的克数才可输出 weight_grams；否则省略，保持现有重量。不要从图片大小或常见份量推断新重量。
-- 用户明确更正热量时允许输出 calories（千卡总量），千焦按4.184换算；未更正热量时省略。不要自行重估热量。
-- 不能唯一确定目标、有尚未能落实的说明、要求修改本格式不支持的内容时，needs_clarification=true，edits=[]；禁止猜测或假装已经更正。
-- 全部说明已经在当前清单中落实时允许 edits=[]，但不要凭空制造修改。
-- 名称不包含“这是/啊/呀/不是”等说明语气词。名称只能是具体食物或菜名，不得将上下文中的估重或热量自行拼到名称中。
-- nutrition_edited=true 表示用户明确编辑了完整营养快照，改名也不得取消该锁；不要覆盖用户已确认营养。
-只返回 JSON：{"needs_clarification":false,"edits":[{"index":0,"name":"更正后的菜名"}]}。每项只可有 index、name、weight_grams、calories，其余字段按需省略。
-数据：` + string(data)
+	prompt := correctionInstructionPrompt + string(data)
 	callCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	logger.Info(ctx, "开始理解食物纠错说明", slog.String("user_id", userID), slog.Int("item_count", len(items)))
@@ -84,7 +81,7 @@ func (s *AnalyzeService) ResolveCorrectionInstructions(ctx context.Context, user
 		if callErr != nil {
 			return nil, callErr
 		}
-		resolved, callErr = applyCorrectionInstructionPlan(parsed, items, text)
+		resolved, callErr = applyCorrectionInstructionPlan(parsed, items)
 		return parsed, callErr
 	})
 	if err != nil {
@@ -147,105 +144,169 @@ func correctionInstructionText(text string, originalTexts ...string) string {
 	return text
 }
 
-func applyCorrectionInstructionPlan(parsed map[string]any, items []map[string]any, text string) ([]map[string]any, error) {
-	invalid := func() error { return &LLMJSONParseError{Err: fmt.Errorf("纠错说明修改计划格式无效")} }
+// applyCorrectionInstructionPlan trusts the model's reading of the note and
+// only checks that the plan is structurally sound. It no longer matches numbers
+// in the note against the plan: that rejected ordinary phrasing such as
+// "没有400克" and every correction that gives no number at all.
+func applyCorrectionInstructionPlan(parsed map[string]any, items []map[string]any) ([]map[string]any, error) {
+	invalid := func(reason string) error {
+		return &LLMJSONParseError{Err: fmt.Errorf("纠错说明修改计划格式无效：%s", reason)}
+	}
 	clarify, exists := parsed["needs_clarification"].(bool)
 	if !exists {
-		return nil, invalid()
+		return nil, invalid("缺少 needs_clarification")
 	}
 	if clarify {
 		return nil, ErrCorrectionInstructionsUnclear
 	}
-	var edits []map[string]any
-	switch rows := parsed["edits"].(type) {
-	case []any:
-		for _, row := range rows {
-			edit, ok := row.(map[string]any)
-			if !ok {
-				return nil, invalid()
-			}
-			edits = append(edits, edit)
-		}
-	case []map[string]any:
-		edits = rows
-	default:
-		return nil, invalid()
+	edits, ok := correctionPlanRows(parsed["edits"], true)
+	if !ok {
+		return nil, invalid("edits")
 	}
-	if len(edits) > len(items) {
-		return nil, invalid()
+	adds, ok := correctionPlanRows(parsed["add"], false)
+	if !ok {
+		return nil, invalid("add")
+	}
+	removed := map[int]bool{}
+	if raw, exists := parsed["remove"]; exists && raw != nil {
+		list, ok := raw.([]any)
+		if !ok {
+			return nil, invalid("remove")
+		}
+		for _, value := range list {
+			index, ok := correctionPlanIndex(value, len(items))
+			if !ok || removed[index] {
+				return nil, invalid("remove")
+			}
+			removed[index] = true
+		}
 	}
 	out := make([]map[string]any, len(items))
 	for index, item := range items {
 		out[index] = copyAnyMap(item)
 	}
-	seen := map[int]bool{}
+	edited := map[int]bool{}
 	for _, edit := range edits {
-		indexValue, ok := finiteNutritionNumber(edit["index"])
-		if !ok || indexValue != math.Trunc(indexValue) || indexValue < 0 || indexValue >= float64(len(items)) {
-			return nil, invalid()
+		index, ok := correctionPlanIndex(edit["index"], len(items))
+		if !ok || edited[index] || removed[index] || len(edit) < 2 {
+			return nil, invalid("edits.index")
 		}
-		index := int(indexValue)
-		if seen[index] {
-			return nil, invalid()
-		}
-		seen[index] = true
+		edited[index] = true
 		for key := range edit {
 			if key != "index" && key != "name" && key != "weight_grams" && key != "calories" {
-				return nil, invalid()
+				return nil, invalid("edits." + key)
 			}
 		}
-		next := out[index]
-		if raw, exists := edit["name"]; exists {
-			name, valid := raw.(string)
-			name = strings.TrimSpace(name)
-			if !valid || name == "" || len([]rune(name)) > 100 {
-				return nil, invalid()
-			}
-			if boolFromAny(next["nameEdited"]) && name != stringFromAny(next["name"]) {
-				return nil, ErrCorrectionInstructionsUnclear
-			}
-			if name != stringFromAny(next["name"]) {
-				if !correctionNameNumbersRequested(name, text, index, items) {
-					return nil, invalid()
-				}
-				next["nutritionEdited"] = correctionNutritionLocked(next)
-				next["name"], next["nameEdited"] = name, true
-			}
-		}
-		if raw, exists := edit["weight_grams"]; exists {
-			weight, valid := finiteNutritionNumber(raw)
-			if !valid || weight <= 0 || weight > 100000 {
-				return nil, invalid()
-			}
-			oldWeight := correctionItemWeight(next)
-			if boolFromAny(next["weightEdited"]) && math.Abs(weight-oldWeight) > 0.001 {
-				return nil, ErrCorrectionInstructionsUnclear
-			}
-			if math.Abs(weight-oldWeight) > 0.001 {
-				if !correctionExplicitNumber(text, weight, false, index, items, stringFromAny(next["name"])) {
-					return nil, invalid()
-				}
-				next["weight"], next["estimatedWeightGrams"], next["weightEdited"] = weight, weight, true
-			}
-		}
-		if raw, exists := edit["calories"]; exists {
-			calories, valid := finiteNutritionNumber(raw)
-			if !valid || calories <= 0 || !correctionExplicitNumber(text, calories, true, index, items, stringFromAny(next["name"])) {
-				return nil, invalid()
-			}
-			if correctionNutritionLocked(next) && math.Abs(calories-correctionItemCalories(next)) > 0.01 {
-				return nil, ErrCorrectionInstructionsUnclear
-			}
-			next["correctionCalories"] = calories
-		}
-		if len(edit) < 2 {
-			return nil, invalid()
+		if err := applyCorrectionEdit(out[index], edit); err != nil {
+			return nil, invalid(err.Error())
 		}
 	}
-	if err := validateCorrectionNumericCoverage(text, items, out); err != nil {
-		return nil, err
+	resolved := make([]map[string]any, 0, len(out)+len(adds))
+	for index, item := range out {
+		if !removed[index] {
+			resolved = append(resolved, item)
+		}
 	}
-	return out, nil
+	nextID := correctionNextItemID(items)
+	for _, add := range adds {
+		for key := range add {
+			if key != "name" && key != "weight_grams" && key != "calories" {
+				return nil, invalid("add." + key)
+			}
+		}
+		if _, hasWeight := add["weight_grams"]; !hasWeight {
+			return nil, invalid("add.weight_grams")
+		}
+		// 新增项没有 sourceItemId，用新编号避免被按同名配对到原清单的菜。
+		item := map[string]any{"itemId": nextID, "nameEdited": true, "weightEdited": true, "nutritionEdited": false}
+		nextID++
+		if err := applyCorrectionEdit(item, add); err != nil {
+			return nil, invalid(err.Error())
+		}
+		if strings.TrimSpace(stringFromAny(item["name"])) == "" {
+			return nil, invalid("add.name")
+		}
+		resolved = append(resolved, item)
+	}
+	if len(resolved) == 0 {
+		return nil, ErrCorrectionLeavesNoFood
+	}
+	return resolved, nil
+}
+
+func correctionPlanRows(raw any, required bool) ([]map[string]any, bool) {
+	if raw == nil {
+		return nil, !required
+	}
+	switch rows := raw.(type) {
+	case []map[string]any:
+		return rows, true
+	case []any:
+		out := make([]map[string]any, 0, len(rows))
+		for _, row := range rows {
+			edit, ok := row.(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, edit)
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+func correctionPlanIndex(raw any, count int) (int, bool) {
+	value, ok := finiteNutritionNumber(raw)
+	if !ok || value != math.Trunc(value) || value < 0 || value >= float64(count) {
+		return 0, false
+	}
+	return int(value), true
+}
+
+// applyCorrectionEdit writes one change onto item, which must be a private copy.
+func applyCorrectionEdit(item, edit map[string]any) error {
+	if raw, exists := edit["name"]; exists {
+		name, valid := raw.(string)
+		name = strings.TrimSpace(name)
+		if !valid || name == "" || len([]rune(name)) > 100 {
+			return fmt.Errorf("name")
+		}
+		if name != stringFromAny(item["name"]) {
+			// 改名后旧营养不再适用，除非用户已在清单里手填了完整营养。
+			item["nutritionEdited"] = correctionNutritionLocked(item)
+			item["name"], item["nameEdited"] = name, true
+		}
+	}
+	if raw, exists := edit["weight_grams"]; exists {
+		weight, valid := finiteNutritionNumber(raw)
+		if !valid || weight <= 0 || weight > 100000 {
+			return fmt.Errorf("weight_grams")
+		}
+		if math.Abs(weight-correctionItemWeight(item)) > 0.001 {
+			item["weight"], item["estimatedWeightGrams"], item["weightEdited"] = weight, weight, true
+		}
+	}
+	if raw, exists := edit["calories"]; exists {
+		calories, valid := finiteNutritionNumber(raw)
+		if !valid || calories <= 0 || calories > 100000 {
+			return fmt.Errorf("calories")
+		}
+		item["correctionCalories"] = math.Round(calories*100) / 100
+	}
+	return nil
+}
+
+func correctionNextItemID(items []map[string]any) int {
+	maxID := 0.0
+	for _, item := range items {
+		for _, key := range []string{"itemId", "sourceItemId", "id"} {
+			if value, ok := finiteNutritionNumber(item[key]); ok && value > maxID {
+				maxID = value
+			}
+		}
+	}
+	return int(math.Floor(maxID)) + 1
 }
 
 func correctionItemWeight(item map[string]any) float64 {
@@ -253,146 +314,6 @@ func correctionItemWeight(item map[string]any) float64 {
 		return weight
 	}
 	return nutritionWeightFromItem(item)
-}
-
-func correctionExplicitNumber(text string, amount float64, energy bool, targetIndex int, items []map[string]any, targetName string) bool {
-	resolved := make([]map[string]any, len(items))
-	for index, item := range items {
-		resolved[index] = item
-	}
-	resolved[targetIndex] = map[string]any{"name": targetName}
-	for _, instruction := range correctionNumericInstructions(text, items, resolved) {
-		if instruction.index == targetIndex && instruction.energy == energy && correctionAmountMatches(instruction.amount, amount, energy) {
-			return true
-		}
-	}
-	return false
-}
-
-const correctionEnergyQuantity = `(?i)([0-9]+(?:\.[0-9]+)?)\s*(千焦|kj|千卡|大卡|kcal)`
-
-type correctionNumericInstruction struct {
-	index  int
-	amount float64
-	energy bool
-}
-
-// Only quantities bound to one existing food are deterministic requirements.
-// Complex sharing, unclear references or conflicting values still need the
-// intent resolver; they must not be silently distributed among dishes.
-func correctionNumericInstructions(text string, items, resolved []map[string]any) []correctionNumericInstruction {
-	var instructions []correctionNumericInstruction
-	var targets map[int]bool
-	for _, clause := range regexp.MustCompile(`[，,；;。\n]`).Split(text, -1) {
-		clause = normalizeChineseWeightWords(clause)
-		named := map[int]bool{}
-		for index, item := range items {
-			names := []string{stringFromAny(item["name"]), stringFromAny(item["sourceName"])}
-			if index < len(resolved) {
-				names = append(names, stringFromAny(resolved[index]["name"]))
-			}
-			for _, name := range names {
-				if name != "" && name != "<nil>" && strings.Contains(clause, name) {
-					named[index] = true
-				}
-			}
-		}
-		if len(named) == 0 {
-			named = correctionDishFormTargets(clause, items, resolved)
-		}
-		if len(named) > 0 {
-			targets = named
-		}
-		if len(targets) == 0 && len(items) == 1 {
-			targets = map[int]bool{0: true}
-		}
-		if len(targets) != 1 {
-			continue
-		}
-		targetIndex := 0
-		for index := range targets {
-			targetIndex = index
-		}
-		for _, energy := range []bool{false, true} {
-			pattern := textWeightQuantity
-			if energy {
-				pattern = correctionEnergyQuantity
-			}
-			for _, match := range regexp.MustCompile(pattern).FindAllStringSubmatchIndex(clause, -1) {
-				if correctionNumberNegated(clause[:match[0]], clause[match[1]:]) {
-					continue
-				}
-				value, err := strconv.ParseFloat(clause[match[2]:match[3]], 64)
-				if err != nil {
-					continue
-				}
-				switch strings.ToLower(clause[match[4]:match[5]]) {
-				case "千焦", "kj":
-					value /= 4.184
-				case "kg", "公斤", "千克":
-					value *= 1000
-				case "斤":
-					value *= 500
-				case "两":
-					value *= 50
-				}
-				instructions = append(instructions, correctionNumericInstruction{index: targetIndex, amount: value, energy: energy})
-			}
-		}
-	}
-	return instructions
-}
-
-func correctionNumberNegated(before, after string) bool {
-	before, after = strings.TrimSpace(before), strings.TrimSpace(after)
-	for _, prefix := range []string{"不是", "并非", "不要", "不按", "原来", "原先", "之前", "旧值", "旧重量", "旧热量"} {
-		if strings.HasSuffix(before, prefix) {
-			return true
-		}
-	}
-	return strings.HasPrefix(after, "不对") || strings.HasPrefix(after, "是错的") || strings.HasPrefix(after, "错误")
-}
-
-func validateCorrectionNumericCoverage(text string, items, resolved []map[string]any) error {
-	expected := map[[2]int]float64{}
-	for _, instruction := range correctionNumericInstructions(text, items, resolved) {
-		field := 0
-		if instruction.energy {
-			field = 1
-		}
-		key := [2]int{instruction.index, field}
-		if prior, exists := expected[key]; exists && math.Abs(prior-instruction.amount) > 0.01 {
-			return ErrCorrectionInstructionsUnclear
-		}
-		expected[key] = instruction.amount
-	}
-	for key, amount := range expected {
-		item := resolved[key[0]]
-		actual := correctionItemWeight(item)
-		if key[1] == 1 {
-			actual = correctionItemCalories(item)
-		}
-		if !correctionAmountMatches(actual, amount, key[1] == 1) {
-			return ErrCorrectionInstructionsUnclear
-		}
-		if key[1] == 1 {
-			// Carry an already-satisfied explicit energy value through subsequent
-			// renamed-item nutrition resolution, rather than losing it to DB values.
-			if _, exists := item["correctionCalories"]; !exists {
-				item["correctionCalories"] = math.Round(amount*100) / 100
-			}
-		}
-	}
-	return nil
-}
-
-func correctionItemCalories(item map[string]any) float64 {
-	for _, value := range []any{item["correctionCalories"], mapFromAny(item["nutrients"])["calories"], item["calorie"], item["calories"]} {
-		if calories, valid := finiteNutritionNumber(value); valid {
-			return calories
-		}
-	}
-	return 0
 }
 
 func correctionNutritionLocked(item map[string]any) bool {
@@ -409,31 +330,11 @@ func correctionNutritionLocked(item map[string]any) bool {
 	return true
 }
 
-func correctionNameNumbersRequested(name, text string, index int, items []map[string]any) bool {
-	for _, energy := range []bool{false, true} {
-		pattern := textWeightQuantity
-		if energy {
-			pattern = correctionEnergyQuantity
-		}
-		for _, match := range regexp.MustCompile(pattern).FindAllStringSubmatch(name, -1) {
-			amount, err := strconv.ParseFloat(match[1], 64)
-			if err != nil {
-				return false
-			}
-			switch strings.ToLower(match[2]) {
-			case "千焦", "kj":
-				amount /= 4.184
-			case "kg", "公斤", "千克":
-				amount *= 1000
-			case "斤":
-				amount *= 500
-			case "两":
-				amount *= 50
-			}
-			if !correctionExplicitNumber(text, amount, energy, index, items, name) {
-				return false
-			}
-		}
+// 重试后模型计划仍无效时，提示用户补充说明，而不是暴露“parse llm json failed”。
+func userFacingCorrectionError(err error) error {
+	var parseErr *LLMJSONParseError
+	if errors.As(err, &parseErr) {
+		return ErrCorrectionInstructionsUnclear
 	}
-	return true
+	return err
 }

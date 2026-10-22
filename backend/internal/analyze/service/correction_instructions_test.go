@@ -41,59 +41,104 @@ func TestResolveCorrectionInstructionsSkipsGeneratedListSummary(t *testing.T) {
 	require.Equal(t, "这是牛肉啊", correctionInstructionText("这是牛肉啊\n用户在列表中做了以下修改：将米饭的重量改为200g"))
 }
 
-func TestCorrectionInstructionPlanRejectsUnsafeEdits(t *testing.T) {
+func TestCorrectionInstructionTextKeepsOnlyCurrentNote(t *testing.T) {
+	text := "上一轮纠错上下文：米饭改为200g\n用户在列表中做了以下修改：将米饭改为200g\n原始文字记录：羊肉锅和米饭\n这是牛肉啊\n原始文字记录：羊肉锅和米饭"
+	require.Equal(t, "这是牛肉啊", correctionInstructionText(text))
+	original := "羊肉锅\n米饭180克"
+	text = "上一轮纠错上下文：将米饭改200克\n原始文字记录：" + original + "\n这是牛肉啊\n原始文字记录：" + original
+	require.Equal(t, "这是牛肉啊", correctionInstructionText(text, original), "完整剥离多行旧原文")
+}
+
+// 用户没给新克数、只说分量不对时，按模型估算的重量修改，不再要求数字出现在原话里。
+func TestResolveCorrectionInstructionsAcceptsEstimatedWeightWithoutNumber(t *testing.T) {
+	client := &mockLLMClient{result: map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 1.0, "weight_grams": 260.0}}}}
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureDashScopeLLMClient(client)
+	items := []map[string]any{
+		{"itemId": 1, "name": "驴肉火烧", "weight": 240.0},
+		{"itemId": 2, "name": "驴肉馄饨", "weight": 400.0},
+	}
+	note := "这个驴肉馄饨应该没有400克，可食用的部分没有这么多"
+	resolved, err := svc.ResolveCorrectionInstructions(context.Background(), "", AnalyzeInput{AdditionalContext: note, CorrectionItems: items})
+	require.NoError(t, err)
+	require.Equal(t, 260.0, resolved[1]["weight"])
+	require.Equal(t, true, resolved[1]["weightEdited"])
+	require.Equal(t, items[0], resolved[0])
+	require.Equal(t, 400.0, items[1]["weight"], "不能修改任务原始输入")
+	require.Contains(t, client.prompt, note)
+	require.Contains(t, client.prompt, "估算一个合理的新克数")
+}
+
+func TestCorrectionInstructionPlanAppliesNamesWeightsAndCalories(t *testing.T) {
+	items := []map[string]any{{"name": "羊肉锅", "weight": 1500.0}, {"name": "米饭", "weight": 180.0}}
+	plan := map[string]any{"needs_clarification": false, "edits": []any{
+		map[string]any{"index": 0.0, "name": "牛肉锅"},
+		map[string]any{"index": 1.0, "weight_grams": 100.0, "calories": 127.15},
+	}}
+	resolved, err := applyCorrectionInstructionPlan(plan, items)
+	require.NoError(t, err)
+	require.Equal(t, "牛肉锅", resolved[0]["name"])
+	require.Equal(t, true, resolved[0]["nameEdited"])
+	require.Equal(t, 1500.0, resolved[0]["weight"])
+	require.Equal(t, 100.0, resolved[1]["weight"])
+	require.Equal(t, 127.15, resolved[1]["correctionCalories"])
+	require.Equal(t, 180.0, items[1]["weight"], "不改写输入")
+}
+
+func TestCorrectionInstructionPlanRemovesAndAddsFoods(t *testing.T) {
+	items := []map[string]any{
+		{"itemId": 1.0, "name": "羊肉锅", "weight": 1500.0},
+		{"itemId": 2.0, "name": "辣子鸡", "weight": 350.0},
+		{"itemId": 3.0, "name": "米饭", "weight": 180.0},
+	}
+	plan := map[string]any{
+		"needs_clarification": false,
+		"edits":               []any{map[string]any{"index": 0.0, "name": "牛肉锅"}},
+		"remove":              []any{2.0},
+		"add":                 []any{map[string]any{"name": "冰粉", "weight_grams": 200.0}, map[string]any{"name": "米饭", "weight_grams": 150.0}},
+	}
+	resolved, err := applyCorrectionInstructionPlan(plan, items)
+	require.NoError(t, err)
+	require.Len(t, resolved, 4)
+	require.Equal(t, "牛肉锅", resolved[0]["name"])
+	require.Equal(t, "辣子鸡", resolved[1]["name"])
+	require.Equal(t, map[string]any{"itemId": 4, "name": "冰粉", "weight": 200.0, "estimatedWeightGrams": 200.0, "nameEdited": true, "weightEdited": true, "nutritionEdited": false}, resolved[2])
+	require.Equal(t, 5, resolved[3]["itemId"], "新增项用新编号，不能按同名配对到被删的原米饭")
+
+	_, err = applyCorrectionInstructionPlan(map[string]any{"needs_clarification": false, "edits": []any{}, "remove": []any{0.0, 1.0, 2.0}}, items)
+	require.ErrorIs(t, err, ErrCorrectionLeavesNoFood)
+}
+
+func TestCorrectionInstructionPlanRejectsMalformedPlans(t *testing.T) {
 	items := []map[string]any{{"name": "羊肉锅", "estimatedWeightGrams": 1500.0}, {"name": "辣子鸡", "estimatedWeightGrams": 350.0}}
 	for _, test := range []struct {
 		name string
 		plan map[string]any
 	}{
-		{"歧义", map[string]any{"needs_clarification": true, "edits": []any{}}},
 		{"缺少明确判断", map[string]any{"edits": []any{}}},
+		{"缺少修改列表", map[string]any{"needs_clarification": false}},
 		{"无效目标", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 2.0, "name": "牛肉锅"}}}},
 		{"小数目标", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.5, "name": "牛肉锅"}}}},
 		{"重复目标", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "name": "牛肉锅"}, map[string]any{"index": 0.0, "name": "鸡肉锅"}}}},
+		{"只有目标", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0}}}},
+		{"未知字段", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "protein": 10.0}}}},
 		{"零重量", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "weight_grams": 0.0}}}},
 		{"空名称", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "name": ""}}}},
-		{"越权营养", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "name": "牛肉锅", "calories": 100.0}}}},
+		{"零热量", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "calories": 0.0}}}},
+		{"删除越界", map[string]any{"needs_clarification": false, "edits": []any{}, "remove": []any{5.0}}},
+		{"删除又修改", map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "name": "牛肉锅"}}, "remove": []any{0.0}}},
+		{"新增缺重量", map[string]any{"needs_clarification": false, "edits": []any{}, "add": []any{map[string]any{"name": "冰粉"}}}},
+		{"新增缺名称", map[string]any{"needs_clarification": false, "edits": []any{}, "add": []any{map[string]any{"weight_grams": 200.0}}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := applyCorrectionInstructionPlan(test.plan, items, "这是牛肉啊")
-			require.Error(t, err)
+			_, err := applyCorrectionInstructionPlan(test.plan, items)
+			var parseErr *LLMJSONParseError
+			require.ErrorAs(t, err, &parseErr)
 			require.Equal(t, "羊肉锅", items[0]["name"])
 		})
 	}
-	plan := map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "name": "牛肉锅", "weight_grams": 900.0}}}
-	for _, locked := range []map[string]any{
-		{"name": "鸡肉锅", "estimatedWeightGrams": 1500.0, "nameEdited": true},
-		{"name": "羊肉锅", "estimatedWeightGrams": 800.0, "weightEdited": true},
-	} {
-		_, err := applyCorrectionInstructionPlan(plan, []map[string]any{locked}, "牛肉锅900克")
-		require.ErrorIs(t, err, ErrCorrectionInstructionsUnclear, "不覆盖用户直接编辑的字段")
-	}
-}
-
-func TestCorrectionInstructionsKeepsCurrentTextAndNumericAuthority(t *testing.T) {
-	text := "上一轮纠错上下文：米饭改为200g\n用户在列表中做了以下修改：将米饭改为200g\n原始文字记录：羊肉锅和米饭\n这是牛肉啊\n原始文字记录：羊肉锅和米饭"
-	require.Equal(t, "这是牛肉啊", correctionInstructionText(text))
-	original := "羊肉锅\n米饭180克"
-	text = "上一轮纠错上下文：将米饭改200克\n原始文字记录：" + original + "\n这是牛肉啊\n原始文字记录：" + original
-	require.Equal(t, "这是牛肉啊", correctionInstructionText(text, original), "完整剥离多行旧原文，不能把其中数字作为当前纠错")
-	items := []map[string]any{{"name": "羊肉锅", "weight": 1500.0}}
-	plan := map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "name": "牛肉锅", "weight_grams": 2200.0}}}
-	_, err := applyCorrectionInstructionPlan(plan, items, "这是牛肉啊")
-	require.Error(t, err, "模型不能为单纯改名擅改克数")
-	plan["edits"] = []any{map[string]any{"index": 0.0, "name": "牛肉锅", "weight_grams": 1500.0}}
-	resolved, err := applyCorrectionInstructionPlan(plan, items, "这是牛肉啊")
-	require.NoError(t, err, "旧客户端仅有weight字段仍可保留原克数")
-	require.Equal(t, 1500.0, resolved[0]["weight"])
-	plan["edits"] = []any{map[string]any{"index": 0.0, "weight_grams": 60.0, "calories": 127.15}}
-	resolved, err = applyCorrectionInstructionPlan(plan, items, "八喜60克，532千焦")
-	require.NoError(t, err, "已有克数与千焦纠错继续支持")
-	require.Equal(t, 60.0, resolved[0]["weight"])
-	require.Equal(t, 127.15, resolved[0]["correctionCalories"])
-	plan["edits"] = []any{map[string]any{"index": 0.0, "name": "牛肉锅", "weight_grams": 200.0}}
-	_, err = applyCorrectionInstructionPlan(plan, []map[string]any{items[0], {"name": "米饭", "weight": 180.0}}, "羊肉锅是牛肉，米饭改200克")
-	require.Error(t, err, "不能把米饭的明确200克套到牛肉锅")
+	_, err := applyCorrectionInstructionPlan(map[string]any{"needs_clarification": true, "edits": []any{}}, items)
+	require.ErrorIs(t, err, ErrCorrectionInstructionsUnclear)
 }
 
 func TestResolveCorrectionInstructionsDoesNotRetryAmbiguity(t *testing.T) {
@@ -105,33 +150,15 @@ func TestResolveCorrectionInstructionsDoesNotRetryAmbiguity(t *testing.T) {
 	require.Equal(t, 1, client.calls)
 }
 
-func TestCorrectionInstructionsRejectsPartiallyAppliedNumericRequests(t *testing.T) {
-	items := []map[string]any{
-		{"name": "羊肉锅", "weight": 1500.0},
-		{"name": "米饭", "weight": 180.0, "nutrients": map[string]any{"calories": 234.0}},
-	}
-	plan := func(edits ...map[string]any) map[string]any {
-		return map[string]any{"needs_clarification": false, "edits": edits}
-	}
-	_, err := applyCorrectionInstructionPlan(plan(map[string]any{"index": 0.0, "name": "牛肉锅"}), items, "羊肉锅改牛肉锅，米饭改200克")
-	require.ErrorIs(t, err, ErrCorrectionInstructionsUnclear, "不能用一次改名掩盖漏掉的明确重量")
-	_, err = applyCorrectionInstructionPlan(plan(map[string]any{"index": 1.0, "weight_grams": 200.0}), items, "米饭200克，300千卡")
-	require.ErrorIs(t, err, ErrCorrectionInstructionsUnclear, "不能只改重量却漏掉用户明确热量")
-	resolved, err := applyCorrectionInstructionPlan(plan(
-		map[string]any{"index": 0.0, "name": "牛肉锅"},
-		map[string]any{"index": 1.0, "weight_grams": 200.0, "calories": 300.0},
-	), items, "羊肉锅改牛肉锅，米饭200克，300千卡")
-	require.NoError(t, err)
-	require.Equal(t, "牛肉锅", resolved[0]["name"])
-	require.Equal(t, 200.0, resolved[1]["weight"])
-	require.Equal(t, 300.0, resolved[1]["correctionCalories"])
-	require.Equal(t, 180.0, items[1]["weight"], "失败或成功均不改写输入")
-
-	// A satisfied energy request must remain explicit even when a later rename
-	// invokes nutrition resolution and would otherwise replace old calories.
-	resolved, err = applyCorrectionInstructionPlan(plan(map[string]any{"index": 1.0, "name": "杂粮饭"}), items, "米饭改为杂粮饭，保持234千卡")
-	require.NoError(t, err)
-	require.Equal(t, 234.0, resolved[1]["correctionCalories"])
+func TestResolveCorrectionInstructionsGivesUserFacingMessageAfterInvalidPlans(t *testing.T) {
+	client := &mockLLMClient{result: map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 2.0, "weight_grams": 0.0}}}}
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.ConfigureDashScopeLLMClient(client)
+	items := []map[string]any{{"name": "羊肉锅", "weight": 1500.0}, {"name": "辣子鸡", "weight": 350.0}, {"name": "米饭", "weight": 180.0}}
+	_, err := svc.ResolveCorrectionInstructions(context.Background(), "", AnalyzeInput{AdditionalContext: "不是羊肉，是牛肉，米饭没吃", CorrectionItems: items})
+	require.ErrorIs(t, err, ErrCorrectionInstructionsUnclear)
+	require.NotContains(t, err.Error(), "parse llm json")
+	require.Greater(t, client.calls, 1, "格式无效仍先按原策略重试")
 }
 
 func TestCorrectionInstructionsPreservesExplicitNutritionLockOnSpokenRename(t *testing.T) {
@@ -140,33 +167,8 @@ func TestCorrectionInstructionsPreservesExplicitNutritionLockOnSpokenRename(t *t
 		"nutrients": map[string]any{"calories": 300.0, "protein": 20.0, "carbs": 25.0, "fat": 13.3},
 	}}
 	plan := map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "name": "牛肉锅"}}}
-	resolved, err := applyCorrectionInstructionPlan(plan, items, "这是牛肉啊")
+	resolved, err := applyCorrectionInstructionPlan(plan, items)
 	require.NoError(t, err)
 	require.True(t, resolved[0]["nutritionEdited"].(bool), "口语改名不得取消用户完整营养快照的编辑锁")
 	require.Equal(t, items[0]["nutrients"], resolved[0]["nutrients"])
-	_, err = applyCorrectionInstructionPlan(plan, items, "这是牛肉，改为150千卡")
-	require.ErrorIs(t, err, ErrCorrectionInstructionsUnclear, "即使模型漏掉冲突热量，也不能绕过用户编辑锁")
-	plan["edits"] = []any{map[string]any{"index": 0.0, "name": "牛肉锅", "calories": 150.0}}
-	_, err = applyCorrectionInstructionPlan(plan, items, "牛肉锅150千卡")
-	require.ErrorIs(t, err, ErrCorrectionInstructionsUnclear)
-}
-
-func TestCorrectionInstructionsRejectsInventedQuantitiesInsideName(t *testing.T) {
-	items := []map[string]any{{"name": "羊肉锅", "weight": 1500.0}}
-	for _, name := range []string{"牛肉锅2200克", "牛肉锅（1500g）", "牛肉锅950kcal", "牛肉锅532千焦"} {
-		t.Run(name, func(t *testing.T) {
-			_, err := applyCorrectionInstructionPlan(map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "name": name}}}, items, "这是牛肉啊")
-			require.Error(t, err, "不能绕过克数/热量字段把模型编造数字拼到名称里")
-		})
-	}
-}
-
-func TestCorrectionInstructionsNumericCoverageSkipsExplicitlyRejectedOldValues(t *testing.T) {
-	items := []map[string]any{{"name": "米饭", "weight": 180.0}}
-	plan := map[string]any{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "weight_grams": 100.0}}}
-	for _, text := range []string{"米饭不是200克，是100克", "米饭200克不对，应该100克", "米饭原来200克，改成100克"} {
-		resolved, err := applyCorrectionInstructionPlan(plan, items, text)
-		require.NoError(t, err, text)
-		require.Equal(t, 100.0, resolved[0]["weight"])
-	}
 }
