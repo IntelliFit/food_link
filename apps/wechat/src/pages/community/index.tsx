@@ -380,7 +380,7 @@ function isCommunityFeedItem(value: CommunityFeedItem | CommunityFeedItem['recor
 }
 
 function CommunityPage() {
-  const [socialTab, setSocialTab] = useState<'find' | 'feed'>('find')
+  const [socialTab, setSocialTab] = useState<'find' | 'feed'>('feed')
   const { scheme } = useAppColorScheme()
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
 
@@ -2024,8 +2024,8 @@ function CommunityPage() {
         style={pageHeight ? { height: `${pageHeight}px` } : undefined}
       >
       <View className='community-social-tabs'>
-        <Text className={socialTab === 'find' ? 'is-active' : ''} onClick={() => setSocialTab('find')}>找搭子</Text>
         <Text className={socialTab === 'feed' ? 'is-active' : ''} onClick={() => setSocialTab('feed')}>晒餐</Text>
+        <Text className={socialTab === 'find' ? 'is-active' : ''} onClick={() => setSocialTab('find')}>找搭子</Text>
         <Text className='community-meal-messages' onClick={() => { if (!getAccessToken()) return redirectToLogin(); void Taro.navigateTo({ url: extraPkgUrl('/pages/private-conversations/index') }) }}>消息{unreadMessageCount > 0 ? ` · ${unreadMessageCount > 99 ? '99+' : unreadMessageCount}` : ''}</Text>
       </View>
       {socialTab === 'find' && <MealMeetupList />}
