@@ -145,6 +145,8 @@ type App struct {
 	openPlatformDone      chan struct{}
 	pushCancel            context.CancelFunc
 	pushDone              chan struct{}
+	mealReminderCancel    context.CancelFunc
+	mealReminderDone      chan struct{}
 	taskQueue             taskqueue.Queue
 	campusCatalogService  *campuscatalogservice.CatalogService
 	contentSecurity       *contentsecurityservice.Service
@@ -615,6 +617,10 @@ func New(cfg *config.Config) (*App, error) {
 			}()
 			logger.Info(context.Background(), "APP 业务提醒巡检已启动")
 		}
+		mealReminderCtx, mealReminderCancel := context.WithCancel(context.Background())
+		app.mealReminderCancel = mealReminderCancel
+		app.mealReminderDone = make(chan struct{})
+		go func() { defer close(app.mealReminderDone); mealMeetupSvc.RunReminders(mealReminderCtx) }()
 		app.startOpenPlatformReconciliation(openPlatformSvc)
 		app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
 	}
@@ -1555,6 +1561,16 @@ func (a *App) Close(ctx context.Context) error {
 		case <-a.pushDone:
 		case <-ctx.Done():
 			logger.Warn(context.Background(), "APP 业务提醒巡检关闭超时", logger.Err(ctx.Err()))
+		}
+	}
+	if a.mealReminderCancel != nil {
+		a.mealReminderCancel()
+	}
+	if a.mealReminderDone != nil {
+		select {
+		case <-a.mealReminderDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "约饭提醒巡检关闭超时", logger.Err(ctx.Err()))
 		}
 	}
 	if a.openPlatformCancel != nil {

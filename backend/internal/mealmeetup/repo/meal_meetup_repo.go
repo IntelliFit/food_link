@@ -44,6 +44,25 @@ func (r *Repo) SetStatus(ctx context.Context, id, status string, now time.Time) 
 func (r *Repo) SetEndsAt(ctx context.Context, id string, endsAt, now time.Time) error {
 	return r.db.WithContext(ctx).Model(&migrationdo.MealMeetupDO{}).Where("id = ?", id).Updates(map[string]any{"ends_at": endsAt, "updated_at": now}).Error
 }
+
+// ActiveStartingBetween lists active meetups whose start falls in (after, upTo].
+func (r *Repo) ActiveStartingBetween(ctx context.Context, after, upTo time.Time, limit int) ([]migrationdo.MealMeetupDO, error) {
+	rows := []migrationdo.MealMeetupDO{}
+	err := r.db.WithContext(ctx).Where("status = 'active' AND starts_at > ? AND starts_at <= ?", after, upTo).Order("starts_at").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
+// ActiveEndingBetween lists active meetups whose room closes in (after, upTo].
+func (r *Repo) ActiveEndingBetween(ctx context.Context, after, upTo time.Time, limit int) ([]migrationdo.MealMeetupDO, error) {
+	rows := []migrationdo.MealMeetupDO{}
+	err := r.db.WithContext(ctx).Where("status = 'active' AND ends_at > ? AND ends_at <= ?", after, upTo).Order("ends_at").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
+// MarkRoomNoticesRead marks the member's unread room inbox notices for one meetup as read.
+func (r *Repo) MarkRoomNoticesRead(ctx context.Context, userID, meetupID string) error {
+	return r.db.WithContext(ctx).Exec("UPDATE private_messages SET is_read = true WHERE receiver_id = ? AND is_read = false AND deleted_at IS NULL AND extra_data ->> 'meetup_id' = ? AND extra_data ->> 'kind' IN ('room_message','close_soon')", userID, meetupID).Error
+}
 func (r *Repo) Participants(ctx context.Context, id string) ([]migrationdo.MealMeetupParticipantDO, error) {
 	rows := []migrationdo.MealMeetupParticipantDO{}
 	err := r.db.WithContext(ctx).Where("meetup_id = ?", id).Order("created_at, id").Find(&rows).Error

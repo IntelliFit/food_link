@@ -58,3 +58,18 @@ describe('system message reward actions', () => {
     expect(resolveSystemMessageActionPath(other)).toBe('/packageExtra/pages/feedback/index')
   })
 })
+
+describe('meal meetup system message actions', () => {
+  const id = '3f2b8c1e-6d4a-4b7e-9c10-2a5d7e8f9a01'
+  it('opens the room for room notices', () => {
+    const notice = message({ content: '房间有新消息', extra_data: { target: 'meal-meetup', meetup_id: id, page: 'room', kind: 'room_message' } })
+    expect(resolveSystemMessageActionPath(notice)).toBe(`/packageMeal/pages/room/index?id=${id}`)
+  })
+  it('keeps opening the details for application and reminder notices', () => {
+    expect(resolveSystemMessageActionPath(message({ extra_data: { target: 'meal-meetup', meetup_id: id, page: 'detail' } }))).toBe(`/packageMeal/pages/detail/index?id=${id}`)
+    expect(resolveSystemMessageActionPath(message({ extra_data: { target: 'meal-meetup', meetup_id: id } }))).toBe(`/packageMeal/pages/detail/index?id=${id}`)
+  })
+  it('refuses a malformed meetup id', () => {
+    expect(resolveSystemMessageActionPath(message({ extra_data: { target: 'meal-meetup', meetup_id: '../x', page: 'room' } }))).toBe('')
+  })
+})

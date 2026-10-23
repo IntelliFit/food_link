@@ -421,6 +421,63 @@ func TestMealMeetupHTTPAndStateBoundaries(t *testing.T) {
 		require.Len(t, rows, 1)
 		require.Equal(t, hidden, rows[0].ID)
 	})
+	notices := func(user, id, kind string, unreadOnly bool) int64 {
+		var n int64
+		q := db.Model(&migrationdo.PrivateMessageDO{}).Where("receiver_id = ? AND extra_data ->> 'meetup_id' = ? AND extra_data ->> 'kind' = ?", user, id, kind)
+		if unreadOnly {
+			q = q.Where("is_read = false")
+		}
+		require.NoError(t, q.Count(&n).Error)
+		return n
+	}
+	t.Run("room messages notify other members once per window and opening the room reads them", func(t *testing.T) {
+		if secs := time.Now().Unix() % 600; secs >= 594 {
+			time.Sleep(7 * time.Second) // stay clear of a notice-window boundary
+		}
+		id := create(3)
+		apply(id, users[1], uuid.NewString())
+		require.Equal(t, 200, respond(id, users[1], "accept", 1))
+		for _, text := range []string{"我先到了", "二楼靠窗"} {
+			require.NoError(t, svc.SendMessage(ctx, users[1], id, domain.MessageRequest{RequestID: uuid.NewString(), Content: text}))
+		}
+		require.EqualValues(t, 1, notices(users[0], id, "room_message", true))
+		require.Zero(t, notices(users[1], id, "room_message", false))
+		var message migrationdo.PrivateMessageDO
+		require.NoError(t, db.Where("receiver_id = ? AND extra_data ->> 'kind' = 'room_message' AND extra_data ->> 'meetup_id' = ?", users[0], id).First(&message).Error)
+		require.Equal(t, "room", message.ExtraData["page"])
+		require.Contains(t, message.Content, "我先到了")
+		_, err := svc.Messages(ctx, users[0], id)
+		require.NoError(t, err)
+		require.Zero(t, notices(users[0], id, "room_message", true))
+		require.EqualValues(t, 1, notices(users[0], id, "room_message", false))
+	})
+	t.Run("reminders go out once per stage and only when someone has joined", func(t *testing.T) {
+		alone := create(3)
+		id := create(3)
+		apply(id, users[1], uuid.NewString())
+		require.Equal(t, 200, respond(id, users[1], "accept", 1))
+		shift(alone, -50*time.Minute, 140*time.Minute) // starts in 50 minutes
+		shift(id, -50*time.Minute, 140*time.Minute)
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.EqualValues(t, 1, notices(users[0], id, "start_soon", false))
+		require.EqualValues(t, 1, notices(users[1], id, "start_soon", false))
+		require.Zero(t, notices(users[0], alone, "start_soon", false))
+		shift(id, -10*time.Minute, 100*time.Minute) // starts in 10 minutes
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.EqualValues(t, 2, notices(users[1], id, "start_soon", false))
+		shift(id, 80*time.Minute, 10*time.Minute) // room closes in 10 minutes
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.EqualValues(t, 1, notices(users[0], id, "close_soon", false))
+		require.Zero(t, notices(users[1], id, "close_soon", false))
+		require.NoError(t, svc.Cancel(ctx, users[0], id))
+		shift(id, 80*time.Minute, 5*time.Minute)
+		before := notices(users[0], id, "close_soon", false)
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.Equal(t, before, notices(users[0], id, "close_soon", false)) // cancelled meetups stay quiet
+	})
 	t.Run("reports capture the correct resource and admin hiding closes discussion", func(t *testing.T) {
 		id := create(3)
 		apply(id, users[1], uuid.NewString())
@@ -445,7 +502,7 @@ func TestMealMeetupHTTPAndStateBoundaries(t *testing.T) {
 		require.NoError(t, svc.ResolveReport(ctx, report.ID, true))
 		var notices int64
 		require.NoError(t, db.Model(&migrationdo.PrivateMessageDO{}).Where("receiver_id = ? AND extra_data ->> 'meetup_id' = ?", users[0], id).Count(&notices).Error)
-		require.EqualValues(t, 2, notices) // application + moderation cancellation
+		require.EqualValues(t, 3, notices) // application + new room message + moderation cancellation
 		_, err = svc.List(ctx, users[2], true, domain.ListQuery{})
 		require.NoError(t, err)
 		_, err = svc.Detail(ctx, users[2], id)

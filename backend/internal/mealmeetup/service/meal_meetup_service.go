@@ -362,21 +362,7 @@ func (s *Service) Detail(ctx context.Context, userID, id string) (*domain.Meetup
 	return view, err
 }
 func (s *Service) notice(ctx context.Context, tx *repo.Repo, row *migrationdo.MealMeetupDO, event *migrationdo.MealMeetupEventDO, recipients []string, content string) error {
-	if s.messages == nil {
-		return fmt.Errorf("约饭系统消息服务未配置")
-	}
-	seen := map[string]bool{}
-	for _, id := range recipients {
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		key := uuid.NewSHA1(uuid.NameSpaceOID, []byte("meal-meetup:"+event.ID+":"+id)).String()
-		if err := s.messages.SendSystemMessageWithActionInTransaction(ctx, tx.DB(), key, id, content, "查看约饭", map[string]any{"target": "meal-meetup", "meetup_id": row.ID, "path": "/packageMeal/pages/detail/index?id=" + row.ID}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return s.deliver(ctx, tx, row, func(id string) string { return uuidKey("meal-meetup:", event.ID, ":", id) }, recipients, content, "查看约饭", "detail", "")
 }
 func (s *Service) Apply(ctx context.Context, userID, id string, req domain.ApplyRequest) error {
 	req.Note = strings.TrimSpace(req.Note)
@@ -700,6 +686,10 @@ func (s *Service) Messages(ctx context.Context, userID, id string) ([]domain.Eve
 		if err != nil {
 			return err
 		}
+		// Opening the room is the read receipt for its inbox notices.
+		if err := tx.MarkRoomNoticesRead(ctx, userID, id); err != nil {
+			return err
+		}
 		ids := []string{}
 		for _, e := range events {
 			ids = append(ids, e.ActorUserID)
@@ -745,8 +735,10 @@ func (s *Service) SendMessage(ctx context.Context, userID, id string, req domain
 		} else if !repo.IsMissing(err) {
 			return err
 		}
-		_, err := tx.AddEvent(ctx, id, userID, "text", req.Content, &req.RequestID, now)
-		return err
+		if _, err := tx.AddEvent(ctx, id, userID, "text", req.Content, &req.RequestID, now); err != nil {
+			return err
+		}
+		return s.notifyRoomMessage(ctx, tx, row, ps, userID, req.Content, now)
 	})
 }
 func (s *Service) Report(ctx context.Context, userID, id string, req domain.ReportRequest) error {
