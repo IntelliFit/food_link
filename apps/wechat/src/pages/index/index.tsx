@@ -1640,7 +1640,8 @@ function IndexPage() {
     return () => {
       try {
         const app = Taro.getApp()
-        if (app && app.eventCenter && app.eventCenter.callbacks) {
+        // 首页实例重建时，旧实例的卸载清理可能晚于新实例注册；只删除自己注册的回调，避免底栏找不到记录菜单。
+        if (app && app.eventCenter && app.eventCenter.callbacks && app.eventCenter.callbacks['showRecordMenu'] === showRecordMenuHandler) {
           delete app.eventCenter.callbacks['showRecordMenu']
         }
       } catch (err) {

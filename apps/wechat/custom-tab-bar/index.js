@@ -159,24 +159,21 @@ Component({
 
     openRecordMenuWithRetry() {
       this.clearRecordOpenTimers()
-      // 页面切换和 React effect 注册存在先后顺序；用少量有界重试替代首页 50ms、持续 60 秒的轮询。
-      const retryDelays = [0, 80, 180, 350, 650]
+      // 页面切换和 React effect 注册存在先后顺序；用有界重试替代首页 50ms、持续 60 秒的轮询。
+      // 真机冷启动/页面重建时首页回调可能晚于 1 秒才注册，所以重试窗口放宽到约 6 秒。
+      const retryDelays = [0, 80, 180, 350, 650, 1000, 1500, 2000]
       const attempt = (index) => {
         if (triggerRecordMenu(getCurrentPages())) {
           this.finishRecordOpening(true)
           return
         }
         if (index >= retryDelays.length - 1) {
-          // 首页组件若发生渲染异常，底栏仍然存在。此时直接进入已有分析页，
-          // 让用户仍可在空图片态选择拍照/相册，不把核心记录能力绑死在首页弹层上。
-          wx.navigateTo({
-            url: '/packageExtra/pages/analyze/index',
-            success: () => this.finishRecordOpening(true),
-            fail: () => {
-              this.finishRecordOpening(false)
-              wx.showToast({ title: '记录入口打开失败，请重试', icon: 'none' })
-            },
-          })
+          // 不再兜底直接进入分析页：那会跳过四个记录选项，并带出 storage 里上一次的旧图片。
+          try {
+            wx.removeStorageSync('showRecordMenuModal')
+          } catch (e) {}
+          this.finishRecordOpening(false)
+          wx.showToast({ title: '记录入口打开失败，请重试', icon: 'none' })
           return
         }
         const timer = setTimeout(() => attempt(index + 1), retryDelays[index + 1])

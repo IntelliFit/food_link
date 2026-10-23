@@ -14,9 +14,13 @@ describe('mini program interaction responsiveness guards', () => {
     expect(tabBarSource).toContain('pageLifetimes')
     expect(tabBarSource).toMatch(/hide\(\)\s*\{\s*this\.stopPolling\(\)/)
     expect(tabBarSource).toContain('openRecordMenuWithRetry()')
-    expect(tabBarSource).toContain("url: '/packageExtra/pages/analyze/index'")
+    expect(tabBarSource).not.toContain("url: '/packageExtra/pages/analyze/index'")
     expect(homeSource).not.toContain('const maxChecks = 1200')
     expect(homeSource).not.toContain('}, 50)')
+  })
+
+  it('only removes the home record menu callback it registered itself', () => {
+    expect(homeSource).toContain("app.eventCenter.callbacks['showRecordMenu'] === showRecordMenuHandler")
   })
 
   it('locks duplicate image actions and records the native picker stages', () => {
