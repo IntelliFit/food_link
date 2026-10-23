@@ -1488,6 +1488,12 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 	} else {
 		return true, fmt.Errorf("纠错说明解析服务不可用，请稍后重试")
 	}
+	modelName := selectPrecisionModel(r.analyze, sessionID)
+	reestimated, nutritionDisputes, err := r.reestimateCorrectionItems(ctx, input, modelName)
+	if err != nil {
+		return true, err
+	}
+	input.CorrectionItems = reestimated
 	correctionItems = input.CorrectionItems
 	contextOverrides := map[int]correctionContextOverride{}
 	for index, item := range correctionItems {
@@ -1496,7 +1502,7 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 		}
 	}
 	input.AnalysisEngine = "db_first"
-	input.ModelName = selectPrecisionModel(r.analyze, sessionID)
+	input.ModelName = modelName
 	standardMode := "standard"
 	input.ExecutionMode = &standardMode
 
@@ -1532,7 +1538,9 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 			}
 		}
 	}
-	err = r.completeTask(ctx, task, result)
+	if err = r.completeTask(ctx, task, result); err == nil {
+		r.captureCorrectionNutritionDisputes(ctx, task, nutritionDisputes, result)
+	}
 	return true, err
 }
 

@@ -66,7 +66,7 @@ func TestResolveCorrectionInstructionsAcceptsEstimatedWeightWithoutNumber(t *tes
 	require.Equal(t, items[0], resolved[0])
 	require.Equal(t, 400.0, items[1]["weight"], "不能修改任务原始输入")
 	require.Contains(t, client.prompt, note)
-	require.Contains(t, client.prompt, "估算一个合理的新克数")
+	require.Contains(t, client.prompt, "填 reestimate_weight=true")
 }
 
 func TestCorrectionInstructionPlanAppliesNamesWeightsAndCalories(t *testing.T) {
@@ -107,6 +107,46 @@ func TestCorrectionInstructionPlanRemovesAndAddsFoods(t *testing.T) {
 
 	_, err = applyCorrectionInstructionPlan(map[string]any{"needs_clarification": false, "edits": []any{}, "remove": []any{0.0, 1.0, 2.0}}, items)
 	require.ErrorIs(t, err, ErrCorrectionLeavesNoFood)
+}
+
+func TestCorrectionInstructionPlanFlagsPhotoReestimateAndNutritionDispute(t *testing.T) {
+	items := []map[string]any{
+		{"itemId": 1.0, "name": "驴肉馄饨", "weight": 400.0},
+		{"itemId": 2.0, "name": "红烧肉", "weight": 200.0},
+		{"itemId": 3.0, "name": "米饭", "weight": 150.0, "weightEdited": true},
+		{"itemId": 4.0, "name": "鸡腿", "weight": 120.0, "nutritionEdited": true, "nutrients": map[string]any{"calories": 250.0, "protein": 25.0, "carbs": 0.0, "fat": 16.0}},
+	}
+	plan := map[string]any{
+		"needs_clarification": false,
+		"edits": []any{
+			map[string]any{"index": 0.0, "weight_grams": 250.0, "reestimate_weight": true, "hint": "可食用的部分没有这么多"},
+			map[string]any{"index": 1.0, "dispute_nutrition": true, "hint": "油比一般多"},
+			map[string]any{"index": 2.0, "reestimate_weight": true},
+			map[string]any{"index": 3.0, "dispute_nutrition": true},
+		},
+		"add": []any{map[string]any{"name": "冰粉", "weight_grams": 200.0, "reestimate_weight": true}},
+	}
+	resolved, err := applyCorrectionInstructionPlan(plan, items)
+	require.NoError(t, err)
+	require.Equal(t, true, resolved[0][CorrectionReestimateWeightKey])
+	require.Equal(t, 250.0, resolved[0]["weight"], "常识估计先作为没有照片时的结果")
+	require.Equal(t, "可食用的部分没有这么多", resolved[0][CorrectionHintKey])
+	require.Equal(t, true, resolved[1][CorrectionDisputeNutritionKey])
+	require.Equal(t, "油比一般多", resolved[1][CorrectionHintKey])
+	require.NotContains(t, resolved[2], CorrectionReestimateWeightKey, "用户在清单里改过的重量不再看图改回")
+	require.NotContains(t, resolved[3], CorrectionDisputeNutritionKey, "用户手填的营养不再看图重估")
+	require.Equal(t, true, resolved[4][CorrectionReestimateWeightKey], "新增且没给重量的菜对照照片估重")
+	require.Equal(t, true, resolved[4]["weightEdited"])
+
+	for _, bad := range []map[string]any{
+		{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "reestimate_weight": "true"}}},
+		{"needs_clarification": false, "edits": []any{map[string]any{"index": 0.0, "hint": 3.0}}},
+		{"needs_clarification": false, "edits": []any{}, "add": []any{map[string]any{"name": "冰粉", "weight_grams": 200.0, "dispute_nutrition": true}}},
+	} {
+		_, err := applyCorrectionInstructionPlan(bad, items)
+		var parseErr *LLMJSONParseError
+		require.ErrorAs(t, err, &parseErr)
+	}
 }
 
 func TestCorrectionInstructionPlanRejectsMalformedPlans(t *testing.T) {

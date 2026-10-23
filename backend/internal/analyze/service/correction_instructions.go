@@ -22,18 +22,26 @@ var (
 	ErrCorrectionLeavesNoFood        = errors.New("按说明删除后这餐没有剩下食物；如果整餐都没吃，请直接删除这次识别")
 )
 
-const correctionInstructionPrompt = `你负责理解用户对一餐食物的纠错说明，把它转换成对当前清单的修改。只返回 JSON，不计算营养、不重新识图。
-数据中 instructions 是用户说明；items 是当前清单（index、菜名、重量克数；name_edited/weight_edited 为 true 表示用户已在清单里手动改过该字段）。
+// 纠错计划写在条目上的标记，由 worker 据此对照原图重估重量或营养。
+const (
+	CorrectionReestimateWeightKey = "correctionReestimateWeight"
+	CorrectionDisputeNutritionKey = "correctionDisputeNutrition"
+	CorrectionHintKey             = "correctionHint"
+)
+
+const correctionInstructionPrompt = `你负责理解用户对一餐食物的纠错说明，把它转换成对当前清单的修改计划。只返回 JSON。
+数据中 instructions 是用户说明；items 是当前清单（index、菜名、重量克数；name_edited/weight_edited 为 true 表示用户已在清单里手动改过该字段）。之后系统会对照原照片重估你标出的菜。
 按用户的真实意图修改，理解正常口语、指代（“这个”“那碗”）、简称和省略，不要求固定句式：
 - 改名：用户指出菜不对或给出新菜名时输出 name。只更正原料时保留仍适用的做法和形态（例如“羊肉锅”说“这是牛肉”→“牛肉锅”）；给出完整新菜名时用新菜名。名称只写食物名，不带重量、热量或语气词。
-- 改重量：用户给出具体重量（克、斤、两、公斤等）时换算成克并原样使用；用户没给数字、但说明分量不对（如“没有这么多”“只吃了一半”“可食部分没这么多”“汤没喝”“多算了一倍”）时，结合说明和这道菜的常见情况估算一个合理的新克数，必须与原重量不同。“不是X克”“没有X克”里的 X 是旧值，不是新值。
-- 改热量：用户明确给出热量时输出 calories（千卡），千焦除以4.184。
+- 改重量：用户给出具体重量（克、斤、两、公斤等）时换算成克填 weight_grams 并原样使用。用户没给数字、但说明分量不对（如“没有这么多”“只吃了一半”“可食部分没这么多”“汤没喝”“多算了一倍”）时，填 reestimate_weight=true，hint 写用户对这道菜分量的原话要点，并在 weight_grams 填一个按常见情况估的新克数（必须与原重量不同，仅在没有照片时使用）。“不是X克”“没有X克”里的 X 是旧值，不是新值。
+- 改热量：用户明确给出热量或标签数值时输出 calories（千卡），千焦除以4.184。
+- 质疑营养：用户认为热量、配料或营养数据不准但没给具体数值（如“油比一般多”“这个是无糖的”“配料表不对”“热量算多了”）时，对那道菜填 dispute_nutrition=true，hint 写用户的理由；能判断原因是菜认错了时改 name 即可。
 - 删除：用户说某道菜没吃、不是这餐的或识别多了时，把它的 index 放入 remove。
-- 添加：用户说还吃了清单里没有的食物时放入 add，填写 name 和 weight_grams（没给重量就按常见一份估算）。
+- 添加：用户说还吃了清单里没有的食物时放入 add，填写 name；给了重量就填 weight_grams，没给就填 reestimate_weight=true，同时在 weight_grams 填常见一份的克数。
 - 用户没提到的菜不要改；用户在清单里手动改过的字段，除非说明里再次明确要求，否则保持不变。
 - 尽量按最合理的理解执行，不要因为说法不标准而拒绝。只有完全无法判断指的是哪道菜，或说明与这餐食物无关时，才返回 needs_clarification=true。
-格式：{"needs_clarification":false,"edits":[{"index":0,"name":"新菜名","weight_grams":300,"calories":450}],"remove":[2],"add":[{"name":"冰粉","weight_grams":200}]}
-edits 每项除 index 外只写需要修改的字段；没有对应内容时用空数组。
+格式：{"needs_clarification":false,"edits":[{"index":0,"name":"新菜名","weight_grams":300,"calories":450},{"index":1,"weight_grams":250,"reestimate_weight":true,"hint":"可食部分没这么多"},{"index":3,"dispute_nutrition":true,"hint":"油比一般多"}],"remove":[2],"add":[{"name":"冰粉","weight_grams":200,"reestimate_weight":true}]}
+edits 每项除 index 外只写需要的字段；没有对应内容时用空数组。
 数据：`
 
 // ResolveCorrectionInstructions translates free text into edits of existing
@@ -193,7 +201,7 @@ func applyCorrectionInstructionPlan(parsed map[string]any, items []map[string]an
 		}
 		edited[index] = true
 		for key := range edit {
-			if key != "index" && key != "name" && key != "weight_grams" && key != "calories" {
+			if key != "index" && !correctionPlanItemKeys[key] {
 				return nil, invalid("edits." + key)
 			}
 		}
@@ -210,7 +218,7 @@ func applyCorrectionInstructionPlan(parsed map[string]any, items []map[string]an
 	nextID := correctionNextItemID(items)
 	for _, add := range adds {
 		for key := range add {
-			if key != "name" && key != "weight_grams" && key != "calories" {
+			if !correctionPlanItemKeys[key] || key == "dispute_nutrition" {
 				return nil, invalid("add." + key)
 			}
 		}
@@ -218,11 +226,12 @@ func applyCorrectionInstructionPlan(parsed map[string]any, items []map[string]an
 			return nil, invalid("add.weight_grams")
 		}
 		// 新增项没有 sourceItemId，用新编号避免被按同名配对到原清单的菜。
-		item := map[string]any{"itemId": nextID, "nameEdited": true, "weightEdited": true, "nutritionEdited": false}
+		item := map[string]any{"itemId": nextID, "nameEdited": true, "nutritionEdited": false}
 		nextID++
 		if err := applyCorrectionEdit(item, add); err != nil {
 			return nil, invalid(err.Error())
 		}
+		item["weightEdited"] = true
 		if strings.TrimSpace(stringFromAny(item["name"])) == "" {
 			return nil, invalid("add.name")
 		}
@@ -264,8 +273,42 @@ func correctionPlanIndex(raw any, count int) (int, bool) {
 	return int(value), true
 }
 
+var correctionPlanItemKeys = map[string]bool{
+	"name": true, "weight_grams": true, "calories": true, "reestimate_weight": true, "dispute_nutrition": true, "hint": true,
+}
+
 // applyCorrectionEdit writes one change onto item, which must be a private copy.
 func applyCorrectionEdit(item, edit map[string]any) error {
+	weightEditedInList := boolFromAny(item["weightEdited"]) && !boolFromAny(item[CorrectionReestimateWeightKey])
+	nutritionLockedInList := correctionNutritionLocked(item)
+	reestimate, err := correctionPlanBool(edit, "reestimate_weight")
+	if err != nil {
+		return err
+	}
+	dispute, err := correctionPlanBool(edit, "dispute_nutrition")
+	if err != nil {
+		return err
+	}
+	if raw, exists := edit["hint"]; exists {
+		hint, valid := raw.(string)
+		if !valid {
+			return fmt.Errorf("hint")
+		}
+		if hint = strings.TrimSpace(hint); hint != "" {
+			runes := []rune(hint)
+			if len(runes) > 200 {
+				hint = string(runes[:200])
+			}
+			item[CorrectionHintKey] = hint
+		}
+	}
+	// 用户在清单里亲手改过的重量和营养以清单为准，不再对照照片改回去。
+	if reestimate && !weightEditedInList {
+		item[CorrectionReestimateWeightKey] = true
+	}
+	if dispute && !nutritionLockedInList {
+		item[CorrectionDisputeNutritionKey] = true
+	}
 	if raw, exists := edit["name"]; exists {
 		name, valid := raw.(string)
 		name = strings.TrimSpace(name)
@@ -295,6 +338,18 @@ func applyCorrectionEdit(item, edit map[string]any) error {
 		item["correctionCalories"] = math.Round(calories*100) / 100
 	}
 	return nil
+}
+
+func correctionPlanBool(edit map[string]any, key string) (bool, error) {
+	raw, exists := edit[key]
+	if !exists || raw == nil {
+		return false, nil
+	}
+	value, valid := raw.(bool)
+	if !valid {
+		return false, fmt.Errorf("%s", key)
+	}
+	return value, nil
 }
 
 func correctionNextItemID(items []map[string]any) int {
