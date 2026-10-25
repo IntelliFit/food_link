@@ -147,3 +147,4 @@ DECISIONS.md
 
 # 本地开发工具链（JDK/Android SDK 等）
 tools/
+.gstack/
