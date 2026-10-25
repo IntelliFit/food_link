@@ -1235,7 +1235,11 @@ func (r *Runner) enrichCampusPreciseMicronutrients(ctx context.Context, task *do
 		enriched []map[string]any
 		err      error
 	)
-	if resolvedRunner, ok := r.analyze.(interface {
+	if campusRunner, ok := r.analyze.(interface {
+		ApplyCampusPreciseMicronutrientsToResolvedItems(context.Context, []map[string]any, string) ([]map[string]any, error)
+	}); ok {
+		enriched, err = campusRunner.ApplyCampusPreciseMicronutrientsToResolvedItems(ctx, items, input.AdditionalContext)
+	} else if resolvedRunner, ok := r.analyze.(interface {
 		ApplyPreciseMicronutrientsToResolvedItems(context.Context, []map[string]any, string) ([]map[string]any, error)
 	}); ok {
 		enriched, err = resolvedRunner.ApplyPreciseMicronutrientsToResolvedItems(ctx, items, input.AdditionalContext)
@@ -1301,7 +1305,7 @@ func (r *Runner) runFoodAnalysis(ctx context.Context, task *domain.AnalysisTask,
 			slog.Int("image_count", taskImageCount(task)),
 		)...,
 	)
-	result, err := r.analyze.Analyze(ctx, task.UserID, input)
+	result, err := r.analyzeWithCampusBudget(ctx, task, input, false)
 	if err != nil {
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.stage", "food_analyze"),
@@ -1417,7 +1421,7 @@ func (r *Runner) processFoodText(ctx context.Context, task *domain.AnalysisTask)
 		attribute.String("analysis.model_name", stringFromMap(task.Payload, "modelName")),
 		attribute.String("analysis.execution_mode", stringFromMap(task.Payload, "execution_mode")),
 	)
-	result, err := r.analyze.AnalyzeText(ctx, task.UserID, input)
+	result, err := r.analyzeWithCampusBudget(ctx, task, input, true)
 	if err != nil {
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.stage", "food_text_analyze"),

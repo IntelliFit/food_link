@@ -1,0 +1,503 @@
+{
+  "baseline": "083ea666b06eaf14dc73cecbfeaf6929ca5667d2",
+  "comparison": "failed_test_identifier_sets_identical",
+  "failed_events_including_subtests": 98,
+  "environment_events": 71,
+  "assertion_events_including_three_parents": 27,
+  "assertion_leaf_events": 24,
+  "assertion_root_scenarios": 6,
+  "targeted_pass_events_including_subtests": 49,
+  "full_suite_passed": false,
+  "failures": [
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestWorkerProcessesCustomFocusAsPersistedBackgroundTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestPrecisionAggregateWaitsUntilEveryChildFinishes",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestPrecisionAggregateIsNotRepublishedOnceClaimed",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestPrecisionAggregateTriggerIgnoresChildrenFromOlderPlans",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestPrecisionAggregateTriggerRunsWithCancelledChildContext",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestWorkerProcessFoodPublishesCatalogItemOnlyAfterNutritionSucceeds",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestWorkerFailureKeepsNewCatalogItemOutOfClientLibrary",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestWorkerProcessFoodTextPublishesCatalogWithPreciseMicronutrients",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestWorkerPreciseCampusEnrichmentFailureDoesNotPublish",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestWorkerProcessFoodWritesBackCampusPublicFood",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestCampusPublicFoodSubmitWaitsForWorkerCaloriesRecognition",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestWorkerProcessPrecisionPlanRelinksCampusPublicFoodToAggregateTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestWorkerProcessPrecisionPlanPausesWithoutCreatingEstimateTasks",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestWorkerProcessPrecisionAggregateWritesBackCampusPublicFood",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood/fast",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood/standard",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood/strict",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood/strict_separate",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood/fast_web_search",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood/standard_web_search",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood/strict_web_search",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood",
+      "category": "parent_of_failed_subtests"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses/fast",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses/standard",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses/strict",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses/strict_separate",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses/fast_web_search",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses/standard_web_search",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses/strict_web_search",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/worker",
+      "test": "TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses",
+      "category": "parent_of_failed_subtests"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_AnalyzeCompare",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_AnalyzeCompareEngines",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_AnalyzeBatch",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_AnalyzeBatch_TooMany",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_ResolveExecutionMode",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes/fast",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes/standard",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes/strict",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes/strict_separate",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes/fast_web_search",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes/standard_web_search",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes/strict_web_search",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes",
+      "category": "parent_of_failed_subtests"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseFallsBackWhenPackagedFoodMisses",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseGeneratesNutritionWhenPackagedAndNormalMiss",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_FinalizeAnalyzeResponseAdjustsImplausibleLibraryCalories",
+      "category": "legacy_nutrition_contract_assertion"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_ApplyDBFirstUsesPackagedNutritionForSnack",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_ApplyDBFirstIntegratesPackagedFoodInMixedMeal",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_ApplyDBFirstPackagedExperimentUsesNetWeightAnchor",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_ApplyDBFirstPackagedExperimentKeepsAIWeightForAmbiguousSpecs",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_ApplyDBFirstPackagedExperimentUserWeightWinsOverLibrary",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_ApplyDBFirstUsesWaterMlAsLiquidWeight",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestApplyDBFirstToItemsUsesIngredientLabelNutrition",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestApplyDBFirstToItemsFallsBackToLibraryWhenNoIngredientLabel",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestEnqueueFailurePreservesAcceptedTaskAndCredits",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestSubmitOpenAnalyzeTaskUsesOpenLedgerInsteadOfUserCredits",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestSubmitOpenTextTaskRejectsUntrustedDirectCall",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskServiceRetryTaskRestartsFailedPrecisionAggregateAsFreshRootTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_EmptyInput",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_RejectsWeappLocalImageReference",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_Success",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_WithImages",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_StrictSeparateCreatesPrecisionPlan",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_DualAngleCreatesInteractivePrecisionSession",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_DualAngleValidation",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_VideoKeyframesCreatePrecisionPlan",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_VideoKeyframeValidation",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_ContinuePrecisionSession_ReusesCreditsAndLimitsRounds",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_ContinuePrecisionSession_RejectsOtherUser",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitAnalyzeTask_RejectsMoreThanFiveImages",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitTextTask_EmptyText",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitTextTask_Success",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitTextTask_ReservesCreditsWithRefundGroup",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_ListTasks",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_ListTasksCollapsesRepeatedSameDayInput",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitCorrectionStoresChainRoot",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitCorrectionUsesOneCredit",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SubmitStrictSeparateCorrectionUsesPrecisionCorrectionCredits",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_SetTaskAutoRecordPersistsPreferenceAndRecordsCompletedTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_CountTasks",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_CountTasksByStatus",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_CountTasksByStatusWaitingRecordUsesRecentWindow",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_GetTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_GetTask_RefundsCreditsOnlyForFailedTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_GetTask_RefundsCreditsForFailedTextTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_RetryTask_ResubmitsFailedImageTaskWithExistingImages",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_PrepareAndEnqueueInternalRetryPreservesChainWithoutCredits",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_PrepareInternalRetryRejectsUserTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_PrepareInternalCampusRetryRepairsDoneTaskPayloadWithoutCredits",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_RetryTask_RejectsDoneTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_UpdateTaskResult",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_DeleteTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_CleanupTimeoutTasks",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_CreateBatchTask",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskService_ValidateQuota",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestWaitingRecordSummaryFiltersBeforePaginationAndCountsAllRows",
+      "category": "embedded_postgres_missing_dll"
+    },
+    {
+      "package": "food_link/backend/internal/analyze/service",
+      "test": "TestTaskServiceListTaskSummariesPageUsesProjectionAndNormalizesLegacyEnergy",
+      "category": "embedded_postgres_missing_dll"
+    }
+  ]
+}

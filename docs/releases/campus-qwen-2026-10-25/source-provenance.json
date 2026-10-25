@@ -1,0 +1,34 @@
+{
+  "files": [
+    {
+      "path": "backend/internal/analyze/service/campus_model.go",
+      "normalized_lf_sha256": "c5b8060e0f38fbe6eb09de11c1170ca2ff9554a2fde99d1afc04f796ebe25a44"
+    },
+    {
+      "path": "backend/internal/analyze/service/campus_model_test.go",
+      "normalized_lf_sha256": "62c6ae49f419717fffc1f2b5dec5f1e5ed47f5065722b0ed40e2cead6b76a25b"
+    },
+    {
+      "path": "backend/internal/worker/campus_model.go",
+      "normalized_lf_sha256": "2e1f385bc3cfe69281d7a423d75d24600332e60bc688b4de2c1e22517d1d1626"
+    },
+    {
+      "path": "backend/internal/worker/campus_model_test.go",
+      "normalized_lf_sha256": "e1c14f8c71f514d0b75a69d08de0978a3c8bca3750d4a78a48e75699944e2ec6"
+    },
+    {
+      "path": "backend/internal/worker/worker.go",
+      "normalized_lf_sha256": "7ed56a7b59d08a7cb002fa35948b6fe447546a166fcece152ebc55f9ebdd1a9d"
+    }
+  ],
+  "deployed_source_base": "b175f4753d2099c3798b5c37a206fb6f6ecafdc9",
+  "integration_base": "083ea666b06eaf14dc73cecbfeaf6929ca5667d2",
+  "original_patch_sha256": "ce9f810dd73458b9c239dae9a8ea899322c90b07097dbcb52220079de3a30447",
+  "image": "ccr.ccs.tencentyun.com/littlehorse/foodlink@sha256:26cec2e7f15b9e238e9905bc9c66646f2de71286e98bc15decc38e0022420854",
+  "image_amd64_manifest": "sha256:ee8cced6a69c97a022100d4e047a634a0dd01f90646e184227952c11a1d45c95",
+  "historical_deployment_verification_at": "2026-10-25T05:22:32+08:00",
+  "original_image_had_a_corresponding_committed_patch": false,
+  "this_commit_does_not_rebuild_or_relabel_that_image": true,
+  "a6_channel_change_included": false,
+  "bulk_food_publication_included": false
+}
