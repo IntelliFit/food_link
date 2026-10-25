@@ -478,6 +478,38 @@ func TestMealMeetupHTTPAndStateBoundaries(t *testing.T) {
 		require.NoError(t, svc.SendDueReminders(ctx))
 		require.Equal(t, before, notices(users[0], id, "close_soon", false)) // cancelled meetups stay quiet
 	})
+	t.Run("host is nudged once per application that waits too long", func(t *testing.T) {
+		id := create(3)
+		agePending := func(user string, ago time.Duration) {
+			require.NoError(t, db.Model(&migrationdo.MealMeetupParticipantDO{}).Where("meetup_id = ? AND user_id = ?", id, user).Update("updated_at", time.Now().Add(-ago)).Error)
+		}
+		apply(id, users[1], uuid.NewString())
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.Zero(t, notices(users[0], id, "apply_waiting", false)) // just applied, not late yet
+		agePending(users[1], 40*time.Minute)
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.EqualValues(t, 1, notices(users[0], id, "apply_waiting", false))
+		apply(id, users[2], uuid.NewString()) // fresh request: no nudge yet
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.EqualValues(t, 1, notices(users[0], id, "apply_waiting", false))
+		agePending(users[2], 45*time.Minute)
+		require.Equal(t, 200, respond(id, users[1], "accept", 1)) // the first one is answered; the second is now the oldest
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.EqualValues(t, 2, notices(users[0], id, "apply_waiting", false))
+		var message migrationdo.PrivateMessageDO
+		require.NoError(t, db.Where("receiver_id = ? AND extra_data ->> 'kind' = 'apply_waiting' AND extra_data ->> 'meetup_id' = ?", users[0], id).First(&message).Error)
+		require.Contains(t, message.Content, "1 位")
+		require.Equal(t, "detail", message.ExtraData["page"])
+		// Once the late-join window is over a stale request is no longer worth a nudge.
+		shift(id, 25*time.Minute, 65*time.Minute)
+		stale := create(3)
+		apply(stale, users[3], uuid.NewString())
+		require.NoError(t, db.Model(&migrationdo.MealMeetupParticipantDO{}).Where("meetup_id = ?", stale).Update("updated_at", time.Now().Add(-time.Hour)).Error)
+		shift(stale, 25*time.Minute, 65*time.Minute)
+		require.NoError(t, svc.SendDueReminders(ctx))
+		require.Zero(t, notices(users[0], stale, "apply_waiting", false))
+	})
 	t.Run("reports capture the correct resource and admin hiding closes discussion", func(t *testing.T) {
 		id := create(3)
 		apply(id, users[1], uuid.NewString())

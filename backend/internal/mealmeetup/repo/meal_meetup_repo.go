@@ -59,6 +59,16 @@ func (r *Repo) ActiveEndingBetween(ctx context.Context, after, upTo time.Time, l
 	return rows, err
 }
 
+// ActiveWithWaitingApplication lists active meetups that start after startsAfter and hold a pending application
+// last touched at or before waitingSince.
+func (r *Repo) ActiveWithWaitingApplication(ctx context.Context, startsAfter, waitingSince time.Time, limit int) ([]migrationdo.MealMeetupDO, error) {
+	rows := []migrationdo.MealMeetupDO{}
+	err := r.db.WithContext(ctx).
+		Where("status = 'active' AND starts_at > ? AND EXISTS (SELECT 1 FROM meal_meetup_participants p WHERE p.meetup_id = meal_meetups.id AND p.status = 'pending' AND p.updated_at <= ?)", startsAfter, waitingSince).
+		Order("starts_at").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
 // MarkRoomNoticesRead marks the member's unread room inbox notices for one meetup as read.
 func (r *Repo) MarkRoomNoticesRead(ctx context.Context, userID, meetupID string) error {
 	return r.db.WithContext(ctx).Exec("UPDATE private_messages SET is_read = true WHERE receiver_id = ? AND is_read = false AND deleted_at IS NULL AND extra_data ->> 'meetup_id' = ? AND extra_data ->> 'kind' IN ('room_message','close_soon')", userID, meetupID).Error

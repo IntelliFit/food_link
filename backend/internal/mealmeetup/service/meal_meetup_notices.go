@@ -18,6 +18,7 @@ const (
 	noticeRoomMessage = "room_message"
 	noticeStartSoon   = "start_soon"
 	noticeCloseSoon   = "close_soon"
+	noticeApplyWait   = "apply_waiting"
 )
 
 const (
@@ -25,6 +26,8 @@ const (
 	roomNoticeWindow = 10 * time.Minute
 	reminderInterval = time.Minute
 	reminderBatch    = 500
+	// applyWaitAfter is how long an application may sit unanswered before the host is nudged.
+	applyWaitAfter = 30 * time.Minute
 )
 
 func clip(value string, max int) string {
@@ -133,7 +136,60 @@ func (s *Service) SendDueReminders(ctx context.Context) error {
 			}
 		}
 	}
+	// Applications the host has not answered: still joinable meetups with a pending request older than applyWaitAfter.
+	waiting, err := s.repo.ActiveWithWaitingApplication(ctx, now.Add(-joinGrace), now.Add(-applyWaitAfter), reminderBatch)
+	if err != nil {
+		return err
+	}
+	for i := range waiting {
+		if err := s.remindApplyWaiting(ctx, &waiting[i]); err != nil {
+			logger.Error(ctx, "约饭申请提醒发送失败", err, slog.String("meetup_id", waiting[i].ID))
+		}
+	}
 	return nil
+}
+
+// remindApplyWaiting nudges the host about the longest-waiting application. Each application is nudged at most
+// once (the key holds its revision), so a host with several requests gets them one at a time rather than in a burst.
+func (s *Service) remindApplyWaiting(ctx context.Context, meetup *migrationdo.MealMeetupDO) error {
+	return s.repo.Transaction(ctx, func(tx *repo.Repo) error {
+		now := s.now()
+		row, err := tx.Get(ctx, meetup.ID, false)
+		if err != nil {
+			return err
+		}
+		if row.Status != "active" || !now.Before(joinCutoff(row)) {
+			return nil
+		}
+		ps, err := tx.Participants(ctx, row.ID)
+		if err != nil {
+			return err
+		}
+		if len(acceptedIDs(row, ps)) >= row.Capacity {
+			return nil // full: there is no seat left to approve
+		}
+		var oldest *migrationdo.MealMeetupParticipantDO
+		waiting := 0
+		for i := range ps {
+			if ps[i].Status != "pending" {
+				continue
+			}
+			waiting++
+			if ps[i].UpdatedAt.After(now.Add(-applyWaitAfter)) {
+				continue
+			}
+			if oldest == nil || ps[i].UpdatedAt.Before(oldest.UpdatedAt) {
+				oldest = &ps[i]
+			}
+		}
+		if oldest == nil {
+			return nil
+		}
+		content := fmt.Sprintf("「%s」有 %d 位饭搭子在等你确认申请，早点回复更容易成局。", clip(row.Title, 12), waiting)
+		return s.deliver(ctx, tx, row, func(id string) string {
+			return uuidKey("meal-remind:apply-waiting:", row.ID, ":", oldest.UserID, ":", oldest.Revision, ":", id)
+		}, []string{row.HostUserID}, content, "去处理", "detail", noticeApplyWait)
+	})
 }
 
 func (s *Service) remind(ctx context.Context, meetup *migrationdo.MealMeetupDO, stage string) error {
