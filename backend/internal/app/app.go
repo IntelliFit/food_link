@@ -84,6 +84,9 @@ import (
 	publicfoodhandler "food_link/backend/internal/publicfood/handler"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
+	promoterhandler "food_link/backend/internal/promoter/handler"
+	promoterrepo "food_link/backend/internal/promoter/repo"
+	promoterservice "food_link/backend/internal/promoter/service"
 	pushhandler "food_link/backend/internal/push/handler"
 	pushrepo "food_link/backend/internal/push/repo"
 	pushservice "food_link/backend/internal/push/service"
@@ -150,6 +153,8 @@ type App struct {
 	taskQueue             taskqueue.Queue
 	campusCatalogService  *campuscatalogservice.CatalogService
 	contentSecurity       *contentsecurityservice.Service
+	promoterSyncCancel    context.CancelFunc
+	promoterSyncDone      chan struct{}
 	profileReviewCancel   context.CancelFunc
 	profileReviewDone     chan struct{}
 }
@@ -539,6 +544,8 @@ func New(cfg *config.Config) (*App, error) {
 	foodContributionRepo := foodcontributionrepo.NewContributionRepo(db)
 	foodContributionSvc := foodcontributionservice.NewContributionService(foodContributionRepo, membershipSvc, storageClient)
 	foodContributionHandler := foodcontributionhandler.NewContributionHandler(foodContributionSvc)
+	promoterSvc := promoterservice.NewPromoterService(promoterrepo.NewPromoterRepo(db), promoterservice.RulesFromConfig(cfg.Promoter))
+	promoterHandler := promoterhandler.NewPromoterHandler(promoterSvc)
 
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
@@ -630,6 +637,12 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/app/sms/send-code", loginHandler.SendSMSCode)
 	engine.POST("/api/app/login/sms", loginHandler.SMSLogin)
 	engine.POST("/api/app/login/password", loginHandler.PasswordLogin)
+		if cfg.Promoter.Enabled {
+			promoterSyncCtx, promoterSyncCancel := context.WithCancel(context.Background())
+			app.promoterSyncCancel = promoterSyncCancel
+			app.promoterSyncDone = make(chan struct{})
+			go func() { defer close(app.promoterSyncDone); promoterSvc.RunSync(promoterSyncCtx) }()
+		}
 	engine.POST("/api/app/register/password", loginHandler.PasswordRegister)
 	engine.POST("/api/app/account/password/reset", loginHandler.ResetPassword)
 	engine.POST("/api/app/account/password", authmw.RequireJWT(jwtSvc), loginHandler.SetPassword)
@@ -929,6 +942,10 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Expiry routes
 	engine.GET("/api/expiry/dashboard", authmw.RequireJWT(jwtSvc), expiryHandler.Dashboard)
+	engine.GET("/api/promoter/me", authmw.RequireJWT(jwtSvc), promoterHandler.Me)
+	engine.POST("/api/promoter/apply", authmw.RequireJWT(jwtSvc), promoterHandler.Apply)
+	engine.POST("/api/promoter/bind", authmw.RequireJWT(jwtSvc), promoterHandler.Bind)
+	engine.GET("/api/promoter/commissions", authmw.RequireJWT(jwtSvc), promoterHandler.Commissions)
 	engine.GET("/api/expiry/items", authmw.RequireJWT(jwtSvc), expiryHandler.ListItems)
 	engine.POST("/api/expiry/items", authmw.RequireJWT(jwtSvc), expiryHandler.CreateItem)
 	engine.GET("/api/expiry/items/:item_id", authmw.RequireJWT(jwtSvc), expiryHandler.GetItem)
@@ -1091,6 +1108,10 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.DELETE("/campus-directory/campuses/:campus_id", adminAuth, adminCampusDirectoryHandler.DeleteCampus)
 	adminAPI.GET("/campus-directory/canteens", adminAuth, adminCampusDirectoryHandler.ListCanteens)
 	adminAPI.POST("/campus-directory/canteens", adminAuth, adminCampusDirectoryHandler.CreateCanteen)
+	adminAPI.GET("/promoters", adminAuth, promoterHandler.AdminList)
+	adminAPI.POST("/promoters/:promoter_id/review", adminAuth, promoterHandler.AdminReview)
+	adminAPI.POST("/promoters/:promoter_id/status", adminAuth, promoterHandler.AdminChangeStatus)
+	adminAPI.PUT("/promoters/:promoter_id/rate", adminAuth, promoterHandler.AdminSetRate)
 	adminAPI.PATCH("/campus-directory/canteens/:canteen_id", adminAuth, adminCampusDirectoryHandler.UpdateCanteen)
 	adminAPI.POST("/campus-directory/canteens/:canteen_id/review", adminAuth, adminCampusDirectoryHandler.ReviewCanteenDraft)
 	adminAPI.POST("/campus-directory/canteens/:canteen_id/merge", adminAuth, adminCampusDirectoryHandler.MergeCanteen)
@@ -1585,6 +1606,16 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	if a.catalogBackfillCancel != nil {
 		a.catalogBackfillCancel()
+	}
+	if a.promoterSyncCancel != nil {
+		a.promoterSyncCancel()
+	}
+	if a.promoterSyncDone != nil {
+		select {
+		case <-a.promoterSyncDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "推广佣金同步关闭超时", logger.Err(ctx.Err()))
+		}
 	}
 	if a.catalogBackfillDone != nil {
 		select {

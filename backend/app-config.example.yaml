@@ -198,3 +198,14 @@ feedback_bot:
   auth_token: ""
   project_key: "foodlink"
   timeout_seconds: 5
+
+# 推广佣金（P0：申请审核、推广码绑定、计佣、冻结期结算，不涉及打款）。
+# 默认关闭；未填或填 0 的项使用括号中的默认值。
+promoter:
+  enabled: false
+  default_rate_bps: 2000        # 默认佣金比例，万分比（20%）
+  settle_delay_hours: 168       # 冻结期（7 天）
+  binding_valid_days: 365       # 绑定后计佣期限（365 天）
+  bind_window_hours: 24         # 注册多久内可绑定推广码（24 小时）
+  agreement_version: "v1"       # 当前推广协议版本，申请时必须一致
+  sync_interval_seconds: 600    # 佣金同步间隔（10 分钟）

@@ -45,6 +45,7 @@ type Config struct {
 	AIUsagePricing AIUsagePricingConfig `mapstructure:"ai_usage_pricing"`
 	Apollo         ApolloConfig         `mapstructure:"apollo"`
 	CanteenCapture CanteenCaptureConfig `mapstructure:"canteen_capture"`
+	Promoter       PromoterConfig       `mapstructure:"promoter"`
 }
 
 type PushConfig struct {
@@ -277,6 +278,19 @@ type CanteenCaptureConfig struct {
 	WithdrawMinCents    int64                            `mapstructure:"withdraw_min_cents"`
 	DisableAutoPublish  bool                             `mapstructure:"disable_auto_publish"`
 	MembershipOptions   []CanteenCaptureMembershipOption `mapstructure:"membership_options"`
+}
+
+// PromoterConfig sets the promoter commission rules. The feature stays off
+// until Enabled is set; zero values fall back to the defaults documented in
+// docs/design/promoter-commission-withdrawal-2026-10-26.md.
+type PromoterConfig struct {
+	Enabled          bool   `mapstructure:"enabled"`
+	DefaultRateBps   int    `mapstructure:"default_rate_bps"`
+	SettleDelayHours int    `mapstructure:"settle_delay_hours"`
+	BindingValidDays int    `mapstructure:"binding_valid_days"`
+	BindWindowHours  int    `mapstructure:"bind_window_hours"`
+	AgreementVersion string `mapstructure:"agreement_version"`
+	SyncIntervalSecs int    `mapstructure:"sync_interval_seconds"`
 }
 
 type CanteenCaptureMembershipOption struct {

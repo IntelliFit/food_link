@@ -27,6 +27,7 @@ func main() {
 	onlyMealMeetups := flag.Bool("only-meal-meetups", false, "only add meal meetup activities, participation, events, and reports")
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
 	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
+	onlyPromoterCommission := flag.Bool("only-promoter-commission", false, "only add promoters, bindings, commissions and withdrawal requests")
 	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
 	onlyNutritionStates := flag.Bool("only-nutrition-states", false, "only add nutrition state dimensions and reviewed common-state seeds")
 	verifyNutritionStates := flag.Bool("verify-nutrition-states", false, "read-only verification of nutrition state dimensions, seeds, aliases, and index")
@@ -82,7 +83,7 @@ func main() {
 	if *onlySupplementProduct {
 		selectedOnlyModes++
 	}
-	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -273,6 +274,8 @@ func main() {
 		migrateErr = migration.MigrateNutritionQuality(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionStates {
 		migrateErr = migration.MigrateNutritionStates(ctx, db, cfg.Database.Schema)
+	} else if *onlyPromoterCommission {
+		migrateErr = migration.MigratePromoterCommission(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionEmbeddings {
 		migrateErr = migration.MigrateNutritionEmbeddings(ctx, db, cfg.Database.Schema)
 	} else if *onlyOnboardingStatus {
@@ -321,6 +324,10 @@ func main() {
 	}
 	if *onlyNutritionStates {
 		log.Printf("营养状态库迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+	if *onlyPromoterCommission {
+		log.Printf("推广佣金迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
 		return
 	}
 	if *onlyNutritionEmbeddings {
