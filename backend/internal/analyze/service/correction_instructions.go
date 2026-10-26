@@ -40,6 +40,7 @@ const correctionInstructionPrompt = `你负责理解用户对一餐食物的纠�
 - 添加：用户说还吃了清单里没有的食物时放入 add，填写 name；给了重量就填 weight_grams，没给就填 reestimate_weight=true，同时在 weight_grams 填常见一份的克数。
 - 用户没提到的菜不要改；用户在清单里手动改过的字段，除非说明里再次明确要求，否则保持不变。
 - 尽量按最合理的理解执行，不要因为说法不标准而拒绝。只有完全无法判断指的是哪道菜，或说明与这餐食物无关时，才返回 needs_clarification=true。
+- 用户说漏了、少了或多识别了食物，但完全没说是什么食物（如“漏了一样”“少识别了一个菜”“多了一样”），只有看照片才能知道时，返回 needs_clarification=true，系统会再结合原照片处理。用户说了食物名称（如“漏了三杯鸡”“还有一碗冰粉”）就直接放入 add，不要返回 needs_clarification。
 格式：{"needs_clarification":false,"edits":[{"index":0,"name":"新菜名","weight_grams":300,"calories":450},{"index":1,"weight_grams":250,"reestimate_weight":true,"hint":"可食部分没这么多"},{"index":3,"dispute_nutrition":true,"hint":"油比一般多"}],"remove":[2],"add":[{"name":"冰粉","weight_grams":200,"reestimate_weight":true}]}
 edits 每项除 index 外只写需要的字段；没有对应内容时用空数组。
 数据：`
@@ -92,6 +93,11 @@ func (s *AnalyzeService) ResolveCorrectionInstructions(ctx context.Context, user
 		resolved, callErr = applyCorrectionInstructionPlan(parsed, items)
 		return parsed, callErr
 	})
+	if err != nil && correctionNeedsPhoto(err) && len(correctionImageURLs(input)) > 0 {
+		// 只看文字定不下来时（如“漏了一样”没说是什么），带上原照片再理解一次。
+		logger.Info(ctx, "纠错说明需结合照片理解", slog.String("user_id", userID), slog.String("correction.note", truncateRunes(text, 200)), logger.Err(err))
+		resolved, err = s.resolveCorrectionInstructionsWithPhoto(ctx, userID, input, items, string(data))
+	}
 	if err != nil {
 		outcome := "failed"
 		if errors.Is(err, ErrCorrectionInstructionsUnclear) {
@@ -99,7 +105,7 @@ func (s *AnalyzeService) ResolveCorrectionInstructions(ctx context.Context, user
 		}
 		metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_instructions", outcome)
 		apm.RecordError(ctx, err)
-		logger.Warn(ctx, "食物纠错说明未能落实", slog.String("user_id", userID), slog.Int("item_count", len(items)), logger.Err(err))
+		logger.Warn(ctx, "食物纠错说明未能落实", slog.String("user_id", userID), slog.Int("item_count", len(items)), slog.String("correction.note", truncateRunes(text, 200)), logger.Err(err))
 		return nil, userFacingCorrectionError(err)
 	}
 	metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_instructions", "passed")
