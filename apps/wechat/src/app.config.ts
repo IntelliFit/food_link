@@ -92,6 +92,8 @@ export default defineAppConfig({
   subpackages: [
     { root: 'packageMeal', name: 'meal', pages: ['pages/detail/index', 'pages/create/index', 'pages/mine/index', 'pages/room/index'] },
     { root: 'packageRecap', name: 'recap', pages: ['pages/recap/index'] },
+    // packageExtra is close to the 2MB subpackage limit; the promoter center lives on its own.
+    { root: 'packagePromoter', name: 'promoter', pages: ['pages/center/index'] },
     {
       root: 'packageExtra',
       name: 'extra',
