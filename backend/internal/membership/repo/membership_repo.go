@@ -775,20 +775,31 @@ func (r *MembershipRepo) ExpirePendingMembershipOrders(ctx context.Context, user
 		if !isMembershipPlanCode(row.PlanCode) {
 			continue
 		}
-		extra := row.Extra
-		if extra == nil {
-			extra = map[string]any{}
+		extra := make(map[string]any, len(row.Extra)+3)
+		for key, value := range row.Extra {
+			extra[key] = value
 		}
 		extra["expire_reason"] = reason
 		extra["expired_at"] = time.Now().Format(time.RFC3339)
 		if excludeOrderNo != "" {
 			extra["superseded_by_order_no"] = excludeOrderNo
 		}
-		if err := r.UpdatePaymentByOrderNo(ctx, row.OrderNo, map[string]any{
-			"status": "expired",
-			"extra":  extra,
-		}); err != nil {
-			return count, err
+		// A payment notify or active query may mark the order paid after the read
+		// above; only expire rows that are still pending so a paid order is never
+		// overwritten.
+		result := r.db.WithContext(ctx).
+			Model(&domain.MembershipPayment{}).
+			Where("order_no = ? AND status = ?", row.OrderNo, "pending").
+			Updates(map[string]any{
+				"status":     "expired",
+				"extra":      datatypes.JSONMap(extra),
+				"updated_at": time.Now(),
+			})
+		if result.Error != nil {
+			return count, result.Error
+		}
+		if result.RowsAffected == 0 {
+			continue
 		}
 		count++
 	}
