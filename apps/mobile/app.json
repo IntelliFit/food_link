@@ -3,7 +3,7 @@
     "name": "智健食探",
     "slug": "foodlink-mobile",
     "scheme": "foodlink",
-    "version": "4.6.1",
+    "version": "4.6.16",
     "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
     "android": {
       "package": "cn.healthymax.foodlink",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 64,
+      "versionCode": 66,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F8FBF5"
@@ -33,6 +33,7 @@
     "plugins": [
       "expo-status-bar",
       "expo-notifications",
+      "./plugins/withHonorPush.cjs",
       [
         "expo-media-library",
         {

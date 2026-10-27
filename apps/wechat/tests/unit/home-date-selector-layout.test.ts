@@ -44,7 +44,7 @@ describe('home date selector layout', () => {
     expect(dateSelectorSource).not.toContain("className='date-calendar-toggle'")
     expect(dateSelectorSource).toContain('{selectedHeading.date}')
     expect(dateSelectorSource).toContain('{selectedHeading.weekday}')
-    expect(dateSelectorSource).toContain("className='date-calendar-title' onClick={toggleExpanded}")
+    expect(dateSelectorSource).toMatch(/className='date-calendar-title'[^>]*onClick=\{toggleExpanded\}/)
     expect(dateSelectorSource).toContain('<IconCollapse')
     expect(calendarTitleStyles).not.toMatch(/^\s*(?:position|left|right|transform)\s*:/m)
     expect(calendarTitleStyles).not.toMatch(/^\s*margin\s*:\s*auto/m)

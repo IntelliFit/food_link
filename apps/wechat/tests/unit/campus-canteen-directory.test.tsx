@@ -101,6 +101,7 @@ describe('campus canteen directory', () => {
   it('shows imported canteens even when no analyzed dishes are published yet', async () => {
     render(<CampusCanteenPage />)
 
+    fireEvent.click(screen.getByText('校园'))
     fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
 
@@ -116,6 +117,7 @@ describe('campus canteen directory', () => {
   it('uses the selected canteen id without conflicting parent filters', async () => {
     render(<CampusCanteenPage />)
 
+    fireEvent.click(screen.getByText('校园'))
     fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
     await waitFor(() => expect(screen.getByText('学生食堂')).toBeInTheDocument())
@@ -123,9 +125,9 @@ describe('campus canteen directory', () => {
 
     await waitFor(() => {
       const calls = (getPublicFoodLibraryList as jest.Mock).mock.calls
-      const latestRequest = calls[calls.length - 2]?.[0]
+      const latestRequest = calls.find(([request]) => request.canteen_id === 'canteen-student')?.[0]
       expect(latestRequest).toEqual(
-        expect.objectContaining({ canteen_id: 'canteen-student', type: 'campus' }),
+        expect.objectContaining({ canteen_id: 'canteen-student', canteen_scope: 'campus' }),
       )
       expect(latestRequest).not.toHaveProperty('school_id')
       expect(latestRequest).not.toHaveProperty('campus_id')
@@ -145,6 +147,7 @@ describe('campus canteen directory', () => {
 
     render(<CampusCanteenPage />)
 
+    fireEvent.click(screen.getByText('校园'))
     fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
     await waitFor(() => expect(screen.getAllByText('已分析鸡肉饭').length).toBeGreaterThan(0))
@@ -173,20 +176,18 @@ describe('campus canteen directory', () => {
 
     render(<CampusCanteenPage />)
 
+    fireEvent.click(screen.getByText('校园'))
     fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
     await waitFor(() =>
       expect(screen.getAllByText('高蛋白鸡肉饭').length).toBeGreaterThan(0),
     )
     expect(screen.getByText('热门')).toHaveClass('active')
-    expect(getPublicFoodLibraryList).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ sort_by: 'hot', type: 'campus' }),
-    )
-    expect(getPublicFoodLibraryList).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ sort_by: 'high_protein', type: 'campus' }),
-    )
+    const campusCalls = (getPublicFoodLibraryList as jest.Mock).mock.calls
+      .map(([request]) => request)
+      .filter(request => request.canteen_scope === 'campus')
+    expect(campusCalls[0]).toEqual(expect.objectContaining({ sort_by: 'hot' }))
+    expect(campusCalls.findIndex(request => request.sort_by === 'high_protein')).toBeGreaterThan(0)
   })
 
   it('falls back to ready campus dishes when the initial hot request fails', async () => {
@@ -209,19 +210,17 @@ describe('campus canteen directory', () => {
 
     render(<CampusCanteenPage />)
 
+    fireEvent.click(screen.getByText('校园'))
     fireEvent.click(screen.getByText('选择学校'))
     fireEvent.click(screen.getByText('选择上海中医药大学'))
     await waitFor(() =>
       expect(screen.getAllByText('超时后可见鸡肉饭').length).toBeGreaterThan(0),
     )
     expect(screen.getByText('热门')).toHaveClass('active')
-    expect(getPublicFoodLibraryList).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ sort_by: 'hot', type: 'campus' }),
-    )
-    expect(getPublicFoodLibraryList).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ sort_by: 'high_protein', type: 'campus' }),
-    )
+    const campusCalls = (getPublicFoodLibraryList as jest.Mock).mock.calls
+      .map(([request]) => request)
+      .filter(request => request.canteen_scope === 'campus')
+    expect(campusCalls[0]).toEqual(expect.objectContaining({ sort_by: 'hot' }))
+    expect(campusCalls.findIndex(request => request.sort_by === 'high_protein')).toBeGreaterThan(0)
   })
 })

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AccessibilityInfo, ActivityIndicator, Animated, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type AnalysisTask, type AnalyzeTaskStatusCount, type BodyMetricWaterDay, type BodyMetricWeightEntry, type DietRecommendationResult, type HomeDashboard, type HomeMealItem, type HomeMealRecordEntry, type PetSummary, type RewardCenterResponse, type StatsSummary } from '@food-link/core'
+import { getMealTypeLabel, homeModuleLocks, inferDefaultMealTypeFromLocalTime, isHomeModuleVisible, type AnalysisTask, type AnalyzeTaskStatusCount, type BodyMetricWaterDay, type BodyMetricWeightEntry, type DietRecommendationResult, type HomeDashboard, type HomeMealItem, type HomeMealRecordEntry, type HomeQuickStatId, type PetSummary, type RewardCenterResponse, type StatsSummary } from '@food-link/core'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { ChevronLeft, ChevronRight, Moon } from 'lucide-react-native'
 import Svg, { Circle as SvgCircle } from 'react-native-svg'
 import { useAuth } from '../providers/AuthProvider'
 import { apiClient, getStoredUserId } from '../api'
@@ -16,13 +17,15 @@ import { IconfontText } from '../components/Iconfont'
 import { RecordActionSheet, type RecordAction } from '../components/RecordActionSheet'
 import { SHOW_DEBUG_LOGIN } from '../config'
 import { useHomeDashboard } from '../hooks/useHomeDashboard'
+import { useHomeModuleLayout } from '../hooks/useHomeModuleLayout'
+import { HomeModuleManager } from '../components/HomeModuleManager'
+import { previousRecapWeek } from '../utils/weeklyRecap'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, compactFont } from '../theme'
 import { todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
-import { DEFAULT_HOME_EXPERIENCE_CONFIG, getStoredHomeExperienceConfig, saveHomeExperienceConfig, type HomeExperienceMode } from '../utils/homeExperience'
 import { consumeHomeRecordMenuDate, onHomeRecordMenuRequest } from '../utils/home-record-menu'
 import {
   dismissHomeBackfillDate,
@@ -148,13 +151,14 @@ export function HomeScreen() {
   const [homePetHidden, setHomePetHidden] = useState(false)
   const [nutritionExpanded, setNutritionExpanded] = useState(false)
   const [currentUserId, setCurrentUserId] = useState('')
+  const { layout: moduleLayout, ready: moduleLayoutReady, save: saveModuleLayout } = useHomeModuleLayout(currentUserId, isAuthenticated)
+  const [showModuleManager, setShowModuleManager] = useState(false)
+  useEffect(() => { setShowModuleManager(false) }, [currentUserId, isAuthenticated])
+  const moduleLocks = homeModuleLocks(Boolean((dashboard?.expirySummary?.soon_count || 0) + (dashboard?.expirySummary?.expired_count || 0)))
   const [hiddenMicronutrientKeys, setHiddenMicronutrientKeys] = useState<HomeMicronutrientKey[]>([])
-  const [homeExperienceMode, setHomeExperienceMode] = useState<HomeExperienceMode>(DEFAULT_HOME_EXPERIENCE_CONFIG.mode)
-  const [modeFeedback, setModeFeedback] = useState<string | null>(null)
   const [reduceMotion, setReduceMotion] = useState(false)
   const [analyzeTaskCounts, setAnalyzeTaskCounts] = useState<AnalyzeTaskStatusCount | null>(null)
   const [petMealReminder, setPetMealReminder] = useState<HomePetMealReminder | null>(null)
-  const modeTransitionOpacity = useRef(new Animated.Value(1)).current
   const [showHealthProfilePrompt, setShowHealthProfilePrompt] = useState(false)
   const [showHomeRecordGuide, setShowHomeRecordGuide] = useState(false)
   const [dismissedBackfillDates, setDismissedBackfillDates] = useState<string[]>([])
@@ -176,7 +180,8 @@ export function HomeScreen() {
   const calorieRemaining = Math.max(0, calorieTarget - calorieCurrent)
   const isCalorieOver = calorieTarget > 0 && calorieCurrent > calorieTarget
   const dashboardBusy = loading || syncing
-  const isWellnessMode = homeExperienceMode === 'wellness'
+  // 与小程序新版一致，两种历史模式共用 Meal Orbit 首页。
+  const isWellnessMode = true
 
   // 体重/喝水/运动（与微信小程序首页逻辑对齐）
   const weightSummary = useMemo(() => {
@@ -297,15 +302,6 @@ export function HomeScreen() {
 
   useEffect(() => {
     let active = true
-    void getStoredHomeExperienceConfig(currentUserId).then((config) => {
-      if (active) setHomeExperienceMode(config.mode)
-    })
-    return () => {
-      active = false
-    }
-  }, [currentUserId])
-  useEffect(() => {
-    let active = true
     void getHiddenMicronutrientKeys(currentUserId).then((keys) => {
       if (active) setHiddenMicronutrientKeys(keys)
     })
@@ -323,11 +319,6 @@ export function HomeScreen() {
     }
   }, [])
 
-  useEffect(() => {
-    if (!modeFeedback) return
-    const timeout = setTimeout(() => setModeFeedback(null), 1600)
-    return () => clearTimeout(timeout)
-  }, [modeFeedback])
 
   useEffect(() => {
     if (!showTargetEditor) {
@@ -772,34 +763,16 @@ export function HomeScreen() {
 
   const dynamicStyles = useHomeDynamicStyles(isDark)
   const themeColors = useHomeThemeColors(isDark, isWellnessMode)
-  const toggleHomeExperienceMode = useCallback(() => {
-    const mode: HomeExperienceMode = homeExperienceMode === 'wellness' ? 'balanced' : 'wellness'
-    modeTransitionOpacity.stopAnimation()
-    if (reduceMotion) {
-      modeTransitionOpacity.setValue(1)
-    } else {
-      modeTransitionOpacity.setValue(0)
-      Animated.timing(modeTransitionOpacity, {
-        toValue: 1,
-        duration: 190,
-        useNativeDriver: true,
-      }).start()
-    }
-    setHomeExperienceMode(mode)
-    setModeFeedback(`已切换至${mode === 'wellness' ? '养生' : '均衡'}模式`)
-    void saveHomeExperienceConfig(currentUserId, { version: 2, mode })
-  }, [currentUserId, homeExperienceMode, modeTransitionOpacity, reduceMotion])
   return (
     <View style={[styles.homeRoot, { backgroundColor: themeColors.background }]}>
       <View pointerEvents="none" style={styles.homeBackgroundLayer}>
-        <View style={[styles.homeBackgroundTopTint, { backgroundColor: isWellnessMode ? themeColors.wellnessBackgroundTopTint : themeColors.backgroundTopTint }]} />
-        <View style={[styles.homeBackgroundSoftTint, { backgroundColor: themeColors.backgroundSoftTint }]} />
+        <Image source={require('../../../wechat/src/assets/home/home-botanical-bg-v1.webp')} resizeMode='cover' style={[StyleSheet.absoluteFill, { width: '100%', height: '100%', opacity: isDark ? 0.08 : 0.34 }]} />
       </View>
       <ScrollView
         style={styles.homeScroll}
         contentContainerStyle={[
           styles.homeContent,
-          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 132 },
+          { paddingTop: insets.top + 34, paddingBottom: insets.bottom + 112 },
         ]}
         refreshControl={
           <RefreshControl
@@ -814,8 +787,6 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <HomeGreeting
-          mode={homeExperienceMode}
-          onModeToggle={toggleHomeExperienceMode}
           petSummary={petSummary}
           petHidden={homePetHidden}
           petReminder={petReminder}
@@ -824,6 +795,10 @@ export function HomeScreen() {
           onPetPress={() => requireAuth(() => navigation.navigate('PetChat'))}
           themeColors={themeColors}
         />
+        <View style={styles.homeLayoutToolbar}>
+          <View />
+          <Pressable accessibilityRole='button' accessibilityLabel='整理首页' disabled={!moduleLayoutReady} onPress={() => setShowModuleManager(true)} hitSlop={8}><Text style={styles.homeLayoutEdit}>整理首页</Text></Pressable>
+        </View>
         {!isAuthenticated ? (
           <Pressable accessibilityRole="button" accessibilityLabel="去登录同步饮食记录和健康数据" style={({ pressed }) => [styles.homeLoginBanner, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }, pressed && styles.pressed]} onPress={openLogin}>
             <Text style={[styles.homeLoginBannerText, { color: themeColors.textSecondary }]}>登录后可同步饮食记录、身体数据与云端目标</Text>
@@ -858,9 +833,10 @@ export function HomeScreen() {
             onDismiss={() => void dismissBackfillHint()}
           />
         ) : null}
-        <Animated.View style={{ opacity: modeTransitionOpacity }}>
-          {isWellnessMode ? (
-            <HomeWellnessCalorieCard
+        {moduleLayout.order.map(id => {
+          if (!isHomeModuleVisible(moduleLayout, id, moduleLocks)) return null
+          const content = {
+            diet: (<HomeWellnessCalorieCard
               current={calorieCurrent}
               target={calorieTarget}
               remaining={calorieRemaining}
@@ -877,40 +853,42 @@ export function HomeScreen() {
               reduceMotion={reduceMotion}
               hiddenMicronutrientKeys={hiddenMicronutrientKeys}
               onManageMicronutrients={openTargetEditor}
-            />
-          ) : (
-            <HomeCalorieCard
-              current={calorieCurrent}
-              target={calorieTarget}
-              remaining={calorieRemaining}
-              progress={calorieProgress}
-              isOver={isCalorieOver}
-              intakeData={intakeData}
-              onOpenTargetEditor={openTargetEditor}
-              nutritionExpanded={nutritionExpanded}
-              onToggleNutrition={() => setNutritionExpanded((v) => !v)}
+            />),
+            nextMeal: isAuthenticated && recordDate === todayDateKey ? <NextMealCard mealType={nextMealType()} compact refreshKey={String(mealPreviewRefresh)} /> : null,
+            body: (<><Text style={[styles.quickHeading, { color: themeColors.text }]}>快捷记录</Text>
+        <HomeBodyStatusStrip
+          weightSummary={weightSummary}
+          todayWater={todayWater}
+          waterGoalMl={waterGoalMl}
+          waterProgress={waterProgress}
+          exerciseKcal={Math.round(exerciseBurnedKcal || 0)}
+          onWeight={() => requireAuth(() => navigation.navigate('BodyMetricRecord', { type: 'weight', date: recordDate }))}
+          onWater={() => requireAuth(() => navigation.navigate('BodyMetricRecord', { type: 'water', date: recordDate }))}
+          onExercise={() => requireAuth(() => navigation.navigate('BodyMetricRecord', { type: 'exercise', date: recordDate }))}
+          onSleep={() => requireAuth(() => navigation.navigate('SleepRecord', { date: recordDate }))}
+          isGuest={!isAuthenticated}
+          selected={moduleLayout.quickStats}
+          date={recordDate}
+          themeColors={themeColors}
+        /></>),
+            supplements: isAuthenticated ? <TodaySupplementsCard summary={dashboard?.supplementSummary} /> : null,
+            meals: (<HomeMealsSection
+              meals={dashboard?.meals || []}
+              onOpenAll={() => requireAuth(() => navigation.navigate('DayRecord', { date: recordDate }))}
+              onQuickRecord={() => openAnalyze('camera')}
+              onOpenHistory={() => navigation.navigate('AnalyzeHistory')}
+              onOpenMeal={handleOpenMeal}
               isDark={isDark}
               themeColors={themeColors}
-              dashboardBusy={dashboardBusy}
-              isGuest={!isAuthenticated}
-              supplementSummary={dashboard?.supplementSummary}
-              reduceMotion={reduceMotion}
-              hiddenMicronutrientKeys={hiddenMicronutrientKeys}
-              onManageMicronutrients={openTargetEditor}
-            />
-          )}
-</Animated.View>
-        {isAuthenticated && recordDate === todayDateKey ? <NextMealCard mealType={nextMealType()} compact refreshKey={String(mealPreviewRefresh)} /> : null}
-        {!isAuthenticated ? (
-          <HomeDietRecommendationEntry
-            remaining={calorieRemaining}
-            busy={dashboardBusy}
+            />),
+            expiry: (isAuthenticated ? (
+          <HomeExpirySection
+            summary={dashboard?.expirySummary || null}
             themeColors={themeColors}
-            onEatOut={() => void requestDietRecommendation('eat_out')}
-            onCookHome={() => void requestDietRecommendation('cook_home')}
+            onOpen={() => navigation.navigate('Expiry')}
           />
-        ) : null}
-        {isAuthenticated ? (
+        ) : null),
+            rewards: (isAuthenticated ? (
           <HomeBannerCarousel
             banners={homeBanners}
             activeIndex={activeBannerIndex}
@@ -919,36 +897,11 @@ export function HomeScreen() {
             themeColors={themeColors}
             reduceMotion={reduceMotion}
           />
-        ) : null}
-        <HomeBodyStatusStrip
-          weightSummary={weightSummary}
-          todayWater={todayWater}
-          waterGoalMl={waterGoalMl}
-          waterProgress={waterProgress}
-          exerciseKcal={Math.round(exerciseBurnedKcal || 0)}
-          onWeight={() => navigation.navigate('BodyMetricRecord', { type: 'weight', date: recordDate })}
-          onWater={() => navigation.navigate('BodyMetricRecord', { type: 'water', date: recordDate })}
-          onExercise={() => navigation.navigate('BodyMetricRecord', { type: 'exercise', date: recordDate })}
-          themeColors={themeColors}
-        />
-        {isAuthenticated ? <SleepCard date={recordDate} /> : null}
-        <HomeMealsSection
-          meals={dashboard?.meals || []}
-          onOpenAll={() => requireAuth(() => navigation.navigate('DayRecord', { date: recordDate }))}
-          onQuickRecord={() => openAnalyze('camera')}
-          onOpenHistory={() => navigation.navigate('AnalyzeHistory')}
-          onOpenMeal={handleOpenMeal}
-          isDark={isDark}
-          themeColors={themeColors}
-        />
-        {isAuthenticated ? (
-          <HomeExpirySection
-            summary={dashboard?.expirySummary || null}
-            themeColors={themeColors}
-            onOpen={() => navigation.navigate('Expiry')}
-          />
-        ) : null}
-        <HomeStatsEntry onPress={() => requireAuth(() => navigation.navigate('DayRecord', { date: recordDate }))} />
+        ) : null),
+            recap: <HomeWeeklyRecapEntry onPress={() => requireAuth(() => navigation.navigate('WeeklyRecap'))} isDark={isDark} />,
+          }[id]
+          return content ? <View key={id} testID={"home-module-" + id} style={{ marginBottom: moduleLayout.density === "comfortable" ? 14 : moduleLayout.density === "compact" ? 0 : 6 }}>{content}</View> : null
+        })}
         {SHOW_DEBUG_LOGIN ? (
           <View style={styles.homeDevActions}>
             <HomeMiniAction label="识别记录" onPress={() => navigation.navigate('AnalyzeHistory')} themeColors={themeColors} />
@@ -957,6 +910,11 @@ export function HomeScreen() {
           </View>
         ) : null}
       </ScrollView>
+      {showModuleManager ? <HomeModuleManager key={currentUserId || 'guest'} layout={moduleLayout} locks={moduleLocks} onClose={() => setShowModuleManager(false)} onSave={async layout => {
+        try { await saveModuleLayout(layout); setShowModuleManager(false) }
+        catch (cause) { await dialog.alert('保存失败', userFacingErrorMessage(cause), 'danger') }
+      }}
+      /> : null}
       <Modal visible={showTargetEditor} transparent animationType="slide" onRequestClose={() => !savingTargets && setShowTargetEditor(false)}>
         <View style={styles.targetModal}>
           <Pressable style={styles.targetModalMask} onPress={() => !savingTargets && setShowTargetEditor(false)} />
@@ -1108,11 +1066,6 @@ export function HomeScreen() {
         onClose={() => setShowRecordMenu(false)}
         onSelect={handleSelectRecordAction}
       />
-      {modeFeedback ? (
-        <View pointerEvents="none" accessibilityLiveRegion="polite" style={[styles.modeFeedbackToast, { top: insets.top + 76, backgroundColor: themeColors.modeFeedbackBg }]}>
-          <Text style={styles.modeFeedbackToastText}>{modeFeedback}</Text>
-        </View>
-      ) : null}
 
     </View>
   )
@@ -1121,17 +1074,17 @@ export function HomeScreen() {
 function useHomeThemeColors(isDark: boolean, isWellnessMode: boolean) {
   return useMemo(
     () => ({
-      background: isDark ? '#0d1312' : isWellnessMode ? '#f3efe1' : colors.background,
+      background: isDark ? '#14251d' : '#f8f6e9',
       backgroundTopTint: isDark ? '#111a18' : '#eaf7f0',
       wellnessBackgroundTopTint: isDark ? '#182019' : '#f4f0e2',
       backgroundSoftTint: isDark ? 'rgba(92, 184, 150, 0.03)' : isWellnessMode ? 'rgba(100, 122, 92, 0.045)' : 'rgba(92, 184, 150, 0.04)',
-      text: isDark ? '#f2f7f4' : colors.text,
+      text: isDark ? '#f2f7f4' : '#0b3b2e',
       textSecondary: isDark ? '#a3b3ad' : colors.textSecondary,
       textMuted: isDark ? '#6b7d76' : colors.textMuted,
       surface: isDark ? '#181f1d' : colors.surface,
       surfaceMuted: isDark ? '#1e2623' : colors.surfaceMuted,
       border: isDark ? 'rgba(255,255,255,0.08)' : colors.border,
-      cardBackground: isDark ? '#181f1d' : isWellnessMode ? '#fffdf7' : '#fff',
+      cardBackground: isDark ? '#181f1d' : '#fff',
       cardBorder: isDark ? 'rgba(255,255,255,0.08)' : isWellnessMode ? 'rgba(103, 138, 119, 0.12)' : 'rgba(227, 233, 238, 0.82)',
       bodyStatusCard: isDark ? 'rgba(255,255,255,0.06)' : isWellnessMode ? 'rgba(255,253,247,0.78)' : 'rgba(255,255,255,0.54)',
       bodyStatusCardBorder: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.62)',
@@ -1159,12 +1112,12 @@ function useHomeThemeColors(isDark: boolean, isWellnessMode: boolean) {
       closeButton: isDark ? 'rgba(255,255,255,0.10)' : '#f3f4f6',
       cancelButton: isDark ? 'rgba(255,255,255,0.10)' : '#f3f4f6',
       calibrationCard: isDark ? 'rgba(240, 152, 92, 0.14)' : '#fff7ed',
-      dateSelectedBg: isDark ? 'rgba(0, 188, 125, 0.45)' : 'rgba(0, 188, 125, 0.55)',
+      dateSelectedBg: isDark ? '#28583f' : '#206e4f',
       dateCircle: isDark ? '#181f1d' : isWellnessMode ? '#fffdf7' : '#fff',
       dateSectionBg: isDark ? 'rgba(255,255,255,0.04)' : isWellnessMode ? 'rgba(255,253,247,0.62)' : 'rgba(255,255,255,0.42)',
       dateSectionBorder: isDark ? 'rgba(255,255,255,0.07)' : isWellnessMode ? 'rgba(103, 138, 119, 0.10)' : 'rgba(47, 84, 61, 0.06)',
-      dateMonthText: isDark ? '#a8c5b8' : '#376d5a',
-      dateText: isDark ? '#f2f7f4' : colors.text,
+      dateMonthText: isDark ? '#a8c5b8' : '#0a3b2d',
+      dateText: isDark ? '#f2f7f4' : '#64756c',
       dateTextMuted: isDark ? '#6b7d76' : colors.textMuted,
       danger: isDark ? '#ff6b6b' : colors.danger,
       over: isDark ? '#ff6b6b' : colors.homeWarningRed,
@@ -1645,8 +1598,6 @@ function TargetFieldRow({
 }
 
 function HomeGreeting({
-  mode,
-  onModeToggle,
   petSummary,
   petHidden,
   onPetPress,
@@ -1655,8 +1606,6 @@ function HomeGreeting({
   isDark,
   themeColors,
 }: {
-  mode: HomeExperienceMode
-  onModeToggle: () => void
   petSummary: PetSummary | null
   petHidden: boolean
   onPetPress: () => void
@@ -1665,7 +1614,6 @@ function HomeGreeting({
   isDark: boolean
   themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
-  const isWellness = mode === 'wellness'
   const pet = petSummary?.pet
   const reminderPalette = homePetReminderPalette(petReminder?.tone || 'recognizing', isDark)
   return (
@@ -1726,29 +1674,11 @@ function HomeGreeting({
             ) : null}
           </Pressable>
         ) : (
-          <View style={styles.greetingText}>
-            <Text style={[styles.greetingTitle, { color: themeColors.text }]}>{homeGreeting()}</Text>
-            <Text style={[styles.greetingSubtitle, { color: themeColors.textSecondary }]}>今天也要健康饮食哦</Text>
+          <View style={[styles.greetingPetReminder, { flex: 0, backgroundColor: isDark ? '#253a2d' : '#fffdf6', borderColor: 'rgba(231,189,112,0.52)' }]}>
+            <Text style={[styles.greetingPetReminderText, { color: themeColors.text }]}>{homeGreeting()}，今天也要好好吃饭</Text>
           </View>
         )}
       </View>
-      <Pressable
-        testID="home-mode-toggle"
-        accessibilityRole="button"
-        accessibilityLabel={`当前${isWellness ? '养生' : '均衡'}模式，点击切换`}
-        accessibilityHint={`切换到${isWellness ? '均衡' : '养生'}首页`}
-        accessibilityState={{ selected: isWellness }}
-        hitSlop={4}
-        style={({ pressed }) => [
-          styles.homeModeToggle,
-          { backgroundColor: themeColors.modeToggleBg, borderColor: themeColors.modeToggleBorder },
-          pressed && styles.homeModeTogglePressed,
-        ]}
-        onPress={onModeToggle}
-      >
-        <Text style={[styles.homeModeToggleLabel, { color: themeColors.modeToggleText }]}>{isWellness ? '养生' : '均衡'}</Text>
-        <Text style={[styles.homeModeToggleSwitch, { color: themeColors.modeToggleArrow }]}>⇄</Text>
-      </Pressable>
     </View>
   )
 }
@@ -1767,7 +1697,8 @@ function HomeDateSelector({
   const [year, month] = selectedDate.split('-').map(Number)
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(year, month - 1, 1))
   useEffect(() => setVisibleMonth(new Date(year, month - 1, 1)), [month, year])
-  const monthLabel = `${visibleMonth.getFullYear()}年${visibleMonth.getMonth() + 1}月`
+  const selected = new Date(`${selectedDate}T12:00:00`)
+  const monthLabel = calendarExpanded ? `${visibleMonth.getFullYear()}年${visibleMonth.getMonth() + 1}月` : `${month}月${Number(selectedDate.slice(8))}日`
   const monthCells = useMemo(() => {
     const first = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1)
     const offset = (first.getDay() + 6) % 7
@@ -1786,20 +1717,16 @@ function HomeDateSelector({
           <Pressable accessibilityRole="button" accessibilityLabel="上个月" style={styles.dateCalendarControl} onPress={() => setVisibleMonth((value) => new Date(value.getFullYear(), value.getMonth() - 1, 1))}>
             <Text style={[styles.dateCalendarControlText, { color: themeColors.dateMonthText }]}>‹</Text>
           </Pressable>
-        ) : <View style={styles.dateCalendarControl} />}
+        ) : null}
         <Pressable accessibilityRole="button" accessibilityLabel={calendarExpanded ? '收起月历' : '展开月历'} style={styles.dateCalendarTitle} onPress={() => setCalendarExpanded((value) => !value)}>
           <Text style={[styles.dateMonthLabel, { color: themeColors.dateMonthText }]}>{monthLabel}</Text>
-          <Text style={[styles.dateCalendarChevron, { color: themeColors.dateMonthText }]}>{calendarExpanded ? '⌃' : '⌄'}</Text>
+          {calendarExpanded ? <IconfontText className='iconfont icon-right-arrow' size={13} color={themeColors.dateMonthText} style={{ transform: [{ rotate: '270deg' }] }} /> : <Text style={{ color: themeColors.dateTextMuted, fontSize: 12 }}>周{['日', '一', '二', '三', '四', '五', '六'][selected.getDay()]}</Text>}
         </Pressable>
         {calendarExpanded ? (
           <Pressable accessibilityRole="button" accessibilityLabel="下个月" style={styles.dateCalendarControl} onPress={() => setVisibleMonth((value) => new Date(value.getFullYear(), value.getMonth() + 1, 1))}>
             <Text style={[styles.dateCalendarControlText, { color: themeColors.dateMonthText }]}>›</Text>
           </Pressable>
-        ) : (
-          <Pressable accessibilityRole="button" accessibilityLabel="展开月历" style={styles.dateCalendarControl} onPress={() => setCalendarExpanded(true)}>
-            <Text style={[styles.dateCalendarToggleText, { color: themeColors.dateMonthText }]}>月历</Text>
-          </Pressable>
-        )}
+        ) : null}
       </View>
       {calendarExpanded ? (
         <View style={styles.monthCalendar}>
@@ -1824,12 +1751,13 @@ function HomeDateSelector({
         </View>
       ) : (
         <View style={styles.dateList}>
+          <Pressable accessibilityRole='button' accessibilityLabel='上一周' style={styles.weekArrow} onPress={() => { const day = new Date(selected); day.setDate(day.getDate() - 7); onSelect(formatDateKeyFromDate(day)) }}><ChevronLeft size={16} color={themeColors.dateTextMuted} /></Pressable>
           {cells.map((cell) => {
             const recorded = cell.calories > 0
             const over = recorded && cell.target > 0 && cell.calories > cell.target
             const selected = selectedDate === cell.date
             return (
-              <Pressable key={cell.date} accessibilityRole="button" accessibilityLabel={`${cell.date}，${cell.dayName}${recorded ? '，已有饮食记录' : '，暂无饮食记录'}`} accessibilityState={{ selected }} style={({ pressed }) => [styles.dateItem, selected && { backgroundColor: themeColors.dateSelectedBg }, pressed && styles.dateItemPressed]} onPress={() => onSelect(cell.date)}>
+              <Pressable key={cell.date} disabled={!isAllowedHomeRecordDate(cell.date)} accessibilityRole='button' accessibilityLabel={`${cell.date}，${cell.dayName}${recorded ? '，已有饮食记录' : '，暂无饮食记录'}`} accessibilityState={{ selected, disabled: !isAllowedHomeRecordDate(cell.date) }} style={({ pressed }) => [styles.dateItem, selected && { backgroundColor: themeColors.dateSelectedBg }, pressed && styles.dateItemPressed]} onPress={() => onSelect(cell.date)}>
                 <Text style={[styles.dateDayName, selected ? { color: '#fff' } : { color: themeColors.dateTextMuted }]}>{cell.dayName}</Text>
                 <View style={[styles.dateDayCircle, recorded && { backgroundColor: colors.brand }, over && { backgroundColor: colors.homeWarningRed }, selected && [styles.dateDayCircleSelected, { backgroundColor: 'transparent' }], !selected && { backgroundColor: themeColors.dateCircle }]}>
                   <Text style={[styles.dateNumText, (recorded || selected) && { color: '#fff' }, !recorded && !selected && { color: themeColors.dateText }]}>{cell.dayNum}</Text>
@@ -1837,6 +1765,7 @@ function HomeDateSelector({
               </Pressable>
             )
           })}
+          <Pressable accessibilityRole='button' accessibilityLabel='下一周' disabled={selectedDate >= todayKey()} style={[styles.weekArrow, selectedDate >= todayKey() && { opacity: 0.4 }]} onPress={() => { const day = new Date(selected); day.setDate(day.getDate() + 7); onSelect(formatDateKeyFromDate(day) > todayKey() ? todayKey() : formatDateKeyFromDate(day)) }}><ChevronRight size={16} color={themeColors.dateTextMuted} /></Pressable>
         </View>
       )}
     </View>
@@ -1878,8 +1807,8 @@ function HomeWellnessCalorieCard({
   hiddenMicronutrientKeys: HomeMicronutrientKey[]
   onManageMicronutrients: () => void
 }) {
-  const size = 122
-  const stroke = 9
+  const size = 150
+  const stroke = 10
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
   const arcLength = circumference * 0.75
@@ -1890,8 +1819,9 @@ function HomeWellnessCalorieCard({
   return (
     <View
       testID="home-wellness-overview"
-      style={[styles.wellnessMainCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }]}
+      style={styles.wellnessMainCard}
     >
+      <View pointerEvents='none' style={styles.wellnessOrbitDecoration}><Image source={require('../../../wechat/src/assets/home/nutrition-orbit-v1.webp')} resizeMode='contain' style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]} /></View>
       <View style={styles.wellnessOverviewRow}>
         <View style={styles.wellnessGaugeWrap}>
           <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -1900,7 +1830,7 @@ function HomeWellnessCalorieCard({
               cy={size / 2}
               r={radius}
               fill="none"
-              stroke={themeColors.progressTrack}
+              stroke='rgba(201,220,204,0.78)'
               strokeWidth={stroke}
               strokeLinecap="round"
               strokeDasharray={`${arcLength} ${circumference - arcLength}`}
@@ -1918,18 +1848,16 @@ function HomeWellnessCalorieCard({
               transform={`rotate(135 ${size / 2} ${size / 2})`}
             />
           </Svg>
-          <View pointerEvents="none" style={styles.wellnessGaugeCenter}>
-            <Text style={[styles.wellnessGaugeLabel, { color: themeColors.textSecondary }]}>{isOver ? '已超出' : '剩余可摄入'}</Text>
-            <Text style={[styles.wellnessGaugeValue, { color: isOver ? themeColors.over : themeColors.text }]} adjustsFontSizeToFit numberOfLines={1}>{displayValue}</Text>
+          <View pointerEvents='none' style={[styles.wellnessGaugeCenter, { backgroundColor: themeColors.background === '#14251d' ? '#1c2f25' : 'rgba(255,254,247,0.88)' }]}>
+            <Text style={[styles.wellnessGaugeLabel, { color: themeColors.textSecondary }]}>{isOver ? '已超出' : '今日还可摄入'}</Text>
+            <Text style={[styles.wellnessGaugeValue, { color: isOver ? themeColors.over : themeColors.text }]} adjustsFontSizeToFit numberOfLines={1}>{isGuest || dashboardBusy ? '--' : displayValue}</Text>
+            {dashboardBusy ? <ActivityIndicator size='small' color={colors.brand} /> : null}
             <Text style={[styles.wellnessGaugeUnit, { color: themeColors.textMuted }]}>kcal</Text>
             <IconfontText className="iconfont icon-a-144-lvye" size={13} color="#8abc72" />
           </View>
         </View>
         <View style={styles.wellnessOverviewDetail}>
           <View style={styles.wellnessSummaryRow}>
-            <Text style={[styles.wellnessIntakeSummary, { color: themeColors.textSecondary }]} numberOfLines={2}>
-              已摄入 {Math.round(current)} / {Math.round(target)} kcal
-            </Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="设置营养目标"
@@ -1941,9 +1869,6 @@ function HomeWellnessCalorieCard({
               <Text style={[styles.wellnessTargetEditText, { color: themeColors.bodyStatusChangeDown }]}>目标</Text>
             </Pressable>
           </View>
-          <View style={[styles.wellnessTotalProgress, { backgroundColor: themeColors.progressTrack }]}>
-            <View style={[styles.wellnessTotalProgressFill, { width: `${normalizedProgress}%`, backgroundColor: isOver ? themeColors.over : '#7fc6a5' }]} />
-          </View>
           <View style={styles.wellnessMacroGrid}>
             {macroConfigs.map((config) => {
               const macroCurrent = Number(intakeData?.macros?.[config.key]?.current || 0)
@@ -1953,13 +1878,14 @@ function HomeWellnessCalorieCard({
               return (
                 <View key={config.key} style={styles.wellnessMacroItem}>
                   <View style={styles.wellnessMacroTitleRow}>
-                    <IconfontText className={config.iconClass} size={10} color={config.color} />
+                    <IconfontText className={config.iconClass} size={13} color='#0e5b42' />
                     <Text style={[styles.wellnessMacroTitle, { color: themeColors.text }]} numberOfLines={1}>{config.label}</Text>
                   </View>
-                  <Text style={[styles.wellnessMacroCurrent, { color: macroOver ? themeColors.over : themeColors.bodyStatusChangeDown }]} numberOfLines={1}>{formatHomeNumber(macroCurrent)}</Text>
-                  <Text style={[styles.wellnessMacroTarget, { color: themeColors.textMuted }]} numberOfLines={1}>/ {formatHomeNumber(macroTarget)}{config.unit}</Text>
-                  <View style={[styles.wellnessMacroTrack, { backgroundColor: themeColors.progressTrack }]}>
-                    <View style={[styles.wellnessMacroFill, { width: `${macroProgress}%`, backgroundColor: macroOver ? themeColors.over : '#7fc6a5' }]} />
+                  <View style={styles.wellnessMacroNumbers}>
+                    <Text style={[styles.wellnessMacroCurrent, { color: macroOver ? themeColors.over : themeColors.bodyStatusChangeDown }]}>{isGuest || dashboardBusy ? '--' : formatHomeNumber(macroCurrent)}<Text style={[styles.wellnessMacroTarget, { color: themeColors.textMuted }]}>/{isGuest || dashboardBusy ? '--' : formatHomeNumber(macroTarget)}{config.unit}</Text></Text>
+                  </View>
+                  <View style={[styles.wellnessMacroTrack, { backgroundColor: 'rgba(170,182,173,0.38)' }]}>
+                    <View style={[styles.wellnessMacroFill, { width: `${macroProgress}%`, backgroundColor: macroOver ? themeColors.over : config.key === 'carbs' ? '#efb833' : '#337f5c' }]} />
                   </View>
                 </View>
               )
@@ -1967,24 +1893,17 @@ function HomeWellnessCalorieCard({
           </View>
         </View>
       </View>
-      {!isGuest ? <TodaySupplementsCard summary={supplementSummary} embedded /> : null}
       <View style={styles.wellnessNutritionShell}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="营养概览"
           accessibilityState={{ expanded: nutritionExpanded }}
-          style={({ pressed }) => [styles.nutritionExpandTitleRow, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.nutritionExpandTitleRow, { minHeight: 24, marginBottom: 0 }, pressed && styles.pressed]}
           onPress={onToggleNutrition}
         >
-          <Text style={[styles.nutritionTitle, { color: themeColors.nutritionTitle }]}>营养概览</Text>
+          <Text style={[styles.orbitNutritionTitle, { color: themeColors.nutritionTitle }]}>营养概览</Text>
           <View style={[styles.nutritionExpandAffordance, { backgroundColor: themeColors.nutritionAffordanceBg }]}>
-            <IconfontText
-              className="iconfont icon-right-arrow"
-              size={14}
-              color={themeColors.nutritionAffordanceText}
-              style={{ transform: [{ rotate: nutritionExpanded ? '270deg' : '90deg' }] }}
-            />
-            <Text style={[styles.nutritionExpandAffordanceText, { color: themeColors.nutritionAffordanceText }]}>{nutritionExpanded ? '收起' : '展开更多'}</Text>
+            <Text style={[styles.orbitNutritionTitle, { color: themeColors.nutritionAffordanceText }]}>{nutritionExpanded ? '收起' : '展开更多'}</Text>
           </View>
         </Pressable>
         {nutritionExpanded ? (
@@ -2185,6 +2104,10 @@ function HomeBodyStatusStrip({
   onWeight,
   onWater,
   onExercise,
+  onSleep,
+  isGuest,
+  selected,
+  date,
   themeColors,
 }: {
   weightSummary: { latestWeight: BodyMetricWeightEntry | null; weightChange: number | null; hasRecord: boolean }
@@ -2195,15 +2118,28 @@ function HomeBodyStatusStrip({
   onWeight: () => void
   onWater: () => void
   onExercise: () => void
+  onSleep: () => void
+  isGuest: boolean
+  selected: HomeQuickStatId[]
+  date: string
   themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
-  return (
-    <View style={styles.bodyStatusSection}>
-      <WeightStatusCard summary={weightSummary} onPress={onWeight} themeColors={themeColors} />
-      <WaterStatusCard todayWater={todayWater} waterGoalMl={waterGoalMl} waterProgress={waterProgress} onPress={onWater} themeColors={themeColors} />
-      <ExerciseStatusCard kcal={exerciseKcal} onPress={onExercise} themeColors={themeColors} />
-    </View>
-  )
+  const cards = selected.map(id => {
+        if (id === 'sleep' && !isGuest) return <SleepCard key={id} date={date} compact compactWidth={selected.length === 4 ? 112 : undefined} />
+        const meta = {
+          weight: { label: '体重', value: isGuest ? '--' : weightSummary.latestWeight ? `${weightSummary.latestWeight.value.toFixed(1)} kg` : '--', icon: 'icon-weight-scale', color: '#109864', onPress: onWeight },
+          water: { label: '喝水', value: isGuest ? '--' : `${Math.round(todayWater.total)} ml`, icon: 'icon-drink', color: '#339ce7', onPress: onWater },
+          exercise: { label: '运动', value: isGuest ? '--' : `${exerciseKcal} kcal`, icon: 'icon-dumbbell', color: '#109864', onPress: onExercise },
+          sleep: { label: '睡眠', value: '--', icon: 'icon-a-144-lvye', color: '#8160ba', onPress: onSleep },
+        }[id]
+        return <Pressable key={id} accessibilityRole='button' accessibilityLabel={`记录${meta.label}`} onPress={meta.onPress} style={[styles.homeQuickCard, selected.length === 4 && { flex: 0, width: 112 }, { backgroundColor: themeColors.bodyStatusCard }]}>
+          <View style={[styles.quickIcon, { backgroundColor: `${meta.color}16` }]}>{id === 'sleep' ? <Moon size={16} color={meta.color} /> : <IconfontText className={`iconfont ${meta.icon}`} size={16} color={meta.color} />}</View>
+          <View style={styles.quickCopy}><Text style={styles.homeQuickValue} numberOfLines={1}>{meta.value}</Text><Text style={styles.quickLabel}>{meta.label}</Text></View>
+        </Pressable>
+      })
+  return selected.length === 4
+    ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickCards}>{cards}</ScrollView>
+    : <View style={[styles.quickCards, { flexDirection: 'row' }]}>{cards}</View>
 }
 
 function WeightStatusCard({
@@ -2301,6 +2237,11 @@ function ExerciseStatusCard({ kcal, onPress, themeColors }: { kcal: number; onPr
   )
 }
 
+function HomeWeeklyRecapEntry({ onPress, isDark }: { onPress: () => void; isDark: boolean }) {
+  const week = previousRecapWeek()
+  return <Pressable accessibilityRole='button' accessibilityLabel='查看上周回顾' onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 66, padding: 12, borderRadius: 14, backgroundColor: isDark ? '#222f29' : 'rgba(255,253,247,0.96)' }}><View style={{ width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? '#293f2f' : '#e8f1e5' }}><IconfontText className='iconfont icon-weibiaoti1' size={22} color='#477353' /></View><View style={{ flex: 1 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Text style={{ color: isDark ? '#e2eddf' : '#294635', fontSize: 15, fontWeight: '700' }}>上周回顾</Text><Text style={{ color: '#708072', fontSize: 10 }}>{week.start.slice(5).replace('-', '.')} — {week.end.slice(5).replace('-', '.')}</Text></View><Text style={{ color: '#7d897f', fontSize: 12, marginTop: 4 }}>回看饮食、饮水与记录天数</Text></View><IconfontText className='iconfont icon-right-arrow' size={16} color='#557560' /></Pressable>
+}
+
 function HomeMealsSection({
   meals,
   onOpenAll,
@@ -2321,17 +2262,16 @@ function HomeMealsSection({
   return (
     <View style={styles.mealsSection}>
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>今日餐食</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}><IconfontText className='iconfont icon-canciguanli' size={16} color={themeColors.mealIconText} /><Text style={[styles.sectionTitle, { color: themeColors.text, marginBottom: 0 }]}>今日餐食</Text></View>
         <Pressable style={styles.viewAllButton} onPress={onOpenAll}>
-          <Text style={[styles.viewAllText, { color: themeColors.textSecondary }]}>查看全部</Text>
+          <IconfontText className='iconfont icon-right-arrow' size={18} color={themeColors.textSecondary} />
         </Pressable>
       </View>
       <View style={styles.mealsList}>
         {meals.length === 0 ? (
-          <Pressable style={({ pressed }) => [styles.mealsEmpty, { backgroundColor: themeColors.emptyMealCard, borderColor: themeColors.emptyMealCardBorder }, pressed && styles.pressed]} onPress={onQuickRecord}>
-            <IconfontText className="iconfont icon-paizhao-xianxing" size={24} color={themeColors.mealIconText} />
-            <Text style={[styles.mealsEmptyTitle, { color: themeColors.text }]}>暂无今日餐食</Text>
-            <Text style={[styles.mealsEmptyDesc, { color: themeColors.textMuted }]}>点这里记录一餐</Text>
+          <Pressable accessibilityRole='button' accessibilityLabel='记录今天的第一餐' style={({ pressed }) => [styles.mealsEmpty, pressed && styles.pressed]} onPress={onQuickRecord}>
+            <Text style={{ fontSize: 14, color: themeColors.textMuted }}>记录今天的第一餐</Text>
+            <IconfontText className='iconfont icon-right-arrow' size={14} color={themeColors.textMuted} />
           </Pressable>
         ) : (
           meals.map((meal, index) => {
@@ -2553,7 +2493,7 @@ function buildWeekCells(
   selectedTarget: number,
   weekStats: StatsSummary | null,
 ): WeekCell[] {
-  const base = parseDateKey(todayDate)
+  const base = parseDateKey(selectedDate)
   const dayNames = ['日', '一', '二', '三', '四', '五', '六']
   const dailyCalorieMap = new Map(
     (weekStats?.daily_calories || []).map((item) => [item.date, Number(item.calories) || 0]),
@@ -2685,10 +2625,8 @@ function expiryToneStyle(urgency: unknown) {
 
 function homeGreeting(): string {
   const hour = new Date().getHours()
-  if (hour < 6) return '夜深了'
-  if (hour < 11) return '早上好'
-  if (hour < 14) return '中午好'
-  if (hour < 18) return '下午好'
+  if (hour < 12) return '早上好'
+  if (hour < 18) return '中午好'
   return '晚上好'
 }
 
@@ -2839,33 +2777,14 @@ const styles = StyleSheet.create({
     height: 360,
     backgroundColor: 'rgba(92, 184, 150, 0.04)',
   },
-  homeLoginBanner: {
-    minHeight: 62,
-    marginBottom: 14,
-    paddingHorizontal: 15,
-    paddingVertical: 11,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
+  homeLoginBanner: { minHeight: 58, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, flexDirection: "row", alignItems: "center", gap: 12 },
   homeLoginBannerText: {
     flex: 1,
     fontSize: 13,
     lineHeight: 19,
-    fontWeight: '600',
+    fontWeight: '400',
   },
-  homeLoginBannerButton: {
-    minWidth: 78,
-    minHeight: 38,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.brand,
-  },
+  homeLoginBannerButton: { minWidth: 70, minHeight: 34, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: colors.brand },
   homeLoginBannerButtonText: {
     color: '#fff',
     fontSize: 13,
@@ -3457,28 +3376,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: 'transparent',
   },
-  greetingSection: {
-    paddingTop: 4,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  greetingMain: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  greetingPet: {
-    position: 'relative',
-    width: 67,
-    height: 72,
-    flexShrink: 0,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
+  homeLayoutToolbar: { minHeight: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  homeLayoutEdit: { fontSize: 11, lineHeight: 18, fontWeight: '600', color: '#526c60' },
+  quickHeading: { fontSize: 15, lineHeight: 21, fontWeight: '800', marginHorizontal: 2, marginBottom: 9 },
+  quickCards: { gap: 7, paddingBottom: 12 },
+  homeQuickCard: { flex: 1, minHeight: 60, borderRadius: 14, padding: 8, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  quickIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  quickCopy: { flex: 1, minWidth: 0 },
+  homeQuickValue: { fontSize: 13, lineHeight: 17, fontWeight: '700', color: '#678373' },
+  quickLabel: { fontSize: 12, lineHeight: 18, color: '#5a6b63' },
+  wellnessOrbitDecoration: { position: 'absolute', top: -17, left: -16, width: '110%', height: 210 },
+  wellnessMacroNumbers: { position: 'absolute', top: 0, right: 0, flexDirection: 'row', alignItems: 'baseline' },
+  orbitNutritionTitle: { fontSize: 10, lineHeight: 15, fontWeight: '700' },
+  greetingSection: { minHeight: 62, marginBottom: 3, flexDirection: "row", alignItems: "center" },
+  greetingMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 4 },
+  greetingPet: { position: "relative", width: 64, height: 60, flexShrink: 0, alignItems: "center", justifyContent: "center" },
   greetingPetGround: {
     position: 'absolute',
     left: 12,
@@ -3489,23 +3401,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(47, 127, 98, 0.12)',
     transform: [{ scaleX: 0.92 }],
   },
-  greetingPetReminder: {
-    position: 'relative',
-    flex: 1,
-    minWidth: 0,
-    minHeight: 48,
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: 11,
-    paddingVertical: 10,
-    paddingLeft: 12,
-    paddingRight: 28,
-    shadowColor: '#1f4f3f',
-    shadowOpacity: 0.09,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 1,
-  },
+  greetingPetReminder: { position: "relative", flex: 1, minWidth: 0, minHeight: 36, justifyContent: "center", borderWidth: 1, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 13 },
   greetingPetReminderPressed: {
     opacity: 0.78,
     transform: [{ scale: 0.985 }],
@@ -3520,12 +3416,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     transform: [{ rotate: '45deg' }],
   },
-  greetingPetReminderText: {
-    flexShrink: 1,
-    fontSize: compactFont(13, 12),
-    lineHeight: 19,
-    fontWeight: '700',
-  },
+  greetingPetReminderText: { flexShrink: 1, fontSize: 12, lineHeight: 18, fontWeight: "700" },
   greetingPetReminderCount: {
     position: 'absolute',
     top: -9,
@@ -3592,26 +3483,13 @@ const styles = StyleSheet.create({
 dateSelectorSection: {
     marginBottom: 10,
   },
-  dateCalendarToolbar: {
-    minHeight: 44,
-    marginBottom: 3,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dateCalendarTitle: {
-    minHeight: 44,
-    paddingHorizontal: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
+  dateCalendarToolbar: { minHeight: 40, marginBottom: 3, flexDirection: "row", alignItems: "center", justifyContent: "flex-start" },
+  dateCalendarTitle: { minHeight: 38, flexDirection: "row", alignItems: "center", gap: 7 },
   dateCalendarControl: { width: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   dateCalendarControlText: { fontSize: 25, lineHeight: 28, fontWeight: '700' },
   dateCalendarToggleText: { fontSize: 12, lineHeight: 18, fontWeight: '700' },
   dateCalendarChevron: { fontSize: 13, lineHeight: 18, fontWeight: '700' },
-  dateMonthLabel: { fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  dateMonthLabel: { fontSize: 23, lineHeight: 31, fontWeight: "900", letterSpacing: -1 },
   monthCalendar: { paddingBottom: 8 },
   monthCalendarWeekdays: { flexDirection: 'row' },
   monthCalendarWeekday: { width: '14.2857%', textAlign: 'center', fontSize: 11, lineHeight: 28, fontWeight: '600' },
@@ -3619,19 +3497,9 @@ dateSelectorSection: {
   monthCalendarCell: { width: '14.2857%', minHeight: 44, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   monthCalendarCellDisabled: { opacity: 0.28 },
   monthCalendarDay: { fontSize: 13, lineHeight: 18, fontWeight: '700' },
-  dateList: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dateItem: {
-    width: 42,
-    height: 64,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 7,
-    paddingBottom: 6,
-  },
+  dateList: { flexDirection: 'row', justifyContent: 'space-between' },
+  weekArrow: { width: 24, alignSelf: 'center', height: 32, alignItems: 'center', justifyContent: 'center' },
+  dateItem: { flex: 1, maxWidth: 38, height: 50, borderRadius: 20, alignItems: "center", justifyContent: "space-between", paddingTop: 5, paddingBottom: 4 },
   dateItemSelected: {
     backgroundColor: 'rgba(0, 188, 125, 0.55)',
     shadowColor: '#00bc7d',
@@ -3652,18 +3520,7 @@ dateSelectorSection: {
   dateTextSelected: {
     color: '#fff',
   },
-  dateDayCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.07,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-  },
+  dateDayCircle: { width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" },
   dateDayCircleRecorded: {
     backgroundColor: colors.brand,
   },
@@ -3683,68 +3540,15 @@ dateSelectorSection: {
   dateNumTextLight: {
     color: '#fff',
   },
-  wellnessMainCard: {
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    shadowColor: '#547862',
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 2,
-  },
-  wellnessOverviewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  wellnessGaugeWrap: {
-    width: 122,
-    height: 122,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  wellnessGaugeCenter: {
-    position: 'absolute',
-    top: 8,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  wellnessGaugeLabel: {
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '700',
-  },
-  wellnessGaugeValue: {
-    maxWidth: 84,
-    marginTop: 1,
-    fontSize: 26,
-    lineHeight: 31,
-    fontWeight: '800',
-  },
-  wellnessGaugeUnit: {
-    marginTop: -1,
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '600',
-  },
-  wellnessOverviewDetail: {
-    flex: 1,
-    minWidth: 0,
-  },
-  wellnessSummaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 5,
-  },
+  wellnessMainCard: { position: "relative", paddingHorizontal: 12, paddingTop: 6, paddingBottom: 0, minHeight: 182, marginBottom: 0 },
+  wellnessOverviewRow: { flexDirection: "row", alignItems: "center", minHeight: 150, gap: 14 },
+  wellnessGaugeWrap: { width: 150, height: 150, alignItems: "center", justifyContent: "center" },
+  wellnessGaugeCenter: { position: "absolute", top: 10, left: 10, right: 10, bottom: 10, borderRadius: 65, alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
+  wellnessGaugeLabel: { fontSize: 13, lineHeight: 19, fontWeight: "600" },
+  wellnessGaugeValue: { maxWidth: 128, fontSize: 39, lineHeight: 43, fontWeight: "900", letterSpacing: -1 },
+  wellnessGaugeUnit: { fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  wellnessOverviewDetail: { flex: 1, minWidth: 0, paddingTop: 16 },
+  wellnessSummaryRow: { position: "absolute", top: -14, right: 0, alignItems: "flex-end" },
   wellnessIntakeSummary: {
     flex: 1,
     minWidth: 0,
@@ -3752,16 +3556,7 @@ dateSelectorSection: {
     lineHeight: 14,
     fontWeight: '600',
   },
-  wellnessTargetEdit: {
-    minHeight: 28,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
+  wellnessTargetEdit: { minHeight: 22, borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3 },
   wellnessTargetEditText: {
     fontSize: 9,
     lineHeight: 12,
@@ -3778,53 +3573,18 @@ dateSelectorSection: {
     height: '100%',
     borderRadius: 999,
   },
-  wellnessMacroGrid: {
-    flexDirection: 'row',
-    gap: 5,
-  },
-  wellnessMacroItem: {
-    flex: 1,
-    minWidth: 0,
-  },
-  wellnessMacroTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  wellnessMacroTitle: {
-    flexShrink: 1,
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: '600',
-  },
-  wellnessMacroCurrent: {
-    marginTop: 3,
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '800',
-  },
-  wellnessMacroTarget: {
-    fontSize: 8,
-    lineHeight: 11,
-  },
-  wellnessMacroTrack: {
-    height: 4,
-    marginTop: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
+  wellnessMacroGrid: { gap: 14 },
+  wellnessMacroItem: { position: "relative", minWidth: 0, minHeight: 24, paddingBottom: 5 },
+  wellnessMacroTitleRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+  wellnessMacroTitle: { fontSize: 12, lineHeight: 18, fontWeight: "800" },
+  wellnessMacroCurrent: { fontSize: 11, lineHeight: 16, fontWeight: "800" },
+  wellnessMacroTarget: { fontSize: 10, lineHeight: 16 },
+  wellnessMacroTrack: { height: 5, marginTop: 4, marginLeft: 54, borderRadius: 999, overflow: "hidden" },
   wellnessMacroFill: {
     height: '100%',
     borderRadius: 999,
   },
-  wellnessNutritionShell: {
-    minHeight: 44,
-    marginTop: 8,
-    paddingTop: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(120, 145, 130, 0.22)',
-    justifyContent: 'center',
-  },
+  wellnessNutritionShell: { minHeight: 20, marginTop: -1, justifyContent: "center" },
   mainCard: {
     borderRadius: 16,
     padding: 16,
@@ -4122,6 +3882,10 @@ dateSelectorSection: {
   mealsSection: {
     marginTop: 2,
     marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.84)',
   },
   sectionHeader: {
     minHeight: 34,
@@ -4144,13 +3908,10 @@ dateSelectorSection: {
     gap: 10,
   },
   mealsEmpty: {
-    minHeight: 142,
-    borderRadius: 20,
+    minHeight: 48,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.54)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.62)',
+    justifyContent: 'space-between',
   },
   mealsEmptyTitle: {
     marginTop: 10,

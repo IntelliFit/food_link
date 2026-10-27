@@ -94,6 +94,8 @@ import type {
   StatsCustomFocusResult,
   StatsInsightResult,
   StatsSummary,
+  StatsCalendarMonth,
+  OwnCommentHistoryItem,
   UpdateFoodRecordRequest,
   UserInfo,
   VoucherListResponse,
@@ -2537,6 +2539,14 @@ export class FoodLinkApiClient {
     return this.authenticatedRequest<DiningWindowItem[]>(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows${query}`, { method: 'GET', timeoutMs: 10000 })
   }
 
+  async getStatsCalendarMonth(month: string): Promise<StatsCalendarMonth> {
+    return this.authenticatedRequest<StatsCalendarMonth>(`/api/stats/calendar?month=${encodeURIComponent(month)}`, { method: 'GET', timeoutMs: 30000 })
+  }
+
+  async communityGetOwnComments(cursor = ''): Promise<{ list: OwnCommentHistoryItem[]; has_more: boolean; next_cursor?: string }> {
+    return this.authenticatedRequest(`/api/community/comments/mine?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { method: 'GET', timeoutMs: 15000 })
+  }
+
   /** Free library/history retrieval. Does not generate paid AI recommendations. */
   async previewMeals(input: { meal_type: ReminderMealType; location?: MealPreviewLocation }): Promise<DietRecommendationResult> {
     return this.authenticatedRequest<DietRecommendationResult>('/api/diet/recommendations/preview', {
@@ -2566,7 +2576,7 @@ export class FoodLinkApiClient {
     })
   }
 
-  async registerPushDevice(installationId: string, input: { token: string; project_id: string; platform: 'android' | 'ios' }): Promise<{ registered: boolean }> {
+  async registerPushDevice(installationId: string, input: { token: string; project_id: string; platform: 'android' | 'ios'; provider?: 'expo' | 'honor' }): Promise<{ registered: boolean }> {
     return this.authenticatedRequest<{ registered: boolean }>(`/api/push/devices/${encodeURIComponent(installationId)}`, {
       method: 'PUT', body: input, timeoutMs: 15000,
     })

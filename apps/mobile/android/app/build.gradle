@@ -8,6 +8,7 @@ def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def rootPackageJson = new JsonSlurper().parse(new File(rootDir, "../../../package.json"))
 def expoAppJson = new JsonSlurper().parse(new File(rootDir, "../app.json"))
 def localSigningProperties = new Properties()
+def releaseSigningConfigured = false
 def localSigningPropertiesFile = new File(rootDir, "keystore.store.local.properties")
 if (localSigningPropertiesFile.exists()) {
     localSigningPropertiesFile.withInputStream { localSigningProperties.load(it) }
@@ -93,10 +94,23 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
+    // FOODLINK_HONOR_APP_ID is public app identity, never a client secret.
+    def honorAppId = providers.gradleProperty('foodlink.honorAppId').orElse(providers.environmentVariable('FOODLINK_HONOR_APP_ID')).getOrElse('')
+    if (!(honorAppId ==~ /[0-9]{0,64}/)) { throw new GradleException('荣耀 APP ID 必须为数字') }
+    defaultConfig { resValue 'string', 'foodlink_honor_app_id', honorAppId }
+    sourceSets { main.java.srcDirs += file('../../native/honor') }
     ndkVersion rootProject.ext.ndkVersion
 
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
+
+    // Optional per-task short native output path for Windows' 260-character limit.
+    // Default build/CI behavior is unchanged when the variable is absent.
+    def shortCxxDirectory = System.getenv("FOODLINK_ANDROID_CXX_BUILD_DIR")
+    if (shortCxxDirectory) {
+        externalNativeBuild.cmake.buildStagingDirectory file(shortCxxDirectory)
+        defaultConfig.externalNativeBuild.cmake.arguments "-DCMAKE_OBJECT_PATH_MAX=240"
+    }
 
     namespace 'cn.healthymax.foodlink'
     defaultConfig {
@@ -122,12 +136,11 @@ android {
             def releaseKeyPassword = System.getenv("FOODLINK_ANDROID_KEY_PASSWORD") ?: findProperty("FOODLINK_ANDROID_KEY_PASSWORD") ?: localSigningProperties.getProperty("keyPassword")
 
             if (releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword) {
+                releaseSigningConfigured = true
                 storeFile file(releaseStoreFile)
                 storePassword releaseStorePassword
                 keyAlias releaseKeyAlias
                 keyPassword releaseKeyPassword
-            } else {
-                throw new GradleException("Android release signing is not configured. Set FOODLINK_ANDROID_* variables or android/keystore.store.local.properties.")
             }
         }
     }
@@ -156,6 +169,14 @@ android {
     }
 }
 
+// Debug validation must not require production credentials. Every release task
+// still fails closed rather than silently producing an unsigned store artifact.
+gradle.taskGraph.whenReady { graph ->
+    if (!releaseSigningConfigured && graph.allTasks.any { it.project == project && it.name.contains('Release') }) {
+        throw new GradleException("Android release signing is not configured. Set FOODLINK_ANDROID_* variables or android/keystore.store.local.properties.")
+    }
+}
+
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
 // Accepts values in comma delimited lists, example:
 // android.packagingOptions.pickFirsts=/LICENSE,**/picasa.ini
@@ -177,8 +198,12 @@ android {
 }
 
 dependencies {
+    implementation('com.hihonor.mcs:push:10.0.31.302')
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    // Expo Notifications keeps this as implementation, so our subclass needs
+    // the same SDK on the app compile classpath (no runtime version upgrade).
+    implementation("com.google.firebase:firebase-messaging:25.0.1")
     implementation("com.tencent.mm.opensdk:wechat-sdk-android:6.8.34")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";

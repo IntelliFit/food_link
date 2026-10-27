@@ -67,7 +67,7 @@ func (r *Repository) ListPreferences(ctx context.Context, after string) ([]Setti
 
 func (r *Repository) Register(ctx context.Context, row migrationdo.PushDeviceDO) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Serialize renewals of the same Expo token across app instances.
+		// Serialize renewals of the same token across app instances.
 		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", row.Token).Error; err != nil {
 			return err
 		}
@@ -77,7 +77,7 @@ func (r *Repository) Register(ctx context.Context, row migrationdo.PushDeviceDO)
 		if err := tx.Model(&migrationdo.PushDeviceDO{}).Where("token = ? AND id <> ?", row.Token, row.ID).Updates(map[string]any{"active": false, "updated_at": row.UpdatedAt}).Error; err != nil {
 			return err
 		}
-		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}}, DoUpdates: clause.AssignmentColumns([]string{"user_id", "token", "project_id", "platform", "active", "last_seen_at", "updated_at"})}).Create(&row).Error; err != nil {
+		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}}, DoUpdates: clause.AssignmentColumns([]string{"user_id", "token", "provider", "project_id", "platform", "active", "last_seen_at", "updated_at"})}).Create(&row).Error; err != nil {
 			return err
 		}
 		// Keep at most five active installations per account.

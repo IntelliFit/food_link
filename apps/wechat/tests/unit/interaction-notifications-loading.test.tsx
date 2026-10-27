@@ -61,7 +61,7 @@ describe('interaction notifications loading state', () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByText('20')).toBeInTheDocument()
+    expect(document.querySelector('.interaction-unread-count')).toHaveTextContent('20')
     expect(document.querySelector('.loading-spinner-md')).not.toBeInTheDocument()
     expect(screen.getByText('评论内容 1')).toBeInTheDocument()
   })

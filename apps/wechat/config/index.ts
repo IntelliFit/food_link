@@ -91,6 +91,8 @@ export default defineConfig<'vite'>(async (merge) => {
       828: 1.81 / 2
     },
     sourceRoot: 'src',
+    // 工作树共用依赖缓存时，始终编译当前 checkout 的共享代码。
+    alias: { '@food-link/core': join(workspaceRoot, 'packages/core/src/index.ts') },
     outputRoot: 'dist',
     plugins: [
       "@tarojs/plugin-generator"

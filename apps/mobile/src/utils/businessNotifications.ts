@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import * as Notifications from 'expo-notifications'
-import { Platform } from 'react-native'
+import { Linking, Platform } from 'react-native'
 import { apiClient, getStoredUserId, hasStoredToken } from '../api'
 import type { ReminderMealType } from '@food-link/core'
+import { LOCAL_CHECK_SOURCE, observeNotification, recordRegistrationDiagnostic } from '../diagnostics/notificationDiagnostics'
+import { getReminderExpoToken } from './pushRegistration'
+import { getHonorPushRegistration, isHonorPushConfigured } from '../native/honorPush'
 
 const INSTALLATION_KEY = 'mobile_push_installation_v1'
 const BOUND_OWNER_KEY = 'mobile_push_bound_owner_v1'
@@ -26,9 +29,12 @@ export function setReminderSessionActive(active: boolean) {
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const data = notification.request.content.data || {}
-    const allowed = data.source !== 'foodlink-reminder' || (
-      !suspended && await hasStoredToken() && data.user_id === await getStoredUserId()
-    )
+    const allowed = data.source === LOCAL_CHECK_SOURCE
+      ? data.user_id === (await getStoredUserId() ?? '')
+      : data.source !== 'foodlink-reminder' || (
+        !suspended && await hasStoredToken() && data.user_id === await getStoredUserId()
+      )
+    void observeNotification(notification, allowed ? 'foreground_allowed' : 'foreground_suppressed').catch(() => undefined)
     return { shouldShowBanner: allowed, shouldShowList: allowed, shouldPlaySound: allowed, shouldSetBadge: false }
   },
 })
@@ -36,6 +42,38 @@ Notifications.setNotificationHandler({
 export async function hasNotificationPermission(): Promise<boolean> {
   const permission = await Notifications.getPermissionsAsync()
   return permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+}
+
+export type ReminderChannelStatus = 'not-applicable' | 'not-created' | 'blocked' | 'standard' | 'banner' | 'unknown'
+
+/** Overall permission alone does not tell whether the reminder channel can pop up. */
+export async function getReminderChannelStatus(): Promise<ReminderChannelStatus> {
+  if (Platform.OS !== 'android') return 'not-applicable'
+  try {
+    const channel = await Notifications.getNotificationChannelAsync(CHANNEL_ID)
+    if (!channel) return 'not-created'
+    if (channel.importance === Notifications.AndroidImportance.NONE) return 'blocked'
+    return channel.importance >= Notifications.AndroidImportance.HIGH ? 'banner' : 'standard'
+  } catch {
+    return 'unknown'
+  }
+}
+
+export async function openReminderNotificationSettings(): Promise<void> {
+  const packageName = Constants.expoConfig?.android?.package
+  const channelStatus = await getReminderChannelStatus()
+  if (Platform.OS === 'android' && packageName && ['banner', 'standard', 'blocked'].includes(channelStatus)) {
+    try {
+      await Linking.sendIntent('android.settings.CHANNEL_NOTIFICATION_SETTINGS', [
+        { key: 'android.provider.extra.APP_PACKAGE', value: packageName },
+        { key: 'android.provider.extra.CHANNEL_ID', value: CHANNEL_ID },
+      ])
+      return
+    } catch {
+      // Older/custom Android builds may only support the app-level settings screen.
+    }
+  }
+  await Linking.openSettings()
 }
 
 async function installationId(): Promise<string> {
@@ -54,7 +92,9 @@ async function registerCurrentDevice(requestPermission: boolean) {
   if (Constants.appOwnership === 'expo') throw new Error('远程提醒需要独立安装包，不支持 Expo Go')
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-      name: '饮食与保质期提醒', importance: Notifications.AndroidImportance.DEFAULT,
+      // Applies only to a new channel. Never delete/recreate an existing channel to
+      // override the user's choice; the settings page explains how to enable banners.
+      name: '饮食与保质期提醒', importance: Notifications.AndroidImportance.HIGH,
     })
   }
   let permitted = await hasNotificationPermission()
@@ -63,25 +103,34 @@ async function registerCurrentDevice(requestPermission: boolean) {
     permitted = await hasNotificationPermission()
   }
   if (!permitted) throw new Error('系统通知未允许，请在系统设置中开启通知')
-  const projectId: unknown = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId
-  if (typeof projectId !== 'string' || !projectId) throw new Error('当前安装包缺少推送项目配置')
+  if (await getReminderChannelStatus() === 'blocked') {
+    throw new Error('系统已关闭饮食与保质期提醒，请在系统通知设置中开启该通道后再保存')
+  }
   const id = await installationId()
-  let token: string
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    const result = await Promise.race([
-      Notifications.getExpoPushTokenAsync({ projectId }),
-      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('推送连接超时')), 20000) }),
-    ])
-    token = result.data
-  } catch {
-    // Native/provider errors can contain credentials; never print or surface their raw text.
-    throw new Error('当前设备无法连接推送服务，请检查 Google 服务和网络后重试')
-  } finally {
-    if (timer) clearTimeout(timer)
+  const isCurrent = async () => !suspended && owner === await getStoredUserId() && await hasStoredToken()
+  let registration: { token: string; project_id: string; provider: 'expo' | 'honor' } | null = null
+  if (isHonorPushConfigured()) {
+    const settings = await apiClient.getReminderSettings()
+    if (!await isCurrent()) throw new Error('账号状态已改变，请重新进入提醒设置')
+    if (settings.push_available && settings.push_providers?.includes('honor')) {
+      registration = await getHonorPushRegistration()
+    }
+  }
+  if (!registration) {
+    const projectId: unknown = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId
+    if (typeof projectId !== 'string' || !projectId) throw new Error('当前安装包缺少推送项目配置')
+    const token = await getReminderExpoToken(projectId, owner, isCurrent)
+    registration = { token, project_id: projectId, provider: 'expo' }
   }
   if (suspended || owner !== await getStoredUserId()) throw new Error('账号状态已改变，请重新进入提醒设置')
-  await apiClient.registerPushDevice(id, { token, project_id: projectId, platform: Platform.OS })
+  await recordRegistrationDiagnostic(owner, 'device_binding_requested')
+  try {
+    await apiClient.registerPushDevice(id, { ...registration, platform: Platform.OS })
+    await recordRegistrationDiagnostic(owner, 'device_binding_ready')
+  } catch (cause) {
+    await recordRegistrationDiagnostic(owner, 'device_binding_failed', 'BACKEND_ERROR')
+    throw cause
+  }
   boundOwner = owner
   await AsyncStorage.setItem(BOUND_OWNER_KEY, owner)
 }

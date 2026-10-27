@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	migrationdo "food_link/backend/internal/migration/do"
@@ -20,16 +22,63 @@ import (
 type Service struct {
 	repo   *repo.Repository
 	expo   *ExpoClient
+	honor  *HonorClient
 	config config.PushConfig
 }
 
 func New(r *repo.Repository, cfg config.PushConfig) *Service {
-	return &Service{repo: r, expo: NewExpoClient(cfg.ExpoAccessToken), config: cfg}
+	return &Service{repo: r, expo: NewExpoClient(cfg.ExpoAccessToken), honor: NewHonorClient(cfg.Honor), config: cfg}
 }
 
 type SettingsResult struct {
 	Preferences   domain.Preferences `json:"preferences"`
 	PushAvailable bool               `json:"push_available"`
+	PushProviders []string           `json:"push_providers"`
+}
+
+// Missing provider is the legacy Expo protocol. Reject unknown providers rather
+// than interpreting their token as an Expo token or silently sending twice.
+func providerName(provider string) string {
+	if provider == "" {
+		return "expo"
+	}
+	return provider
+}
+
+func (s *Service) settingsResult(p domain.Preferences) SettingsResult {
+	providers := []string{}
+	if s.config.Enabled {
+		if s.config.ExpoProjectID != "" {
+			providers = append(providers, "expo")
+		}
+		if s.config.Honor.Ready() {
+			providers = append(providers, "honor")
+		}
+	}
+	return SettingsResult{Preferences: p, PushAvailable: len(providers) > 0, PushProviders: providers}
+}
+
+func (s *Service) deviceProjectValid(provider, projectID, platform string) bool {
+	switch providerName(provider) {
+	case "expo":
+		return projectID == s.config.ExpoProjectID && projectID != ""
+	case "honor":
+		return platform == "android" && s.config.Honor.Ready() && projectID == s.config.Honor.AppID
+	default:
+		return false
+	}
+}
+
+func validHonorToken(token string) bool {
+	if token == "" || len(token) > 4096 || !utf8.ValidString(token) {
+		return false
+	}
+	for _, r := range token {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func invalid(message string) error {
@@ -45,7 +94,7 @@ func (s *Service) Settings(ctx context.Context, userID string) (SettingsResult, 
 	if err != nil {
 		return SettingsResult{}, s.storageError(ctx, "read_preferences", userID)
 	}
-	return SettingsResult{Preferences: p.Preferences, PushAvailable: s.config.Enabled}, nil
+	return s.settingsResult(p.Preferences), nil
 }
 func (s *Service) SaveSettings(ctx context.Context, userID string, p domain.Preferences) (SettingsResult, error) {
 	if err := p.Validate(); err != nil {
@@ -60,10 +109,11 @@ func (s *Service) SaveSettings(ctx context.Context, userID string, p domain.Pref
 		return SettingsResult{}, s.storageError(ctx, "save_preferences", userID)
 	}
 	logger.Info(ctx, "提醒偏好已更新", slog.String("user_id", userID), slog.Bool("enabled", p.Enabled))
-	return SettingsResult{Preferences: p, PushAvailable: s.config.Enabled}, nil
+	return s.settingsResult(p), nil
 }
 
 type RegisterInput struct {
+	Provider  string `json:"provider"`
 	Token     string `json:"token"`
 	ProjectID string `json:"project_id"`
 	Platform  string `json:"platform"`
@@ -73,14 +123,16 @@ var installationPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
 var tokenPattern = regexp.MustCompile(`^(?:ExpoPushToken|ExponentPushToken)\[[A-Za-z0-9_-]{10,200}\]$`)
 
 func (s *Service) Register(ctx context.Context, userID, id string, input RegisterInput) error {
-	if !installationPattern.MatchString(id) || !tokenPattern.MatchString(input.Token) {
+	input.Provider = providerName(input.Provider)
+	validToken := input.Provider == "expo" && tokenPattern.MatchString(input.Token) || input.Provider == "honor" && validHonorToken(input.Token)
+	if !installationPattern.MatchString(id) || !validToken {
 		logger.Warn(ctx, "提醒设备标识校验失败", slog.String("user_id", userID))
 		return invalid("设备标识或推送凭据无效")
 	}
 	if input.Platform != "android" && input.Platform != "ios" {
 		return invalid("不支持此设备平台")
 	}
-	if input.ProjectID != s.config.ExpoProjectID {
+	if !s.deviceProjectValid(input.Provider, input.ProjectID, input.Platform) {
 		logger.Warn(ctx, "提醒设备项目不匹配", slog.String("user_id", userID))
 		return invalid("推送项目不匹配，请安装最新 APP")
 	}
@@ -88,10 +140,10 @@ func (s *Service) Register(ctx context.Context, userID, id string, input Registe
 		return &commonerrors.AppError{Code: 10005, Message: "消息提醒服务尚未启用", HTTPStatus: http.StatusServiceUnavailable}
 	}
 	now := time.Now().UTC()
-	if err := s.repo.Register(ctx, migrationdo.PushDeviceDO{ID: id, UserID: userID, Token: input.Token, ProjectID: input.ProjectID, Platform: input.Platform, Active: true, LastSeenAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := s.repo.Register(ctx, migrationdo.PushDeviceDO{ID: id, UserID: userID, Token: input.Token, Provider: input.Provider, ProjectID: input.ProjectID, Platform: input.Platform, Active: true, LastSeenAt: now, CreatedAt: now, UpdatedAt: now}); err != nil {
 		return s.storageError(ctx, "register_device", userID)
 	}
-	logger.Info(ctx, "提醒设备已绑定", slog.String("user_id", userID), slog.String("platform", input.Platform))
+	logger.Info(ctx, "提醒设备已绑定", slog.String("user_id", userID), slog.String("platform", input.Platform), slog.String("push_provider", input.Provider))
 	return nil
 }
 func (s *Service) Revoke(ctx context.Context, userID, id string) error {
@@ -164,7 +216,10 @@ func (s *Service) Plan(ctx context.Context, now time.Time) error {
 					}
 					for _, device := range devices {
 						key := strings.Join([]string{setting.UserID, device.ID, o.Kind, o.MealType, o.Date}, ":")
-						job := migrationdo.PushDeliveryDO{UserID: setting.UserID, DeviceID: device.ID, DedupeKey: key, TokenHash: repo.TokenHash(device.Token), PreferencesVersion: setting.UpdatedAt, Kind: o.Kind, MealType: o.MealType, LocalDate: o.Date, Status: "pending", NotBefore: o.Due, ExpiresAt: o.Expires, CreatedAt: now, UpdatedAt: now}
+						if !s.deviceProjectValid(device.Provider, device.ProjectID, device.Platform) {
+							continue
+						}
+						job := migrationdo.PushDeliveryDO{UserID: setting.UserID, DeviceID: device.ID, Provider: providerName(device.Provider), DedupeKey: key, TokenHash: repo.TokenHash(device.Token), PreferencesVersion: setting.UpdatedAt, Kind: o.Kind, MealType: o.MealType, LocalDate: o.Date, Status: "pending", NotBefore: o.Due, ExpiresAt: o.Expires, CreatedAt: now, UpdatedAt: now}
 						if err = s.repo.Enqueue(ctx, job); err != nil {
 							return s.storageError(ctx, "enqueue", setting.UserID)
 						}
@@ -206,7 +261,7 @@ func (s *Service) Dispatch(ctx context.Context, now time.Time) (bool, error) {
 	if err != nil {
 		return true, s.storageError(ctx, "read_device", job.UserID)
 	}
-	if device == nil || !device.Active || device.UserID != job.UserID || repo.TokenHash(device.Token) != job.TokenHash || device.ProjectID != s.config.ExpoProjectID || device.LastSeenAt.Before(now.AddDate(0, 0, -30)) {
+	if device == nil || !device.Active || device.UserID != job.UserID || repo.TokenHash(device.Token) != job.TokenHash || providerName(device.Provider) != providerName(job.Provider) || !s.deviceProjectValid(device.Provider, device.ProjectID, device.Platform) || device.LastSeenAt.Before(now.AddDate(0, 0, -30)) {
 		return cancel("DeviceChanged")
 	}
 	settings, err := s.repo.GetPreferences(ctx, job.UserID)
@@ -237,9 +292,20 @@ func (s *Service) Dispatch(ctx context.Context, now time.Time) (bool, error) {
 	logger.Info(ctx, "开始投递 APP 业务提醒",
 		slog.String("user_id", job.UserID), slog.String("job_id", job.ID),
 		slog.String("kind", job.Kind), slog.String("meal_type", job.MealType),
-		slog.String("push_priority", message.Priority), slog.Int("ttl_seconds", message.TTL))
-	ticket, code := s.expo.Send(ctx, message)
+		slog.String("push_provider", providerName(job.Provider)), slog.String("push_priority", message.Priority), slog.Int("ttl_seconds", message.TTL))
+	var ticket, code string
+	if providerName(job.Provider) == "honor" {
+		ticket, code = s.honor.Send(ctx, message)
+	} else {
+		ticket, code = s.expo.Send(ctx, message)
+	}
 	if code == "" {
+		if providerName(job.Provider) == "honor" {
+			logger.Info(ctx, "提醒已被荣耀推送服务接受", slog.String("job_id", job.ID), slog.String("kind", job.Kind), slog.String("push_provider", "honor"))
+			// HONOR uses a separate authenticated callback protocol. Until that is
+			// connected this is acceptance only; never poll Expo with this ID.
+			return true, s.finish(ctx, job, map[string]any{"status": "provider_accepted", "ticket_id": ticket, "accepted_at": now, "receipt_check_at": nil, "last_code": ""})
+		}
 		check := now.Add(15 * time.Minute)
 		logger.Info(ctx, "提醒已被推送服务接受", slog.String("job_id", job.ID), slog.String("kind", job.Kind), slog.String("push_priority", message.Priority))
 		return true, s.finish(ctx, job, map[string]any{"status": "accepted", "ticket_id": ticket, "accepted_at": now, "receipt_check_at": check, "last_code": ""})
@@ -266,6 +332,9 @@ func (s *Service) CheckReceipt(ctx context.Context, now time.Time) (bool, error)
 	}
 	if job == nil {
 		return false, nil
+	}
+	if providerName(job.Provider) != "expo" {
+		return true, s.finish(ctx, job, map[string]any{"status": "receipt_unknown", "last_code": "ReceiptUnsupported", "receipt_check_at": nil})
 	}
 	if job.AcceptedAt == nil || now.Sub(*job.AcceptedAt) >= 23*time.Hour {
 		return true, s.finish(ctx, job, map[string]any{"status": "receipt_unknown", "last_code": "ReceiptTimeout"})

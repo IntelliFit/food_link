@@ -29,9 +29,14 @@ import { StandardFoodContributionScreen } from '../screens/StandardFoodContribut
 import { FoodContributionScreen } from '../screens/FoodContributionScreen'
 import { RecordSettingsScreen } from '../screens/RecordSettingsScreen'
 import { ReminderSettingsScreen } from '../screens/ReminderSettingsScreen'
+import { NotificationDiagnosticsScreen } from '../screens/NotificationDiagnosticsScreen'
+import { getStoredUserId } from '../api'
+import { LOCAL_CHECK_SOURCE, observeNotification } from '../diagnostics/notificationDiagnostics'
 import { MealSuggestionsScreen } from '../screens/MealSuggestionsScreen'
 import { CampusDiningSettingsScreen } from '../screens/CampusDiningSettingsScreen'
 import { SleepRecordScreen } from '../screens/SleepRecordScreen'
+import { MyCommentsScreen } from '../screens/MyCommentsScreen'
+import { WeeklyRecapScreen } from '../screens/WeeklyRecapScreen'
 import * as Notifications from 'expo-notifications'
 import { reminderDestination } from '../utils/businessNotifications'
 import { PackagedFoodCorrectionScreen } from '../screens/PackagedFoodCorrectionScreen'
@@ -140,8 +145,18 @@ export function RootNavigator() {
       const id = response.notification.request.identifier
       if (handledNotificationRef.current === id) return
       if (!navigationRef.isReady()) { pendingNotificationRef.current = response; return }
+      if (response.notification.request.content.data?.source === LOCAL_CHECK_SOURCE) {
+        if (response.notification.request.content.data.user_id !== (await getStoredUserId() ?? '') || !active) return
+        handledNotificationRef.current = id
+        pendingNotificationRef.current = null
+        void observeNotification(response.notification, 'local_opened').catch(() => undefined)
+        navigationRef.navigate('NotificationDiagnostics')
+        Notifications.clearLastNotificationResponse()
+        return
+      }
       const destination = await reminderDestination(response)
       if (!active || !isAuthenticated || !navigationRef.isReady()) return
+      void observeNotification(response.notification, 'opened').catch(() => undefined)
       handledNotificationRef.current = id
       pendingNotificationRef.current = null
       if (!destination) return
@@ -334,9 +349,12 @@ export function RootNavigator() {
         }}
       >
         <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+        <Stack.Screen name='NotificationDiagnostics' component={NotificationDiagnosticsScreen} options={{ title: '通知自检与诊断' }} />
         {isAuthenticated ? (
           <>
             <Stack.Screen name="ReminderSettings" component={ReminderSettingsScreen} options={{ title: '消息提醒' }} />
+            <Stack.Screen name="MyComments" component={MyCommentsScreen} options={{ title: '我的评论' }} />
+            <Stack.Screen name="WeeklyRecap" component={WeeklyRecapScreen} options={{ title: '上周回顾' }} />
             <Stack.Screen name="CampusDiningSettings" component={CampusDiningSettingsScreen} options={{ title: '校园就餐偏好' }} />
             <Stack.Screen name="SleepRecord" component={SleepRecordScreen} options={{ title: '睡眠记录' }} />
             <Stack.Screen name="MealSuggestions" component={MealSuggestionsScreen} options={{ title: '餐食建议' }} />

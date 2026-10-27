@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 import { AppState } from 'react-native'
 import * as Notifications from 'expo-notifications'
-import { apiClient, hasStoredToken } from '../api'
+import { apiClient, getStoredUserId, hasStoredToken } from '../api'
+import { syncNotificationDiagnosticOwner } from '../diagnostics/notificationDiagnostics'
+import { addHonorPushTokenListener } from '../native/honorPush'
 import { authorizeWithWechat, isNativeWechatAuthAvailable } from '../native/wechatAuth'
 import { refreshReminderDevice, revokeReminderDevice, setReminderSessionActive } from '../utils/businessNotifications'
 
@@ -34,16 +36,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   useEffect(() => {
+    if (isBootstrapping) return undefined
+    let active = true
+    void (async () => {
+      const owner = isAuthenticated ? await getStoredUserId() : null
+      if (active) await syncNotificationDiagnosticOwner(owner)
+    })().catch(() => undefined)
+    return () => { active = false }
+  }, [isAuthenticated, isBootstrapping])
+
+  useEffect(() => {
     setReminderSessionActive(isAuthenticated)
     if (!isAuthenticated) return undefined
     const refresh = () => { void refreshReminderDevice().catch(() => undefined) }
     refresh()
     const foreground = AppState.addEventListener('change', (state) => { if (state === 'active') refresh() })
     const tokenChange = Notifications.addPushTokenListener(refresh)
+    const honorTokenChange = addHonorPushTokenListener(refresh)
     return () => {
       setReminderSessionActive(false)
       foreground.remove()
       tokenChange.remove()
+      honorTokenChange.remove()
     }
   }, [isAuthenticated])
 

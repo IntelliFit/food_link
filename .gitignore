@@ -148,3 +148,6 @@ DECISIONS.md
 # 本地开发工具链（JDK/Android SDK 等）
 tools/
 .gstack/
+
+# Local Kotlin compiler session state
+apps/mobile/android/.kotlin/
