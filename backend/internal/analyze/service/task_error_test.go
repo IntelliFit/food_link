@@ -31,6 +31,30 @@ func TestSanitizeAIUpstreamErrorMessage(t *testing.T) {
 			forbid: "ofoxai",
 		},
 		{
+			name:   "empty food result after fallback hides model names",
+			input:  "食物识别未返回有效食物，请重试；千问备用模型仍未返回有效结果：食物识别未返回有效食物，请重试",
+			want:   "没有识别到食物，请上传清晰的食物照片或补充文字描述后重试",
+			forbid: "千问",
+		},
+		{
+			name:   "single empty food result",
+			input:  "食物识别未返回有效食物，请重试",
+			want:   "没有识别到食物，请上传清晰的食物照片或补充文字描述后重试",
+			forbid: "",
+		},
+		{
+			name:   "provider channel failure hides vendor",
+			input:  "Gemini 所有可用渠道均失败: context canceled",
+			want:   "AI 识别服务暂时不可用，请稍后重试",
+			forbid: "gemini",
+		},
+		{
+			name:   "client config error hides vendor",
+			input:  "文字输入模式使用千问时，请配置 DASHSCOPE_API_KEY",
+			want:   "AI 识别服务暂时不可用，请稍后重试",
+			forbid: "dashscope",
+		},
+		{
 			name:  "friendly business error is preserved",
 			input: "图片不够清晰，请重新拍摄",
 			want:  "图片不够清晰，请重新拍摄",

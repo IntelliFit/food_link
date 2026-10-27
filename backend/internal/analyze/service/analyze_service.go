@@ -3057,7 +3057,8 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 					slog.Int("image_count", len(imageURLs)),
 				)
 			} else {
-				err = fmt.Errorf("%w；千问备用模型仍未返回有效结果：%v", primaryErr, fallbackErr)
+				// Fallback details are logged below; keep the returned error free of model names.
+				err = primaryErr
 				logger.Warn(ctx, "食物图片千问主模型与备用模型均未返回有效食物",
 					slog.String("primary_provider", primaryProvider),
 					slog.String("primary_model", primaryModel),
