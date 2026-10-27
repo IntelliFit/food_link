@@ -1,4 +1,11 @@
-import type { CommissionStatus, PromoterCommission, PromoterMe, PromoterStatus } from '../../../utils/promoter-api'
+import type {
+  CommissionStatus,
+  PromoterCommission,
+  PromoterMe,
+  PromoterStatus,
+  PromoterWithdrawal,
+  WithdrawalStatus,
+} from '../../../utils/promoter-api'
 
 /** 分转元；余额在退款冲回后可能为负，保留符号。 */
 export function formatCents(cents: number): string {
@@ -10,6 +17,16 @@ export function formatCents(cents: number): string {
 export function formatRate(bps: number): string {
   const percent = (Number(bps) || 0) / 100
   return `${Number.isInteger(percent) ? percent : percent.toFixed(1)}%`
+}
+
+/** 一次提现的金额：全部可提现余额，超过单笔上限时按上限；不满门槛时为 0。 */
+export function withdrawAmount(me: Pick<PromoterMe, 'withdraw_min_cents' | 'withdraw_max_cents'>, availableCents: number): number {
+  const amount = Math.min(Number(availableCents) || 0, me.withdraw_max_cents)
+  return amount >= me.withdraw_min_cents ? amount : 0
+}
+
+export function withdrawRuleText(me: Pick<PromoterMe, 'withdraw_min_cents' | 'withdraw_max_cents'>): string {
+  return `满 ¥${formatCents(me.withdraw_min_cents)} 可提现，单笔最多 ¥${formatCents(me.withdraw_max_cents)}，每天 1 次。审核通过后由工作人员转到你的微信，到账后这里会显示「已到账」。`
 }
 
 /** 推广规则同时作为 v1 推广协议正文展示，申请时需勾选同意。 */
@@ -82,4 +99,28 @@ export function commissionLine(item: PromoterCommission): CommissionLine {
 /** 分享出去的落地页：首页带上推广码，打开即记录归因。 */
 export function sharePath(promoCode: string): string {
   return `/pages/index/index?promo=${encodeURIComponent(promoCode)}`
+}
+
+const WITHDRAWAL_STATUS_LABEL: Record<WithdrawalStatus, string> = {
+  reviewing: '审核中',
+  approved: '待打款',
+  transferring: '打款中',
+  succeeded: '已到账',
+  rejected: '未通过',
+  failed: '打款失败',
+}
+
+export function withdrawalLine(item: PromoterWithdrawal): CommissionLine {
+  const muted = item.status === 'rejected' || item.status === 'failed'
+  const when = item.status === 'succeeded' && item.finished_at ? item.finished_at : item.created_at
+  const sub = muted && item.note
+    ? `${item.note}，金额已退回余额`
+    : `${item.status === 'succeeded' ? '到账' : '申请'}于 ${when ? formatDate(when) : ''}`
+  return {
+    title: '佣金提现',
+    sub,
+    amount: `¥${formatCents(item.amount_cents)}`,
+    status: WITHDRAWAL_STATUS_LABEL[item.status] || '',
+    muted,
+  }
 }

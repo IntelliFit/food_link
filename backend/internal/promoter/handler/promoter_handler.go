@@ -21,6 +21,13 @@ type PromoterService interface {
 	Review(ctx context.Context, admin, promoterID string, input service.ReviewInput) (*domain.Promoter, error)
 	ChangeStatus(ctx context.Context, admin, promoterID string, input service.StatusInput) (*domain.Promoter, error)
 	SetRate(ctx context.Context, admin, promoterID string, input service.RateInput) (*domain.Promoter, error)
+	Withdraw(ctx context.Context, userID string, input service.WithdrawInput) (*domain.WithdrawalItem, error)
+	Withdrawals(ctx context.Context, userID string, page, size int) (*service.WithdrawalPage, error)
+	AdminWithdrawals(ctx context.Context, status string, page, size int) (*service.AdminWithdrawalPage, error)
+	ReviewWithdrawal(ctx context.Context, admin, withdrawalID string, input service.WithdrawalReviewInput) (*domain.Withdrawal, error)
+	RecordManualPayout(ctx context.Context, admin, withdrawalID string, input service.WithdrawalPayoutInput) (*domain.Withdrawal, error)
+	AdminCommissions(ctx context.Context, promoterID, status string, page, size int) (*service.AdminCommissionPage, error)
+	ReverseCommission(ctx context.Context, admin, commissionID string, input service.ReverseCommissionInput) (*service.ReverseCommissionResult, error)
 }
 
 type PromoterHandler struct {

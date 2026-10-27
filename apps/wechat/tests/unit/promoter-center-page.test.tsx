@@ -2,7 +2,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import * as Taro from '@tarojs/taro'
 import { useEffect } from 'react'
 import PromoterCenterPage from '../../src/packagePromoter/pages/center/index'
-import { applyPromoter, getPromoterCommissions, getPromoterMe } from '../../src/utils/promoter-api'
+import {
+  applyPromoter,
+  createPromoterWithdrawal,
+  getPromoterCommissions,
+  getPromoterMe,
+  getPromoterWithdrawals,
+} from '../../src/utils/promoter-api'
 import type { PromoterMe } from '../../src/utils/promoter-api'
 
 jest.mock('@tarojs/components', () => {
@@ -21,9 +27,17 @@ jest.mock('../../src/utils/theme-navigation-bar', () => ({ applyThemeNavigationB
 jest.mock('../../src/utils/api', () => ({ showUnifiedApiError: jest.fn() }))
 jest.mock('../../src/utils/promoter-api', () => ({
   getPromoterMe: jest.fn(), applyPromoter: jest.fn(), getPromoterCommissions: jest.fn(),
+  getPromoterWithdrawals: jest.fn(), createPromoterWithdrawal: jest.fn(),
 }))
 
-const base: PromoterMe = { enabled: true, status: 'none', rate_bps: 2000, agreement_version: 'v1', settle_delay_days: 7 }
+const base: PromoterMe = {
+  enabled: true, status: 'none', rate_bps: 2000, agreement_version: 'v1', settle_delay_days: 7,
+  withdraw_min_cents: 1000, withdraw_max_cents: 20000,
+}
+const summary = (patch: Partial<NonNullable<PromoterMe['summary']>> = {}) => ({
+  available_cents: 398, pending_cents: 198, total_earned_cents: 398, withdrawing_cents: 0, withdrawn_cents: 0,
+  invitee_count: 3, paid_order_count: 2, ...patch,
+})
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -52,9 +66,9 @@ it('requires agreeing to the rules before applying, then shows the review state'
 
 it('shows the promo code, balances and commission list once approved', async () => {
   ;(getPromoterMe as jest.Mock).mockResolvedValue({
-    ...base, status: 'active', promo_code: 'AB12CD34',
-    summary: { available_cents: 398, pending_cents: 198, total_earned_cents: 398, withdrawing_cents: 0, withdrawn_cents: 0, invitee_count: 3, paid_order_count: 2 },
+    ...base, status: 'active', promo_code: 'AB12CD34', summary: summary(),
   })
+  ;(getPromoterWithdrawals as jest.Mock).mockResolvedValue({ total: 0, items: [] })
   ;(getPromoterCommissions as jest.Mock).mockResolvedValue({
     total: 1,
     items: [{ id: 'c1', invitee_nickname: '小**', plan_code: 'light_monthly', order_amount_cents: 1990, rate_bps: 2000, commission_cents: 398, status: 'available', paid_at: '2026-11-01T10:00:00+08:00', settle_at: '2026-11-08T10:00:00+08:00' }],
@@ -68,6 +82,49 @@ it('shows the promo code, balances and commission list once approved', async () 
   expect(screen.getByText('分享给好友').getAttribute('data-open-type')).toBe('share')
   expect(getPromoterCommissions).toHaveBeenCalledWith(1, 20)
   expect(screen.queryByText('查看更多')).toBeNull()
+  expect(screen.getByText('满 ¥10.00 可提现')).toBeTruthy()
+  expect(screen.queryByText('提现记录')).toBeNull()
+})
+
+it('withdraws the balance up to the single limit and reuses the request key after a failure', async () => {
+  ;(getPromoterMe as jest.Mock).mockResolvedValue({
+    ...base, status: 'active', promo_code: 'AB12CD34', summary: summary({ available_cents: 25000, total_earned_cents: 25000 }),
+  })
+  ;(getPromoterCommissions as jest.Mock).mockResolvedValue({ total: 0, items: [] })
+  ;(getPromoterWithdrawals as jest.Mock).mockResolvedValue({
+    total: 1,
+    items: [{ id: 'w1', amount_cents: 1500, net_amount_cents: 1500, status: 'rejected', note: '请先补充实名信息', created_at: '2026-11-01T10:00:00+08:00' }],
+  })
+  ;(Taro.showModal as jest.Mock).mockResolvedValue({ confirm: true })
+  ;(createPromoterWithdrawal as jest.Mock)
+    .mockRejectedValueOnce(new Error('timeout'))
+    .mockRejectedValueOnce(Object.assign(new Error('上一笔提现还在处理中'), { statusCode: 409 }))
+    .mockResolvedValueOnce({ id: 'w2' })
+  render(<PromoterCenterPage />)
+
+  expect(await screen.findByText('提现记录')).toBeTruthy()
+  expect(screen.getByText('请先补充实名信息，金额已退回余额')).toBeTruthy()
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await waitFor(() => expect(screen.getByText('提现 ¥200.00')).toBeTruthy())
+    fireEvent.click(screen.getByText('提现 ¥200.00'))
+    await waitFor(() => expect(createPromoterWithdrawal).toHaveBeenCalledTimes(attempt))
+  }
+  const [first, second, third] = (createPromoterWithdrawal as jest.Mock).mock.calls
+  expect(first[0]).toBe(20000)
+  expect(second[1]).toBe(first[1]) // a network failure may have saved it: retry with the same key
+  expect(third[1]).not.toBe(second[1]) // the server refused it: nothing was saved, start fresh
+  await waitFor(() => expect(getPromoterMe).toHaveBeenCalledTimes(2))
+})
+
+it('keeps a suspended promoter from withdrawing', async () => {
+  ;(getPromoterMe as jest.Mock).mockResolvedValue({
+    ...base, status: 'suspended', promo_code: 'AB12CD34', summary: summary({ available_cents: 5000 }),
+  })
+  ;(getPromoterCommissions as jest.Mock).mockResolvedValue({ total: 0, items: [] })
+  ;(getPromoterWithdrawals as jest.Mock).mockResolvedValue({ total: 0, items: [] })
+  render(<PromoterCenterPage />)
+  expect(await screen.findByText('暂停期间不能提现，佣金会一直为你保留。')).toBeTruthy()
+  expect(screen.queryByText(/^提现 ¥/)).toBeNull()
 })
 
 it('lets a rejected applicant see the reason and apply again', async () => {

@@ -291,6 +291,9 @@ type PromoterConfig struct {
 	BindWindowHours  int    `mapstructure:"bind_window_hours"`
 	AgreementVersion string `mapstructure:"agreement_version"`
 	SyncIntervalSecs int    `mapstructure:"sync_interval_seconds"`
+	WithdrawMinCents int64  `mapstructure:"withdraw_min_cents"`
+	WithdrawMaxCents int64  `mapstructure:"withdraw_max_cents"`
+	WithdrawPerDay   int    `mapstructure:"withdraw_daily_limit"`
 }
 
 type CanteenCaptureMembershipOption struct {

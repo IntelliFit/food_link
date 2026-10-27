@@ -48,6 +48,30 @@
 | POST | `/api/admin/promoters/:id/status` | 停用、恢复、终止 |
 | PUT | `/api/admin/promoters/:id/rate` | 调整个人佣金比例，`null` 恢复默认；只影响之后的订单 |
 
+### P1a 提现申请 + 人工打款（2026-10-27）
+
+先不接微信商家转账，用已有的 `promoter_withdrawals` 表（`payout_method = manual`），不需要新迁移。
+
+- **发起**：推广员在小程序点「提现」，金额为全部可提现余额，超过单笔上限按上限。满 10 元可提、单笔 ≤ 200 元、每个北京时间自然日 1 次（被驳回、打款失败的不算），暂停中的推广员不能提。
+- **防超提**：先 `SELECT … FOR UPDATE` 锁推广员行，再用**单独一条语句**重新计算余额和当天次数（READ COMMITTED 下新语句拿新快照，能看到并发请求刚提交的提现），校验通过才插入。加上同一时间只能有一笔进行中提现的唯一索引，并发点多次只会成功一笔（有测试覆盖）。前端每次提现带 `request_key`，网络失败后用同一个 key 重试，后端返回第一次的结果。
+- **审核**：运营在 admin「推广佣金 → 提现审核」通过或驳回（驳回必填原因，推广员可见）。通过时在锁住推广员行的事务里再校验一次：推广员必须是正常状态，余额不能为负（有退款扣回时）。
+- **打款**：通过后运营在商户平台或微信转账，回到后台「标记已打款」（需勾选已核对）或「标记失败」（必填原因，金额退回余额）。标记只记录已经发生的事，不再拦截；推广员已暂停或余额为负时，后台弹窗会先标红提醒。标记人和备注（如转账单号）追加到 `review_note`，`reviewed_by` 保留审核人。微信转账的单子不能手工标记。
+- **手工扣回佣金**：admin「推广员 → 佣金明细」可按订单号扣回单笔佣金（冻结中 → 取消，已结算 → 扣回），必填原因，记为 `admin: 原因`。用于商户平台手工退款不回写订单表的情况（见上文缺口 1）。手工扣回也先锁推广员行，和审核串行；同步任务不会改回。同步任务自动冲正时不加这把锁，极少数情况下审核通过后余额才变负，按第 4.6 节由之后的佣金抵扣。
+- **后台推广员管理**：同一页面可以审核申请（通过需勾选已核实实名）、暂停 / 恢复 / 终止、改个人比例。
+- 新增配置 `promoter.withdraw_min_cents`（1000）、`withdraw_max_cents`（20000）、`withdraw_daily_limit`（1），不配置时用默认值。
+
+新增接口：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/promoter/withdrawals` | 发起提现，带 `amount_cents`、`request_key` |
+| GET | `/api/promoter/withdrawals?page=&limit=` | 提现记录，`note` 为驳回或失败原因 |
+| GET | `/api/admin/promoter-withdrawals?status=&page=&limit=` | 提现列表，含推广员当前可提现余额 |
+| POST | `/api/admin/promoter-withdrawals/:id/review` | `approve` + `note`，驳回必填 `note` |
+| POST | `/api/admin/promoter-withdrawals/:id/payout` | 人工打款结果：`succeeded` + `note`，失败必填 `note` |
+| GET | `/api/admin/promoters/:id/commissions?status=&page=&limit=` | 佣金明细，含订单号、订单状态 |
+| POST | `/api/admin/promoter-commissions/:id/reverse` | 手工扣回佣金，必填 `reason` |
+
 ## 1. 目标和范围
 
 推广员用专属码拉新，被推广用户付费购买会员后，推广员按比例拿佣金；佣金过了冻结期变为可提现，推广员在小程序里发起提现，通过微信支付「商家转账」（佣金报酬，场景 ID 1005）转到本人微信零钱。

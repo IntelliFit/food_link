@@ -4,6 +4,7 @@ import { authenticatedRequest, getAccessToken } from './api'
 /** 推广佣金：推广员申请、推广码归因和佣金明细。金额单位都是分。 */
 export type PromoterStatus = 'none' | 'pending_review' | 'active' | 'suspended' | 'terminated' | 'rejected'
 export type CommissionStatus = 'pending' | 'available' | 'cancelled' | 'reversed'
+export type WithdrawalStatus = 'reviewing' | 'approved' | 'transferring' | 'succeeded' | 'rejected' | 'failed'
 
 export interface PromoterSummary {
   available_cents: number
@@ -23,6 +24,8 @@ export interface PromoterMe {
   review_note?: string
   agreement_version: string
   settle_delay_days: number
+  withdraw_min_cents: number
+  withdraw_max_cents: number
   summary?: PromoterSummary
 }
 
@@ -41,6 +44,22 @@ export interface PromoterCommission {
 
 export interface PromoterCommissionPage {
   items: PromoterCommission[]
+  total: number
+}
+
+export interface PromoterWithdrawal {
+  id: string
+  amount_cents: number
+  net_amount_cents: number
+  status: WithdrawalStatus
+  /** 驳回或打款失败的原因 */
+  note: string
+  created_at?: string
+  finished_at?: string
+}
+
+export interface PromoterWithdrawalPage {
+  items: PromoterWithdrawal[]
   total: number
 }
 
@@ -66,6 +85,15 @@ export function applyPromoter(agreementVersion: string, applyNote: string): Prom
 
 export function getPromoterCommissions(page: number, limit = 20): Promise<PromoterCommissionPage> {
   return call(`/commissions?page=${page}&limit=${limit}`, { method: 'GET' })
+}
+
+export function getPromoterWithdrawals(page: number, limit = 20): Promise<PromoterWithdrawalPage> {
+  return call(`/withdrawals?page=${page}&limit=${limit}`, { method: 'GET' })
+}
+
+/** requestKey 由调用方生成；网络失败后用同一个 key 重试，后端只会记一笔。 */
+export function createPromoterWithdrawal(amountCents: number, requestKey: string): Promise<PromoterWithdrawal> {
+  return call('/withdrawals', { method: 'POST', data: { amount_cents: amountCents, request_key: requestKey } })
 }
 
 function bindPromoCode(promoCode: string, source: string): Promise<{ bound: boolean; reason: BindReason }> {

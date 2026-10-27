@@ -30,8 +30,10 @@ import {
   ruleLines,
   sharePath,
   statusCopy,
+  withdrawAmount,
+  withdrawalLine,
 } from '../../src/packagePromoter/pages/center/promoter-view'
-import type { PromoterCommission } from '../../src/utils/promoter-api'
+import type { PromoterCommission, PromoterWithdrawal } from '../../src/utils/promoter-api'
 
 describe('promo code capture', () => {
   beforeEach(() => {
@@ -110,5 +112,28 @@ describe('promoter center view helpers', () => {
     expect(statusCopy('rejected', '请补充推广渠道')?.body).toContain('请补充推广渠道')
     expect(statusCopy('active')).toBeNull()
     expect(sharePath('AB12CD34')).toBe('/pages/index/index?promo=AB12CD34')
+  })
+})
+
+describe('withdrawal view helpers', () => {
+  const limits = { withdraw_min_cents: 1000, withdraw_max_cents: 20000 }
+  const withdrawal = (patch: Partial<PromoterWithdrawal>): PromoterWithdrawal => ({
+    id: 'w1', amount_cents: 3000, net_amount_cents: 3000, status: 'reviewing', note: '',
+    created_at: '2026-11-01T10:00:00+08:00', ...patch,
+  })
+
+  it('withdraws the whole balance capped at the single limit, nothing below the minimum', () => {
+    expect(withdrawAmount(limits, 3000)).toBe(3000)
+    expect(withdrawAmount(limits, 25000)).toBe(20000)
+    expect(withdrawAmount(limits, 999)).toBe(0)
+    expect(withdrawAmount(limits, -500)).toBe(0)
+  })
+
+  it('labels withdrawals and shows why one was returned', () => {
+    expect(withdrawalLine(withdrawal({}))).toMatchObject({ amount: '¥30.00', status: '审核中', muted: false })
+    expect(withdrawalLine(withdrawal({ status: 'succeeded', finished_at: '2026-11-03T09:05:00+08:00' })).sub).toContain('到账于')
+    expect(withdrawalLine(withdrawal({ status: 'failed', note: '收款账户异常' }))).toMatchObject({
+      sub: '收款账户异常，金额已退回余额', status: '打款失败', muted: true,
+    })
   })
 })
