@@ -633,11 +633,17 @@ func (r *PublicFoodRepo) ListCollected(ctx context.Context, userID string, limit
 	return rows, err
 }
 
+// GetItem backs the detail page and the correction form it prefills. Older
+// community/office-park projections kept floor and window only on the catalog
+// row, so the aliases after p.* (later columns win) fall back to it; a form
+// prefilled with blanks would otherwise clear them on the next correction.
 func (r *PublicFoodRepo) GetItem(ctx context.Context, itemID string) (*domain.PublicFoodItem, error) {
 	var row domain.PublicFoodItem
 	err := r.db.WithContext(ctx).
 		Table("public_food_library AS p").
 		Select(`p.*, COALESCE(nutrition_catalog.analysis_task_id, p.analysis_task_id) AS analysis_task_id,
+			COALESCE(NULLIF(p.floor, ''), nutrition_catalog.floor, '') AS floor,
+			COALESCE(NULLIF(p.window_name, ''), nutrition_catalog.window_name, '') AS window_name,
 			nutrition_catalog.id AS catalog_item_id, nutrition_batch.venue_type AS venue_type,
 			nutrition_catalog.organization_name AS venue_organization_name, nutrition_catalog.area_name AS venue_area_name,
 			nutrition_catalog.canteen_name AS venue_canteen_name,

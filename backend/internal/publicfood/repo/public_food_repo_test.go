@@ -41,6 +41,39 @@ func TestGetItemReadsLinkedCatalogTaskForLegacyProjection(t *testing.T) {
 	require.Equal(t, "青年社区", item.VenueOrganizationName)
 }
 
+// The correction form is prefilled from GetItem and always resends floor and
+// window, so blanks here would clear the catalog values on the next save.
+func TestGetItemFallsBackToCatalogFloorAndWindow(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	parkBatch, universityBatch := uuid.NewString(), uuid.NewString()
+	require.NoError(t, db.Create(&catalogdomain.CollectionBatch{ID: parkBatch, VenueType: "office_park"}).Error)
+	require.NoError(t, db.Create(&catalogdomain.CollectionBatch{ID: universityBatch, VenueType: "university"}).Error)
+
+	parkID, universityID, plainID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	require.NoError(t, db.Create(&catalogdomain.CatalogItem{ID: parkID, BatchID: parkBatch, Name: "小酥肉", Floor: "B1（负一层）", WindowName: "一城一味窗口"}).Error)
+	require.NoError(t, db.Create(&catalogdomain.CatalogItem{ID: universityID, BatchID: universityBatch, Name: "牛肉面", Floor: "旧楼层", WindowName: "旧窗口"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{ID: parkID, FoodName: "小酥肉", Status: "published", Type: "common"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{ID: universityID, FoodName: "牛肉面", Status: "published", Type: "campus", IsCampusFood: true, Floor: "二楼", WindowName: "面食窗口"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{ID: plainID, FoodName: "自制沙拉", Status: "published", Type: "common", Floor: "三楼"}).Error)
+
+	r := NewPublicFoodRepo(db)
+	for _, tc := range []struct {
+		name, id, floor, window string
+	}{
+		{"office park projection without location uses catalog", parkID, "B1（负一层）", "一城一味窗口"},
+		{"projection values win over catalog", universityID, "二楼", "面食窗口"},
+		{"item without catalog row keeps its own values", plainID, "三楼", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item, err := r.GetItem(context.Background(), tc.id)
+			require.NoError(t, err)
+			require.NotNil(t, item)
+			require.Equal(t, tc.floor, item.Floor)
+			require.Equal(t, tc.window, item.WindowName)
+		})
+	}
+}
+
 func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
