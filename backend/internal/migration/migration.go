@@ -191,6 +191,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := MigrateCanteenCaptureTables(ctx, db); err != nil {
 		return err
 	}
+	if err := MigrateMealDishTables(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureMealMeetupConstraints(ctx, db); err != nil {
 		return err
 	}
