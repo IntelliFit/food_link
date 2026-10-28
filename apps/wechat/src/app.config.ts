@@ -50,6 +50,7 @@ const extraSubpackagePages = [
   'pages/reward-center/index',
   'pages/food-contribution/index',
   'pages/standard-food-contribution/index',
+  'pages/research-weight/index',
   'pages/my-vouchers/index',
   'pages/interaction-notifications/index',
   'pages/comment-history/index',

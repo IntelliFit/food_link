@@ -1,0 +1,30 @@
+package migration
+
+import (
+	"context"
+	"testing"
+
+	migrationdo "food_link/backend/internal/migration/do"
+	"food_link/backend/pkg/testdb"
+	"github.com/stretchr/testify/require"
+)
+
+func TestMigrateResearchWeightSamplesIsIdempotentAndConstrainsRows(t *testing.T) {
+	db := testdb.New(t)
+	ctx := context.Background()
+	require.NoError(t, db.AutoMigrate(&migrationdo.RewardTaskUploadDO{}))
+	require.NoError(t, MigrateResearchWeightSamples(ctx, db, "public"))
+	require.NoError(t, MigrateResearchWeightSamples(ctx, db, "public"))
+
+	insert := `INSERT INTO research_weight_samples (user_id, client_key, scene, weighing_mode, container_type, tare_mode, total_net_grams, consent_version, consented_at)
+VALUES ('11111111-1111-1111-1111-111111111111', ?, ?, 'whole', 'bowl', 'measured', ?, 'v', now())`
+	require.NoError(t, db.Exec(insert, "key-1", "canteen", 320.5).Error)
+	require.Error(t, db.Exec(insert, "key-1", "canteen", 320.5).Error, "client key is unique per user")
+	require.Error(t, db.Exec(insert, "key-2", "space", 320.5).Error, "scene is constrained")
+	require.Error(t, db.Exec(insert, "key-3", "home", 0).Error, "net grams must be positive")
+	require.Error(t, db.Exec(`UPDATE research_weight_samples SET quality_tier = 'D'`).Error, "tier is constrained")
+
+	reward := `INSERT INTO reward_task_uploads (user_id, task_type, bonus_date, status, reward_credits) VALUES ('11111111-1111-1111-1111-111111111111', ?, '2026-10-28', 'succeeded', 2)`
+	require.NoError(t, db.Exec(reward, "research_weight_sample").Error)
+	require.Error(t, db.Exec(reward, "unknown_task").Error)
+}

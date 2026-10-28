@@ -2005,6 +2005,15 @@ func (s *MembershipService) AwardStandardFoodContribution(ctx context.Context, u
 	})
 }
 
+// AwardResearchWeightSample pays the credits a reviewer chose for one approved
+// weighed benchmark sample; the sample ID makes a repeated approval a no-op.
+func (s *MembershipService) AwardResearchWeightSample(ctx context.Context, userID, sampleID string, credits int, meta map[string]any) (map[string]any, error) {
+	return s.awardRewardTask(ctx, rewardTaskAwardInput{
+		UserID: userID, TaskType: "research_weight_sample", RewardCredits: credits,
+		DailyMaxEvents: 0, SourceID: sampleID, Meta: meta,
+	})
+}
+
 type rewardTaskAwardInput struct {
 	UserID           string
 	TaskType         string

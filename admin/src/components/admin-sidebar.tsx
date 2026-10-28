@@ -14,6 +14,7 @@ import {
   Megaphone,
   Images,
   Package,
+  Scale,
   ScanLine,
   Settings,
   Tags,
@@ -32,6 +33,7 @@ export type AdminMenuId =
   | 'overview'
   | 'feedback'
   | 'benchmark'
+  | 'research-weight'
   | 'packaged-foods'
   | 'packaged-food-test'
   | 'packaged-food-corrections'
@@ -94,6 +96,7 @@ const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
     label: '实验工具',
     items: [
       { id: 'benchmark', label: '数据集评测', icon: FlaskConical },
+      { id: 'research-weight', label: '称重科研数据', icon: Scale },
       { id: 'packaged-food-test', label: '包装食品测试', icon: Package },
       { id: 'payment-test', label: '支付测试', icon: CreditCard },
     ],

@@ -40,6 +40,7 @@ func main() {
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	onlyCanteenCollectors := flag.Bool("only-canteen-collectors", false, "only extend collector authorization to community, office park and corporate canteens")
 	onlyCanteenCapture := flag.Bool("only-canteen-capture", false, "only add window capture sessions, capture photos and the collector earnings ledger")
+	onlyResearchWeight := flag.Bool("only-research-weight", false, "only add weighed benchmark samples and their reward task type")
 	onlySupplements := flag.Bool("only-supplements", false, "only add supplement catalog, cabinet, intake schema, and catalog seeds")
 	onlySupplementFeed := flag.Bool("only-supplement-feed", false, "only add supplement intake feed visibility and update feed interaction target constraints")
 	onlySupplementProduct := flag.Bool("only-supplement-feed-product", false, "only add optional supplement bottle identity snapshots")
@@ -83,7 +84,7 @@ func main() {
 	if *onlySupplementProduct {
 		selectedOnlyModes++
 	}
-	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlyResearchWeight, *onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -215,6 +216,13 @@ func main() {
 		if err != nil {
 			log.Fatalf("补剂历史动态恢复失败: %v", err)
 		}
+		return
+	}
+	if *onlyResearchWeight {
+		if err := migration.MigrateResearchWeightSamples(ctx, db, schema); err != nil {
+			log.Fatalf("称重科研数据迁移失败: %v", err)
+		}
+		log.Printf("称重科研数据结构迁移完成: schema=%s", schema)
 		return
 	}
 	if *onlyProductUpdates {

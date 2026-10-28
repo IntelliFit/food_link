@@ -93,6 +93,9 @@ import (
 	recipehandler "food_link/backend/internal/recipe/handler"
 	reciperepo "food_link/backend/internal/recipe/repo"
 	recipeservice "food_link/backend/internal/recipe/service"
+	researchweighthandler "food_link/backend/internal/researchweight/handler"
+	researchweightrepo "food_link/backend/internal/researchweight/repo"
+	researchweightservice "food_link/backend/internal/researchweight/service"
 	schoolhandler "food_link/backend/internal/school/handler"
 	searchhandler "food_link/backend/internal/search/handler"
 	searchrepo "food_link/backend/internal/search/repo"
@@ -544,6 +547,8 @@ func New(cfg *config.Config) (*App, error) {
 	foodContributionRepo := foodcontributionrepo.NewContributionRepo(db)
 	foodContributionSvc := foodcontributionservice.NewContributionService(foodContributionRepo, membershipSvc, storageClient)
 	foodContributionHandler := foodcontributionhandler.NewContributionHandler(foodContributionSvc)
+	researchWeightSvc := researchweightservice.NewSampleService(researchweightrepo.NewSampleRepo(db), membershipSvc, storageClient)
+	researchWeightHandler := researchweighthandler.NewSampleHandler(researchWeightSvc)
 	promoterSvc := promoterservice.NewPromoterService(promoterrepo.NewPromoterRepo(db), promoterservice.RulesFromConfig(cfg.Promoter))
 	promoterHandler := promoterhandler.NewPromoterHandler(promoterSvc)
 
@@ -892,6 +897,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/public-food-library/canteen-locations", authmw.RequireJWT(jwtSvc), canteenLocationHandler.List)
 	engine.POST("/api/food-nutrition-contributions", authmw.RequireJWT(jwtSvc), foodContributionHandler.Submit)
 	engine.GET("/api/food-nutrition-contributions/mine", authmw.RequireJWT(jwtSvc), foodContributionHandler.Mine)
+	engine.POST("/api/research-weight-samples", authmw.RequireJWT(jwtSvc), researchWeightHandler.Submit)
+	engine.GET("/api/research-weight-samples/mine", authmw.RequireJWT(jwtSvc), researchWeightHandler.Mine)
+	engine.POST("/api/research-weight-samples/upload-image", authmw.RequireJWT(jwtSvc), researchWeightHandler.UploadImage)
+	engine.POST("/api/research-weight-samples/upload-video", authmw.RequireJWT(jwtSvc), researchWeightHandler.UploadVideo)
 	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), contentGuard(3), publicFoodHandler.Create)
 	engine.GET("/api/public-food-library/mine", authmw.RequireJWT(jwtSvc), publicFoodHandler.Mine)
 	engine.GET("/api/public-food-library/collections", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collections)
@@ -1081,6 +1090,10 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/food-nutrition-contributions", adminAuth, foodContributionHandler.AdminList)
 	adminAPI.GET("/food-nutrition-contributions/:contribution_id", adminAuth, foodContributionHandler.AdminGet)
 	adminAPI.POST("/food-nutrition-contributions/:contribution_id/review", adminAuth, foodContributionHandler.AdminReview)
+	adminAPI.GET("/research-weight-samples", adminAuth, researchWeightHandler.AdminList)
+	adminAPI.GET("/research-weight-samples/:sample_id", adminAuth, researchWeightHandler.AdminGet)
+	adminAPI.POST("/research-weight-samples/:sample_id/review", adminAuth, researchWeightHandler.AdminReview)
+	adminAPI.POST("/research-weight-samples/:sample_id/promote", adminAuth, researchWeightHandler.AdminPromote)
 	adminAPI.GET("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Get)
 	adminAPI.POST("/food-nutrition", adminAuth, adminFoodNutritionHandler.Create)
 	adminAPI.PATCH("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Update)
