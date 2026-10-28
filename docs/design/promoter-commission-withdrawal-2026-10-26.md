@@ -72,6 +72,34 @@
 | GET | `/api/admin/promoters/:id/commissions?status=&page=&limit=` | 佣金明细，含订单号、订单状态 |
 | POST | `/api/admin/promoter-commissions/:id/reverse` | 手工扣回佣金，必填 `reason` |
 
+### P1b 商家转账单表（2026-10-27 按微信官方文档核对）
+
+核对的文档（pay.weixin.qq.com/doc/v3/merchant）：发起转账 4012716434、商户单号查询 4012716437、撤销转账 4012716458、回调通知 4012712115、JSAPI 调起确认收款 4012716430、佣金报酬报备字段 4013774590。
+
+和第 4.5 节草案相比的变化：
+
+- `state` 增加本地状态 `CREATED`：先落库拿到 `out_bill_no`，再调微信；调用超时或返回结果不明时保持 `CREATED`，由补偿任务按 `out_bill_no` 查单。官方要求非 200 或遇到新错误码时**不能换单号重试**，只有查单明确 `FAIL` 后才能换新单号。
+- 其余状态和微信一致：`ACCEPTED`、`PROCESSING`、`WAIT_USER_CONFIRM`、`TRANSFERING`、`SUCCESS`、`FAIL`、`CANCELING`、`CANCELLED`；终态是 `SUCCESS`、`FAIL`、`CANCELLED`。用户 24 小时内不确认收款，单据会被关闭。
+- 字段长度按文档加约束：`out_bill_no` 只能是数字和大小写字母、最长 32 位；`transfer_remark` 最多 32 个字符（用户收款时可见）；`openid` 最长 64 位。
+- 佣金报酬（1005）的 `transfer_scene_report_infos` 必须正好两条：`岗位类型`、`报酬说明`，内容各最多 32 个字符，例如 `推广员` / `2026年10月推广佣金`。`user_recv_perception` 只能是 `劳务报酬`（默认）、`报销款`、`企业补贴`、`开工利是`，我们不传，用默认的劳务报酬。
+- 不存 `user_name`：只有单笔 ≥ 2000 元才必须传实名，我们单笔上限 200 元。
+- `package_info` 只在 `WAIT_USER_CONFIRM` 时返回，小程序 `wx.requestMerchantTransfer` 用它拉起确认收款页；返回成功只代表页面展示过，不代表到账。
+- 回调事件类型 `MCHTRANSFER.BILL.FINISHED`，只在终态时发；解密后有 `out_bill_no`、`transfer_bill_no`、`state`、`mch_id`、`transfer_amount`、`openid`、`fail_reason`、`create_time`、`update_time`。处理前要核对金额、openid、商户号和本地一致。
+- 查单接口只能查最近 30 天的单据。
+- 迁移命令：`go run ./cmd/migration -only-wechat-transfer`，只新建 `wechat_transfer_bills` 一张表，不改已有表。`promoter_withdrawals` 已有 `transfer_bill_id`、`payout_method = wechat_transfer` 和 `transferring` 状态，不需要改。2026-10-28 已在生产库执行。
+
+### P1b 微信转账打款（2026-10-28）
+
+- 代码：`pkg/wechatpay/transfer.go`（发起、查单），`internal/wechattransfer`（转账单、补偿查单、回调），`internal/promoter/service/withdrawal_transfer.go`（提现接入）。
+- 后台「通过并转账」：同一个事务里锁推广员、复核状态和余额、按推广员小程序 openid 建 `CREATED` 转账单，提现改为 `transferring`；提交后立即调微信。调用失败不影响审核结果，单据留在 `CREATED`，由查单任务处理。
+- 查单任务每 `query_interval_seconds`（默认 60 秒）扫未结束的单据；等待收款的单据每 10 分钟查一次。每张单据查询前先占 45 秒租约（`last_queried_at`），多个副本不会同时对一张单据发请求。
+- 查单返回「不存在」时用同一个 `out_bill_no` 重新发起；连续 5 次不存在且建单超过 30 分钟，按失败关闭（`fail_reason = CREATE_FAILED`），金额退回推广员余额。
+- 转账单到 `SUCCESS` 时提现改为 `succeeded`；`FAIL`、`CANCELLED` 时提现改为 `failed`，常见失败原因转成推广员能看懂的话，金额退回余额。两者在同一个事务里改。
+- 回调 `POST /api/payment/wechat/transfer/notify`：验签（微信支付公钥）、时间戳 5 分钟内、APIv3 密钥解密，核对单号、金额、openid、商户号后再更新；重复通知不重复处理；不认识的单号直接确认。
+- 小程序提现记录里，等待收款的提现显示「收款」按钮，调 `wx.requestMerchantTransfer`；关掉收款页后调 `POST /api/promoter/withdrawals/:id/refresh` 让后端查一次单。
+- 后台：「通过并转账」/「线下打款」二选一；转账中的提现显示微信状态、单号、最近一次错误，可点「查单」（`POST /api/admin/promoter-withdrawals/:id/sync-transfer`）。
+- 开关：Apollo 加 `wechat_transfer.enabled: true` 才生效；`app_id` 默认小程序 AppID，`notify_url` 默认按 `app.env` 取 `https://(dev.)api.healthymax.cn/api/payment/wechat/transfer/notify`。商户号和密钥沿用 `wechat.pay`。关闭时后台只有线下打款。
+
 ## 1. 目标和范围
 
 推广员用专属码拉新，被推广用户付费购买会员后，推广员按比例拿佣金；佣金过了冻结期变为可提现，推广员在小程序里发起提现，通过微信支付「商家转账」（佣金报酬，场景 ID 1005）转到本人微信零钱。
@@ -300,14 +328,11 @@ reviewing ──(通过)──► approved ──(创建转账单)──► tran
 ## 10. 配置项（新增，真实值只放 Apollo）
 
 ```yaml
-wechat:
-  pay:
-    transfer:
-      enabled: false              # 总开关，默认关
-      appid: ""                   # 商户号已绑定的 FoodLink 小程序 AppID
-      scene_id: "1005"
-      notify_url: "https://api.healthymax.cn/api/payment/wechat/transfer/notify"
-      max_single_cents: 20000
+wechat_transfer:
+  enabled: false                # 总开关，默认关
+  app_id: ""                    # 留空用小程序 AppID
+  notify_url: ""                # 留空按 app.env 推导
+  query_interval_seconds: 60
 promoter:
   default_rate_bps: 2000
   settle_delay_hours: 168

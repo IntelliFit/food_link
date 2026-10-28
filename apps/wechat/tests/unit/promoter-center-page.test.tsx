@@ -8,6 +8,7 @@ import {
   getPromoterCommissions,
   getPromoterMe,
   getPromoterWithdrawals,
+  refreshPromoterWithdrawal,
 } from '../../src/utils/promoter-api'
 import type { PromoterMe } from '../../src/utils/promoter-api'
 
@@ -27,7 +28,7 @@ jest.mock('../../src/utils/theme-navigation-bar', () => ({ applyThemeNavigationB
 jest.mock('../../src/utils/api', () => ({ showUnifiedApiError: jest.fn() }))
 jest.mock('../../src/utils/promoter-api', () => ({
   getPromoterMe: jest.fn(), applyPromoter: jest.fn(), getPromoterCommissions: jest.fn(),
-  getPromoterWithdrawals: jest.fn(), createPromoterWithdrawal: jest.fn(),
+  getPromoterWithdrawals: jest.fn(), createPromoterWithdrawal: jest.fn(), refreshPromoterWithdrawal: jest.fn(),
 }))
 
 const base: PromoterMe = {
@@ -134,4 +135,31 @@ it('lets a rejected applicant see the reason and apply again', async () => {
   expect(screen.getByText(/请补充推广渠道/)).toBeTruthy()
   expect(screen.getByText('提交申请')).toBeTruthy()
   expect(getPromoterCommissions).not.toHaveBeenCalled()
+})
+
+it('opens the WeChat confirm page for a transfer waiting on the promoter, then refreshes', async () => {
+  const requestMerchantTransfer = jest.fn(({ success }: any) => success())
+  ;(globalThis as any).wx = { canIUse: () => true, requestMerchantTransfer }
+  ;(getPromoterMe as jest.Mock).mockResolvedValue({
+    ...base, status: 'active', promo_code: 'AB12CD34', summary: summary({ withdrawing_cents: 3000 }),
+  })
+  ;(getPromoterCommissions as jest.Mock).mockResolvedValue({ total: 0, items: [] })
+  ;(getPromoterWithdrawals as jest.Mock).mockResolvedValue({
+    total: 1,
+    items: [{
+      id: 'w9', amount_cents: 3000, net_amount_cents: 3000, status: 'transferring', note: '请在 24 小时内点「收款」确认',
+      receive: { mch_id: '1105991965', app_id: 'wx-mini', package: 'pkg-1' }, created_at: '2026-11-01T10:00:00+08:00',
+    }],
+  })
+  ;(refreshPromoterWithdrawal as jest.Mock).mockResolvedValue({ id: 'w9', status: 'succeeded' })
+  try {
+    render(<PromoterCenterPage />)
+    expect(await screen.findByText('请在 24 小时内点「收款」确认')).toBeTruthy()
+    fireEvent.click(screen.getByText('收款'))
+    await waitFor(() => expect(refreshPromoterWithdrawal).toHaveBeenCalledWith('w9'))
+    expect(requestMerchantTransfer).toHaveBeenCalledWith(expect.objectContaining({ mchId: '1105991965', appId: 'wx-mini', package: 'pkg-1' }))
+    await waitFor(() => expect(getPromoterMe).toHaveBeenCalledTimes(2))
+  } finally {
+    delete (globalThis as any).wx
+  }
 })

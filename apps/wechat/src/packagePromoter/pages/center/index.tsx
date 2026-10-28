@@ -11,10 +11,12 @@ import {
   getPromoterCommissions,
   getPromoterMe,
   getPromoterWithdrawals,
+  refreshPromoterWithdrawal,
   type PromoterCommission,
   type PromoterMe,
   type PromoterWithdrawal,
 } from '../../../utils/promoter-api'
+import { requestMerchantTransfer } from '../../../utils/merchant-transfer'
 import {
   commissionLine,
   formatCents,
@@ -43,6 +45,7 @@ function PromoterCenterPage() {
   const [applying, setApplying] = useState(false)
   const [withdrawals, setWithdrawals] = useState<PromoterWithdrawal[]>([])
   const [withdrawing, setWithdrawing] = useState(false)
+  const [receivingId, setReceivingId] = useState('')
   const pageRef = useRef(1)
   // 网络失败后用同一金额重试时复用 key，后端只记一笔。
   const withdrawKeyRef = useRef<{ amount: number; key: string } | null>(null)
@@ -114,7 +117,7 @@ function PromoterCenterPage() {
     if (withdrawing || amount <= 0) return
     const { confirm } = await Taro.showModal({
       title: `提现 ¥${formatCents(amount)}`,
-      content: '提交后进入审核，通过后由工作人员转到你的微信。',
+      content: '提交后进入审核，通过后转到你的微信零钱。',
       confirmText: '提交',
       confirmColor: '#14815d',
     })
@@ -180,6 +183,24 @@ function PromoterCenterPage() {
       </View>
     </>
   )
+
+  const receive = async (item: PromoterWithdrawal) => {
+    if (!item.receive || receivingId) return
+    setReceivingId(item.id)
+    try {
+      const result = await requestMerchantTransfer(item.receive)
+      if (result === 'unsupported') {
+        await Taro.showModal({ title: '请升级微信', content: '当前微信版本不支持收款，升级到最新版后再来点「收款」。', showCancel: false })
+        return
+      }
+      if (result === 'failed') Taro.showToast({ title: '没能打开收款页，请稍后再试', icon: 'none' })
+      // 收款页关闭后让后端查一次微信，再刷新列表；查询失败也照常刷新。
+      await refreshPromoterWithdrawal(item.id).catch(() => undefined)
+      await load()
+    } finally {
+      setReceivingId('')
+    }
+  }
 
   const renderWithdraw = (current: PromoterMe, availableCents: number) => {
     if (current.status !== 'active') {
@@ -252,7 +273,13 @@ function PromoterCenterPage() {
                   </View>
                   <View className='promo-row-side'>
                     <Text className='promo-row-amount'>{line.amount}</Text>
-                    <Text className='promo-row-sub'>{line.status}</Text>
+                    {item.receive ? (
+                      <View className={`promo-receive ${receivingId ? 'disabled' : ''}`} onClick={() => void receive(item)}>
+                        <Text>收款</Text>
+                      </View>
+                    ) : (
+                      <Text className='promo-row-sub'>{line.status}</Text>
+                    )}
                   </View>
                 </View>
               )

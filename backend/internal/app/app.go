@@ -155,6 +155,8 @@ type App struct {
 	contentSecurity       *contentsecurityservice.Service
 	promoterSyncCancel    context.CancelFunc
 	promoterSyncDone      chan struct{}
+	transferPollCancel    context.CancelFunc
+	transferPollDone      chan struct{}
 	profileReviewCancel   context.CancelFunc
 	profileReviewDone     chan struct{}
 }
@@ -546,6 +548,13 @@ func New(cfg *config.Config) (*App, error) {
 	foodContributionHandler := foodcontributionhandler.NewContributionHandler(foodContributionSvc)
 	promoterSvc := promoterservice.NewPromoterService(promoterrepo.NewPromoterRepo(db), promoterservice.RulesFromConfig(cfg.Promoter))
 	promoterHandler := promoterhandler.NewPromoterHandler(promoterSvc)
+	transferSvc, err := newWechatTransferService(cfg, db)
+	if err != nil {
+		return nil, err
+	}
+	if transferSvc != nil {
+		promoterSvc.ConfigureTransfer(transferSvc)
+	}
 
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
@@ -643,6 +652,7 @@ func New(cfg *config.Config) (*App, error) {
 			app.promoterSyncDone = make(chan struct{})
 			go func() { defer close(app.promoterSyncDone); promoterSvc.RunSync(promoterSyncCtx) }()
 		}
+		app.startWechatTransferPoller(transferSvc)
 	engine.POST("/api/app/register/password", loginHandler.PasswordRegister)
 	engine.POST("/api/app/account/password/reset", loginHandler.ResetPassword)
 	engine.POST("/api/app/account/password", authmw.RequireJWT(jwtSvc), loginHandler.SetPassword)
@@ -859,6 +869,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/wechat/content-security/notify", contentCallback.Notify)
 	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
+	if transferSvc != nil {
+		engine.POST(wechatTransferNotifyPath, transferSvc.NotifyHandler)
+	}
 	engine.POST("/api/membership/auto-renew/signing", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePapaySigning)
 	engine.POST("/api/membership/auto-renew/cancel", authmw.RequireJWT(jwtSvc), membershipHandler.CancelPapayContract)
 	engine.POST("/api/payment/wechat/papay/contract/notify", membershipHandler.PapayContractNotify)
@@ -948,6 +961,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/promoter/commissions", authmw.RequireJWT(jwtSvc), promoterHandler.Commissions)
 	engine.POST("/api/promoter/withdrawals", authmw.RequireJWT(jwtSvc), promoterHandler.Withdraw)
 	engine.GET("/api/promoter/withdrawals", authmw.RequireJWT(jwtSvc), promoterHandler.Withdrawals)
+	engine.POST("/api/promoter/withdrawals/:withdrawal_id/refresh", authmw.RequireJWT(jwtSvc), promoterHandler.RefreshWithdrawal)
 	engine.GET("/api/expiry/items", authmw.RequireJWT(jwtSvc), expiryHandler.ListItems)
 	engine.POST("/api/expiry/items", authmw.RequireJWT(jwtSvc), expiryHandler.CreateItem)
 	engine.GET("/api/expiry/items/:item_id", authmw.RequireJWT(jwtSvc), expiryHandler.GetItem)
@@ -1119,6 +1133,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/promoter-withdrawals", adminAuth, promoterHandler.AdminWithdrawals)
 	adminAPI.POST("/promoter-withdrawals/:withdrawal_id/review", adminAuth, promoterHandler.AdminReviewWithdrawal)
 	adminAPI.POST("/promoter-withdrawals/:withdrawal_id/payout", adminAuth, promoterHandler.AdminRecordPayout)
+	adminAPI.POST("/promoter-withdrawals/:withdrawal_id/sync-transfer", adminAuth, promoterHandler.AdminSyncTransfer)
 	adminAPI.PATCH("/campus-directory/canteens/:canteen_id", adminAuth, adminCampusDirectoryHandler.UpdateCanteen)
 	adminAPI.POST("/campus-directory/canteens/:canteen_id/review", adminAuth, adminCampusDirectoryHandler.ReviewCanteenDraft)
 	adminAPI.POST("/campus-directory/canteens/:canteen_id/merge", adminAuth, adminCampusDirectoryHandler.MergeCanteen)
@@ -1624,6 +1639,7 @@ func (a *App) Close(ctx context.Context) error {
 			logger.Warn(context.Background(), "推广佣金同步关闭超时", logger.Err(ctx.Err()))
 		}
 	}
+	a.stopWechatTransferPoller(ctx)
 	if a.catalogBackfillDone != nil {
 		select {
 		case <-a.catalogBackfillDone:

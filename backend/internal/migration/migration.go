@@ -185,6 +185,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := MigratePromoterCommissionTables(ctx, db); err != nil {
 		return err
 	}
+	if err := MigrateWechatTransferTables(ctx, db); err != nil {
+		return err
+	}
 	if err := MigrateCanteenCaptureTables(ctx, db); err != nil {
 		return err
 	}

@@ -46,6 +46,7 @@ type Config struct {
 	Apollo         ApolloConfig         `mapstructure:"apollo"`
 	CanteenCapture CanteenCaptureConfig `mapstructure:"canteen_capture"`
 	Promoter       PromoterConfig       `mapstructure:"promoter"`
+	WechatTransfer WechatTransferConfig `mapstructure:"wechat_transfer"`
 }
 
 type PushConfig struct {
@@ -294,6 +295,16 @@ type PromoterConfig struct {
 	WithdrawMinCents int64  `mapstructure:"withdraw_min_cents"`
 	WithdrawMaxCents int64  `mapstructure:"withdraw_max_cents"`
 	WithdrawPerDay   int    `mapstructure:"withdraw_daily_limit"`
+}
+
+// WechatTransferConfig switches on WeChat Pay merchant transfers (商家转账)
+// for payouts. The merchant and keys come from wechat.pay; app_id defaults to
+// the mini program and notify_url to the API host for app.env.
+type WechatTransferConfig struct {
+	Enabled           bool   `mapstructure:"enabled"`
+	AppID             string `mapstructure:"app_id"`
+	NotifyURL         string `mapstructure:"notify_url"`
+	QueryIntervalSecs int    `mapstructure:"query_interval_seconds"`
 }
 
 type CanteenCaptureMembershipOption struct {

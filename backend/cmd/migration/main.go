@@ -28,6 +28,7 @@ func main() {
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
 	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
 	onlyPromoterCommission := flag.Bool("only-promoter-commission", false, "only add promoters, bindings, commissions and withdrawal requests")
+	onlyWechatTransfer := flag.Bool("only-wechat-transfer", false, "only add the WeChat Pay merchant transfer bill table")
 	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
 	onlyNutritionStates := flag.Bool("only-nutrition-states", false, "only add nutrition state dimensions and reviewed common-state seeds")
 	verifyNutritionStates := flag.Bool("verify-nutrition-states", false, "read-only verification of nutrition state dimensions, seeds, aliases, and index")
@@ -83,7 +84,7 @@ func main() {
 	if *onlySupplementProduct {
 		selectedOnlyModes++
 	}
-	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyWechatTransfer, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -270,12 +271,14 @@ func main() {
 		migrateErr = migration.MigrateSleepRecords(ctx, db, cfg.Database.Schema)
 	} else if *onlyPapay {
 		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
+	} else if *onlyPromoterCommission {
+		migrateErr = migration.MigratePromoterCommission(ctx, db, cfg.Database.Schema)
+	} else if *onlyWechatTransfer {
+		migrateErr = migration.MigrateWechatTransfer(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionQuality {
 		migrateErr = migration.MigrateNutritionQuality(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionStates {
 		migrateErr = migration.MigrateNutritionStates(ctx, db, cfg.Database.Schema)
-	} else if *onlyPromoterCommission {
-		migrateErr = migration.MigratePromoterCommission(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionEmbeddings {
 		migrateErr = migration.MigrateNutritionEmbeddings(ctx, db, cfg.Database.Schema)
 	} else if *onlyOnboardingStatus {
@@ -318,16 +321,20 @@ func main() {
 		log.Printf("微信自动续费迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
+	if *onlyPromoterCommission {
+		log.Printf("推广佣金迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyWechatTransfer {
+		log.Printf("商家转账单迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
 	if *onlyNutritionQuality {
 		log.Printf("营养可信等级迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	if *onlyNutritionStates {
 		log.Printf("营养状态库迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
-	if *onlyPromoterCommission {
-		log.Printf("推广佣金迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
-		return
-	}
 		return
 	}
 	if *onlyNutritionEmbeddings {

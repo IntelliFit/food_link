@@ -38,22 +38,43 @@ type Withdrawal struct {
 
 func (Withdrawal) TableName() string { return "promoter_withdrawals" }
 
-// WithdrawalItem is a withdrawal as the promoter sees it.
+// WithdrawalView is a withdrawal with the state of its WeChat transfer, if
+// it has one.
+type WithdrawalView struct {
+	Withdrawal         `gorm:"embedded"`
+	TransferState      string `gorm:"column:transfer_state" json:"transfer_state"`
+	TransferFailReason string `gorm:"column:transfer_fail_reason" json:"transfer_fail_reason"`
+	TransferLastError  string `gorm:"column:transfer_last_error" json:"transfer_last_error"`
+	OutBillNo          string `gorm:"column:out_bill_no" json:"out_bill_no"`
+	PackageInfo        string `gorm:"column:package_info" json:"-"`
+}
+
+// WithdrawalItem is a withdrawal as the promoter sees it. Receive is set
+// while a WeChat transfer waits for them to confirm it.
 type WithdrawalItem struct {
-	ID             string     `json:"id"`
-	AmountCents    int64      `json:"amount_cents"`
-	NetAmountCents int64      `json:"net_amount_cents"`
-	Status         string     `json:"status"`
-	Note           string     `json:"note"`
-	CreatedAt      *time.Time `json:"created_at,omitempty"`
-	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+	ID             string       `json:"id"`
+	AmountCents    int64        `json:"amount_cents"`
+	NetAmountCents int64        `json:"net_amount_cents"`
+	Status         string       `json:"status"`
+	Note           string       `json:"note"`
+	Receive        *ReceiveInfo `json:"receive,omitempty"`
+	CreatedAt      *time.Time   `json:"created_at,omitempty"`
+	FinishedAt     *time.Time   `json:"finished_at,omitempty"`
+}
+
+// ReceiveInfo is what wx.requestMerchantTransfer needs to show the payee
+// the confirm page.
+type ReceiveInfo struct {
+	MchID   string `json:"mch_id"`
+	AppID   string `json:"app_id"`
+	Package string `json:"package"`
 }
 
 // AdminWithdrawal is a withdrawal in the review queue, with who asked for it
 // and that promoter's balance right now (which already excludes this
 // withdrawal's amount).
 type AdminWithdrawal struct {
-	Withdrawal
+	WithdrawalView `gorm:"embedded"`
 	PromoCode      string `json:"promo_code"`
 	PromoterStatus string `json:"promoter_status"`
 	UserID         string `json:"user_id"`

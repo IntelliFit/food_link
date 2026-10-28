@@ -26,7 +26,7 @@ export function withdrawAmount(me: Pick<PromoterMe, 'withdraw_min_cents' | 'with
 }
 
 export function withdrawRuleText(me: Pick<PromoterMe, 'withdraw_min_cents' | 'withdraw_max_cents'>): string {
-  return `满 ¥${formatCents(me.withdraw_min_cents)} 可提现，单笔最多 ¥${formatCents(me.withdraw_max_cents)}，每天 1 次。审核通过后由工作人员转到你的微信，到账后这里会显示「已到账」。`
+  return `满 ¥${formatCents(me.withdraw_min_cents)} 可提现，单笔最多 ¥${formatCents(me.withdraw_max_cents)}，每天 1 次。审核通过后转到你的微信零钱，需要时在提现记录里点「收款」确认，到账后会显示「已到账」。`
 }
 
 /** 推广规则同时作为 v1 推广协议正文展示，申请时需勾选同意。 */
@@ -104,7 +104,7 @@ export function sharePath(promoCode: string): string {
 const WITHDRAWAL_STATUS_LABEL: Record<WithdrawalStatus, string> = {
   reviewing: '审核中',
   approved: '待打款',
-  transferring: '打款中',
+  transferring: '转账中',
   succeeded: '已到账',
   rejected: '未通过',
   failed: '打款失败',
@@ -113,14 +113,14 @@ const WITHDRAWAL_STATUS_LABEL: Record<WithdrawalStatus, string> = {
 export function withdrawalLine(item: PromoterWithdrawal): CommissionLine {
   const muted = item.status === 'rejected' || item.status === 'failed'
   const when = item.status === 'succeeded' && item.finished_at ? item.finished_at : item.created_at
-  const sub = muted && item.note
-    ? `${item.note}，金额已退回余额`
-    : `${item.status === 'succeeded' ? '到账' : '申请'}于 ${when ? formatDate(when) : ''}`
+  let sub = `${item.status === 'succeeded' ? '到账' : '申请'}于 ${when ? formatDate(when) : ''}`
+  if (muted && item.note) sub = `${item.note}，金额已退回余额`
+  else if (item.status === 'transferring' && item.note) sub = item.note
   return {
     title: '佣金提现',
     sub,
     amount: `¥${formatCents(item.amount_cents)}`,
-    status: WITHDRAWAL_STATUS_LABEL[item.status] || '',
+    status: item.receive ? '待收款' : WITHDRAWAL_STATUS_LABEL[item.status] || '',
     muted,
   }
 }

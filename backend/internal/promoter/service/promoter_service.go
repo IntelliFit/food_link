@@ -15,6 +15,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/promoter/domain"
 	"food_link/backend/internal/promoter/repo"
+	"food_link/backend/internal/wechattransfer"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 
@@ -108,9 +109,10 @@ func RulesFromConfig(cfg config.PromoterConfig) Rules {
 }
 
 type PromoterService struct {
-	repo  *repo.PromoterRepo
-	rules Rules
-	now   func() time.Time
+	repo     *repo.PromoterRepo
+	rules    Rules
+	transfer *wechattransfer.Service
+	now      func() time.Time
 }
 
 func NewPromoterService(r *repo.PromoterRepo, rules Rules) *PromoterService {

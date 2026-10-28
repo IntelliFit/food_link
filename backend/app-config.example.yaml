@@ -212,3 +212,10 @@ promoter:
   withdraw_min_cents: 1000      # 满 10 元可提现
   withdraw_max_cents: 20000     # 单笔最多 200 元
   withdraw_daily_limit: 1       # 每人每天最多发起 1 次（驳回、失败的不算）
+
+# 微信支付商家转账（推广佣金提现到零钱）。商户号和密钥沿用 wechat.pay。
+wechat_transfer:
+  enabled: false
+  app_id: ""                    # 留空用小程序 AppID
+  notify_url: ""                # 留空按 app.env 用 https://(dev.)api.healthymax.cn/api/payment/wechat/transfer/notify
+  query_interval_seconds: 60    # 补偿查单间隔
