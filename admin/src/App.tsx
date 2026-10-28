@@ -31,6 +31,7 @@ import { PaymentTestPage } from '@/pages/payment-test-page'
 import { UserRewardPage } from '@/pages/user-reward-page'
 import { UserFoodPhotosPage } from '@/pages/user-food-photos-page'
 import { ProductUpdatesPage } from '@/pages/product-updates-page'
+import { OnboardingPage } from '@/pages/onboarding-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 import { AdminRoleContext, type AdminRole, type AdminSession } from '@/types/admin-session'
 import { AnalyticsPage } from '@/pages/analytics-page'
@@ -55,6 +56,7 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   'user-food-photos': '/user-food-photos',
   settings: '/settings',
   'product-updates': '/product-updates',
+  onboarding: '/onboarding',
 }
 
 /** Admin 根组件：会话检查、登录与业务路由 */
@@ -167,6 +169,7 @@ export function App() {
         <Route path='/user-rewards' element={<UserRewardPage {...pageProps} />} />
         <Route path='/user-food-photos' element={<UserFoodPhotosPage {...pageProps} />} />
         <Route path='/product-updates' element={<ProductUpdatesPage {...pageProps} />} />
+        <Route path='/onboarding' element={<OnboardingPage {...pageProps} />} />
         </> : null}
         <Route path='*' element={<Navigate to={role === 'admin' ? '/overview' : '/analytics'} replace />} />
       </Routes>

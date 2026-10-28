@@ -13,6 +13,7 @@ import { PrivacyAuthorizationModal } from './components/PrivacyAuthorizationModa
 import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
 import { parseMarketingCodeFromLaunchOptions } from './utils/marketing-qr'
 import { ProductUpdatePrompt, PRODUCT_UPDATE_AUTH_EVENT } from './utils/product-updates'
+import { experiments } from './utils/experiments'
 
 import './app.scss'
 
@@ -149,6 +150,7 @@ function App({ children }: PropsWithChildren<any>) {
     console.log('App launched.')
     resetPreviousCommunityFeedSession()
     cleanupGeneratedUserFiles().catch(() => { /* ignore startup cleanup errors */ })
+    void experiments.refresh()
     if (!handleMarketingScene(options)) {
       handleInviteScene(options)
       handleDeepLink(options)
@@ -158,6 +160,12 @@ function App({ children }: PropsWithChildren<any>) {
   useEffect(() => {
     const productUpdates = new ProductUpdatePrompt()
     const checkProductUpdates = () => productUpdates.check()
+    // 登录/退出时先把已排队的事件发出去再重新拉分组：退出后发送的事件不带账号，
+    // 不会记到下一个登录的账号名下；登录后的拉取让服务端把匿名分组绑定到账号
+    const refreshExperiments = () => {
+      void experiments.flush().finally(() => experiments.refresh())
+    }
+    Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, refreshExperiments)
     Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, checkProductUpdates)
     productUpdates.check()
     const getCurrentRoute = () => {
@@ -180,6 +188,7 @@ function App({ children }: PropsWithChildren<any>) {
       productUpdates.hide()
       flushRecentRequestTraces()
       flushRecentConsoleLogs()
+      void experiments.flush()
     }
     const onGlobalError = (error: unknown) => {
       console.error('[app-global-error]', {
@@ -209,6 +218,7 @@ function App({ children }: PropsWithChildren<any>) {
     return () => {
       productUpdates.dispose()
       Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, checkProductUpdates)
+      Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, refreshExperiments)
       Taro.offAppShow(onShow)
       Taro.offAppHide(onHide)
       taroAppEvents.offError?.(onGlobalError)

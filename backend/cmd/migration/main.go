@@ -51,6 +51,8 @@ func main() {
 	restoreExcludeIDs := flag.String("restore-exclude-ids", "", "comma-separated author-hidden intake IDs to preserve")
 	onlyGrowthPerformanceIndexes := flag.Bool("only-growth-performance-indexes", false, "only create growth-sensitive feed, notification, and body-summary indexes")
 	onlyMarketingQR := flag.Bool("only-marketing-qr", false, "only add offline marketing QR attribution tables")
+	onlyContentConfigs := flag.Bool("only-content-configs", false, "only add the admin-edited content config table (onboarding trust badges)")
+	onlyExperiments := flag.Bool("only-experiments", false, "only add A/B experiment definitions, anonymous visitors, assignments and app events")
 	onlyCampusMapLocations := flag.Bool("only-campus-map-locations", false, "only add school, campus, and canteen coordinates used by the food map")
 	onlySleep := flag.Bool("only-sleep-records", false, "only add manual daily sleep records")
 	onlyPushReminders := flag.Bool("only-push-reminders", false, "only migrate the three push reminder tables and constraints")
@@ -82,7 +84,7 @@ func main() {
 	if *onlySupplementProduct {
 		selectedOnlyModes++
 	}
-	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyExperiments, *onlyContentConfigs, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -299,6 +301,10 @@ func main() {
 		migrateErr = migration.MigrateGrowthPerformanceIndexes(ctx, db, cfg.Database.Schema)
 	} else if *onlyMarketingQR {
 		migrateErr = migration.MigrateMarketingQR(ctx, db, cfg.Database.Schema)
+	} else if *onlyExperiments {
+		migrateErr = migration.MigrateExperiments(ctx, db, cfg.Database.Schema)
+	} else if *onlyContentConfigs {
+		migrateErr = migration.MigrateContentConfigs(ctx, db, cfg.Database.Schema)
 	} else if *onlyCampusMapLocations {
 		migrateErr = migration.MigrateCampusMapLocations(ctx, db)
 	} else {
@@ -361,6 +367,14 @@ func main() {
 	}
 	if *onlyMarketingQR {
 		log.Printf("线下二维码归因结构迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyExperiments {
+		log.Printf("A/B 实验结构迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyContentConfigs {
+		log.Printf("后台内容配置表迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	if *onlyCampusMapLocations {

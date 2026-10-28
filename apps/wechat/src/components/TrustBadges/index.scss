@@ -1,0 +1,28 @@
+.trust-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12rpx;
+  margin-top: 20rpx;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    height: 56rpx;
+    padding: 0 20rpx;
+    border-radius: 28rpx;
+    background: #123b2c;
+  }
+
+  &__icon {
+    font-size: 22rpx;
+    color: #f6e7b8;
+  }
+
+  &__text {
+    font-size: 24rpx;
+    font-weight: 700;
+    color: #f6e7b8;
+  }
+}

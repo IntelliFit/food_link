@@ -92,6 +92,8 @@ export default defineAppConfig({
   subpackages: [
     { root: 'packageMeal', name: 'meal', pages: ['pages/detail/index', 'pages/create/index', 'pages/mine/index', 'pages/room/index'] },
     { root: 'packageRecap', name: 'recap', pages: ['pages/recap/index'] },
+    // onboarding_v2 实验组的新注册流程：先试拍一顿、3 句话建档
+    { root: 'packageOnboarding', name: 'onboarding', pages: ['pages/try/index', 'pages/profile/index'] },
     {
       root: 'packageExtra',
       name: 'extra',
