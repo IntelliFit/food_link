@@ -58,7 +58,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 func (h *Handler) Register(c *gin.Context) {
 	userID := begin(c, "register_device")
 	var body service.RegisterInput
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1024)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 8192)
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, commonerrors.ErrBadRequest)
 		return

@@ -67,6 +67,9 @@ export type RootStackParamList = {
   } | undefined
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined
   ReminderSettings: undefined
+  NotificationDiagnostics: undefined
+  MyComments: undefined
+  WeeklyRecap: undefined
   CampusDiningSettings: undefined
   SleepRecord: { date?: string } | undefined
   MealSuggestions: { mealType?: 'breakfast' | 'lunch' | 'dinner' } | undefined

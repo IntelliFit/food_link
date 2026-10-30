@@ -1097,6 +1097,25 @@ export interface StatsSummary {
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
 export type CommunityAuthorScope = 'all' | 'priority' | 'public'
 export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food' | 'circle_post'
+
+export interface OwnCommentHistoryItem {
+  id: string
+  content: string
+  created_at: string | null
+  parent_comment_id?: string
+  target_type: string
+  target_id: string
+  target_available: boolean
+  target_preview?: string
+}
+
+export interface StatsCalendarMonth {
+  month: string
+  start_date: string
+  end_date: string
+  tdee: number
+  days: Array<{ date: string; calories: number; has_record: boolean }>
+}
 export type CommunityFeedContentType = 'all' | CommunityFeedTargetType
 
 export interface CommunityFeedQueryParams {
@@ -1683,6 +1702,8 @@ export interface ReminderPreferences {
 }
 
 export interface ReminderSettings {
+  /** Absent on legacy servers; clients then retain Expo registration. */
+  push_providers?: Array<'expo' | 'honor'>
   preferences: ReminderPreferences
   push_available: boolean
 }

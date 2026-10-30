@@ -1,0 +1,36 @@
+{
+  "provider": "honor",
+  "package": "cn.healthymax.foodlink",
+  "sdkVersion": "10.0.31.302",
+  "rollout": "disabled until both the backend advertises honor and the APK has a nonempty public HONOR app ID",
+  "nativeAppId": "FOODLINK_HONOR_APP_ID or Gradle property foodlink.honorAppId",
+  "privateServerConfiguration": ["PUSH_HONOR_CLIENT_ID", "PUSH_HONOR_CLIENT_SECRET"],
+  "behavior": {
+    "registration": "existing authenticated permission-checked device API, one provider per installation",
+    "legacy": "missing provider means Expo; unsupported devices and old servers keep the Expo path",
+    "sdkInitialization": "only on deliberate or previously enabled registration, never at application creation",
+    "click": "phase one opens the APP home; business detail deep-linking through the HONOR notification is not implemented",
+    "receipt": "provider acceptance only; authenticated HONOR delivery callback is not implemented",
+    "diagnostics": "existing Expo/FCM callback and channel counters do not validate the HONOR route; no callback record is not proof of HONOR non-delivery",
+    "routing": "no automatic parallel HONOR/FCM fanout or fallback after ambiguous send",
+    "classification": "no assumed service-message entitlement; vendor classification/quota must be confirmed before production"
+  },
+  "beforeRealDeviceAcceptance": [
+    "Create/verify the HONOR developer app for the existing package and release signing SHA256; user must complete verification and accept platform agreements",
+    "Enable PUSH and securely provide app ID, client ID and client secret, without posting secrets to chat",
+    "Update third-party SDK/privacy disclosure and confirm consent-gated initialization",
+    "Review/merge the existing APP worktree and current dev without losing prior UI and diagnostics work",
+    "Confirm the migration target, run the existing migration command for provider columns, then deploy the disabled provider",
+    "Rebuild and install the correctly signed APK; no existing APK is changed by this source work",
+    "Opt in one authorized account for no-VPN cellular, background and lock-screen acceptance; a provider success is not handset delivery",
+    "Verify logout, recorded-meal skip, quiet hours, token rotation and old-client regression before broad rollout"
+  ],
+  "rollback": "Disable HONOR registrations first. Do not roll back to Expo-only backend while active HONOR device bindings remain; rebind through the existing APP or retain the provider-aware backend. Never relabel an HONOR token as Expo.",
+  "sources": [
+    "https://developer.honor.com/cn/docs/11002/guides/intergrate",
+    "https://developer.honor.com/cn/docs/11002/guides/sdk-base-api",
+    "https://developer.honor.com/cn/docs/11002/guides/cloud-base-api",
+    "https://developer.honor.com/cn/docs/11002/guides/notification-class",
+    "https://developer.honor.com/cn/docs/11002/guides/kit-history"
+  ]
+}

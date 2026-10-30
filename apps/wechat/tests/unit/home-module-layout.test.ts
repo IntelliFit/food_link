@@ -7,7 +7,7 @@ describe('home module preferences', () => {
     expect(result.order[0]).toBe('meals')
     expect(new Set(result.order).size).toBe(defaultHomeModuleLayout().order.length)
     expect(result.hidden).toEqual(['expiry'])
-    expect(result.quickStats).toEqual(['weight', 'water', 'sleep'])
+    expect(result.quickStats).toEqual(['weight', 'exercise', 'sleep'])
   })
   it('keeps expiry alerts visible while letting users hide optional supplements', () => {
     const layout = { ...defaultHomeModuleLayout(), hidden: ['supplements', 'expiry'] as const }
@@ -35,11 +35,26 @@ describe('home module preferences', () => {
     storage.set('user_id', 'alice')
     expect(readHomeModuleLayout().hidden).toEqual(['rewards'])
   })
+  it('migrates the previous default once and preserves later custom quick cards', () => {
+    const storage = new Map<string, unknown>([
+      ['user_id', 'alice'],
+      ['home_module_layout_v3:alice', { quickStats: ['weight', 'water', 'sleep'], hidden: ['rewards'] }],
+    ])
+    ;(Taro.getStorageSync as jest.Mock).mockImplementation(key => storage.get(key))
+    ;(Taro.setStorageSync as jest.Mock).mockImplementation((key, value) => storage.set(key, value))
+    expect(readHomeModuleLayout().quickStats).toEqual(['weight', 'exercise', 'sleep'])
+    expect(readHomeModuleLayout().hidden).toEqual(['rewards'])
+    expect(storage.has('home_module_layout_v4:alice')).toBe(true)
+    saveHomeModuleLayout({ ...readHomeModuleLayout(), quickStats: ['weight', 'water', 'sleep'] })
+    expect(readHomeModuleLayout().quickStats).toEqual(['weight', 'water', 'sleep'])
+  })
   it('defaults to three quick cards and lets each metric be selected independently', () => {
     const defaults = defaultHomeModuleLayout()
-    expect(defaults.quickStats).toEqual(['weight', 'water', 'sleep'])
-    expect(isHomeQuickStatVisible(defaults, 'exercise')).toBe(false)
-    const four = toggleHomeQuickStat(defaults, 'exercise', true)
+    expect(defaults.quickStats).toEqual(['weight', 'exercise', 'sleep'])
+    expect(isHomeQuickStatVisible(defaults, 'exercise')).toBe(true)
+    expect(isHomeQuickStatVisible(defaults, 'water')).toBe(false)
+    expect(normalizeHomeModuleLayout({ quickStats: ['weight', 'water', 'sleep'] }).quickStats).toEqual(['weight', 'water', 'sleep'])
+    const four = toggleHomeQuickStat(defaults, 'water', true)
     expect(four.quickStats).toEqual(['weight', 'water', 'exercise', 'sleep'])
     const sleepOnly = ['weight', 'water', 'exercise'].reduce(
       (layout, id) => toggleHomeQuickStat(layout, id as 'weight' | 'water' | 'exercise', false),
@@ -57,7 +72,7 @@ describe('home module preferences', () => {
     expect(sleepOnly.quickStats).toEqual(['sleep'])
     expect(sleepOnly.order).toEqual(['nextMeal', 'diet', 'supplements', 'rewards', 'meals', 'expiry', 'body', 'recap'])
     expect(normalizeHomeModuleLayout({ order: ['body', 'sleep'], hidden: ['sleep'] }).quickStats).toEqual(['weight', 'water', 'exercise'])
-    expect(normalizeHomeModuleLayout({ order: ['body', 'sleep'], hidden: [] }).quickStats).toEqual(['weight', 'water', 'sleep'])
+    expect(normalizeHomeModuleLayout({ order: ['body', 'sleep'], hidden: [] }).quickStats).toEqual(['weight', 'exercise', 'sleep'])
     expect(normalizeHomeModuleLayout({}).quickStats).toEqual(defaultHomeModuleLayout().quickStats)
   })
 })

@@ -16,6 +16,7 @@ module.exports = {
     ],
   },
   moduleNameMapper: {
+    '^@food-link/core$': '<rootDir>/../../packages/core/src/index.ts',
     '^@/(.*)$': '<rootDir>/src/$1',
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
   },

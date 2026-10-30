@@ -414,6 +414,8 @@ function createMockAdapters() {
         if (url.endsWith('/api/recipes/recipe-1/use')) return response({ code: 0, data: { message: 'ok', record_id: 'record-2' } })
       }
       if (url.includes('/api/public-food-library')) {
+        if (url.includes('/revisions?')) return response({ code: 0, data: { items: [], page: 2, limit: 10, total: 0 } })
+        if (url.endsWith('/corrections')) return response({ code: 0, data: { item: { id: 'campus-1' }, revision: { id: 'revision-1', result_version: 4 }, reanalysis_queued: true } })
         if (url.endsWith('/contribute-images')) return response({ code: 0, data: { image_paths: ['https://cdn.example.com/campus-1.jpg'], accepted: true } })
         if (url.includes('/comments')) return response({ code: 0, data: { comment: { id: 'pf-comment-1', content: 'good' } } })
         if (url.endsWith('/like') || url.endsWith('/collect')) return response({ code: 0, data: { message: 'ok' } })
@@ -442,6 +444,9 @@ function createMockAdapters() {
         if (url.endsWith('/api/public-food-library/food-1')) return response({ code: 0, data: { message: 'ok', item: { id: 'food-1', food_name: '鸡胸饭', total_calories: 430 } } })
         return response({ code: 0, data: { list: [{ id: 'food-1', food_name: '鸡胸饭', total_calories: 420 }] } })
       }
+      if (url.endsWith('/api/campus-food-collectors/profile')) return response({ code: 0, data: { applications: [], active_scopes: [], can_batch: false } })
+      if (url.endsWith('/api/campus-food-collectors/applications')) return response({ code: 0, data: { application: { id: 'application-1', status: 'pending' } } })
+      if (url.endsWith('/api/campus-food-collection/batches')) return response({ code: 0, data: { batch: { id: 'batch-1' }, items: [], idempotent: false } })
       if (url.endsWith('/api/user/user-2/public-profile')) {
         return response({ code: 0, data: { id: 'user-2', nickname: 'Friend', record_days: 8, is_following: false } })
       }
@@ -1610,6 +1615,45 @@ describe('FoodLinkApiClient', () => {
       ],
     })
     expect(result.accepted).toBe(true)
+  })
+
+  it('uses versioned campus correction, revision, collector, and upload endpoints', async () => {
+    const { adapters, requests, uploads } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    await client.uploadCampusFoodImageFile({ fileUri: 'file://campus.jpg' })
+    await client.getCampusFoodRevisions('campus-1', 2, 10)
+    await client.correctCampusFood('campus-1', {
+      base_version: 3,
+      patch: { name: '新版牛肉饭', availability_status: 'available' },
+      evidence_image_paths: ['https://cdn.example.com/campus.jpg'],
+      reason: '用户修正校园菜品信息',
+    })
+    await client.getCampusCollectorProfile()
+    await client.applyCampusCollector({ school_id: 'school-1', campus_id: 'campus-a' })
+    await client.createCampusCollectorBatch({
+      client_batch_key: 'batch-1',
+      venue_type: 'university',
+      school_id: 'school-1',
+      campus_id: 'campus-a',
+      canteen_id: 'canteen-1',
+      organization_name: '测试大学',
+      area_name: '主校区',
+      canteen_name: '第一食堂',
+      entries: [{ name: '牛肉饭', image_paths: ['https://cdn.example.com/campus.jpg'] }],
+    })
+
+    expect(uploads[uploads.length - 1]).toMatchObject({
+      url: 'https://api.example.com/api/campus-food-collection/images',
+      fieldName: 'file',
+      fileName: 'campus-food.jpg',
+    })
+    expect(requests.some((entry) => entry.url.endsWith('/api/public-food-library/campus-1/revisions?page=2&limit=10'))).toBe(true)
+    expect(requests.find((entry) => entry.url.endsWith('/api/public-food-library/campus-1/corrections'))?.options?.body).toMatchObject({ base_version: 3 })
+    expect(requests.some((entry) => entry.url.endsWith('/api/campus-food-collectors/profile'))).toBe(true)
+    expect(requests.some((entry) => entry.url.endsWith('/api/campus-food-collectors/applications'))).toBe(true)
+    expect(requests.some((entry) => entry.url.endsWith('/api/campus-food-collection/batches'))).toBe(true)
   })
   it('replies to and deletes public food comments', async () => {
     const { adapters, requests } = createMockAdapters()

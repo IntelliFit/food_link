@@ -14,7 +14,7 @@
     "strictNullChecks": true,
     "skipLibCheck": true,
     "sourceMap": true,
-    "rootDir": ".",
+    "rootDir": "../..",
     "jsx": "react-jsx",
     "allowJs": true,
     "resolveJsonModule": true,
@@ -24,7 +24,8 @@
     ],
     "paths": {
       // TS5090 leading './'
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@food-link/core": ["../../packages/core/src/index.ts"]
     }
   },
   "include": ["./src", "./types", "./config"],

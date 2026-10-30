@@ -14,7 +14,7 @@ describe('credit cost disclosure', () => {
 
   it('shows concise costs at every fixed-price action', () => {
     expect(readSource('packageExtra/pages/analyze/index.tsx')).toContain('消耗 ${creditCost} 积分')
-    expect(readSource('packageExtra/pages/record-text/index.tsx')).toContain('开始分析 · 2 积分')
+    expect(readSource('packageExtra/pages/record-text/index.tsx')).toContain("${executionMode === 'fast' ? '快速分析' : '开始分析'} · 2 积分")
     expect(readSource('packageExtra/pages/exercise-record/index.tsx')).toContain("className='exercise-compose-cost'>消耗 1 积分")
     expect(readSource('packageExtra/pages/expiry-edit/index.tsx')).toContain('消耗 {recognitionCreditCost} 积分')
     expect(readSource('pages/stats/index.tsx')).toContain('添加 · ${customFocusCost} 积分')

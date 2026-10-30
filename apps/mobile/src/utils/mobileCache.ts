@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { clearNotificationDiagnostics } from '../diagnostics/notificationDiagnostics'
 
 const EXACT_CACHE_KEYS = new Set([
   'home_dashboard_local_cache',
@@ -31,6 +32,9 @@ const CACHE_KEY_PREFIXES = [
   'onboarding_home_record_guide_v1:user:',
   'home_experience_config_v1:',
   'home_experience_config_v2:',
+  'home_module_layout_v2:',
+  'home_module_layout_v3:',
+  'home_module_layout_v4:',
   'home_hidden_micronutrients_v1:',
 ]
 
@@ -45,5 +49,6 @@ export async function clearMobileUserCache(): Promise<number> {
     || CACHE_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
   ))
   if (removable.length > 0) await AsyncStorage.multiRemove(removable)
+  await clearNotificationDiagnostics()
   return removable.length
 }

@@ -221,10 +221,13 @@ export function ProfileScreen() {
       : ''
 
   const serviceItems: MenuEntry[] = [
+    { title: '我的评论', subtitle: '查看自己发出的评论与回复', iconClass: 'icon-pinglun', tone: 'green', onPress: privateAction(() => navigation.navigate('MyComments')) },
     { title: '健康档案', subtitle: '生理指标、日常消耗、病史与饮食偏好', iconClass: 'icon-shentinianling', tone: 'green', onPress: openHealthProfile },
     { title: '食物保质期', subtitle: expiryText, iconClass: 'icon-guoqi1', tone: 'gold', badgeCount: expiryBadge, onPress: privateAction(() => navigation.navigate('Expiry')) },
     { title: '我的宠物', subtitle: isAuthenticated ? `奖励积分 ${earnedBalance}，去看看你的健康伙伴` : '登录后查看你的健康伙伴', iconClass: 'icon-good', tone: 'purple', onPress: privateAction(() => navigation.navigate('PetHome')) },
-    { title: '签到打卡 · 上传食物赚积分', subtitle: '每日签到、分享打卡或上传真实食物都能赚积分', iconClass: 'icon-zengji', tone: 'slate', onPress: privateAction(() => navigation.navigate('RewardCenter')) },
+    { title: '签到与积分奖励', subtitle: '每日签到、分享打卡或上传真实食物都能赚积分', iconClass: 'icon-zengji', tone: 'slate', onPress: privateAction(() => navigation.navigate('RewardCenter')) },
+    { title: '贡献食物数据', subtitle: '补充标准食物、包装食品或公共餐食', iconClass: 'icon-shiwu', tone: 'green', onPress: privateAction(() => navigation.navigate('FoodContribution')) },
+    { title: '邀请好友得会员', subtitle: '邀请好友有效使用获得会员奖励', iconClass: 'icon-duoren', tone: 'green', onPress: privateAction(() => navigation.navigate('InviteFriends')) },
     { title: '公共食物库', subtitle: '浏览公共食物营养数据', iconClass: 'icon-foodshop', tone: 'blue', onPress: privateAction(() => navigation.navigate('PublicFood', { mode: 'all' })) },
     { title: '校园食堂', subtitle: '查食堂菜品热量、价格和蛋白质', iconClass: 'icon-dizhi', tone: 'slate', onPress: privateAction(() => navigation.navigate('CampusCanteen')) },
     { title: '加入用户群', subtitle: '反馈问题、提建议，一起共创食探', iconClass: 'icon-pengyouquan', tone: 'purple', onPress: privateAction(() => navigation.navigate('UserGroup')) },
@@ -232,18 +235,20 @@ export function ProfileScreen() {
   ]
 
   const settingsItems: MenuEntry[] = [
+    { title: '记录设置', subtitle: '自动记录与识别偏好', iconClass: 'icon-canciguanli', tone: 'green', onPress: privateAction(() => navigation.navigate('RecordSettings')) },
     { title: '消息提醒', subtitle: '用餐、漏记和临期提醒', iconClass: 'icon-shizhong', tone: 'green', onPress: privateAction(() => navigation.navigate('ReminderSettings')) },
+    { title: '通知自检与诊断', subtitle: '检查本地展示和远程收件', iconClass: 'icon-shizhong', tone: 'green', onPress: () => navigation.navigate('NotificationDiagnostics') },
     { title: '账号安全', subtitle: '手机号密码与备用登录方式', iconClass: 'icon-user', tone: 'blue', onPress: privateAction(() => navigation.navigate('AccountSecurity')) },
     { title: '隐私设置', subtitle: '搜索可见性和公开记录', iconClass: 'icon-jiesuo', tone: 'green', onPress: privateAction(() => navigation.navigate('PrivacySettings')) },
     { title: '关于我们', subtitle: '应用说明、协议和联系方式', iconClass: 'icon-all', tone: 'gold', onPress: () => navigation.navigate('About') },
   ]
 
   const profileDark = isDark
-  const profilePageBg = profileDark ? '#0d1312' : '#f9fafb'
-  const profileWashBg = profileDark ? 'rgba(16,23,22,1)' : 'rgba(92, 184, 150, 0.08)'
-  const profileTextPrimary = profileDark ? '#f2f7f4' : '#111827'
+  const profilePageBg = profileDark ? '#17241c' : '#f6f5ed'
+  const profileWashBg = 'transparent'
+  const profileTextPrimary = profileDark ? '#f2f7f4' : '#243d31'
   const profileTextSecondary = profileDark ? 'rgba(214,226,220,0.6)' : '#6b7280'
-  const profileCardBg = profileDark ? '#181f1d' : '#fff'
+  const profileCardBg = profileDark ? '#222f29' : '#fffef9'
   const profileOnboardingBg = profileDark ? '#1a2e24' : '#f0fdf4'
   const profileOnboardingBorder = profileDark ? 'rgba(112,196,149,0.25)' : '#bbf7d0'
   const profileOnboardingText = profileDark ? '#6ee7b7' : '#166534'
@@ -261,7 +266,7 @@ export function ProfileScreen() {
         style={styles.profileScroll}
         contentContainerStyle={[
           styles.profileContent,
-          { paddingTop: Math.max(insets.top + 8, 20), paddingBottom: insets.bottom + 180 },
+          { paddingTop: insets.top + 47, paddingBottom: insets.bottom + 130 },
         ]}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
         showsVerticalScrollIndicator={false}
@@ -272,7 +277,7 @@ export function ProfileScreen() {
               <Image source={{ uri: profile.avatar }} style={styles.userAvatar} />
             ) : (
               <View style={styles.userAvatarFallback}>
-                <User size={42} color="#cbd5e1" strokeWidth={1.9} />
+                <User size={24} color='#668373' strokeWidth={1.9} />
               </View>
             )}
             <View style={styles.userInfoMain}>
@@ -296,9 +301,7 @@ export function ProfileScreen() {
                   <Text style={[styles.userMetaText, { color: '#9ca3af' }]}>个人主页</Text>
                   <ChevronRight size={15} color="#9ca3af" strokeWidth={2.3} />
                 </Pressable>
-              ) : (
-                <Text style={[styles.userMetaText, { color: profileTextSecondary }]}>登录后同步饮食与健康数据</Text>
-              )}
+              ) : null}
             </View>
           </Pressable>
 
@@ -372,12 +375,20 @@ export function ProfileScreen() {
           </Pressable>
         ) : null}
 
-        <View style={[styles.listCard, { backgroundColor: profileCardBg }]}>
-          {serviceItems.map((item, index) => (
-            <ProfileListItem key={item.title} item={item} first={index === 0} isDark={profileDark} />
-          ))}
-          {settingsItems.map((item) => <ProfileListItem key={item.title} item={item} isDark={profileDark} />)}
+        <View style={[styles.listCard, styles.groupCard, { backgroundColor: profileCardBg }]}>
+          <Text style={[styles.groupTitle, { color: profileTextSecondary }]}>日常使用</Text>
+          <View style={styles.shortcutGrid}>{[
+            { title: '美食图谱', icon: 'icon-foodshop', onPress: privateAction(() => navigation.navigate('PublicFood', { mode: 'all' })) },
+            { title: '校园食堂', icon: 'icon-dizhi', onPress: privateAction(() => navigation.navigate('CampusCanteen')) },
+            { title: '健康档案', icon: 'icon-shentinianling', onPress: openHealthProfile },
+            { title: '我的宠物', icon: 'icon-good', onPress: privateAction(() => navigation.navigate('PetHome')) },
+          ].map(item => <Pressable key={item.title} accessibilityRole='button' style={[styles.shortcut, { backgroundColor: profileDark ? '#293a2d' : '#edf2e8' }]} onPress={item.onPress}><IconfontText className={`iconfont ${item.icon}`} size={18} color='#5aac88' /><Text style={[styles.shortcutTitle, { color: profileTextPrimary }]}>{item.title}</Text><ChevronRight size={12} color='#9ba99c' /></Pressable>)}</View>
         </View>
+        {[
+          { title: '记录与奖励', items: serviceItems.filter(item => ['我的评论', '食物保质期', '签到与积分奖励', '贡献食物数据'].includes(item.title)) },
+          { title: '帮助与邀请', items: serviceItems.filter(item => ['邀请好友得会员', '加入用户群', '意见反馈'].includes(item.title)) },
+          { title: '设置', items: settingsItems },
+        ].map(group => <View key={group.title} style={[styles.listCard, styles.groupCard, { backgroundColor: profileCardBg }]}><Text style={[styles.groupTitle, { color: profileTextSecondary }]}>{group.title}</Text>{group.items.map((item, index) => <ProfileListItem key={item.title} item={item} first={index === 0} isDark={profileDark} />)}</View>)}
 
         <Pressable style={({ pressed }) => [styles.toolCard, { backgroundColor: profileCardBg }, pressed && styles.pressed]} onPress={confirmClearCache}>
           <Text style={[styles.toolText, profileDark && { color: '#94a3b8' }]}>清除缓存</Text>
@@ -435,7 +446,7 @@ function ProfileListItem({
   const Icon = item.icon
   const tone = toneMeta[item.tone]
   return (
-    <Pressable style={({ pressed }) => [styles.listItem, first && styles.listItemFirst, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }, pressed && styles.pressed]} onPress={item.onPress}>
+    <Pressable accessibilityRole='button' style={({ pressed }) => [styles.listItem, first && styles.listItemFirst, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : '#edf0e7' }, pressed && styles.pressed]} onPress={item.onPress}>
       <View style={[styles.listIcon, { backgroundColor: tone.backgroundColor }]}>
         {item.iconClass ? (
           <IconfontText className={`iconfont ${item.iconClass}`} size={20} color={tone.color} />
@@ -451,6 +462,7 @@ function ProfileListItem({
           <Text style={styles.listBadgeText}>{item.badgeCount > 99 ? '99+' : item.badgeCount}</Text>
         </View>
       ) : null}
+      <ChevronRight size={14} color='#97a597' />
     </Pressable>
   )
 }
@@ -523,15 +535,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   userAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#e2e8f0',
   },
   userAvatarFallback: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: '#d2dbc8',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
@@ -788,13 +802,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 16,
     overflow: 'hidden',
-    borderRadius: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e3e7dc',
     backgroundColor: '#fff',
   },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 61,
+    minHeight: 56,
     gap: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#f1f5f9',
@@ -806,7 +822,7 @@ const styles = StyleSheet.create({
   listIcon: {
     width: 28,
     height: 28,
-    borderRadius: 8,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -814,11 +830,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  groupCard: { paddingTop: 11 },
+  groupTitle: { fontSize: 12, lineHeight: 18, fontWeight: '600' },
+  shortcutGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingVertical: 10 },
+  shortcut: { width: '49%', minHeight: 47, paddingHorizontal: 9, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  shortcutTitle: { flex: 1, fontSize: 14, lineHeight: 20 },
   listTitle: {
     color: '#1f2937',
     fontSize: 15,
     lineHeight: 22,
-    fontWeight: '600',
+    fontWeight: '400',
   },
   listBadge: {
     minWidth: 18,

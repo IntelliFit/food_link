@@ -8,8 +8,8 @@ import { ColorSchemeProvider, useColorScheme } from './src/providers/ColorScheme
 import { DialogProvider } from './src/providers/DialogProvider'
 import { RootNavigator } from './src/navigation/RootNavigator'
 import { installConsoleLogCapture } from './src/diagnostics/consoleLogBuffer'
+import { listenForNotificationDiagnostics } from './src/diagnostics/notificationDiagnostics'
 import { configureTextScaling } from './src/utils/textScaling'
-import { runNotificationSmokeTest } from './src/utils/pushNotifications'
 import { colors } from './src/theme'
 
 installConsoleLogCapture()
@@ -22,7 +22,8 @@ function AppContent() {
   })
 
   useEffect(() => {
-    void runNotificationSmokeTest()
+    const stopDiagnostics = listenForNotificationDiagnostics()
+    return stopDiagnostics
   }, [])
 
   if (!fontsLoaded) {
