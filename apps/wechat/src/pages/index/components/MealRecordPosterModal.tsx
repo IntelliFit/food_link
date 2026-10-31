@@ -8,6 +8,7 @@ import {
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
 import { computePhotoPosterHeight, drawPhotoRecordPoster, type PhotoPosterLabels } from '../../../utils/photo-record-poster'
+import { computeWatermarkPosterHeight, drawWatermarkRecordPoster } from '../../../utils/watermark-record-poster'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { getCurrentPosterUserProfile, getLocalPosterUserProfile, mergePosterUserProfile, type PosterUserProfile } from '../../../utils/poster-profile'
@@ -30,6 +31,7 @@ interface MealRecordPosterModalProps {
   allowReward?: boolean
 }
 
+type PosterStyle = 'classic' | 'photo' | 'watermark'
 type CanvasImage = { width: number; height: number }
 type PosterCanvas = HTMLCanvasElement & {
   createImage: () => CanvasImage & { src: string; onload: () => void; onerror: () => void }
@@ -40,7 +42,7 @@ function inviteCodeFor(userId: string) {
 }
 
 export function MealRecordPosterModal({ visible, record, onClose, onShareContextChange, afterSave = false, allowReward = true }: MealRecordPosterModalProps) {
-  const [style, setStyle] = useState<'classic' | 'photo'>('photo')
+  const [style, setStyle] = useState<PosterStyle>('photo')
   const [labels, setLabels] = useState<PhotoPosterLabels>('nutrients')
   const [imageIndex, setImageIndex] = useState(0)
   const [generating, setGenerating] = useState(false)
@@ -59,7 +61,8 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
   const images = record?.image_paths?.length ? record.image_paths : record?.image_path ? [record.image_path] : []
   const photoSrc = images[imageIndex] || images[0] || ''
   const effectiveStyle = photoSrc ? style : 'classic'
-  const key = effectiveStyle === 'classic' ? 'classic' : `photo:${labels}:${photoSrc}`
+  const usesPhoto = effectiveStyle !== 'classic'
+  const key = usesPhoto ? `${effectiveStyle}:${labels}:${photoSrc}` : 'classic'
   const currentPoster = posterKey === key ? poster : null
 
   useEffect(() => {
@@ -145,12 +148,12 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         ]).then(([membership, compare]) => ({ membership, compare }))
       }
       const [mainImg, { profile, qrImg }, details] = await Promise.all([
-        loadImage(effectiveStyle === 'photo' ? photoSrc : (record.image_path || images[0] || '')),
+        loadImage(usesPhoto ? photoSrc : (record.image_path || images[0] || '')),
         ownerAssets.current,
         effectiveStyle === 'classic' ? classicDetails.current : Promise.resolve(null),
       ])
       if (!active) return
-      if (effectiveStyle === 'photo' && (!mainImg || mainImg.width <= 0 || mainImg.height <= 0)) {
+      if (usesPhoto && (!mainImg || mainImg.width <= 0 || mainImg.height <= 0)) {
         throw new Error('原图读取失败，请重试或选择经典海报')
       }
       const avatarImg = effectiveStyle === 'classic' ? await loadImage(profile.avatar) : null
@@ -162,13 +165,17 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         mealPlanKcal: compare.meal_plan_kcal, hasBaseline: compare.has_baseline,
         deltaKcal: compare.delta_kcal, baselineKcal: compare.baseline_kcal,
       } : undefined
-      const height = effectiveStyle === 'photo' && mainImg
-        ? computePhotoPosterHeight(mainImg, POSTER_WIDTH)
-        : computePosterHeight(ctx, record, POSTER_WIDTH, membership?.is_pro, calorieCompare)
+      const height = effectiveStyle === 'watermark' && mainImg
+        ? computeWatermarkPosterHeight(mainImg, POSTER_WIDTH)
+        : effectiveStyle === 'photo' && mainImg
+          ? computePhotoPosterHeight(mainImg, POSTER_WIDTH)
+          : computePosterHeight(ctx, record, POSTER_WIDTH, membership?.is_pro, calorieCompare)
       canvas.width = POSTER_WIDTH * 2
       canvas.height = height * 2
       ctx.scale(2, 2)
-      if (effectiveStyle === 'photo' && mainImg) {
+      if (effectiveStyle === 'watermark' && mainImg) {
+        drawWatermarkRecordPoster(ctx, { width: POSTER_WIDTH, height, image: mainImg, record, labels, nickname: profile.nickname, qrCodeImage: qrImg })
+      } else if (effectiveStyle === 'photo' && mainImg) {
         drawPhotoRecordPoster(ctx, { width: POSTER_WIDTH, height, image: mainImg, record, labels, nickname: profile.nickname, qrCodeImage: qrImg })
       } else {
         drawRecordPoster(ctx, {
@@ -227,19 +234,22 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
       </View>
       <View className='record-share-styles'>
         <View className={`record-share-style record-share-style-classic ${effectiveStyle === 'classic' ? 'active' : ''}`} onClick={() => setStyle('classic')}>
-          <Text>经典海报</Text><Text className='record-share-style-desc'>保留原来的营养卡片</Text>
+          <Text>经典海报</Text><Text className='record-share-style-desc'>原来的营养卡片</Text>
         </View>
         {photoSrc && <View className={`record-share-style record-share-style-photo ${effectiveStyle === 'photo' ? 'active' : ''}`} onClick={() => setStyle('photo')}>
           <Text>原图贴纸</Text><Text className='record-share-style-desc'>照片 + 可爱标注</Text>
         </View>}
+        {photoSrc && <View className={`record-share-style record-share-style-watermark ${effectiveStyle === 'watermark' ? 'active' : ''}`} onClick={() => setStyle('watermark')}>
+          <Text>相机水印</Text><Text className='record-share-style-desc'>信息收进底栏</Text>
+        </View>}
       </View>
-      {effectiveStyle === 'photo' && (
+      {usesPhoto && (
         <View className='record-share-labels'>
           <View className={`record-share-label-calories ${labels === 'calories' ? 'active' : ''}`} onClick={() => setLabels('calories')}>只标热量</View>
           <View className={`record-share-label-nutrients ${labels === 'nutrients' ? 'active' : ''}`} onClick={() => setLabels('nutrients')}>热量 + 营养</View>
         </View>
       )}
-      {effectiveStyle === 'photo' && images.length > 1 && (
+      {usesPhoto && images.length > 1 && (
         <ScrollView scrollX className='record-share-photos'>
           {images.map((src, index) => <Image key={`${src}-${index}`} className={`record-share-photo ${imageIndex === index ? 'active' : ''}`} src={src} mode='aspectFill' onClick={() => setImageIndex(index)} />)}
         </ScrollView>

@@ -35,9 +35,21 @@ function pill(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h:
   ctx.fill()
 }
 
-const numberLabel = (value: number | null | undefined) => {
+export const numberLabel = (value: number | null | undefined) => {
   const n = Number(value)
   return Number.isFinite(n) && n >= 0 ? String(Math.round(n * 10) / 10) : '—'
+}
+
+const MEAL_LABELS: Record<string, string> = {
+  breakfast: '早餐', morning_snack: '早加餐', lunch: '午餐', afternoon_snack: '午加餐',
+  dinner: '晚餐', evening_snack: '晚加餐', snack: '加餐',
+}
+
+/** 「10.29  午餐」，日期无效时只留餐次。 */
+export function dateMealLabel(record: Pick<FoodRecord, 'record_time' | 'meal_type'>): string {
+  const date = new Date(record.record_time)
+  const dateText = Number.isNaN(date.getTime()) ? '' : `${date.getMonth() + 1}.${date.getDate()}`
+  return `${dateText}  ${MEAL_LABELS[record.meal_type] || '美食打卡'}`.trim()
 }
 
 export function drawPhotoRecordPoster(ctx: CanvasRenderingContext2D, options: {
@@ -81,18 +93,12 @@ export function drawPhotoRecordPoster(ctx: CanvasRenderingContext2D, options: {
   ctx.scale(scale, scale)
   const sw = w / scale
   const sh = photoHeight / scale
-  const meals: Record<string, string> = {
-    breakfast: '早餐', morning_snack: '早加餐', lunch: '午餐', afternoon_snack: '午加餐',
-    dinner: '晚餐', evening_snack: '晚加餐', snack: '加餐',
-  }
-  const date = new Date(record.record_time)
-  const dateText = Number.isNaN(date.getTime()) ? '' : `${date.getMonth() + 1}.${date.getDate()}`
   pill(ctx, 16, 16, 134, 34, '#fff7de')
   ctx.fillStyle = '#795c36'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.font = 'bold 14px sans-serif'
-  ctx.fillText(`${dateText}  ${meals[record.meal_type] || '美食打卡'}`, 83, 33)
+  ctx.fillText(dateMealLabel(record), 83, 33)
 
   // 矢量笑脸不依赖设备上的 emoji 字体。
   const faceX = sw - 36
