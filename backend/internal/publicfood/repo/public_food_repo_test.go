@@ -598,6 +598,29 @@ func TestPublicFoodRepo_ListPublishedMapCandidatesInheritsCampusAndSchoolCoordin
 	require.Equal(t, directLatitude, *byID["direct-food"].DirectLatitude)
 }
 
+func TestPublicFoodRepo_ListPublishedMapCandidatesReturnsOneRowPerSpotWithFoodCount(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	shopLatitude, shopLongitude := 31.2749, 121.5423
+	otherLatitude, otherLongitude := 39.9, 116.4
+	photo := "https://example.com/dish.jpg"
+	require.NoError(t, db.Create(&[]domain.PublicFoodItem{
+		{ID: "a-no-photo", UserID: "user-1", FoodName: "无图菜", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "b-photo", UserID: "user-1", FoodName: "有图菜", Type: "common", MerchantName: "一家店", ImagePath: &photo, Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "c-no-photo", UserID: "user-1", FoodName: "无图菜二", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "d-other", UserID: "user-1", FoodName: "别家菜", Type: "common", MerchantName: "别家店", Latitude: &otherLatitude, Longitude: &otherLongitude, Status: "published", CreatedAt: &now},
+	}).Error)
+
+	rows, err := NewPublicFoodRepo(db).ListPublishedMapCandidates(context.Background(), "viewer-1")
+
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "b-photo", rows[0].ID)
+	require.Equal(t, 3, rows[0].SpotFoodCount)
+	require.Equal(t, "d-other", rows[1].ID)
+	require.Equal(t, 1, rows[1].SpotFoodCount)
+}
+
 func stringPtr(value string) *string { return &value }
 
 func TestPublicFoodRepo_ListPublishedCampusFiltersFloorAndWindow(t *testing.T) {

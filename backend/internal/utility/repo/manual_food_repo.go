@@ -994,6 +994,7 @@ func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string,
 			GROUP BY 1
 		) usage ON usage.source_id = p.id::text
 		WHERE p.status = 'published'
+			AND COALESCE(p.availability_status, '') <> 'unknown'
 			AND (%s)
 		ORDER BY
 			CASE

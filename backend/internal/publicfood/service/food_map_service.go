@@ -23,7 +23,7 @@ func (s *PublicFoodService) ListMapSpots(ctx context.Context, userID string) ([]
 			continue
 		}
 		if index, exists := spotIndexes[spot.Key]; exists {
-			spots[index].FoodCount++
+			spots[index].FoodCount += spot.FoodCount
 			continue
 		}
 		spot.FeaturedItem = s.normalizePublicFoodItem(spot.FeaturedItem)
@@ -80,7 +80,7 @@ func mapSpotFromCandidate(candidate repo.MapFoodCandidate) (domain.PublicFoodMap
 	}
 	return domain.PublicFoodMapSpot{
 		Key: key, Latitude: latitude, Longitude: longitude, LocationLevel: level,
-		LocationName: locationName, Address: address, FoodCount: 1, FeaturedItem: featured,
+		LocationName: locationName, Address: address, FoodCount: max(1, candidate.SpotFoodCount), FeaturedItem: featured,
 	}, true
 }
 

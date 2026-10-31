@@ -85,6 +85,7 @@ func TestStatsRepo_CustomFocusCardPersistsExplainabilityMeta(t *testing.T) {
 func TestStatsRepo_GetDietRecommendationCandidatesFiltersCampusSchool(t *testing.T) {
 	db := setupStatsTestDB(t)
 	require.NoError(t, db.Exec(`CREATE TABLE public_food_library (
+		availability_status TEXT,
 		id TEXT PRIMARY KEY, food_name TEXT, description TEXT, total_calories REAL,
 		total_protein REAL, total_carbs REAL, total_fat REAL, items TEXT,
 		status TEXT, is_campus_food BOOLEAN, school_id TEXT, school_name TEXT,
@@ -128,6 +129,7 @@ func TestStatsRepo_GetDietRecommendationCandidatesFiltersCampusSchool(t *testing
 func TestStatsRepo_SearchCampusDietCandidatesEnforcesSchoolNutritionAndEvidence(t *testing.T) {
 	db := setupStatsTestDB(t)
 	require.NoError(t, db.Exec(`CREATE TABLE public_food_library (
+		availability_status TEXT,
 		id TEXT PRIMARY KEY, food_name TEXT, description TEXT, total_calories REAL,
 		total_protein REAL, total_carbs REAL, total_fat REAL, items TEXT,
 		status TEXT, is_campus_food BOOLEAN, school_id TEXT, school_name TEXT,
