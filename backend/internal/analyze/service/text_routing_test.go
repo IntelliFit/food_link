@@ -83,12 +83,25 @@ func TestAnalyzeTextFastModeUsesDefaultRoute(t *testing.T) {
 	}
 	qwen := &mockLLMClient{result: textFood("橙子", 139, 1, 16, 0.2)}
 	s := newTextRoutingService(t, c, qwen)
-	mode := fastExecutionMode
+	mode := "fast"
 
 	result, err := s.AnalyzeText(WithVisionRequest(context.Background(), mode, "task-fast-text", false), "", AnalyzeInput{Text: "橙子139g", ExecutionMode: &mode})
 	require.NoError(t, err)
 	require.Equal(t, gemini3FlashModel, result["model_name"])
-	require.Zero(t, qwen.calls, "fast text no longer uses qwen-flash, which misreported per-100g values")
+	require.Zero(t, qwen.calls, "the retired fast tier stays on the default text route")
+}
+
+func TestAnalyzeTextStandardSkipsEdiblePortionModel(t *testing.T) {
+	c := balancedChannels{openlux: &channelFixture{result: textFood("鸡腿", 150, 30, 0, 12)}}
+	qwen := &mockLLMClient{result: textFood("鸡腿", 150, 30, 0, 12)}
+	s := newTextRoutingService(t, c, qwen)
+	mode := defaultExecutionMode
+
+	result, err := s.AnalyzeText(standardVisionCtx(), "", AnalyzeInput{Text: "一个鸡腿", ExecutionMode: &mode})
+	require.NoError(t, err)
+	require.Zero(t, qwen.calls, "bone-in names must not wait on the auxiliary model for text")
+	require.Equal(t, "text_default", result["edible_portion_status"])
+	require.EqualValues(t, 150, toItems(result["items"])[0]["estimatedWeightGrams"])
 }
 
 func TestAnalyzeTextKeepsExplicitlyRequestedModel(t *testing.T) {

@@ -10,8 +10,6 @@ import (
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 )
 
-const fastTextModel = "qwen-flash"
-
 func textNutritionJSONSchema(withNutrition bool) map[string]any {
 	nutrientKeys := append([]string{"calories", "protein", "carbs", "fat"}, preciseMicronutrientKeys...)
 	nutrientProperties := map[string]any{}

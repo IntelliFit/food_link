@@ -23,7 +23,7 @@ func normalizeAnalysisEngine(engine, executionMode string, textInput bool) strin
 		return analysisEngineDBCandidates
 	}
 
-	if textInput || isFastExecutionMode(executionMode) {
+	if textInput {
 		return analysisEngineAIDirect
 	}
 	if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {

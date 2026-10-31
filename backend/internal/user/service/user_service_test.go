@@ -803,9 +803,9 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	grouped := "gemini35_flash_grouped"
 	assert.Equal(t, "gemini35_flash_grouped", normalizeExecutionMode(&grouped))
 	fast := "fast"
-	assert.Equal(t, "fast", normalizeExecutionMode(&fast))
+	assert.Equal(t, "standard", normalizeExecutionMode(&fast))
 	fastWeb := "fast_web_search"
-	assert.Equal(t, "fast_web_search", normalizeExecutionMode(&fastWeb))
+	assert.Equal(t, "standard_web_search", normalizeExecutionMode(&fastWeb))
 	assert.Equal(t, "standard", normalizeExecutionMode(nil))
 	invalid := "invalid"
 	assert.Equal(t, "standard", normalizeExecutionMode(&invalid))

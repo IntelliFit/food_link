@@ -97,7 +97,7 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
 ]
 
 type ReferencePresetValue = PrecisionReferencePresetKey
-type AnalyzeBaseMode = 'fast' | 'standard' | 'strict'
+type AnalyzeBaseMode = 'standard' | 'strict'
 type PrecisionCaptureMode = 'photos' | 'video'
 
 interface SelectedAnalyzeVideo {
@@ -136,7 +136,6 @@ const readSuggestRatioPreference = (): boolean => {
 }
 
 const resolveAnalyzeBaseMode = (mode: ExecutionMode): AnalyzeBaseMode => {
-  if (mode === 'fast' || mode === 'fast_web_search') return 'fast'
   if (mode === 'strict' || mode === 'strict_separate' || mode === 'strict_web_search') return 'strict'
   return 'standard'
 }
@@ -150,7 +149,6 @@ const resolveExecutionModeFromOptions = (
   webSearchEnabled: boolean,
   separateFoodEstimateEnabled: boolean,
 ): ExecutionMode => {
-  if (baseMode === 'fast') return webSearchEnabled ? 'fast_web_search' : 'fast'
   if (baseMode === 'standard') return webSearchEnabled ? 'standard_web_search' : 'standard'
   if (webSearchEnabled) return 'strict_web_search'
   if (separateFoodEstimateEnabled) return 'strict_separate'
@@ -1521,12 +1519,6 @@ function AnalyzePage() {
             <Text className='mode-link' onClick={handleDefaultModeEdit}>设为默认</Text>
           </View>
           <View className='mode-switch-row'>
-            <View
-              className={`mode-switch-item ${selectedBaseMode === 'fast' ? 'active' : ''}`}
-              onClick={() => handleBaseModeTap('fast')}
-            >
-              快速
-            </View>
             <View
               className={`mode-switch-item ${selectedBaseMode === 'standard' ? 'active' : ''}`}
               onClick={() => handleBaseModeTap('standard')}

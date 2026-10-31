@@ -443,8 +443,8 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	assert.Equal(t, "standard", normalizeExecutionMode(&lite))
 	assert.Equal(t, "standard", normalizeExecutionMode(&standard))
 	assert.Equal(t, "standard_web_search", normalizeExecutionMode(&standardWeb))
-	assert.Equal(t, "fast", normalizeExecutionMode(&fast))
-	assert.Equal(t, "fast_web_search", normalizeExecutionMode(&fastWeb))
+	assert.Equal(t, "standard", normalizeExecutionMode(&fast))
+	assert.Equal(t, "standard_web_search", normalizeExecutionMode(&fastWeb))
 	assert.Equal(t, "strict_separate", normalizeExecutionMode(&strictSeparate))
 	assert.Equal(t, "strict_web_search", normalizeExecutionMode(&strictWeb))
 	assert.Equal(t, "standard_packaged_experiment", normalizeExecutionMode(&packagedExperiment))
@@ -620,12 +620,12 @@ func TestAnalyzeService_SelectFoodImageModelKeepsOrdinaryOnGemini(t *testing.T) 
 	svc.ConfigureDashScopeLLMClient(qwenClient)
 
 	svc.ConfigureImageModelTraffic(100, 100)
-	assert.Equal(t, qwen38FlashModel, svc.SelectFoodImageModel(fastExecutionMode, "task-1"))
+	assert.Equal(t, gemini3FlashModel, svc.SelectFoodImageModel("fast", "task-1"), "the retired fast tier routes like standard")
 	assert.Equal(t, gemini3FlashModel, svc.SelectFoodImageModel(defaultExecutionMode, "task-1"))
 	assert.Equal(t, gemini35FlashModel, svc.SelectFoodImageModel(precisionExecutionMode, "session-1"))
 
 	svc.ConfigureImageModelTraffic(0, 0)
-	assert.Equal(t, qwen38FlashModel, svc.SelectFoodImageModel(fastExecutionMode, "task-1"))
+	assert.Equal(t, gemini3FlashModel, svc.SelectFoodImageModel("fast", "task-1"), "the retired fast tier routes like standard")
 	assert.Equal(t, gemini3FlashModel, svc.SelectFoodImageModel(defaultExecutionMode, "task-1"))
 	assert.Equal(t, gemini35FlashModel, svc.SelectFoodImageModel(precisionExecutionMode, "session-1"))
 
@@ -1086,8 +1086,8 @@ func TestBuildPromptStandardMode(t *testing.T) {
 	assert.Contains(t, prompt, "260g")
 }
 
-func TestBuildPromptFastModeRequestsCompleteNutritionInOneCall(t *testing.T) {
-	for _, mode := range []string{fastExecutionMode, fastWebSearchMode} {
+func TestBuildPromptOrdinaryModesRequestCompleteNutritionInOneCall(t *testing.T) {
+	for _, mode := range []string{defaultExecutionMode, standardWebSearchMode} {
 		prompt := buildPrompt(AnalyzeInput{AnalysisEngine: analysisEngineAIDirect}, nil, mode)
 		assert.Contains(t, prompt, "一次完成识别、估重、可食部及完整营养", mode)
 		for _, key := range preciseMicronutrientKeys {
@@ -1097,7 +1097,7 @@ func TestBuildPromptFastModeRequestsCompleteNutritionInOneCall(t *testing.T) {
 		assert.NotContains(t, prompt, `"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}`, mode)
 	}
 
-	dbFirst := buildPrompt(AnalyzeInput{AnalysisEngine: analysisEngineLegacyDBFirst}, nil, fastExecutionMode)
+	dbFirst := buildPrompt(AnalyzeInput{AnalysisEngine: analysisEngineLegacyDBFirst}, nil, defaultExecutionMode)
 	assert.NotContains(t, dbFirst, "一次完成识别、估重、可食部及完整营养")
 }
 
@@ -1774,34 +1774,6 @@ func TestAnalyzeService_AnalyzeImageStandardIgnoresExplicitDoubaoAndUsesGemini3F
 	assert.Equal(t, "gemini3 image", result["description"])
 	assert.Equal(t, 0, doubaoClient.calls)
 	assert.Equal(t, 1, gemini3Client.calls)
-}
-
-func TestAnalyzeService_AnalyzeImageFastKeepsExplicitQwen38Model(t *testing.T) {
-	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
-	gemini3Client := &mockLLMClient{err: assert.AnError}
-	qwenClient := &mockLLMClient{result: map[string]any{"description": "qwen fast image", "items": []any{map[string]any{"name": "米饭", "estimatedWeightGrams": 100.0}}}}
-	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
-	svc.ConfigureImageProvider("doubao")
-	svc.ConfigureDashScopeLLMClient(qwenClient)
-	svc.ConfigureWebSearcher(nil)
-	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
-	// Keep nutrition enrichment independent from the image-routing assertion.
-	micronutrients := map[string]any{fallbackNutritionSourceKey: "qwen_generated"}
-	for _, key := range preciseMicronutrientKeys {
-		micronutrients[key] = 1.0
-	}
-	svc.ConfigureNutritionFallbackEstimator(&fakeNutritionFallbackEstimator{rows: map[int]map[string]any{0: micronutrients}})
-	mode := fastExecutionMode
-
-	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
-		ImageURL:      "https://example.com/img.jpg",
-		ExecutionMode: &mode,
-	})
-
-	require.NoError(t, err)
-	assert.Equal(t, "qwen fast image", result["description"])
-	assert.Equal(t, 0, doubaoClient.calls)
-	assert.Equal(t, 1, qwenClient.calls)
 }
 
 func TestAnalyzeService_AnalyzeImageStandardDoesNotFallbackToDoubaoWhenGeminiFails(t *testing.T) {
@@ -2838,7 +2810,7 @@ func mixedMealWithSugarfreePackagedDrinkParsed() map[string]any {
 }
 
 func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesPackagedFoodWithDatabaseEngineAcrossMainModes(t *testing.T) {
-	for _, mode := range []string{fastExecutionMode, defaultExecutionMode, precisionExecutionMode, precisionSeparateExecutionMode} {
+	for _, mode := range []string{defaultExecutionMode, precisionExecutionMode, precisionSeparateExecutionMode} {
 		t.Run(mode, func(t *testing.T) {
 			svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
@@ -2872,11 +2844,9 @@ func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesPackagedFoodWithDatabas
 
 func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkWithDatabaseEngineAcrossModes(t *testing.T) {
 	modes := []string{
-		fastExecutionMode,
 		defaultExecutionMode,
 		precisionExecutionMode,
 		precisionSeparateExecutionMode,
-		fastWebSearchMode,
 		standardWebSearchMode,
 		precisionWebSearchMode,
 	}
@@ -2929,7 +2899,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkW
 }
 
 func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodWithDatabaseEngineAcrossMainModes(t *testing.T) {
-	for _, mode := range []string{fastExecutionMode, defaultExecutionMode, precisionExecutionMode, precisionSeparateExecutionMode} {
+	for _, mode := range []string{defaultExecutionMode, precisionExecutionMode, precisionSeparateExecutionMode} {
 		t.Run(mode, func(t *testing.T) {
 			modelClient := &mockLLMClient{result: mixedMealWithPackagedFoodParsed()}
 			svc := NewAnalyzeService(modelClient, modelClient, nil)
@@ -2963,18 +2933,13 @@ func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodWithDatabaseEngineAcro
 }
 
 func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodWithDatabaseEngineAcrossWebSearchModes(t *testing.T) {
-	for _, mode := range []string{fastWebSearchMode, standardWebSearchMode, precisionWebSearchMode} {
+	for _, mode := range []string{standardWebSearchMode, precisionWebSearchMode} {
 		t.Run(mode, func(t *testing.T) {
 			svc := NewAnalyzeService(&multiImageLLMClient{err: assert.AnError}, &multiImageLLMClient{result: mixedMealWithPackagedFoodParsed()}, nil)
 			svc.ConfigureWebSearcher(&mockWebSearcher{})
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
 
-			var qwenClient *mockDashScopeNativeSearchClient
-			switch mode {
-			case fastWebSearchMode:
-				qwenClient = &mockDashScopeNativeSearchClient{result: mixedMealWithPackagedFoodParsed()}
-				svc.dashscopeClient = qwenClient
-			case precisionWebSearchMode:
+			if mode == precisionWebSearchMode {
 				svc.gemini35Client = &multiImageLLMClient{result: mixedMealWithPackagedFoodParsed()}
 			}
 
@@ -2997,10 +2962,6 @@ func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodWithDatabaseEngineAcro
 			require.True(t, ok)
 			assert.Equal(t, 1, meta["triggered_count"])
 			assert.Equal(t, 1, meta["matched_count"])
-			if mode == fastWebSearchMode {
-				require.NotNil(t, qwenClient)
-				require.Len(t, qwenClient.imageSetCalls, 1)
-			}
 		})
 	}
 }
@@ -3390,63 +3351,7 @@ func TestApplyPreciseMicronutrientsToResolvedItemsSkipsSecondDBResolution(t *tes
 	require.Equal(t, 232.0, mapFromAny(items[0]["nutrients"])["calories"])
 }
 
-func TestAnalyzeService_FinalizeFastDatabaseModeUsesOnlyQwenPostprocessing(t *testing.T) {
-	resolver := newFakeAnalyzeNutritionResolver()
-	qwen := &sequenceLLMClient{results: []map[string]any{
-		{
-			"items": []any{map[string]any{
-				"index": 0,
-				"unitNutritionPer100g": map[string]any{
-					"calories": 100.0,
-					"protein":  5.0,
-					"carbs":    10.0,
-					"fat":      4.0,
-				},
-			}},
-		},
-		{
-			"items": []any{map[string]any{
-				"index":          0,
-				"suggestedRatio": 80.0,
-				"reason":         "测试建议比例",
-			}},
-		},
-	}}
-	var deepseekCalls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		deepseekCalls.Add(1)
-		http.Error(w, "unexpected deepseek call", http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
-	svc.nutrition = resolver
-	svc.ConfigureDeepSeekFallback("test-key", server.URL)
-	svc.ConfigureDashScopeLLMClient(qwen)
-
-	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
-		"description": "快速模式包装补充剂",
-		"items": []any{map[string]any{
-			"name":                 "未收录D3补充剂",
-			"type":                 "snack",
-			"estimatedWeightGrams": 30.0,
-			"grossWeightGrams":     30.0,
-		}},
-	}, AnalyzeInput{SuggestRatioEnabled: true, RemainingCalories: floatPtr(10), AnalysisEngine: analysisEngineLegacyDBFirst}, fastExecutionMode, "qwen", qwen38FlashModel, 6000)
-	require.NoError(t, err)
-
-	assert.Equal(t, int32(0), deepseekCalls.Load())
-	assert.Equal(t, 2, qwen.calls)
-	assert.Equal(t, "fast_default", resp["edible_portion_status"])
-	assert.Equal(t, "applied", resp["suggest_ratio_status"])
-	items := toItems(resp["items"])
-	require.Len(t, items, 1)
-	assert.Equal(t, "qwen_generated", items[0]["nutrition_source"])
-	assert.Equal(t, "fast_default", items[0]["ediblePortionSource"])
-	assert.Equal(t, "ai", items[0]["suggestedRatioSource"])
-}
-
-func TestAnalyzeService_FinalizeFastModeSkipsMicronutrientCallWhenVisionIsComplete(t *testing.T) {
+func TestAnalyzeService_FinalizeOrdinaryModeSkipsMicronutrientCallWhenVisionIsComplete(t *testing.T) {
 	qwen := &sequenceLLMClient{}
 	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
 	svc.ConfigureDashScopeLLMClient(qwen)
@@ -3467,7 +3372,7 @@ func TestAnalyzeService_FinalizeFastModeSkipsMicronutrientCallWhenVisionIsComple
 			"ediblePortionReason":  "无不可食部分",
 			"nutrients":            nutrients,
 		}},
-	}, AnalyzeInput{AnalysisEngine: analysisEngineAIDirect, PreciseMicronutrients: true}, fastExecutionMode, "qwen", qwen38FlashModel, 6000)
+	}, AnalyzeInput{AnalysisEngine: analysisEngineAIDirect, PreciseMicronutrients: true}, defaultExecutionMode, "qwen", qwen38FlashModel, 6000)
 	require.NoError(t, err)
 
 	assert.Equal(t, 0, qwen.calls, "complete one-call vision nutrition must not trigger a second model request")
@@ -3776,11 +3681,9 @@ func TestAnalyzeService_ApplyDBFirstToItemsUserCorrectionWeightWinsOverPackagedA
 
 func TestAnalyzeService_FinalizeAnalyzeResponseKeepsPackagedWeightWithSuggestRatioAndDatabaseEngine(t *testing.T) {
 	modes := []string{
-		fastExecutionMode,
 		defaultExecutionMode,
 		precisionExecutionMode,
 		precisionSeparateExecutionMode,
-		fastWebSearchMode,
 		standardWebSearchMode,
 		precisionWebSearchMode,
 	}

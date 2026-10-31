@@ -485,9 +485,9 @@ func TestBuildSubmitTaskPayloadPreservesIntegratedPackagedCorrectionFields(t *te
 			"nutrients":            map[string]any{"calories": 90.0, "protein": 4.2},
 		}},
 		SourceType: "Image",
-	}, "2026-06-04", "fast_web_search")
+	}, "2026-06-04", "standard_web_search")
 
-	assert.Equal(t, "fast_web_search", payload["execution_mode"])
+	assert.Equal(t, "standard_web_search", payload["execution_mode"])
 	assert.Equal(t, true, payload["suggest_ratio_enabled"])
 	assert.Equal(t, &remaining, payload["remaining_calories"])
 	assert.Equal(t, "桃李面包只吃半包", payload["additionalContext"])

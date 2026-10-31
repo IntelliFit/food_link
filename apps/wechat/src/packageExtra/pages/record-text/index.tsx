@@ -51,7 +51,6 @@ const ACTIVITY_TIMINGS = [
 ]
 
 const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
-const TEXT_MODE_STORAGE_KEY = 'textAnalyzeExecutionMode'
 
 const readSuggestRatioPreference = (): boolean => {
   const saved = Taro.getStorageSync(SUGGEST_RATIO_STORAGE_KEY)
@@ -68,7 +67,7 @@ function RecordTextPage() {
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
   const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>('ai_direct')
-  const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => Taro.getStorageSync(TEXT_MODE_STORAGE_KEY) === 'standard' ? 'standard' : 'fast')
+  const executionMode: ExecutionMode = 'standard'
   const [showAdvanced, setShowAdvanced] = useState(false)
   const submitLock = useRef(false)
   const [loading, setLoading] = useState(false)
@@ -247,21 +246,6 @@ function RecordTextPage() {
         </View>
       )}
       <ScrollView className='content-scroll' scrollY>
-        <View className='text-mode-section'>
-          <View className='text-mode-switch'>
-            {([{ value: 'fast', label: '快速', description: '快速模型 · 日常记录' }, { value: 'standard', label: '普通', description: '详细分析 · 复杂餐食' }] as const).map(mode => (
-              <View
-                key={mode.value}
-                className={`text-mode-option text-mode-option--${mode.value} ${executionMode === mode.value ? 'active' : ''}`}
-                onClick={() => { setExecutionMode(mode.value); Taro.setStorageSync(TEXT_MODE_STORAGE_KEY, mode.value) }}
-              >
-                <Text className='text-mode-label'>{mode.label}</Text>
-                <Text className='text-mode-description'>{mode.description}</Text>
-              </View>
-            ))}
-          </View>
-          <Text className='text-mode-note'>两种模式均包含基础营养与微量营养素估算</Text>
-        </View>
         {/* 输入区域 */}
         <View className='input-section'>
           <Text className='section-title'>吃了什么？</Text>
@@ -395,7 +379,7 @@ function RecordTextPage() {
           className={`submit-btn ${!foodText.trim() || loading || isQuotaExhausted ? 'disabled' : ''}`}
           onClick={handleSubmit}
         >
-          {loading ? <View className='text-submit-spinner' /> : <Text>{isQuotaExhausted ? '积分不足，暂不可分析' : `${executionMode === 'fast' ? '快速分析' : '开始分析'} · 2 积分`}</Text>}
+          {loading ? <View className='text-submit-spinner' /> : <Text>{isQuotaExhausted ? '积分不足，暂不可分析' : '开始分析 · 2 积分'}</Text>}
         </View>
       </View>
       <CreditShortageSheet
