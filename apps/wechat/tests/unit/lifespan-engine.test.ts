@@ -162,11 +162,11 @@ describe('lifespan engine behaviour', () => {
     const person = (sex: 'male' | 'female', age: number, height_cm: number, weight_kg: number) => (
       { ...MALE_32, sex, age, height_cm, weight_kg, risk: { conditions: ['hypertension'] } }
     )
-    // adapt_input in lifespan_predictor/input_adapter.py, engine 0.3.0.
-    expect(engine.assumedSbp(person('male', 60, 170, 70))).toBeCloseTo(150, 5)
+    // golden/input_fixtures.json: hypertension_no_reading_young, hypertension_no_reading_old_heavy.
+    expect(engine.assumedSbp(person('male', 40, 172, 72))).toBeCloseTo(150, 5)
+    expect(engine.assumedSbp(person('male', 85, 170, 90))).toBeCloseTo(164.641122276, 5)
+    // adapt_input in lifespan_predictor/input_adapter.py, engine 0.3.0: women, where the sex-specific slope matters.
     expect(engine.assumedSbp(person('female', 75, 158, 60))).toBeCloseTo(150.262992, 5)
-    expect(engine.assumedSbp(person('male', 70, 175, 110))).toBeCloseTo(160.999354, 5)
-    expect(engine.assumedSbp(person('female', 25, 160, 50))).toBeCloseTo(150, 5)
     expect(engine.assumedSbp(MALE_32)).toBeNull()
     expect(engine.assumedSbp({ ...MALE_32, risk: { conditions: ['hypertension'], sbp_mmhg: 130 } })).toBeNull()
     expect(engine.assumedSbp({ ...MALE_32, risk: { conditions: ['diabetes'] } })).toBeNull()
