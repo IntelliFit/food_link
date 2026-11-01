@@ -24,7 +24,7 @@ external:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.External.A6APIKey != "test-key" || cfg.External.A6BaseURL != "https://api.a6api.com/v1" {
+	if cfg.External.A6APIKey != "test-key" || cfg.External.A6BaseURL != "https://api.a6api.vip/v1" {
 		t.Fatal("A6凭证/域名未规范化")
 	}
 	r := cfg.External.VisionRouting

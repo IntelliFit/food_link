@@ -44,7 +44,7 @@ external:
 ```yaml
 external:
   a6_api_key: "填入新的正式Key"
-  a6_base_url: "https://api.a6api.com"
+  a6_base_url: "https://api.a6api.vip"
   vision_routing:
     a6_shadow_percent: 10
     shadow_max_concurrent: 2
