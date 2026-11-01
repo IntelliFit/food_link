@@ -205,6 +205,9 @@ type PackagedProductExtractResult struct {
 	ProductFamilyKey      string                      `json:"product_family_key,omitempty"`
 	FlavorText            string                      `json:"flavor_text,omitempty"`
 	PackageCategory       string                      `json:"package_category,omitempty"`
+	FoodType              string                      `json:"food_type,omitempty"`
+	CatalogCategory       string                      `json:"catalog_category,omitempty"`
+	DefaultPortionG       float64                     `json:"default_portion_g,omitempty"`
 	NetContentValue       float64                     `json:"net_content_value,omitempty"`
 	NetContentUnit        string                      `json:"net_content_unit,omitempty"`
 	UnitCount             float64                     `json:"unit_count,omitempty"`
@@ -581,6 +584,7 @@ func buildPackagedProductExtractPrompt(recognizedNameHint string, imageCount int
 请只提取图片中真实可见的信息，不要编造，不要根据常识补品牌和口味。
 不要在模型里做自由数学换算。你只负责提取标签上的原始数值、单位、口径（每100g/每100ml/每份）和份量信息。
 如果同一大包装是组合装/多口味，且营养成分表有两列或以上，请不要丢弃任一列：在 raw_label_payload 中按“口味/子商品名 + 每份重量”分别记录每列每份营养，例如“浓郁黑巧克力单支营养（42g）”。raw_nutrition_per_basis 仍只在标签只有一套营养表时填写。
+food_type 只能是 snack、beverage、dairy、staple、protein、meal、other 之一，按这件商品实际是什么来判断：开袋即食的休闲食品（薯片、饼干、糖果、巧克力、坚果、果干、辣条、肉脯、海苔、果冻、蛋白棒等）填 snack；饮料填 beverage；牛奶酸奶填 dairy；米面主食填 staple；需要烹饪的肉蛋豆制品填 protein；即食正餐填 meal；判断不了填 other。
 营养成分表、净含量/规格、品名是核心信息；配料表和条码是可选增强信息，缺失时不要放入 needs_more_images，也不要降低整体置信度。
 只有缺少营养成分表、净含量/规格、品名等核心信息，导致无法确定商品营养或规格时，才在 needs_more_images 里返回对应原因（如 ["nutrition_label"]、["net_weight"]、["front_package"]）。
 可参考的已识别名称提示：` + hint + `
@@ -590,6 +594,7 @@ func buildPackagedProductExtractPrompt(recognizedNameHint string, imageCount int
   "product_name": "",
   "flavor_text": "",
   "package_category": "",
+  "food_type": "",
   "net_content_value": 0,
   "net_content_unit": "",
   "unit_count": 0,
@@ -736,6 +741,7 @@ func parsePackagedProductExtractResult(raw map[string]any, imageURLs []string) *
 		ProductFamilyKey:     stringFromAny(raw["product_family_key"], raw["productFamilyKey"]),
 		FlavorText:           stringFromAny(raw["flavor_text"], raw["flavorText"]),
 		PackageCategory:      stringFromAny(raw["package_category"], raw["packageCategory"]),
+		FoodType:             stringFromAny(raw["food_type"], raw["foodType"]),
 		NetContentValue:      numberFromAny(raw["net_content_value"], raw["netContentValue"]),
 		NetContentUnit:       strings.ToLower(stringFromAny(raw["net_content_unit"], raw["netContentUnit"])),
 		UnitCount:            numberFromAny(raw["unit_count"], raw["unitCount"]),
@@ -830,6 +836,8 @@ func enrichPackagedProductExtractResult(result *PackagedProductExtractResult) {
 	result.MissingFields = missingFields
 	result.ConfirmationReasons, result.ConfirmationFields = determinePackagedConfirmation(result)
 	result.NeedsUserConfirmation = len(result.ConfirmationReasons) > 0
+	result.CatalogCategory = packagedCatalogCategory(result)
+	result.DefaultPortionG = effectiveServingWeight(result)
 }
 
 func stringFromAny(values ...any) string {
