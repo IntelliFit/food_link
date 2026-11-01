@@ -1,3 +1,4 @@
+import { LifespanEntry } from '../../components/LifespanEntry'
 import { WeeklyRecapEntry } from '../../components/WeeklyRecapEntry'
 import { resetSocialInbox } from '../../utils/social-inbox'
 import { View, Text, Image, Navigator } from '@tarojs/components'
@@ -820,6 +821,7 @@ function ProfilePage() {
       )}
 
       {isLoggedIn && <WeeklyRecapEntry />}
+      <LifespanEntry />
 
       <View className='profile-card profile-shortcuts-card'>
         <Text className='profile-group-title'>日常使用</Text>
