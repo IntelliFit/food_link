@@ -28,6 +28,8 @@ type PromoterService interface {
 	RecordManualPayout(ctx context.Context, admin, withdrawalID string, input service.WithdrawalPayoutInput) (*domain.Withdrawal, error)
 	AdminCommissions(ctx context.Context, promoterID, status string, page, size int) (*service.AdminCommissionPage, error)
 	ReverseCommission(ctx context.Context, admin, commissionID string, input service.ReverseCommissionInput) (*service.ReverseCommissionResult, error)
+	RefreshWithdrawal(ctx context.Context, userID, withdrawalID string) (*domain.WithdrawalItem, error)
+	AdminSyncTransfer(ctx context.Context, admin, withdrawalID string) (*domain.WithdrawalView, error)
 }
 
 type PromoterHandler struct {

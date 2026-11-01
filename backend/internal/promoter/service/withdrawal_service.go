@@ -13,6 +13,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/promoter/domain"
 	"food_link/backend/internal/promoter/repo"
+	"food_link/backend/internal/wechattransfer"
 	"food_link/backend/pkg/logger"
 
 	"github.com/google/uuid"
@@ -35,8 +36,8 @@ type WithdrawInput struct {
 }
 
 // Withdraw asks to cash out part of the available balance. The amount is
-// held from now on and paid by hand after review until WeChat transfers
-// ship. Sending the same request key again returns the first request.
+// held from now on and paid after review, by WeChat transfer or by hand.
+// Sending the same request key again returns the first request.
 func (s *PromoterService) Withdraw(ctx context.Context, userID string, input WithdrawInput) (*domain.WithdrawalItem, error) {
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
@@ -77,7 +78,7 @@ func (s *PromoterService) Withdraw(ctx context.Context, userID string, input Wit
 		logger.Info(ctx, "推广员发起提现",
 			slog.String("promoter_id", promoter.ID), slog.String("withdrawal_id", saved.ID), slog.Int64("amount_cents", saved.AmountCents))
 	}
-	item := withdrawalItem(*saved)
+	item := s.withdrawalItem(domain.WithdrawalView{Withdrawal: *saved})
 	return &item, nil
 }
 
@@ -125,30 +126,38 @@ func (s *PromoterService) Withdrawals(ctx context.Context, userID string, page, 
 	}
 	items := make([]domain.WithdrawalItem, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, withdrawalItem(row))
+		items = append(items, s.withdrawalItem(row))
 	}
 	return &WithdrawalPage{Items: items, Total: total}, nil
 }
 
 // withdrawalItem keeps reviewer names and internal ids from the promoter;
-// the note is why it was rejected or failed, which they need to see.
-func withdrawalItem(row domain.Withdrawal) domain.WithdrawalItem {
-	note := ""
+// the note is why it was rejected or failed, which they need to see, or what
+// to do while a WeChat transfer waits for them.
+func (s *PromoterService) withdrawalItem(row domain.WithdrawalView) domain.WithdrawalItem {
+	item := domain.WithdrawalItem{
+		ID: row.ID, AmountCents: row.AmountCents, NetAmountCents: row.NetAmountCents, Status: row.Status,
+		CreatedAt: row.CreatedAt, FinishedAt: row.FinishedAt,
+	}
 	switch row.Status {
 	case domain.WithdrawalRejected:
-		note = row.ReviewNote
+		item.Note = row.ReviewNote
 	case domain.WithdrawalFailed:
-		note = row.FailReason
+		item.Note = row.FailReason
+	case domain.WithdrawalTransferring:
+		item.Note = "微信转账处理中"
+		if row.TransferState == wechattransfer.StateWaitUserConfirm && row.PackageInfo != "" && s.transfer != nil {
+			item.Note = "请在 24 小时内点「收款」确认，钱会到你的微信零钱"
+			item.Receive = &domain.ReceiveInfo{MchID: s.transfer.MchID(), AppID: s.transfer.AppID(), Package: row.PackageInfo}
+		}
 	}
-	return domain.WithdrawalItem{
-		ID: row.ID, AmountCents: row.AmountCents, NetAmountCents: row.NetAmountCents, Status: row.Status,
-		Note: note, CreatedAt: row.CreatedAt, FinishedAt: row.FinishedAt,
-	}
+	return item
 }
 
 type AdminWithdrawalPage struct {
-	Items []domain.AdminWithdrawal `json:"items"`
-	Total int64                    `json:"total"`
+	Items           []domain.AdminWithdrawal `json:"items"`
+	Total           int64                    `json:"total"`
+	TransferEnabled bool                     `json:"transfer_enabled"`
 }
 
 func (s *PromoterService) AdminWithdrawals(ctx context.Context, status string, page, size int) (*AdminWithdrawalPage, error) {
@@ -160,18 +169,21 @@ func (s *PromoterService) AdminWithdrawals(ctx context.Context, status string, p
 	if rows == nil {
 		rows = []domain.AdminWithdrawal{}
 	}
-	return &AdminWithdrawalPage{Items: rows, Total: total}, nil
+	return &AdminWithdrawalPage{Items: rows, Total: total, TransferEnabled: s.transfer != nil}, nil
 }
 
 type WithdrawalReviewInput struct {
-	Approve bool   `json:"approve"`
-	Note    string `json:"note"`
+	Approve      bool   `json:"approve"`
+	Note         string `json:"note"`
+	PayoutMethod string `json:"payout_method"`
 }
 
 // ReviewWithdrawal approves or rejects a withdrawal under review. Rejecting
 // releases the amount back to the balance and needs a reason the promoter
 // will see. Approval is refused while the promoter is not active or when a
-// refund taken back after the request has left the balance short.
+// refund taken back after the request has left the balance short. An
+// approval paid by WeChat transfer starts the transfer at once; a manual one
+// (the default) waits for ops to record the payout.
 func (s *PromoterService) ReviewWithdrawal(ctx context.Context, admin, withdrawalID string, input WithdrawalReviewInput) (*domain.Withdrawal, error) {
 	if !isUUID(withdrawalID) {
 		return nil, commonerrors.ErrNotFound
@@ -182,20 +194,15 @@ func (s *PromoterService) ReviewWithdrawal(ctx context.Context, admin, withdrawa
 	}
 	updates := map[string]any{"review_note": note, "reviewed_by": admin, "reviewed_at": s.now()}
 	var updated *domain.Withdrawal
-	if input.Approve {
+	switch {
+	case input.Approve && input.PayoutMethod == domain.PayoutWechatTransfer:
+		updated, err = s.approveForTransfer(ctx, withdrawalID, updates)
+	case input.Approve && (input.PayoutMethod == "" || input.PayoutMethod == domain.PayoutManual):
 		updates["status"] = domain.WithdrawalApproved
-		// The balance already excludes this withdrawal, so below zero means
-		// commission was taken back after the request was made.
-		updated, err = s.repo.UpdateWithdrawalLocked(ctx, withdrawalID, []string{domain.WithdrawalReviewing}, updates, func(state repo.WithdrawalState) error {
-			if state.PromoterStatus != domain.StatusActive {
-				return appError(http.StatusConflict, "推广员当前不是正常状态，不能通过提现，请驳回或先恢复推广员")
-			}
-			if state.AvailableCents < 0 {
-				return appError(http.StatusConflict, "推广员有退款扣回的佣金，余额已不足以支付这笔提现，请驳回")
-			}
-			return nil
-		})
-	} else {
+		updated, err = s.repo.UpdateWithdrawalLocked(ctx, withdrawalID, []string{domain.WithdrawalReviewing}, updates, s.checkApproval, nil)
+	case input.Approve:
+		return nil, appError(http.StatusBadRequest, "打款方式无效")
+	default:
 		updates["status"] = domain.WithdrawalRejected
 		updates["finished_at"] = s.now()
 		updated, err = s.repo.UpdateWithdrawalIfStatus(ctx, withdrawalID, []string{domain.WithdrawalReviewing}, updates)
@@ -209,6 +216,19 @@ func (s *PromoterService) ReviewWithdrawal(ctx context.Context, admin, withdrawa
 	logger.Info(ctx, "推广提现已审核",
 		slog.String("withdrawal_id", withdrawalID), slog.String("admin", admin), slog.String("status", updated.Status))
 	return updated, nil
+}
+
+// checkApproval refuses approval while the promoter is not active, or when
+// the balance, which already excludes this withdrawal, is below zero because
+// commission was taken back after the request was made.
+func (s *PromoterService) checkApproval(state repo.WithdrawalState) error {
+	if state.PromoterStatus != domain.StatusActive {
+		return appError(http.StatusConflict, "推广员当前不是正常状态，不能通过提现，请驳回或先恢复推广员")
+	}
+	if state.AvailableCents < 0 {
+		return appError(http.StatusConflict, "推广员有退款扣回的佣金，余额已不足以支付这笔提现，请驳回")
+	}
+	return nil
 }
 
 type WithdrawalPayoutInput struct {

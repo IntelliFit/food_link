@@ -8,13 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { adminRequest } from '@/lib/api'
 import { formatTime, shortId } from '@/lib/format'
-import { PROMOTER_STATUS_LABEL, WITHDRAWAL_STATUS_LABEL, yuan } from '@/lib/promoter-format'
-import type { AdminWithdrawal, Page, WithdrawalStatus } from '@/types/promoter'
+import { PROMOTER_STATUS_LABEL, TRANSFER_STATE_LABEL, WITHDRAWAL_STATUS_LABEL, yuan } from '@/lib/promoter-format'
+import type { AdminWithdrawal, AdminWithdrawalPage, WithdrawalStatus } from '@/types/promoter'
 
 const PAGE_SIZE = 20
 const FILTERS: Array<{ value: WithdrawalStatus | ''; label: string }> = [
   { value: 'reviewing', label: '待审核' },
   { value: 'approved', label: '待打款' },
+  { value: 'transferring', label: '转账中' },
   { value: 'succeeded', label: '已打款' },
   { value: 'rejected', label: '已驳回' },
   { value: 'failed', label: '打款失败' },
@@ -26,7 +27,8 @@ type Props = { onAction: (spec: ActionSpec) => void }
 export function PromoterWithdrawalsSection({ onAction }: Props) {
   const [status, setStatus] = useState<WithdrawalStatus | ''>('reviewing')
   const [page, setPage] = useState(1)
-  const [data, setData] = useState<Page<AdminWithdrawal>>({ items: [], total: 0 })
+  const [data, setData] = useState<AdminWithdrawalPage>({ items: [], total: 0, transfer_enabled: false })
+  const [syncingId, setSyncingId] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export function PromoterWithdrawalsSection({ onAction }: Props) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ status, page: String(page), limit: String(PAGE_SIZE) })
-      setData(await adminRequest<Page<AdminWithdrawal>>(`/api/admin/promoter-withdrawals?${params}`))
+      setData(await adminRequest<AdminWithdrawalPage>(`/api/admin/promoter-withdrawals?${params}`))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '读取提现列表失败')
     } finally {
@@ -57,14 +59,38 @@ export function PromoterWithdrawalsSection({ onAction }: Props) {
     }
   }
 
+  function approveTransfer(item: AdminWithdrawal) {
+    onAction({
+      title: `通过并微信转账 ${yuan(item.net_amount_cents)} 给 ${item.nickname || '推广员'}？`,
+      description: '通过后立即从商户号运营账户发起商家转账，推广员在小程序提现记录里点「收款」确认后到账；24 小时不确认会自动退回余额。推广员当前状态和余额会再校验一次。',
+      confirmLabel: '通过并转账',
+      noteLabel: '审核备注',
+      run: ({ note }) => post(item, 'review', { approve: true, note, payout_method: 'wechat_transfer' }, '已发起微信转账'),
+    })
+  }
+
   function approve(item: AdminWithdrawal) {
     onAction({
-      title: `通过 ${item.nickname || '推广员'} 的提现 ${yuan(item.amount_cents)}？`,
+      title: `通过 ${item.nickname || '推广员'} 的提现 ${yuan(item.amount_cents)}，线下打款？`,
       description: '通过后请在微信支付商户平台或微信转账给对方，转完回到这里点「标记已打款」。推广员当前状态和余额会再校验一次。',
       confirmLabel: '通过',
       noteLabel: '审核备注',
-      run: ({ note }) => post(item, 'review', { approve: true, note }, '已通过，等待打款'),
+      run: ({ note }) => post(item, 'review', { approve: true, note, payout_method: 'manual' }, '已通过，等待打款'),
     })
+  }
+
+  async function syncTransfer(item: AdminWithdrawal) {
+    if (syncingId) return
+    setSyncingId(item.id)
+    try {
+      const row = await adminRequest<AdminWithdrawal>(`/api/admin/promoter-withdrawals/${encodeURIComponent(item.id)}/sync-transfer`, { method: 'POST' })
+      toast.success(`微信转账：${TRANSFER_STATE_LABEL[row.transfer_state] || row.transfer_state}`)
+      void load()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '查询微信转账失败')
+    } finally {
+      setSyncingId('')
+    }
   }
 
   function reject(item: AdminWithdrawal) {
@@ -149,22 +175,35 @@ export function PromoterWithdrawalsSection({ onAction }: Props) {
                 </TableCell>
                 <TableCell className='text-right font-medium'>{yuan(item.amount_cents)}</TableCell>
                 <TableCell className={`text-right ${item.available_cents < 0 ? 'text-destructive' : ''}`}>{yuan(item.available_cents)}</TableCell>
-                <TableCell><Badge variant={item.status === 'reviewing' || item.status === 'approved' ? 'default' : 'outline'}>{WITHDRAWAL_STATUS_LABEL[item.status]}</Badge></TableCell>
+                <TableCell>
+                  <Badge variant={item.status === 'reviewing' || item.status === 'approved' || item.status === 'transferring' ? 'default' : 'outline'}>{WITHDRAWAL_STATUS_LABEL[item.status]}</Badge>
+                  {item.transfer_state ? <div className='mt-1 text-xs text-muted-foreground'>微信：{TRANSFER_STATE_LABEL[item.transfer_state] || item.transfer_state}</div> : null}
+                </TableCell>
                 <TableCell className='max-w-[240px] text-xs text-muted-foreground'>
                   {item.reviewed_by ? <div>{item.reviewed_by}{item.reviewed_at ? ` · ${formatTime(item.reviewed_at, true)}` : ''}</div> : null}
                   {item.review_note ? <div className='truncate' title={item.review_note}>{item.review_note}</div> : null}
                   {item.fail_reason ? <div className='truncate text-destructive' title={item.fail_reason}>{item.fail_reason}</div> : null}
+                  {item.out_bill_no ? <div className='truncate' title={item.out_bill_no}>单号 {item.out_bill_no}</div> : null}
+                  {item.transfer_last_error && item.status === 'transferring'
+                    ? <div className='truncate text-destructive' title={item.transfer_last_error}>{item.transfer_last_error}</div>
+                    : null}
                 </TableCell>
                 <TableCell className='text-right'>
                   <div className='flex justify-end gap-2'>
                     {item.status === 'reviewing' ? <>
-                      <Button size='sm' onClick={() => approve(item)}>通过</Button>
+                      {data.transfer_enabled ? <Button size='sm' onClick={() => approveTransfer(item)}>通过并转账</Button> : null}
+                      <Button size='sm' variant={data.transfer_enabled ? 'outline' : 'default'} onClick={() => approve(item)}>{data.transfer_enabled ? '线下打款' : '通过'}</Button>
                       <Button size='sm' variant='outline' onClick={() => reject(item)}>驳回</Button>
                     </> : null}
                     {item.status === 'approved' && item.payout_method === 'manual' ? <>
                       <Button size='sm' onClick={() => markPaid(item)}>标记已打款</Button>
                       <Button size='sm' variant='outline' onClick={() => markFailed(item)}>标记失败</Button>
                     </> : null}
+                    {item.status === 'transferring' && item.transfer_state ? (
+                      <Button size='sm' variant='outline' disabled={syncingId === item.id} onClick={() => void syncTransfer(item)}>
+                        {syncingId === item.id ? <Loader2 className='size-4 animate-spin' /> : '查单'}
+                      </Button>
+                    ) : null}
                   </div>
                 </TableCell>
               </TableRow>

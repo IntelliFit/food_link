@@ -3,12 +3,15 @@ package repo
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"time"
 
 	"food_link/backend/internal/promoter/domain"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrWithdrawalInFlight is returned when the promoter already has a
@@ -105,15 +108,45 @@ func (r *PromoterRepo) GetWithdrawal(ctx context.Context, id string) (*domain.Wi
 	return &row, nil
 }
 
-func (r *PromoterRepo) ListWithdrawals(ctx context.Context, promoterID string, limit, offset int) ([]domain.Withdrawal, int64, error) {
-	q := r.db.WithContext(ctx).Model(&domain.Withdrawal{}).Where("promoter_id = ?", promoterID)
+// withdrawalViewColumns selects a withdrawal aliased w0 with its transfer
+// bill aliased b.
+const withdrawalViewColumns = `w0.*, COALESCE(b.state, '') AS transfer_state, COALESCE(b.fail_reason, '') AS transfer_fail_reason,
+       COALESCE(b.last_error, '') AS transfer_last_error, COALESCE(b.out_bill_no, '') AS out_bill_no,
+       COALESCE(b.package_info, '') AS package_info`
+
+const withdrawalBillJoin = `LEFT JOIN wechat_transfer_bills b ON b.id = w0.transfer_bill_id`
+
+func (r *PromoterRepo) ListWithdrawals(ctx context.Context, promoterID string, limit, offset int) ([]domain.WithdrawalView, int64, error) {
 	var total int64
-	if err := q.Count(&total).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&domain.Withdrawal{}).Where("promoter_id = ?", promoterID).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	var rows []domain.Withdrawal
-	err := q.Order("created_at DESC, id").Limit(limit).Offset(offset).Find(&rows).Error
+	var rows []domain.WithdrawalView
+	err := r.db.WithContext(ctx).Raw(`SELECT `+withdrawalViewColumns+` FROM promoter_withdrawals w0 `+withdrawalBillJoin+`
+WHERE w0.promoter_id = ? ORDER BY w0.created_at DESC, w0.id LIMIT ? OFFSET ?`, promoterID, limit, offset).Scan(&rows).Error
 	return rows, total, err
+}
+
+func (r *PromoterRepo) GetWithdrawalView(ctx context.Context, id string) (*domain.WithdrawalView, error) {
+	var rows []domain.WithdrawalView
+	err := r.db.WithContext(ctx).Raw(`SELECT `+withdrawalViewColumns+` FROM promoter_withdrawals w0 `+withdrawalBillJoin+`
+WHERE w0.id = ?`, id).Scan(&rows).Error
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return &rows[0], nil
+}
+
+// PayeeOpenID is the mini program openid of a promoter's user, which WeChat
+// transfers pay to.
+func PayeeOpenID(tx *gorm.DB, promoterID string) (string, error) {
+	var openIDs []string
+	err := tx.Raw(`SELECT COALESCE(u.openid, '') FROM promoters p LEFT JOIN weapp_user u ON u.id = p.user_id WHERE p.id = ?`, promoterID).
+		Scan(&openIDs).Error
+	if err != nil || len(openIDs) == 0 {
+		return "", err
+	}
+	return openIDs[0], nil
 }
 
 // UpdateWithdrawalIfStatus applies updates only while the withdrawal is still
@@ -136,9 +169,11 @@ func (r *PromoterRepo) UpdateWithdrawalIfStatus(ctx context.Context, id string, 
 // UpdateWithdrawalLocked moves a withdrawal on like UpdateWithdrawalIfStatus,
 // but first locks its promoter row and re-reads the promoter's status and
 // balance for check, in the same transaction as the update; new withdrawals
-// and manual reversals for that promoter wait for it. It returns nil when the
-// withdrawal does not exist or has moved on.
-func (r *PromoterRepo) UpdateWithdrawalLocked(ctx context.Context, id string, statuses []string, updates map[string]any, check func(WithdrawalState) error) (*domain.Withdrawal, error) {
+// and manual reversals for that promoter wait for it. prepare, when set, runs
+// after check in the same transaction and may add updates. It returns nil
+// when the withdrawal does not exist or has moved on.
+func (r *PromoterRepo) UpdateWithdrawalLocked(ctx context.Context, id string, statuses []string, updates map[string]any,
+	check func(WithdrawalState) error, prepare func(tx *gorm.DB, w domain.Withdrawal) (map[string]any, error)) (*domain.Withdrawal, error) {
 	var out *domain.Withdrawal
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var current []domain.Withdrawal
@@ -154,6 +189,20 @@ func (r *PromoterRepo) UpdateWithdrawalLocked(ctx context.Context, id string, st
 		}
 		if err := check(state); err != nil {
 			return err
+		}
+		// Re-read under a row lock so what prepare sees is what gets updated.
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).Find(&current).Error; err != nil {
+			return err
+		}
+		if !slices.Contains(statuses, current[0].Status) {
+			return nil
+		}
+		if prepare != nil {
+			extra, err := prepare(tx, current[0])
+			if err != nil {
+				return err
+			}
+			maps.Copy(updates, extra)
 		}
 		updates["updated_at"] = time.Now()
 		result := tx.Model(&domain.Withdrawal{}).Where("id = ? AND status IN ?", id, statuses).Updates(updates)
@@ -193,11 +242,12 @@ func (r *PromoterRepo) AdminListWithdrawals(ctx context.Context, status string, 
 	}
 	var rows []domain.AdminWithdrawal
 	err := r.db.WithContext(ctx).Raw(`
-SELECT w0.*, p.promo_code, p.status AS promoter_status, p.user_id, COALESCE(u.nickname, '') AS nickname,
+SELECT `+withdrawalViewColumns+`, p.promo_code, p.status AS promoter_status, p.user_id, COALESCE(u.nickname, '') AS nickname,
        `+availableCentsExpr+` AS available_cents
 FROM promoter_withdrawals w0
 JOIN promoters p ON p.id = w0.promoter_id
 LEFT JOIN weapp_user u ON u.id = p.user_id
+`+withdrawalBillJoin+`
 WHERE `+where+`
 ORDER BY w0.created_at DESC, w0.id
 LIMIT ? OFFSET ?`, append(args, limit, offset)...).Scan(&rows).Error

@@ -8,6 +8,7 @@ import { mealLocationFailure, mealPreviewFailure, requestMealLocation } from '..
 import { canNavigateMeal, navigateToMeal } from '../../../utils/meal-navigation'
 import { ensureWeappPrivacyAuthorized } from '../../../utils/weapp-privacy'
 import { mealSource, mealTitle } from '../../../utils/meal-presentation'
+import { rememberRecommendedDish } from '../../../utils/meal-dish-recommended'
 import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
 import './NextMealRecommendations.scss'
 
@@ -142,11 +143,13 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
     const timer = setTimeout(() => {
       if (owner !== getAccessToken() || !visible.current) return
       void recordMealRecommendationFeedback({ run_id: runId, option_keys: [key], action: 'shown' }).catch(() => {})
+      rememberRecommendedDish(option?.source, option?.source_id, 'shown')
     }, 600)
     return () => clearTimeout(timer)
-  }, [pageVisible, inViewport, busy, result?.recommendation_id, option?.option_key, owner])
+  }, [pageVisible, inViewport, busy, result?.recommendation_id, option?.option_key, option?.source, option?.source_id, owner])
 
   const adjust = (item: DietRecommendationOption) => {
+    rememberRecommendedDish(item.source, item.source_id, 'chatted')
     if (result?.recommendation_id && item.option_key) void recordMealRecommendationFeedback({ run_id: result.recommendation_id, option_keys: [item.option_key], action: 'selected' }).catch(() => {})
     onAdjust(item)
   }
@@ -154,6 +157,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
   const navigate = async (item: DietRecommendationOption) => {
     if (navigationPending.current) return
     navigationPending.current = true
+    rememberRecommendedDish(item.source, item.source_id, 'navigated')
     setNavigating(item.source_id || item.title)
     try { await navigateToMeal(item) }
     catch (navigationError) { void Taro.showToast({ title: (navigationError as Error).message || '暂时无法打开地图', icon: 'none' }) }

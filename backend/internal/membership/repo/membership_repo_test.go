@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -15,6 +16,14 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if err := testdb.Stop(); err != nil && code == 0 {
+		code = 1
+	}
+	os.Exit(code)
+}
 
 func setupTestDB(t *testing.T) *gorm.DB {
 	db := testdb.New(t)
@@ -228,6 +237,62 @@ func TestMembershipRepo_CreatePaymentAndLookupByOrderNo(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, found)
 	assert.Equal(t, "pending", found.Status)
+}
+
+func TestMembershipRepo_ExpirePendingMembershipOrdersKeepsOrderPaidAfterRead(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewMembershipRepo(db)
+	ctx := context.Background()
+
+	for _, orderNo := range []string{"PM_RACE_PAID", "PM_RACE_PENDING", "PM_RACE_CURRENT"} {
+		require.NoError(t, r.CreatePayment(ctx, &domain.MembershipPayment{
+			UserID:         "u1",
+			PlanCode:       "standard_monthly",
+			OrderNo:        orderNo,
+			Amount:         99,
+			Currency:       "CNY",
+			DurationMonths: 1,
+			Status:         "pending",
+			Extra:          map[string]any{"source": "test"},
+		}))
+	}
+
+	// Simulate a WeChat Pay notify landing between the pending-order read and
+	// the expire update: right after the read, mark one order paid.
+	marked := false
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:mark_paid_after_read", func(tx *gorm.DB) {
+		if marked || tx.Statement.Table != "pro_membership_payment_records" {
+			return
+		}
+		marked = true
+		require.NoError(t, db.Exec(
+			"UPDATE pro_membership_payment_records SET status = 'paid' WHERE order_no = ?", "PM_RACE_PAID",
+		).Error)
+	}))
+
+	count, err := r.ExpirePendingMembershipOrders(ctx, "u1", "PM_RACE_CURRENT", "superseded_by_paid_order")
+	require.NoError(t, err)
+	require.True(t, marked)
+	assert.Equal(t, 1, count)
+
+	paid, err := r.GetPaymentByOrderNo(ctx, "PM_RACE_PAID")
+	require.NoError(t, err)
+	require.NotNil(t, paid)
+	assert.Equal(t, "paid", paid.Status)
+	assert.NotContains(t, paid.Extra, "expire_reason")
+
+	expired, err := r.GetPaymentByOrderNo(ctx, "PM_RACE_PENDING")
+	require.NoError(t, err)
+	require.NotNil(t, expired)
+	assert.Equal(t, "expired", expired.Status)
+	assert.Equal(t, "superseded_by_paid_order", expired.Extra["expire_reason"])
+	assert.Equal(t, "PM_RACE_CURRENT", expired.Extra["superseded_by_order_no"])
+	assert.Equal(t, "test", expired.Extra["source"])
+
+	current, err := r.GetPaymentByOrderNo(ctx, "PM_RACE_CURRENT")
+	require.NoError(t, err)
+	require.NotNil(t, current)
+	assert.Equal(t, "pending", current.Status)
 }
 
 func TestMembershipRepo_CreatePaymentInitializesNonNullJSONFields(t *testing.T) {

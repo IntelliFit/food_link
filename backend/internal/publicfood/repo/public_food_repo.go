@@ -114,6 +114,7 @@ type MapFoodCandidate struct {
 	SchoolProvince     string     `gorm:"column:school_province"`
 	SchoolCity         string     `gorm:"column:school_city"`
 	SchoolLatitude     *float64   `gorm:"column:school_latitude"`
+	SpotFoodCount      int        `gorm:"column:spot_food_count"`
 	SchoolLongitude    *float64   `gorm:"column:school_longitude"`
 }
 
@@ -364,6 +365,8 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	return rows, err
 }
 
+const mapSpotLimit = 5000
+
 func (r *PublicFoodRepo) ListPublishedMapCandidates(ctx context.Context, viewerUserID string) ([]MapFoodCandidate, error) {
 	var rows []MapFoodCandidate
 	directLocation := validMapCoordinateSQL("p.latitude", "p.longitude")
@@ -392,7 +395,13 @@ func (r *PublicFoodRepo) ListPublishedMapCandidates(ctx context.Context, viewerU
 			COALESCE(map_school.name, '') AS directory_school_name,
 			COALESCE(map_school.province, '') AS school_province,
 			COALESCE(map_school.city, '') AS school_city,
-			map_school.latitude AS school_latitude, map_school.longitude AS school_longitude`).
+			map_school.latitude AS school_latitude, map_school.longitude AS school_longitude,
+			CASE
+				WHEN ` + directLocation + ` THEN 'food:' || ROUND(p.latitude::numeric, 5) || ':' || ROUND(p.longitude::numeric, 5)
+				WHEN map_canteen.id IS NOT NULL AND ` + canteenLocation + ` THEN 'canteen:' || map_canteen.id::text
+				WHEN map_campus.id IS NOT NULL AND ` + campusLocation + ` THEN 'campus:' || map_campus.id::text
+				WHEN map_school.id IS NOT NULL AND ` + schoolLocation + ` THEN 'school:' || map_school.id::text
+			END AS spot_key`).
 		Joins("LEFT JOIN school_canteens map_canteen ON map_canteen.id = p.canteen_id AND map_canteen.status = 'active'").
 		Joins("LEFT JOIN school_campuses map_campus ON map_campus.id = COALESCE(map_canteen.campus_id, p.campus_id) AND map_campus.status = 'active'").
 		Joins(`LEFT JOIN schools map_school ON map_school.status = 'active'
@@ -408,11 +417,21 @@ func (r *PublicFoodRepo) ListPublishedMapCandidates(ctx context.Context, viewerU
 		Where(validPublishedCampusNutritionSQL("p")).
 		Where("(" + directLocation + ") OR (" + canteenLocation + ") OR (" + campusLocation + ") OR (" + schoolLocation + ")")
 	q = visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
-	q = q.Order("CASE WHEN NULLIF(BTRIM(COALESCE(p.image_path, '')), '') IS NOT NULL THEN 0 ELSE 1 END ASC").
-		Order("(COALESCE(p.like_count, 0) * 3 + COALESCE(p.collection_count, 0) * 4 + COALESCE(p.comment_count, 0) * 2) DESC").
-		Order("p.published_at DESC NULLS LAST, p.id ASC").
-		Limit(5000)
-	return rows, q.Scan(&rows).Error
+	// Rank inside each spot in SQL: the limit then applies to spots, so a shop's
+	// dishes can no longer push other shops off the map, and each spot keeps its
+	// full dish count and most presentable dish.
+	ranked := r.db.WithContext(ctx).Table("(?) AS candidates", q).
+		Select(`candidates.*, COUNT(*) OVER (PARTITION BY spot_key) AS spot_food_count,
+			ROW_NUMBER() OVER (PARTITION BY spot_key ORDER BY
+				CASE WHEN NULLIF(BTRIM(COALESCE(image_path, '')), '') IS NOT NULL THEN 0 ELSE 1 END ASC,
+				(COALESCE(like_count, 0) * 3 + COALESCE(collection_count, 0) * 4 + COALESCE(comment_count, 0) * 2) DESC,
+				published_at DESC NULLS LAST, id ASC) AS spot_rank`).
+		Where("spot_key IS NOT NULL")
+	return rows, r.db.WithContext(ctx).Table("(?) AS ranked", ranked).
+		Where("spot_rank = 1").
+		Order("spot_food_count DESC, id ASC").
+		Limit(mapSpotLimit).
+		Scan(&rows).Error
 }
 
 func validMapCoordinateSQL(latitudeColumn, longitudeColumn string) string {
@@ -633,11 +652,17 @@ func (r *PublicFoodRepo) ListCollected(ctx context.Context, userID string, limit
 	return rows, err
 }
 
+// GetItem backs the detail page and the correction form it prefills. Older
+// community/office-park projections kept floor and window only on the catalog
+// row, so the aliases after p.* (later columns win) fall back to it; a form
+// prefilled with blanks would otherwise clear them on the next correction.
 func (r *PublicFoodRepo) GetItem(ctx context.Context, itemID string) (*domain.PublicFoodItem, error) {
 	var row domain.PublicFoodItem
 	err := r.db.WithContext(ctx).
 		Table("public_food_library AS p").
 		Select(`p.*, COALESCE(nutrition_catalog.analysis_task_id, p.analysis_task_id) AS analysis_task_id,
+			COALESCE(NULLIF(p.floor, ''), nutrition_catalog.floor, '') AS floor,
+			COALESCE(NULLIF(p.window_name, ''), nutrition_catalog.window_name, '') AS window_name,
 			nutrition_catalog.id AS catalog_item_id, nutrition_batch.venue_type AS venue_type,
 			nutrition_catalog.organization_name AS venue_organization_name, nutrition_catalog.area_name AS venue_area_name,
 			nutrition_catalog.canteen_name AS venue_canteen_name,

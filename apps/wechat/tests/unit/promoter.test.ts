@@ -135,5 +135,9 @@ describe('withdrawal view helpers', () => {
     expect(withdrawalLine(withdrawal({ status: 'failed', note: '收款账户异常' }))).toMatchObject({
       sub: '收款账户异常，金额已退回余额', status: '打款失败', muted: true,
     })
+    expect(withdrawalLine(withdrawal({
+      status: 'transferring', note: '请点「收款」', receive: { mch_id: 'm', app_id: 'a', package: 'p' },
+    }))).toMatchObject({ sub: '请点「收款」', status: '待收款', muted: false })
+    expect(withdrawalLine(withdrawal({ status: 'transferring', note: '微信转账处理中' })).status).toBe('转账中')
   })
 })

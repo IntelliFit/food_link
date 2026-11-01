@@ -48,7 +48,14 @@ export type AdminWithdrawal = {
   user_id: string
   nickname: string
   available_cents: number
+  /** 微信转账单状态，线下打款为空 */
+  transfer_state: string
+  transfer_fail_reason: string
+  transfer_last_error: string
+  out_bill_no: string
 }
+
+export type AdminWithdrawalPage = Page<AdminWithdrawal> & { transfer_enabled: boolean }
 
 export type AdminCommission = {
   id: string

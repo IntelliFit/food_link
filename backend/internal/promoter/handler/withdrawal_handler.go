@@ -31,6 +31,24 @@ func (h *PromoterHandler) Withdrawals(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *PromoterHandler) RefreshWithdrawal(c *gin.Context) {
+	item, err := h.svc.RefreshWithdrawal(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("withdrawal_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, item)
+}
+
+func (h *PromoterHandler) AdminSyncTransfer(c *gin.Context) {
+	row, err := h.svc.AdminSyncTransfer(c.Request.Context(), c.GetString("admin_username"), c.Param("withdrawal_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, row)
+}
+
 func (h *PromoterHandler) AdminWithdrawals(c *gin.Context) {
 	result, err := h.svc.AdminWithdrawals(c.Request.Context(), c.Query("status"), queryInt(c, "page"), queryInt(c, "limit"))
 	if err != nil {

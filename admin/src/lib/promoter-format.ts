@@ -17,6 +17,19 @@ export const WITHDRAWAL_STATUS_LABEL: Record<WithdrawalStatus, string> = {
   failed: '打款失败',
 }
 
+/** 微信商家转账单状态；CREATED 是我们已记录但微信还没受理。 */
+export const TRANSFER_STATE_LABEL: Record<string, string> = {
+  CREATED: '待发起',
+  ACCEPTED: '微信已受理',
+  PROCESSING: '微信处理中',
+  WAIT_USER_CONFIRM: '待推广员收款',
+  TRANSFERING: '转账中',
+  SUCCESS: '已到账',
+  FAIL: '失败',
+  CANCELING: '撤销中',
+  CANCELLED: '已撤销',
+}
+
 export const COMMISSION_STATUS_LABEL: Record<CommissionStatus, string> = {
   pending: '冻结中',
   available: '已结算',
