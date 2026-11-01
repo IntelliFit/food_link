@@ -1796,7 +1796,11 @@ JSON:
 		// Fast mode shares the one-call schema so micronutrients do not need a
 		// second serial model request after the photo is recognized.
 		if (isOrdinaryFoodImageMode(executionMode) || isFastExecutionMode(executionMode)) && analysisEngineProducesNutrition(input.AnalysisEngine) {
-			return combinedOrdinaryPhotoPrompt(prompt)
+			prompt = combinedOrdinaryPhotoPrompt(prompt)
+			if input.AnalysisEngine == analysisEngineSmart {
+				prompt = withSmartNutritionFields(prompt)
+			}
+			return prompt
 		}
 		return prompt
 	}
@@ -5979,6 +5983,8 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 		resp = s.applyAIThenExactDBNutrition(postprocessCtx, resp, input)
 	case analysisEngineDBCandidates:
 		resp = s.applyCandidateGuidedNutrition(postprocessCtx, resp, input)
+	case analysisEngineSmart:
+		resp = s.applySmartNutrition(postprocessCtx, resp)
 	default:
 		resp = s.applyDBFirstNutritionWithOptions(postprocessCtx, resp, dbFirstNutritionOptions{
 			additionalContext:            fullNutritionContext(input),
