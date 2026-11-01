@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -23,7 +24,7 @@ func (s *PublicFoodService) ListMapSpots(ctx context.Context, userID string) ([]
 			continue
 		}
 		if index, exists := spotIndexes[spot.Key]; exists {
-			spots[index].FoodCount++
+			spots[index].FoodCount += spot.FoodCount
 			continue
 		}
 		spot.FeaturedItem = s.normalizePublicFoodItem(spot.FeaturedItem)
@@ -66,6 +67,10 @@ func mapSpotFromCandidate(candidate repo.MapFoodCandidate) (domain.PublicFoodMap
 	default:
 		return domain.PublicFoodMapSpot{}, false
 	}
+	// The list endpoint filters on the SQL key, so hand clients that exact value.
+	if candidate.SpotKey != "" {
+		key = candidate.SpotKey
+	}
 	featured := domain.PublicFoodItem{
 		ID: candidate.ID, UserID: candidate.UserID, FoodName: candidate.FoodName, Description: candidate.Description,
 		ImagePath: candidate.ImagePath, ImagePaths: []string{}, Items: []map[string]any{}, UserTags: []string{},
@@ -80,8 +85,14 @@ func mapSpotFromCandidate(candidate repo.MapFoodCandidate) (domain.PublicFoodMap
 	}
 	return domain.PublicFoodMapSpot{
 		Key: key, Latitude: latitude, Longitude: longitude, LocationLevel: level,
-		LocationName: locationName, Address: address, FoodCount: 1, FeaturedItem: featured,
+		LocationName: locationName, Address: address, FoodCount: max(1, candidate.SpotFoodCount), FeaturedItem: featured,
 	}, true
+}
+
+var mapSpotKeyPattern = regexp.MustCompile(`^(?:food:-?\d{1,3}\.\d{1,10}:-?\d{1,3}\.\d{1,10}|(?:canteen|campus|school):[0-9a-fA-F-]{36})$`)
+
+func validMapSpotKey(key string) bool {
+	return mapSpotKeyPattern.MatchString(key)
 }
 
 func validMapCoordinate(latitude, longitude *float64) bool {

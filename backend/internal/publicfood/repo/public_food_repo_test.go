@@ -41,6 +41,39 @@ func TestGetItemReadsLinkedCatalogTaskForLegacyProjection(t *testing.T) {
 	require.Equal(t, "青年社区", item.VenueOrganizationName)
 }
 
+// The correction form is prefilled from GetItem and always resends floor and
+// window, so blanks here would clear the catalog values on the next save.
+func TestGetItemFallsBackToCatalogFloorAndWindow(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	parkBatch, universityBatch := uuid.NewString(), uuid.NewString()
+	require.NoError(t, db.Create(&catalogdomain.CollectionBatch{ID: parkBatch, VenueType: "office_park"}).Error)
+	require.NoError(t, db.Create(&catalogdomain.CollectionBatch{ID: universityBatch, VenueType: "university"}).Error)
+
+	parkID, universityID, plainID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	require.NoError(t, db.Create(&catalogdomain.CatalogItem{ID: parkID, BatchID: parkBatch, Name: "小酥肉", Floor: "B1（负一层）", WindowName: "一城一味窗口"}).Error)
+	require.NoError(t, db.Create(&catalogdomain.CatalogItem{ID: universityID, BatchID: universityBatch, Name: "牛肉面", Floor: "旧楼层", WindowName: "旧窗口"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{ID: parkID, FoodName: "小酥肉", Status: "published", Type: "common"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{ID: universityID, FoodName: "牛肉面", Status: "published", Type: "campus", IsCampusFood: true, Floor: "二楼", WindowName: "面食窗口"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{ID: plainID, FoodName: "自制沙拉", Status: "published", Type: "common", Floor: "三楼"}).Error)
+
+	r := NewPublicFoodRepo(db)
+	for _, tc := range []struct {
+		name, id, floor, window string
+	}{
+		{"office park projection without location uses catalog", parkID, "B1（负一层）", "一城一味窗口"},
+		{"projection values win over catalog", universityID, "二楼", "面食窗口"},
+		{"item without catalog row keeps its own values", plainID, "三楼", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item, err := r.GetItem(context.Background(), tc.id)
+			require.NoError(t, err)
+			require.NotNil(t, item)
+			require.Equal(t, tc.floor, item.Floor)
+			require.Equal(t, tc.window, item.WindowName)
+		})
+	}
+}
+
 func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -563,6 +596,57 @@ func TestPublicFoodRepo_ListPublishedMapCandidatesInheritsCampusAndSchoolCoordin
 	require.Equal(t, "燕园校区", byID["campus-food"].DirectoryCampus)
 	require.Equal(t, schoolLatitude, *byID["school-food"].SchoolLatitude)
 	require.Equal(t, directLatitude, *byID["direct-food"].DirectLatitude)
+}
+
+func TestPublicFoodRepo_ListPublishedMapCandidatesReturnsOneRowPerSpotWithFoodCount(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	shopLatitude, shopLongitude := 31.2749, 121.5423
+	otherLatitude, otherLongitude := 39.9, 116.4
+	photo := "https://example.com/dish.jpg"
+	require.NoError(t, db.Create(&[]domain.PublicFoodItem{
+		{ID: "a-no-photo", UserID: "user-1", FoodName: "无图菜", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "b-photo", UserID: "user-1", FoodName: "有图菜", Type: "common", MerchantName: "一家店", ImagePath: &photo, Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "c-no-photo", UserID: "user-1", FoodName: "无图菜二", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "d-other", UserID: "user-1", FoodName: "别家菜", Type: "common", MerchantName: "别家店", Latitude: &otherLatitude, Longitude: &otherLongitude, Status: "published", CreatedAt: &now},
+	}).Error)
+
+	rows, err := NewPublicFoodRepo(db).ListPublishedMapCandidates(context.Background(), "viewer-1")
+
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, "b-photo", rows[0].ID)
+	require.Equal(t, 3, rows[0].SpotFoodCount)
+	require.Equal(t, "d-other", rows[1].ID)
+	require.Equal(t, 1, rows[1].SpotFoodCount)
+}
+
+func TestPublicFoodRepo_ListPublishedSpotKeyReturnsThatSpotsDishes(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	shopLatitude, shopLongitude := 31.2749, 121.5423
+	otherLatitude, otherLongitude := 39.9, 116.4
+	photo := "https://example.com/dish.jpg"
+	require.NoError(t, db.Create(&[]domain.PublicFoodItem{
+		{ID: "a-no-photo", UserID: "user-1", FoodName: "无图菜", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "b-photo", UserID: "user-1", FoodName: "有图菜", Type: "common", MerchantName: "一家店", ImagePath: &photo, Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "c-no-photo", UserID: "user-1", FoodName: "无图菜二", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "d-other", UserID: "user-1", FoodName: "别家菜", Type: "common", MerchantName: "一家店", Latitude: &otherLatitude, Longitude: &otherLongitude, Status: "published", CreatedAt: &now},
+		{ID: "e-draft", UserID: "user-1", FoodName: "下架菜", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "deleted", CreatedAt: &now},
+	}).Error)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+	candidates, err := r.ListPublishedMapCandidates(ctx, "viewer-1")
+	require.NoError(t, err)
+	require.Equal(t, "food:31.27490:121.54230", candidates[0].SpotKey)
+
+	page, err := r.ListPublished(ctx, ListFilter{SpotKey: candidates[0].SpotKey, ViewerUserID: "viewer-1", Limit: 2})
+	require.NoError(t, err)
+	require.Equal(t, []string{"b-photo", "a-no-photo"}, []string{page[0].ID, page[1].ID})
+	next, err := r.ListPublished(ctx, ListFilter{SpotKey: candidates[0].SpotKey, ViewerUserID: "viewer-1", Limit: 2, Offset: 2})
+	require.NoError(t, err)
+	require.Len(t, next, 1)
+	require.Equal(t, "c-no-photo", next[0].ID)
 }
 
 func stringPtr(value string) *string { return &value }

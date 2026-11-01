@@ -7,6 +7,7 @@ import {
   Flag,
   FlaskConical,
   Gift,
+  HandCoins,
   LayoutDashboard,
   LogOut,
   MessageSquareText,
@@ -43,6 +44,7 @@ export type AdminMenuId =
   | 'feed-reports'
   | 'payment-test'
   | 'user-rewards'
+  | 'promoters'
   | 'user-food-photos'
   | 'settings'
   | 'product-updates'
@@ -71,6 +73,7 @@ const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
       { id: 'feedback', label: '意见反馈', icon: MessageSquareText },
       { id: 'feed-reports', label: '举报管理', icon: Flag },
       { id: 'user-rewards', label: '用户奖励', icon: Gift },
+      { id: 'promoters', label: '推广佣金', icon: HandCoins },
     ],
   },
   {

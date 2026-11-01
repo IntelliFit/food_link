@@ -32,6 +32,7 @@ func newFixture(t *testing.T, enabled bool) *fixture {
 	ctx := context.Background()
 	require.NoError(t, db.AutoMigrate(&migrationdo.UserDO{}, &migrationdo.MembershipPaymentDO{}))
 	require.NoError(t, migration.MigratePromoterCommission(ctx, db, "public"))
+	require.NoError(t, migration.MigrateWechatTransfer(ctx, db, "public"))
 	f := &fixture{db: db, now: time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)}
 	f.svc = NewPromoterService(repo.NewPromoterRepo(db), RulesFromConfig(config.PromoterConfig{Enabled: enabled}))
 	f.svc.now = func() time.Time { return f.now }

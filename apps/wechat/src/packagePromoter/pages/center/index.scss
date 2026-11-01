@@ -32,6 +32,8 @@
 .promo-agree-text { flex: 1; color: #53635b; font-size: 24rpx; line-height: 36rpx; }
 .promo-primary { display: flex; align-items: center; justify-content: center; height: 80rpx; margin-top: 22rpx; border-radius: 18rpx; background: #14815d; color: #fff; font-size: 27rpx; font-weight: 650; }
 .promo-primary.disabled { opacity: .45; pointer-events: none; }
+.promo-receive { display: inline-flex; align-items: center; margin-top: 8rpx; padding: 8rpx 26rpx; border-radius: 999rpx; background: #14815d; color: #fff; font-size: 24rpx; font-weight: 650; }
+.promo-receive.disabled { opacity: .45; pointer-events: none; }
 .promo-share { width: 100%; padding: 0; line-height: 80rpx; border: none; }
 .promo-share::after { border: none; }
 .promo-more { display: flex; align-items: center; justify-content: center; height: 72rpx; margin-top: 8rpx; color: #14815d; font-size: 24rpx; }

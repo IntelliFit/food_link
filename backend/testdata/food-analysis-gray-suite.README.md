@@ -27,7 +27,7 @@ go run ./cmd/food-analysis-gray-verify --config-dir . --user-id latest --suite .
 - `package_miss_ai_fallback`：白米饭 + 虚构未收录包装豆干，要求包装库未命中后由 AI 或已生成的普通营养库兜底，且不留下未解析项
 - `normal_only_skewer`：纯普通烤串，要求不要误触发包装食品
 
-完整 suite 默认覆盖 `fast`、`standard`、`strict`、`strict_separate`、`fast_web_search`、`standard_web_search`、`strict_web_search` 七种模式。
+完整 suite 默认覆盖 `standard`、`strict`、`strict_separate`、`standard_web_search`、`strict_web_search` 七种模式。
 
 ```powershell
 cd backend

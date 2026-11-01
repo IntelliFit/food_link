@@ -4,7 +4,7 @@ import { flushRecentConsoleLogs, installConsoleLogCapture } from './utils/consol
 installConsoleLogCapture()
 
 import { createElement, type PropsWithChildren, useEffect } from 'react'
-import Taro, { useLaunch } from '@tarojs/taro'
+import Taro, { useError, useLaunch } from '@tarojs/taro'
 import { flushRecentRequestTraces, getAccessToken } from './utils/api'
 import { extraPkgUrl } from './utils/subpackage-extra'
 import { writePendingFriendInviteCode } from './utils/pending-friend-invite'
@@ -14,8 +14,12 @@ import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
 import { parseMarketingCodeFromLaunchOptions } from './utils/marketing-qr'
 import { ProductUpdatePrompt, PRODUCT_UPDATE_AUTH_EVENT } from './utils/product-updates'
 import { bindPendingPromoCode, parsePromoCodeFromLaunchOptions, writePendingPromoCode } from './utils/promoter-api'
+import { installAppUpdateCheck } from './utils/app-update'
+import { handleClientError, recheckBlankPageAfterError } from './utils/client-error'
 
 import './app.scss'
+
+installAppUpdateCheck()
 
 // 不需要登录的页面白名单（与 getCurrentPageRoute 一致，含分包根路径）
 const PUBLIC_PAGES = new Set([
@@ -153,6 +157,9 @@ function handlePromoScene(options?: any) {
 }
 
 function App({ children }: PropsWithChildren<any>) {
+  // Taro 的页面错误边界只把渲染异常交给这个钩子，wx.onError 收不到。
+  useError((error) => handleClientError('error', error))
+
   useLaunch((options) => {
     console.log('App launched.')
     resetPreviousCommunityFeedSession()
@@ -181,6 +188,7 @@ function App({ children }: PropsWithChildren<any>) {
     }
     const onShow = (options: any) => {
       productUpdates.show()
+      recheckBlankPageAfterError()
       console.log('[app] onAppShow, options:', options)
       handlePromoScene(options)
       if (!handleMarketingScene(options)) {
@@ -198,6 +206,7 @@ function App({ children }: PropsWithChildren<any>) {
         route: getCurrentRoute(),
         message: String(error || '').slice(0, 1200),
       })
+      handleClientError('error', error)
     }
     const onUnhandledRejection = (event: { reason?: unknown }) => {
       const reason = event?.reason
@@ -205,6 +214,7 @@ function App({ children }: PropsWithChildren<any>) {
         route: getCurrentRoute(),
         message: reason instanceof Error ? reason.message : String(reason || '').slice(0, 1200),
       })
+      handleClientError('rejection', reason)
     }
     const onMemoryWarning = (event: { level?: number }) => {
       console.warn('[app-memory-warning]', {

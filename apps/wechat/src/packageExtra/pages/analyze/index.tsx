@@ -96,7 +96,7 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
 ]
 
 type ReferencePresetValue = PrecisionReferencePresetKey
-type AnalyzeBaseMode = 'fast' | 'standard' | 'strict'
+type AnalyzeBaseMode = 'standard' | 'strict'
 type PrecisionCaptureMode = 'photos' | 'video'
 
 interface SelectedAnalyzeVideo {
@@ -135,15 +135,13 @@ const readSuggestRatioPreference = (): boolean => {
 }
 
 const resolveAnalyzeBaseMode = (mode: ExecutionMode): AnalyzeBaseMode => {
-  if (mode === 'fast' || mode === 'fast_web_search') return 'fast'
   if (mode === 'strict' || mode === 'strict_separate' || mode === 'strict_web_search') return 'strict'
   return 'standard'
 }
 
-/** 联网校准已下线（近 30 天约 200 次联网只改动过 1 次结果），旧的默认设置迁移到对应的不联网模式。 */
+/** 快速模式和联网校准已下线，旧的默认设置迁移到普通或精准模式。 */
 const toVisibleExecutionMode = (mode: ExecutionMode): ExecutionMode => {
-  if (mode === 'fast_web_search') return 'fast'
-  if (mode === 'standard_web_search') return 'standard'
+  if (mode === 'fast' || mode === 'fast_web_search' || mode === 'standard_web_search') return 'standard'
   if (mode === 'strict_web_search') return 'strict'
   return mode
 }
@@ -494,7 +492,7 @@ function AnalyzePage() {
       },
       analysis_mode: {
         title: '识别方式',
-        content: '快速：出结果最快，适合单一食物、包装食品和随手记。普通：复杂家常菜、多道菜同框时识别更稳，适合日常记录。精准：俯拍和 45° 斜拍各一张，约 1 分钟，重量估算更细，适合减脂、控糖等需要精确记录的场景。\n三种方式都会自动查询食物库：米饭、水果、鸡蛋等常见食物和带品牌的包装食品优先使用库里的营养数据，家常菜按食材和用油计算，查不到的由 AI 估算。多张照片会合并成一次识别，同一食物的不同角度不会重复计算。'
+        content: '普通：一张照片即可出结果，适合日常记录。精准：俯拍和 45° 斜拍各一张，约 1 分钟，重量估算更细，适合减脂、控糖等需要精确记录的场景。\n两种方式都会自动查询食物库：米饭、水果、鸡蛋等常见食物和带品牌的包装食品优先使用库里的营养数据，家常菜按食材和用油计算，查不到的由 AI 估算。多张照片会合并成一次识别，同一食物的不同角度不会重复计算。'
       },
       separate_foods: {
         title: '分项模式',
@@ -1476,7 +1474,7 @@ function AnalyzePage() {
         )}
 
         <View className='analyze-guide-quality-zone' id='analyze-guide-quality-zone'>
-        {/* 识别方式：快速 / 普通 / 精准，营养数据统一由智能匹配完成 */}
+        {/* 识别方式：普通 / 精准，营养数据统一由智能匹配完成 */}
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>识别方式</Text>
@@ -1486,12 +1484,6 @@ function AnalyzePage() {
             <Text className='mode-link' onClick={handleDefaultModeEdit}>设为默认</Text>
           </View>
           <View className='mode-switch-row'>
-            <View
-              className={`mode-switch-item ${selectedBaseMode === 'fast' ? 'active' : ''}`}
-              onClick={() => handleBaseModeTap('fast')}
-            >
-              快速
-            </View>
             <View
               className={`mode-switch-item ${selectedBaseMode === 'standard' ? 'active' : ''}`}
               onClick={() => handleBaseModeTap('standard')}

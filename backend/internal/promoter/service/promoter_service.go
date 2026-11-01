@@ -15,6 +15,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/promoter/domain"
 	"food_link/backend/internal/promoter/repo"
+	"food_link/backend/internal/wechattransfer"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 
@@ -59,6 +60,9 @@ type Rules struct {
 	BindWindow       time.Duration
 	AgreementVersion string
 	SyncInterval     time.Duration
+	WithdrawMinCents int64
+	WithdrawMaxCents int64
+	WithdrawPerDay   int
 }
 
 func RulesFromConfig(cfg config.PromoterConfig) Rules {
@@ -70,6 +74,9 @@ func RulesFromConfig(cfg config.PromoterConfig) Rules {
 		BindWindow:       time.Duration(cfg.BindWindowHours) * time.Hour,
 		AgreementVersion: strings.TrimSpace(cfg.AgreementVersion),
 		SyncInterval:     time.Duration(cfg.SyncIntervalSecs) * time.Second,
+		WithdrawMinCents: cfg.WithdrawMinCents,
+		WithdrawMaxCents: cfg.WithdrawMaxCents,
+		WithdrawPerDay:   cfg.WithdrawPerDay,
 	}
 	if rules.DefaultRateBps <= 0 || rules.DefaultRateBps > 10000 {
 		rules.DefaultRateBps = defaultRateBps
@@ -89,13 +96,23 @@ func RulesFromConfig(cfg config.PromoterConfig) Rules {
 	if rules.SyncInterval <= 0 {
 		rules.SyncInterval = defaultSyncInterval
 	}
+	if rules.WithdrawMinCents <= 0 {
+		rules.WithdrawMinCents = defaultWithdrawMinCents
+	}
+	if rules.WithdrawMaxCents < rules.WithdrawMinCents {
+		rules.WithdrawMaxCents = max(defaultWithdrawMaxCents, rules.WithdrawMinCents)
+	}
+	if rules.WithdrawPerDay <= 0 {
+		rules.WithdrawPerDay = defaultWithdrawPerDay
+	}
 	return rules
 }
 
 type PromoterService struct {
-	repo  *repo.PromoterRepo
-	rules Rules
-	now   func() time.Time
+	repo     *repo.PromoterRepo
+	rules    Rules
+	transfer *wechattransfer.Service
+	now      func() time.Time
 }
 
 func NewPromoterService(r *repo.PromoterRepo, rules Rules) *PromoterService {
@@ -114,6 +131,8 @@ type Me struct {
 	ReviewNote       string          `json:"review_note,omitempty"`
 	AgreementVersion string          `json:"agreement_version"`
 	SettleDelayDays  int             `json:"settle_delay_days"`
+	WithdrawMinCents int64           `json:"withdraw_min_cents"`
+	WithdrawMaxCents int64           `json:"withdraw_max_cents"`
 	Summary          *domain.Summary `json:"summary,omitempty"`
 }
 
@@ -128,6 +147,8 @@ func (s *PromoterService) Me(ctx context.Context, userID string) (*Me, error) {
 		RateBps:          s.rules.DefaultRateBps,
 		AgreementVersion: s.rules.AgreementVersion,
 		SettleDelayDays:  int((s.rules.SettleDelay + 24*time.Hour - 1) / (24 * time.Hour)),
+		WithdrawMinCents: s.rules.WithdrawMinCents,
+		WithdrawMaxCents: s.rules.WithdrawMaxCents,
 	}
 	promoter, err := s.repo.GetByUser(ctx, userID)
 	if err != nil || promoter == nil {

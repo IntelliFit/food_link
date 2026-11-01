@@ -7,12 +7,27 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { showUnifiedApiError } from '../../../utils/api'
 import {
   applyPromoter,
+  createPromoterWithdrawal,
   getPromoterCommissions,
   getPromoterMe,
+  getPromoterWithdrawals,
+  refreshPromoterWithdrawal,
   type PromoterCommission,
   type PromoterMe,
+  type PromoterWithdrawal,
 } from '../../../utils/promoter-api'
-import { commissionLine, formatCents, formatRate, ruleLines, sharePath, statusCopy } from './promoter-view'
+import { requestMerchantTransfer } from '../../../utils/merchant-transfer'
+import {
+  commissionLine,
+  formatCents,
+  formatRate,
+  ruleLines,
+  sharePath,
+  statusCopy,
+  withdrawAmount,
+  withdrawalLine,
+  withdrawRuleText,
+} from './promoter-view'
 import './index.scss'
 
 const PAGE_SIZE = 20
@@ -28,7 +43,12 @@ function PromoterCenterPage() {
   const [agreed, setAgreed] = useState(false)
   const [applyNote, setApplyNote] = useState('')
   const [applying, setApplying] = useState(false)
+  const [withdrawals, setWithdrawals] = useState<PromoterWithdrawal[]>([])
+  const [withdrawing, setWithdrawing] = useState(false)
+  const [receivingId, setReceivingId] = useState('')
   const pageRef = useRef(1)
+  // 网络失败后用同一金额重试时复用 key，后端只记一笔。
+  const withdrawKeyRef = useRef<{ amount: number; key: string } | null>(null)
 
   const loadCommissions = async (page: number) => {
     const result = await getPromoterCommissions(page, PAGE_SIZE)
@@ -42,7 +62,10 @@ function PromoterCenterPage() {
     try {
       const next = await getPromoterMe()
       setMe(next)
-      if (next.summary) await loadCommissions(1)
+      if (next.summary) {
+        const [, withdrawalPage] = await Promise.all([loadCommissions(1), getPromoterWithdrawals(1, PAGE_SIZE)])
+        setWithdrawals(withdrawalPage.items)
+      }
     } catch (error) {
       await showUnifiedApiError(error, '读取推广信息失败')
     } finally {
@@ -90,6 +113,35 @@ function PromoterCenterPage() {
     }
   }
 
+  const withdraw = async (amount: number) => {
+    if (withdrawing || amount <= 0) return
+    const { confirm } = await Taro.showModal({
+      title: `提现 ¥${formatCents(amount)}`,
+      content: '提交后进入审核，通过后转到你的微信零钱。',
+      confirmText: '提交',
+      confirmColor: '#14815d',
+    })
+    if (!confirm) return
+    const request = withdrawKeyRef.current?.amount === amount
+      ? withdrawKeyRef.current
+      : { amount, key: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}` }
+    withdrawKeyRef.current = request
+    setWithdrawing(true)
+    try {
+      await createPromoterWithdrawal(amount, request.key)
+      withdrawKeyRef.current = null
+      Taro.showToast({ title: '已提交，等待审核', icon: 'none' })
+      await load()
+    } catch (error) {
+      // 服务端明确拒绝（4xx）时没有生成提现单，下次换新 key；网络失败或 5xx 可能已经生成，保留 key 重试。
+      const status = Number((error as { statusCode?: number })?.statusCode || 0)
+      if (status >= 400 && status < 500) withdrawKeyRef.current = null
+      await showUnifiedApiError(error, '提现申请失败')
+    } finally {
+      setWithdrawing(false)
+    }
+  }
+
   const copyCode = (code: string) => {
     Taro.setClipboardData({ data: code }).catch(() => undefined)
   }
@@ -132,6 +184,41 @@ function PromoterCenterPage() {
     </>
   )
 
+  const receive = async (item: PromoterWithdrawal) => {
+    if (!item.receive || receivingId) return
+    setReceivingId(item.id)
+    try {
+      const result = await requestMerchantTransfer(item.receive)
+      if (result === 'unsupported') {
+        await Taro.showModal({ title: '请升级微信', content: '当前微信版本不支持收款，升级到最新版后再来点「收款」。', showCancel: false })
+        return
+      }
+      if (result === 'failed') Taro.showToast({ title: '没能打开收款页，请稍后再试', icon: 'none' })
+      // 收款页关闭后让后端查一次微信，再刷新列表；查询失败也照常刷新。
+      await refreshPromoterWithdrawal(item.id).catch(() => undefined)
+      await load()
+    } finally {
+      setReceivingId('')
+    }
+  }
+
+  const renderWithdraw = (current: PromoterMe, availableCents: number) => {
+    if (current.status !== 'active') {
+      return <Text className='promo-meta'>暂停期间不能提现，佣金会一直为你保留。</Text>
+    }
+    const amount = withdrawAmount(current, availableCents)
+    return (
+      <>
+        <View className={`promo-primary ${amount <= 0 || withdrawing ? 'disabled' : ''}`} onClick={() => void withdraw(amount)}>
+          {withdrawing
+            ? <View className='promo-spinner promo-spinner--light' />
+            : <Text>{amount > 0 ? `提现 ¥${formatCents(amount)}` : `满 ¥${formatCents(current.withdraw_min_cents)} 可提现`}</Text>}
+        </View>
+        <Text className='promo-meta'>{withdrawRuleText(current)}</Text>
+      </>
+    )
+  }
+
   const renderPromoter = (current: PromoterMe) => {
     const summary = current.summary
     const code = current.promo_code
@@ -170,7 +257,33 @@ function PromoterCenterPage() {
                 <Text className='promo-stat-label'>付费订单</Text>
               </View>
             </View>
-            <Text className='promo-meta'>提现功能即将开放，佣金会一直为你保留。</Text>
+            {renderWithdraw(current, summary.available_cents)}
+          </View>
+        )}
+        {withdrawals.length > 0 && (
+          <View className='promo-card'>
+            <Text className='promo-title'>提现记录</Text>
+            {withdrawals.map(item => {
+              const line = withdrawalLine(item)
+              return (
+                <View key={item.id} className={`promo-row ${line.muted ? 'promo-row--muted' : ''}`}>
+                  <View className='promo-row-main'>
+                    <Text className='promo-row-title'>{line.title}</Text>
+                    <Text className='promo-row-sub'>{line.sub}</Text>
+                  </View>
+                  <View className='promo-row-side'>
+                    <Text className='promo-row-amount'>{line.amount}</Text>
+                    {item.receive ? (
+                      <View className={`promo-receive ${receivingId ? 'disabled' : ''}`} onClick={() => void receive(item)}>
+                        <Text>收款</Text>
+                      </View>
+                    ) : (
+                      <Text className='promo-row-sub'>{line.status}</Text>
+                    )}
+                  </View>
+                </View>
+              )
+            })}
           </View>
         )}
         <View className='promo-card'>

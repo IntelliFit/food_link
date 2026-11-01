@@ -113,8 +113,6 @@ func TestSmartPromptAsksForRoutingFieldsOnlyForSmartEngine(t *testing.T) {
 	smart := buildPrompt(AnalyzeInput{AnalysisEngine: analysisEngineSmart}, nil, "standard")
 	require.Contains(t, smart, `"components":[]`)
 	require.NotContains(t, smart, `"brand":""`, "asking for package fields inflated weights to the whole package")
-	fast := buildPrompt(AnalyzeInput{AnalysisEngine: analysisEngineSmart}, nil, fastExecutionMode)
-	require.Contains(t, fast, `"components":[]`, "the Qwen fast mode uses the same smart schema")
 	plain := buildPrompt(AnalyzeInput{AnalysisEngine: analysisEngineAIDirect}, nil, "standard")
 	require.NotContains(t, plain, `"components":[]`)
 }

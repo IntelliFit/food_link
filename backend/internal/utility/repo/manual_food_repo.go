@@ -34,6 +34,7 @@ const nutritionExactQualitySQL = "quality_tier IN ('authoritative','reviewed_est
 type CustomFoodInput struct {
 	ID                 string
 	Title              string
+	Category           string
 	DefaultWeightGrams float64
 	TotalCalories      float64
 	TotalProtein       float64
@@ -149,7 +150,7 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 		UserID:             userID,
 		Title:              title,
 		NormalizedTitle:    normalizedTitle,
-		Category:           "custom",
+		Category:           normalizeCustomFoodCategory(input.Category),
 		DefaultWeightGrams: defaultWeight,
 		TotalCalories:      input.TotalCalories,
 		TotalProtein:       input.TotalProtein,
@@ -169,6 +170,8 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 	if row.PortionLabel == "" {
 		row.PortionLabel = fmt.Sprintf("%sg", formatManualCompactNumber(defaultWeight))
 	}
+	// 旧版客户端保存时不带分类，不能把已归入零食的商品改回自定义。
+	categoryProvided := strings.TrimSpace(input.Category) != ""
 	if editing {
 		err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			var existing domain.UserCustomFood
@@ -185,18 +188,26 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 			if duplicate > 0 {
 				return &commonerrors.AppError{Code: 10002, Message: "已有同名自定义食物，请使用不同名称", HTTPStatus: 400}
 			}
-			return tx.Model(&existing).Select("title", "normalized_title", "default_weight_grams", "total_calories", "total_protein", "total_carbs", "total_fat", "nutrients_per_100g", "extra_nutrients", "image_path", "image_paths", "portion_label", "recommend_reason", "updated_at").Updates(&row).Error
+			columns := []string{"title", "normalized_title", "default_weight_grams", "total_calories", "total_protein", "total_carbs", "total_fat", "nutrients_per_100g", "extra_nutrients", "image_path", "image_paths", "portion_label", "recommend_reason", "updated_at"}
+			if categoryProvided {
+				columns = append(columns, "category")
+			} else {
+				row.Category = existing.Category
+			}
+			return tx.Model(&existing).Select(columns).Updates(&row).Error
 		})
 		if err != nil {
 			return domain.ManualFoodResult{}, err
 		}
 		return r.manualFoodResultFromCustomFood(row), nil
 	}
+	upsertColumns := []string{"title"}
+	if categoryProvided {
+		upsertColumns = append(upsertColumns, "category")
+	}
 	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "normalized_title"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"title",
-			"category",
+		DoUpdates: clause.AssignmentColumns(append(upsertColumns,
 			"default_weight_grams",
 			"total_calories",
 			"total_protein",
@@ -211,7 +222,7 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 			"public_status",
 			"status",
 			"updated_at",
-		}),
+		)),
 	}).Create(&row).Error; err != nil {
 		return domain.ManualFoodResult{}, err
 	}
@@ -994,6 +1005,7 @@ func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string,
 			GROUP BY 1
 		) usage ON usage.source_id = p.id::text
 		WHERE p.status = 'published'
+			AND COALESCE(p.availability_status, '') <> 'unknown'
 			AND (%s)
 		ORDER BY
 			CASE
@@ -1697,7 +1709,7 @@ func (r *ManualFoodRepo) manualFoodResultFromCustomFood(item domain.UserCustomFo
 		Source:             "custom",
 		Title:              item.Title,
 		Subtitle:           fmt.Sprintf("%.0f kcal / %sg", item.TotalCalories, formatManualCompactNumber(item.DefaultWeightGrams)),
-		Category:           "custom",
+		Category:           normalizeCustomFoodCategory(item.Category),
 		DefaultWeightGrams: item.DefaultWeightGrams,
 		DisplayUnit:        "g",
 		DisplayUnitLabel:   "g",
@@ -1852,6 +1864,14 @@ func parseLooseFloat(value any) (float64, bool) {
 	}
 	n, err := strconv.ParseFloat(raw, 64)
 	return n, err == nil
+}
+
+// normalizeCustomFoodCategory 目前只有零食单独归类，其余自定义食物都留在“自定义”。
+func normalizeCustomFoodCategory(category string) string {
+	if strings.TrimSpace(category) == "snack" {
+		return "snack"
+	}
+	return "custom"
 }
 
 func normalizeCustomFoodTitle(title string) string {

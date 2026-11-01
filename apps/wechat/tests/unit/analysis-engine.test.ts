@@ -8,7 +8,6 @@ import {
 describe('analysis engine routing', () => {
   it('submits every new analysis with the smart engine, whatever the mode', () => {
     expect(SUBMIT_ANALYSIS_ENGINE).toBe('smart')
-    expect(defaultAnalysisEngineForMode('fast')).toBe('smart')
     expect(defaultAnalysisEngineForMode('standard')).toBe('smart')
     expect(defaultAnalysisEngineForMode('strict')).toBe('smart')
   })

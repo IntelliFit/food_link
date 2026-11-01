@@ -762,7 +762,7 @@ func (s *BenchmarkService) computeRunMetrics(ctx context.Context, runID string) 
 
 func isValidExecutionMode(mode string) bool {
 	switch mode {
-	case "fast", "standard", "strict", "fast_web_search", "standard_web_search", "strict_web_search", "gemini35_flash_grouped":
+	case "standard", "strict", "standard_web_search", "strict_web_search", "gemini35_flash_grouped":
 		return true
 	}
 	return false
@@ -770,8 +770,6 @@ func isValidExecutionMode(mode string) bool {
 
 func modeToDefaultModel(mode string) string {
 	switch mode {
-	case "fast", "fast_web_search":
-		return "qwen3.8-flash"
 	case "standard", "standard_web_search":
 		return "gemini-3-flash-preview"
 	case "strict", "strict_web_search", "gemini35_flash_grouped":

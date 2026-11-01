@@ -1,9 +1,16 @@
 import {
   buildFoodMapSpots,
   buildFoodMapSpotsFromPayload,
+  clusterFoodMapSpots,
+  foodMapClusterCellSize,
   foodMapDistanceKm,
+  foodMapMarkerItemsInView,
+  formatFoodMapClusterCount,
+  type FoodMapSpot,
   formatFoodMapDistance,
   hasValidFoodCoordinates,
+  mapSpotDishesLabel,
+  mapSpotOpensDishList,
 } from '../../src/packageExtra/pages/food-library/food-map'
 import type { PublicFoodLibraryItem, PublicFoodMapSpotPayload } from '../../src/utils/api'
 import { existsSync, readFileSync } from 'fs'
@@ -132,5 +139,69 @@ describe('public food map helpers', () => {
     expect(formatFoodMapDistance(nearby)).toBe('110m')
     expect(formatFoodMapDistance(2.34)).toBe('2.3km')
     expect(formatFoodMapDistance(128.8)).toBe('129km')
+  })
+})
+
+describe('food map clustering', () => {
+  function spot(key: string, latitude: number, longitude: number): FoodMapSpot {
+    const featuredItem = food({ id: key })
+    return { key, latitude, longitude, items: [featuredItem], featuredItem, foodCount: 1, locationLevel: 'food', locationName: key, address: '' }
+  }
+  const nearA = spot('a', 39.9001, 116.4001)
+  const nearB = spot('b', 39.9002, 116.4002)
+  const far = spot('far', 23.1, 113.3)
+
+  it('merges nearby spots into a counted cluster and leaves distant ones alone', () => {
+    const items = clusterFoodMapSpots([nearA, nearB, far], 5)
+    const cluster = items.find(item => item.kind === 'cluster')
+    expect(items).toHaveLength(2)
+    expect(cluster?.kind === 'cluster' && cluster.spots.map(item => item.key)).toEqual(['a', 'b'])
+    expect(cluster?.latitude).toBeCloseTo(39.90015)
+    expect(items.find(item => item.kind === 'spot')?.key).toBe('far')
+  })
+
+  it('separates every spot at street level so each one can be opened', () => {
+    expect(foodMapClusterCellSize(17)).toBe(0)
+    expect(clusterFoodMapSpots([nearA, nearB], 17).every(item => item.kind === 'spot')).toBe(true)
+  })
+
+  it('uses smaller cells as the map zooms in', () => {
+    const sizes = [4, 6, 8, 10, 12, 14, 16].map(foodMapClusterCellSize)
+    expect(sizes).toEqual([...sizes].sort((left, right) => right - left))
+    expect(new Set(sizes).size).toBe(sizes.length)
+  })
+
+  it('keeps the selected spot as its own marker inside a cluster area', () => {
+    const items = clusterFoodMapSpots([nearA, nearB], 5, 'a')
+    expect(items.map(item => [item.kind, item.key])).toEqual([['spot', 'a'], ['spot', 'b']])
+  })
+
+  it('drops far markers when zoomed in but keeps the selected one', () => {
+    const center = { latitude: 39.9, longitude: 116.4 }
+    const items = clusterFoodMapSpots([nearA, far], 15)
+    expect(foodMapMarkerItemsInView(items, center, 15).map(item => item.key)).toEqual(['a'])
+    expect(foodMapMarkerItemsInView(items, center, 15, 'far').map(item => item.key)).toEqual(['a', 'far'])
+  })
+
+  it('keeps every marker when zoomed out', () => {
+    const items = clusterFoodMapSpots([nearA, far], 6)
+    expect(foodMapMarkerItemsInView(items, { latitude: 39.9, longitude: 116.4 }, 6)).toHaveLength(2)
+  })
+
+  it('caps the cluster label', () => {
+    expect(formatFoodMapClusterCount(99)).toBe('99')
+    expect(formatFoodMapClusterCount(100)).toBe('99+')
+  })
+})
+
+describe('map spot dish list', () => {
+  it('opens a list only when a spot has more than one dish', () => {
+    expect(mapSpotOpensDishList({ foodCount: 279 })).toBe(true)
+    expect(mapSpotOpensDishList({ foodCount: 1 })).toBe(false)
+  })
+
+  it('says how many dishes the button leads to', () => {
+    expect(mapSpotDishesLabel(279)).toBe('查看 279 道餐食')
+    expect(mapSpotDishesLabel(1)).toBe('查看餐食')
   })
 })

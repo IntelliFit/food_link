@@ -780,7 +780,7 @@ func TestLoadFullGraySuiteFixture(t *testing.T) {
 		t.Fatalf("load full suite fixture: %v", err)
 	}
 	if strings.Join(suite.Modes, ",") != strings.Join(defaultGrayModes, ",") {
-		t.Fatalf("full suite modes=%#v, want default seven modes %#v", suite.Modes, defaultGrayModes)
+		t.Fatalf("full suite modes=%#v, want default modes %#v", suite.Modes, defaultGrayModes)
 	}
 	if suite.SuggestRatioEnabled == nil || !*suite.SuggestRatioEnabled {
 		t.Fatalf("full suite must keep suggest_ratio_enabled=true")

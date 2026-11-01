@@ -104,14 +104,11 @@ const ACTIVITY_OPTIONS = [
   { label: '体力劳动', value: 'active' }
 ]
 const EXECUTION_MODE_OPTIONS: Array<{ label: string; value: ExecutionMode }> = [
-  { label: '快速模式', value: 'fast' },
   { label: '普通模式', value: 'standard' },
   { label: '精准模式', value: 'strict' }
 ]
 const normalizeVisibleExecutionMode = (value: unknown): ExecutionMode => (
-  value === 'fast' || value === 'fast_web_search' || value === 'lite'
-    ? 'fast'
-    : value === 'strict' || value === 'strict_separate' || value === 'strict_web_search' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped'
+  value === 'strict' || value === 'strict_separate' || value === 'strict_web_search' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped'
         ? 'strict'
         : 'standard'
 )

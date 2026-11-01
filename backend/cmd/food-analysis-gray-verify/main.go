@@ -29,11 +29,9 @@ import (
 )
 
 var defaultGrayModes = []string{
-	"fast",
 	"standard",
 	"strict",
 	"strict_separate",
-	"fast_web_search",
 	"standard_web_search",
 	"strict_web_search",
 }

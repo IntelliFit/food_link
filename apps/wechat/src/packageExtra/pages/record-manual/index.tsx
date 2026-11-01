@@ -11,6 +11,7 @@ import {
   searchManualFood,
   saveManualCustomFood,
   showUnifiedApiError,
+  submitPackagedProductExtract,
   uploadAnalyzeImage,
   type CanonicalMealType,
   type FoodRecordEntryType,
@@ -46,6 +47,16 @@ import {
   selectedManualFoodAmountText,
 } from '../../../utils/manual-food-serving'
 import { FOOD_LIBRARY_PICKED_EVENT } from '../../../utils/food-library-picker'
+import { askPackagedUploadConsent } from '../../../utils/packaged-upload-consent'
+import {
+  choosePackagePhotos,
+  customDraftFromPackagedExtract,
+  describeCustomImport,
+  isSnackCustomFood,
+  pollPackagedExtractResult,
+  uploadPackagePhotos,
+  type CustomFoodCategory,
+} from './custom-food-import'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -96,6 +107,7 @@ type CustomEnergyUnit = 'kcal' | 'kj'
 const KJ_PER_KCAL = 4.184
 const CUSTOM_FOOD_STORAGE_LIMIT = 120
 const CUSTOM_FOOD_STORAGE_PREFIX = 'record_manual_custom_foods_v1'
+const CUSTOM_IMAGE_LIMIT = 4
 
 interface ServingPreset {
   label: string
@@ -287,7 +299,7 @@ function normalizeCustomFoodItem(item: any): ManualFoodSearchResult | null {
     source: 'custom',
     title,
     subtitle: String(item.subtitle || `${Math.round(Number(item.total_calories || 0))} kcal / ${formatWeightGrams(defaultWeight)}g`),
-    category: 'custom',
+    category: item.category === 'snack' ? 'snack' : 'custom',
     default_weight_grams: defaultWeight,
     display_unit: 'g',
     display_unit_label: 'g',
@@ -538,6 +550,9 @@ function RecordManualPage() {
   const [showCustomMicroPanel, setShowCustomMicroPanel] = useState(false)
   const [customImageUploading, setCustomImageUploading] = useState(false)
   const [customImages, setCustomImages] = useState<string[]>([])
+  const [customCategory, setCustomCategory] = useState<CustomFoodCategory>('custom')
+  const [customImporting, setCustomImporting] = useState(false)
+  const [customImportNote, setCustomImportNote] = useState('')
   const [editingCustomItem, setEditingCustomItem] = useState<ManualFoodSearchResult | null>(null)
   const [customSaving, setCustomSaving] = useState(false)
   const customSaveLock = useRef(false)
@@ -596,6 +611,10 @@ function RecordManualPage() {
     }
     loadCatalog('common', 1, true)
     hydrateCustomItemsFromBackend(storedCustomItems)
+    return () => {
+      // 离开页面后停止轮询包装识别任务
+      customDraftGeneration.current += 1
+    }
   }, [])
 
   useDidShow(() => {
@@ -628,6 +647,8 @@ function RecordManualPage() {
       setCatalogItems((prev) => replace ? data.items : [...prev, ...data.items])
     } catch (e: any) {
       if (requestSeq === catalogRequestSeqRef.current) {
+        // 换分类失败时不留上一个分类的食物，否则会显示在错误的分类下
+        if (replace) setCatalogItems([])
         await showUnifiedApiError(e, '加载食物目录失败')
       }
     } finally {
@@ -729,7 +750,10 @@ function RecordManualPage() {
       ]
       : activeCategory === 'custom'
         ? customItems
-        : catalogItems
+        : activeCategory === 'snack'
+          // 目录加载时 catalogItems 还是上一个分类的，这时只放自己的零食
+          ? [...customItems.filter(isSnackCustomFood), ...(catalogLoading ? [] : catalogItems)]
+          : catalogItems
     const seen = new Set<string>()
     return items
       .filter((item) => {
@@ -738,7 +762,8 @@ function RecordManualPage() {
         seen.add(key)
         return true
       })
-  }, [activeCategory, catalogItems, customItems, normalizedQuery, searchResults])
+  }, [activeCategory, catalogItems, catalogLoading, customItems, normalizedQuery, searchResults])
+  const snackListReady = !normalizedQuery && activeCategory === 'snack' && visibleItems.length > 0
 
   const statsText = useMemo(() => {
     const nutritionCount = catalogData?.stats?.nutrition_food_count || 0
@@ -789,6 +814,9 @@ function RecordManualPage() {
     setCustomMicroValues({})
     setShowCustomMicroPanel(false)
     setCustomImageUploading(false)
+    setCustomCategory('custom')
+    setCustomImporting(false)
+    setCustomImportNote('')
   }
 
   const handleCustomMicroInput = (key: NutrientKey, value: string) => {
@@ -829,6 +857,65 @@ function RecordManualPage() {
     setCustomImages([])
   }
 
+  const runPackageImport = async (existingImages: string[]) => {
+    const generation = customDraftGeneration.current
+    const isAbandoned = () => generation !== customDraftGeneration.current
+    setCustomImporting(true)
+    setCustomImportNote('')
+    try {
+      if (!(await askPackagedUploadConsent())) return
+      let imageUrls = existingImages
+      if (imageUrls.length === 0) {
+        const localPaths = await choosePackagePhotos(CUSTOM_IMAGE_LIMIT)
+        if (localPaths.length === 0) return
+        imageUrls = await uploadPackagePhotos(localPaths)
+        if (isAbandoned()) return
+        setCustomImages(imageUrls)
+      }
+      const { task_id: taskId } = await submitPackagedProductExtract({ image_urls: imageUrls })
+      const result = await pollPackagedExtractResult(taskId, isAbandoned)
+      if (!result || isAbandoned()) return
+      const draft = customDraftFromPackagedExtract(result)
+      if (draft.name) setCustomName(draft.name)
+      if (draft.weight) setCustomWeight(draft.weight)
+      setCustomCategory(draft.category)
+      if (draft.nutrition) {
+        // 识别结果统一是每 100g 的 kcal，口径要和数值一起换，不留旧值
+        setCustomNutritionBasis('100')
+        setCustomEnergyUnit('kcal')
+        setCustomCalories(draft.nutrition.calories)
+        setCustomProtein(draft.nutrition.protein)
+        setCustomCarbs(draft.nutrition.carbs)
+        setCustomFat(draft.nutrition.fat)
+        setCustomMicroValues(draft.nutrition.micro)
+      }
+      setCustomImportNote(describeCustomImport(draft, result))
+    } catch (e: any) {
+      if (isAbandoned()) return
+      const message = String(e?.errMsg || e?.message || e || '')
+      if (/cancel/i.test(message)) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e, '需要授权后才能选择图片')
+        return
+      }
+      await showUnifiedApiError(e, '识别包装失败，可以手动填写')
+    } finally {
+      if (!isAbandoned()) setCustomImporting(false)
+    }
+  }
+
+  const handleStartPackageImport = () => {
+    if (customSaveLock.current || customImporting) return
+    resetCustomDraft()
+    setShowCustomPanel(true)
+    void runPackageImport([])
+  }
+
+  const handlePanelPackageImport = () => {
+    if (customImporting || customImageUploading) return
+    void runPackageImport(customImages)
+  }
+
   const handleAddCustomItem = async () => {
     if (customSaveLock.current) return
     const name = customName.trim()
@@ -853,6 +940,10 @@ function RecordManualPage() {
     }
     if (customImageUploading) {
       Taro.showToast({ title: '图片处理后再加入', icon: 'none' })
+      return
+    }
+    if (customImporting) {
+      Taro.showToast({ title: '识别完再保存', icon: 'none' })
       return
     }
 
@@ -899,7 +990,7 @@ function RecordManualPage() {
         source: 'custom',
         title: name,
         subtitle: `${Math.round(nutrients.calories)} kcal / ${formatWeightGrams(weight)}g`,
-        category: 'custom',
+        category: customCategory,
         default_weight_grams: weight,
         display_unit: 'g',
         display_unit_label: 'g',
@@ -926,6 +1017,7 @@ function RecordManualPage() {
         savedCustomResult = await saveManualCustomFood({
           id: editingCustomItem && /^[0-9a-f-]{36}$/i.test(editingCustomItem.id) ? editingCustomItem.id : undefined,
           title: customResult.title,
+          category: customCategory,
           default_weight_grams: customResult.default_weight_grams,
           total_calories: customResult.total_calories,
           total_protein: customResult.total_protein,
@@ -978,11 +1070,15 @@ function RecordManualPage() {
     customSaveLock.current = false
     setCustomSaving(false)
     Taro.vibrateShort({ type: 'light' }).catch(() => {})
+    const savedAsSnack = customCategory === 'snack'
+    const landingCategory = savedAsSnack ? 'snack' : 'custom'
     resetCustomDraft()
     setShowCustomPanel(false)
-    setActiveCategory('custom')
+    activeCategoryRef.current = landingCategory
+    setActiveCategory(landingCategory)
     setSearchText('')
-    Taro.showToast({ title: '自定义完成', icon: 'success' })
+    if (savedAsSnack) loadCatalog('snack', 1, true)
+    Taro.showToast({ title: savedAsSnack ? '已归入零食' : '自定义完成', icon: 'success' })
   }
 
   const handleManageCustomItem = async (item: ManualFoodSearchResult) => {
@@ -1017,6 +1113,7 @@ function RecordManualPage() {
     setCustomFat(String(nutrients.fat))
     setCustomMicroValues(Object.fromEntries(CUSTOM_MICRO_FIELDS.map(field => [field.key, String(nutrients[field.key] ?? '')])))
     setCustomImages((item.image_paths || (item.image_path ? [item.image_path] : [])).slice(0, 4))
+    setCustomCategory(item.category === 'snack' ? 'snack' : 'custom')
     setShowCustomPanel(true)
   }
 
@@ -1543,10 +1640,15 @@ function RecordManualPage() {
           <View className='custom-entry-card'>
             <View className='custom-entry-copy'>
               <Text className='custom-entry-title'>没有找到？直接自定义</Text>
-              <Text className='custom-entry-subtitle'>不拍照，不走 AI，填一次后下次可复用</Text>
+              <Text className='custom-entry-subtitle'>拍包装袋自动填好，或手动填一次，下次可复用</Text>
             </View>
-            <View className='custom-entry-btn' onClick={openCustomPanel}>
-              <Text>{normalizedQuery ? `新建“${normalizedQuery}”` : '新建'}</Text>
+            <View className='custom-entry-actions'>
+              <View className='custom-entry-btn' onClick={handleStartPackageImport}>
+                <Text>拍包装导入</Text>
+              </View>
+              <View className='custom-entry-btn custom-entry-btn-secondary' onClick={openCustomPanel}>
+                <Text>{normalizedQuery ? `新建“${normalizedQuery}”` : '手动新建'}</Text>
+              </View>
             </View>
           </View>
 
@@ -1576,6 +1678,11 @@ function RecordManualPage() {
                     <View className={`custom-image-btn ${customImageUploading ? 'disabled' : ''}`} onClick={handleChooseCustomImage}>
                       {customImageUploading ? <View className='custom-image-btn-spinner' /> : <Text>添加照片</Text>}
                     </View>
+                    {!editingCustomItem && (
+                      <View className={`custom-image-import ${customImporting ? 'disabled' : ''}`} onClick={handlePanelPackageImport}>
+                        <Text>{customImages.length > 0 ? '识别这些照片' : '拍包装导入'}</Text>
+                      </View>
+                    )}
                     {customImages.length > 0 && (
                       <View className='custom-image-remove' onClick={handleRemoveCustomImage}>
                         <Text>移除</Text>
@@ -1592,6 +1699,17 @@ function RecordManualPage() {
                   </View>
                 ))}
               </View>
+              {customImporting && (
+                <View className='custom-import-status'>
+                  <View className='custom-import-spinner' />
+                  <Text>正在读取包装上的名称和营养成分表</Text>
+                </View>
+              )}
+              {!customImporting && customImportNote && (
+                <View className='custom-import-status'>
+                  <Text>{customImportNote}</Text>
+                </View>
+              )}
               <View className='custom-food-grid'>
                 <View className='custom-field custom-field-full'>
                   <Text className='custom-field-label'>名称</Text>
@@ -1601,6 +1719,18 @@ function RecordManualPage() {
                     placeholder='例如 家里卤牛肉'
                     onInput={(e) => setCustomName(e.detail.value)}
                   />
+                </View>
+                <View className='custom-category-row custom-field-full'>
+                  <Text className='custom-field-label'>分类</Text>
+                  {([['custom', '自定义'], ['snack', '零食']] as Array<[CustomFoodCategory, string]>).map(([value, label]) => (
+                    <View
+                      key={value}
+                      className={`custom-basis-chip ${customCategory === value ? 'active' : ''}`}
+                      onClick={() => setCustomCategory(value)}
+                    >
+                      <Text>{label}</Text>
+                    </View>
+                  ))}
                 </View>
                 <View className='custom-field'>
                   <Text className='custom-field-label'>默认一份重量 g</Text>
@@ -1725,10 +1855,11 @@ function RecordManualPage() {
 
         <View className='catalog-shell'>
           {!normalizedQuery && (
-            <ScrollView className='catalog-sidebar' scrollY>
+            <ScrollView className='catalog-sidebar' scrollY scrollIntoView={`catalog-tab-${activeCategory}`}>
               {categories.map((category) => (
                 <View
                   key={category.key}
+                  id={`catalog-tab-${category.key}`}
                   className={`catalog-tab ${activeCategory === category.key ? 'active' : ''}`}
                   onClick={() => handleSelectCategory(category.key)}
                 >
@@ -1750,7 +1881,7 @@ function RecordManualPage() {
               </View>
             </View>
 
-            {(catalogLoading || searchLoading) ? (
+            {(searchLoading || (catalogLoading && !snackListReady)) ? (
               <View className='loading-state'>
                 <View className='loading-spinner' />
               </View>
