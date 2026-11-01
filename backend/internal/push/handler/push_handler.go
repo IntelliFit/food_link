@@ -18,6 +18,7 @@ func New(svc *service.Service) *Handler { return &Handler{svc: svc} }
 func (h *Handler) RegisterRoutes(group *gin.RouterGroup) {
 	group.GET("/preferences", h.Settings)
 	group.PUT("/preferences", h.SaveSettings)
+	group.PUT("/devices/:installation_id/local-meals", h.SaveLocalMeals)
 	group.PUT("/devices/:installation_id", h.Register)
 	group.DELETE("/devices/:installation_id", h.Revoke)
 }
@@ -78,4 +79,21 @@ func (h *Handler) Revoke(c *gin.Context) {
 	}
 	complete(c, "revoke_device")
 	response.Success(c, gin.H{"registered": false})
+}
+
+func (h *Handler) SaveLocalMeals(c *gin.Context) {
+	userID := begin(c, "save_local_meal_preferences")
+	var body domain.Preferences
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, commonerrors.ErrBadRequest)
+		return
+	}
+	data, err := h.svc.SaveSettings(c.Request.Context(), userID, body, c.Param("installation_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	complete(c, "save_local_meal_preferences")
+	response.Success(c, data)
 }
