@@ -24,7 +24,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
-import { ANALYSIS_ENGINE_OPTIONS } from '../../../utils/analysis-engine'
+import { SUBMIT_ANALYSIS_ENGINE } from '../../../utils/analysis-engine'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -67,7 +67,7 @@ function RecordTextPage() {
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
-  const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>('ai_direct')
+  const analysisEngine: AnalysisEngine = SUBMIT_ANALYSIS_ENGINE
   const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => Taro.getStorageSync(TEXT_MODE_STORAGE_KEY) === 'standard' ? 'standard' : 'fast')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const submitLock = useRef(false)
@@ -316,23 +316,6 @@ function RecordTextPage() {
           </View>
         </View>
 
-        {/* 营养计算方式 */}
-        <View className='input-section'>
-          <Text className='section-title'>营养计算方式</Text>
-          <View className='text-engine-options'>
-            {ANALYSIS_ENGINE_OPTIONS.map(option => (
-              <View
-                key={option.value}
-                className={`text-engine-option ${analysisEngine === option.value ? 'active' : ''}`}
-                onClick={() => setAnalysisEngine(option.value)}
-              >
-                <Text className='text-engine-option__label'>{option.label}</Text>
-                <Text className='text-engine-option__description'>{option.description}</Text>
-              </View>
-            ))}
-          </View>
-          <Text className='text-engine-note'>AI 估算无需等待数据库校准；选择数据库校准可能增加等待时间。</Text>
-        </View>
         </View>}
 
         {/* 餐次选择 */}

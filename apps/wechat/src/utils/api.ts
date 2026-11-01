@@ -106,7 +106,7 @@ export type ExecutionMode =
   | 'experimental'
   | 'gemini35_flash'
   | 'gemini35_flash_grouped'
-export type AnalysisEngine = 'ai_direct' | 'ai_then_db_exact' | 'db_candidates_ai' | 'legacy_direct' | 'db_first'
+export type AnalysisEngine = 'smart' | 'ai_direct' | 'ai_then_db_exact' | 'db_candidates_ai' | 'legacy_direct' | 'db_first'
 export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
 export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
 export type PrecisionSourceType = 'image' | 'text'

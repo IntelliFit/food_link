@@ -11,17 +11,20 @@
 }
 
 .mode-link {
+  flex-shrink: 0;
   font-size: 22rpx;
   color: #00bc7d;
   font-weight: 600;
+  white-space: nowrap;
   padding: 4rpx 10rpx;
 }
 
 .mode-switch-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex-shrink: 0;
   gap: 10rpx;
-  width: 430rpx;
+  width: 380rpx;
 }
 
 .mode-switch-item {
@@ -66,55 +69,42 @@
   line-height: 1.5;
 }
 
-.analysis-engine-section {
-  padding: 14rpx 20rpx 16rpx;
-  border-top: 1rpx solid rgb(0 0 0 / 3%);
-}
-
-.analysis-engine-header {
+.analysis-more-toggle {
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  margin-bottom: 12rpx;
-}
+  gap: 12rpx;
+  padding: 16rpx 20rpx;
+  border-top: 1rpx solid rgb(0 0 0 / 3%);
 
-.analysis-engine-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10rpx;
-}
-
-.analysis-engine-option {
-  min-width: 0;
-  padding: 12rpx 10rpx;
-  border: 2rpx solid #e2e8f0;
-  border-radius: 14rpx;
-  background: #f8fafc;
-  box-sizing: border-box;
-
-  &.active {
-    border-color: #00bc7d;
-    background: rgb(0 188 125 / 8%);
+  &:active {
+    background: rgb(0 0 0 / 2%);
   }
 }
 
-.analysis-engine-option__label,
-.analysis-engine-option__description {
-  display: block;
+.analysis-more-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #374151;
 }
 
-.analysis-engine-option__label {
-  color: #1f2937;
+.analysis-more-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #00bc7d;
+  font-size: 20rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-more-arrow {
+  color: #94a3b8;
   font-size: 22rpx;
-  line-height: 30rpx;
-  font-weight: 700;
 }
 
-.analysis-engine-option__description {
-  margin-top: 4rpx;
-  color: #64748b;
-  font-size: 18rpx;
-  line-height: 26rpx;
+.analysis-more-panel .analysis-options-row {
+  border-top: none;
+  padding-top: 0;
 }
 
 .analysis-options-row {
@@ -1116,10 +1106,12 @@
   .multiview-compact-left {
     display: flex;
     align-items: center;
-    gap: 12rpx;
+    gap: 8rpx;
   }
 
   .multiview-compact-title {
+    flex-shrink: 0;
+    white-space: nowrap;
     font-size: 24rpx;
     font-weight: 600;
     color: #374151;
