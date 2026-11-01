@@ -79,6 +79,7 @@ function LifespanPredictorPage() {
     return <View className={rootClass}><FirstRun onDone={savePerson} /></View>
   }
 
+  const completeness = completenessOf(person)
   const header = (
     <View>
       <View className='lp-modes'>
@@ -89,7 +90,7 @@ function LifespanPredictorPage() {
         <Text className='lp-hero__dim lp-grow'>在算：{person.label} · {person.sex === 'male' ? '男' : '女'} {person.age} 岁 · 只在这台手机上计算</Text>
         <View className='lp-who__change' role='button' onClick={() => setSheetOpen(true)}>换个人</View>
       </View>
-      <Text className='lp-hero__dim lp-who__complete'>信息完整度 {completenessOf(person)}%，答得越多越准</Text>
+      <Text className='lp-hero__dim lp-who__complete'>{completeness < 100 ? `信息完整度 ${completeness}%，答得越多越准` : '这一版问到的题都答了'}</Text>
     </View>
   )
   const openPoster = (build: BuildPoster) => setPoster(() => build)

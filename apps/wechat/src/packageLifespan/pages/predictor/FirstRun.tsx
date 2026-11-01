@@ -55,6 +55,7 @@ export function FirstRun({ onDone }: FirstRunProps) {
           error={error}
           onChange={(next) => {
             touched.current = true
+            setError('')
             setDraft(prev => ({ ...prev, ...next }))
           }}
         />

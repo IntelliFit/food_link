@@ -22,6 +22,7 @@ interface ThreeYouTabProps {
 }
 
 const TONE_CLASSES = ['is-a', 'is-b', 'is-c']
+const CHANGE_COUNT: Record<number, string> = { 1: '一', 2: '两' }
 
 const shift = (value: number): string => `${value >= 0 ? '往右推了' : '往左拉了'}约 ${years(Math.abs(value))} 年`
 
@@ -137,8 +138,8 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
       </View>
 
       <View className='lp-card'>
-        <Text className='lp-card__title'>最值得改的三件事</Text>
-        {changes.length === 0 && <Text className='lp-fine'>按引擎目前能算的三项（水果、鱼、体重），这个人的吃法已经达标了。去“自己调”试试其他习惯。</Text>}
+        <Text className='lp-card__title'>最值得改的{CHANGE_COUNT[changes.length] ?? '三'}件事</Text>
+        {changes.length === 0 && <Text className='lp-fine'>按目前能算的几项（水果、鱼、体重，填了的话还有蔬菜和盐），这个人的吃法已经达标了。去“自己调”试试其他习惯。</Text>}
         {changes.slice(0, 3).map((change, index) => (
           <View key={change.factor} className='lp-change'>
             <View className='lp-change__top'>
@@ -173,7 +174,9 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
                 <Text className={`lp-le__name ${TONE_CLASSES[index]}`}>{branch.name}</Text>
                 <Text className='lp-dice__value'>{Math.floor(deathAge(person, branch, life))}<Text className='lp-dice__unit'> 岁</Text></Text>
                 <Text className='lp-fine'>这次模拟离世</Text>
-                <Text className='lp-dice__event'>{first ? `${Math.floor(first.age)} 岁首次${DISEASE_NAMES[first.type]}` : '没有新的重大慢病'}</Text>
+                <Text className='lp-dice__event'>
+                  {alreadyIll ? '已有重大慢病' : first ? `${Math.floor(first.age)} 岁首次${DISEASE_NAMES[first.type]}` : '没有新的重大慢病'}
+                </Text>
               </View>
             )
           })}
@@ -194,8 +197,8 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
       <View className='lp-card'>
         <Text className='lp-card__title'>数据与依据</Text>
         <Text className='lp-note'>{person.label}的信息由你填写，只在这台手机上计算，不上传。</Text>
-        <Text className='lp-note'>三个你之间只有水果、鱼和热量不同，其他保持一致。</Text>
-        <Text className='lp-note'>基础死亡率来自 2020 年人口普查生命表；饮食和体重系数来自中国慢性病前瞻性研究（CKB）与 2025 年 Nature Communications 中国生活方式与预期寿命研究。没有论文的参数在参数表中标为“估计”。</Text>
+        <Text className='lp-note'>三个你之间只有饮食不同：水果、鱼和热量，填了的话还有蔬菜和盐。其他保持一致。</Text>
+        <Text className='lp-note'>基础死亡率来自 2020 年人口普查生命表；饮食和体重系数来自中国慢性病前瞻性研究（CKB）与 2025 年 Nature Communications 中国生活方式与预期寿命研究；蔬菜来自 2017 年 International Journal of Epidemiology 荟萃分析；盐对心血管的影响来自 2022 年 NEJM 研究，折算到全因死亡是估计；重大慢病来自 2023 年 Nature Human Behaviour 的 CKB 研究。没有论文的参数在参数表中标为“估计”。</Text>
         <Text className='lp-note'>模型 {engine.version.engine} · 参数 {engine.version.registry}</Text>
         <Text className='lp-note'>引擎开源：github.com/SmallHorseBrother/lifespan-predictor（MIT 许可证）</Text>
         <Text className='lp-link lp-link--danger' onClick={onDeleteData}>清除这台手机上的寿命预测器数据</Text>

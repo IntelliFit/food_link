@@ -1,6 +1,6 @@
 // Turns engine curves into what the predictor screens show.
 import { engine, type AdherenceSpec, type ChangePlan, type Curves, type DiseaseEventType, type EvidenceWarning, type Exposures, type FirstDisease, type Person, type Sex } from '../engine/engine'
-import { lifeCardsFor } from './habits'
+import { lifeCardsFor, saltGrams } from './habits'
 
 export const LIFE_SEED = 182772
 export const DISCLAIMER = '模拟估算，不用于诊断'
@@ -117,7 +117,7 @@ export function topChanges(model: PredictorModel): TopChange[] {
       action: { label: '下一餐换成鱼', target: 'next_meal' },
     }),
     change('sodium_mg', {
-      name: '少盐', from: `钠 ${Math.round(base.sodium_mg ?? 0)} mg/天`, to: `${Math.round(target.sodium_mg ?? 0)} mg/天`, evidence: ['队列研究', '模型推算'],
+      name: '少盐', from: `约 ${saltGrams(base.sodium_mg ?? 0)} g 盐/天`, to: `约 ${saltGrams(target.sodium_mg ?? 0)} g/天`, evidence: ['队列研究', '模型推算'],
       action: { label: '让下一餐少盐一点', target: 'next_meal' },
     }),
     change('delta_intake_kcal', {

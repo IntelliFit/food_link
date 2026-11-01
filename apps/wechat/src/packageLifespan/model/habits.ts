@@ -25,7 +25,7 @@ export const ALCOHOL_LABELS: Record<Alcohol, string> = {
 export type NumericHabit = 'fruit_g' | 'vegetables_g' | 'fish_g' | 'sodium_mg' | 'delta_intake_kcal' | 'pa_met_h' | 'sleep_h'
 
 const SODIUM_MG_PER_G_SALT = 393
-const saltGrams = (mg: number): number => Math.round(mg / SODIUM_MG_PER_G_SALT)
+export const saltGrams = (mg: number): number => Math.round(mg / SODIUM_MG_PER_G_SALT)
 
 export interface HabitSlider {
   key: NumericHabit
@@ -105,7 +105,7 @@ export const LIFE_CARDS: LifeCard[] = [
   },
   { id: 'fish', name: '每周多吃两次鱼', detail: '鱼 +30 g/天', apply: x => ({ ...x, fish_g: x.fish_g + 30 }) },
   {
-    id: 'salt', name: '每天少吃 3 克盐', detail: '钠 −1200 mg/天',
+    id: 'salt', name: '每天少吃 3 克盐', detail: '盐 −3 g/天',
     applies: person => person.sodium_mg != null,
     apply: x => ({ ...x, sodium_mg: Math.max(0, (x.sodium_mg ?? 0) - 1200) }),
   },

@@ -44,7 +44,10 @@ export function PersonSheet({ people, activeId, onPick, onSave, onDelete, onClos
             <PersonForm
               draft={editing.draft}
               error={error}
-              onChange={(next) => setEditing(prev => prev && { ...prev, draft: { ...prev.draft, ...next } })}
+              onChange={(next) => {
+                setError('')
+                setEditing(prev => prev && { ...prev, draft: { ...prev.draft, ...next } })
+              }}
             />
           </ScrollView>
         ) : (

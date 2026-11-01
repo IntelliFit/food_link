@@ -177,7 +177,35 @@ describe('predictor page', () => {
     fireEvent.click(await screen.findByText('三个你'))
     expect(await screen.findByText(/这一项不适用/)).toBeInTheDocument()
     expect(screen.queryByText(/^无重大慢病 \d+\.\d 年/)).not.toBeInTheDocument()
-    expect(screen.getAllByText('没有新的重大慢病')).toHaveLength(3)
+    expect(screen.getAllByText('已有重大慢病')).toHaveLength(3)
+  })
+
+  it('names the number of changes it actually lists', async () => {
+    mockStorage([{ ...STORED, height_cm: 170, weight_kg: 62, energy_balance_kcal: 0, fruit_g: 300 }])
+    render(<LifespanPredictorPage />)
+    fireEvent.click(await screen.findByText('三个你'))
+    expect(await screen.findByText('最值得改的一件事')).toBeInTheDocument()
+    expect(screen.getByText('每周多吃几次鱼')).toBeInTheDocument()
+  })
+
+  it('shows salt in grams and clears a form error once the field changes', async () => {
+    mockStorage([{ ...STORED, sodium_mg: 6000 }])
+    const view = render(<LifespanPredictorPage />)
+    await screen.findByText('每天少吃 3 克盐')
+    expect(screen.getByText('盐 −3 g/天')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('三个你'))
+    expect(await screen.findByText(/现在 约 15 g 盐\/天 → 约 6 g\/天/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('换个人'))
+    fireEvent.click(screen.getByText('修改我的信息'))
+    const pressure = view.container.querySelectorAll('.lp-sheet input')[3]
+    const props = Object.entries(pressure).find(([key]) => key.startsWith('__reactProps'))?.[1] as { onInput: (e: unknown) => void }
+    act(() => props.onInput({ detail: { value: '20' } }))
+    fireEvent.click(screen.getByText('开始算'))
+    expect(screen.getByText(/收缩压请填/)).toBeInTheDocument()
+    const fresh = Object.entries(view.container.querySelectorAll('.lp-sheet input')[3]).find(([key]) => key.startsWith('__reactProps'))?.[1] as { onInput: (e: unknown) => void }
+    act(() => fresh.onInput({ detail: { value: '135' } }))
+    expect(screen.queryByText(/收缩压请填/)).not.toBeInTheDocument()
   })
 
   it('shows the first disease for one simulated life', async () => {
