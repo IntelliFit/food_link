@@ -78,7 +78,7 @@ export interface HealthProfileFields {
 export function draftWithHealthProfile(draft: PersonDraft, profile: HealthProfileFields, now: Date): PersonDraft {
   const age = profile.birthday ? ageFromBirthday(profile.birthday, now) : null
   const activity = profile.health_condition?.daily_life_activity_level || profile.activity_level || ''
-  // The profile only asks about a few diseases, so "none listed" cannot mean "known to have none".
+  // The profile only asks about a few diseases: "none listed" stays unanswered, and the form asks about the rest.
   const known = (profile.health_condition?.medical_history ?? []).filter(item => (CONDITIONS as readonly string[]).includes(item))
   return {
     ...draft,

@@ -7,7 +7,7 @@ import { createDisease } from './disease'
 import { createFactors } from './factors'
 import { lifeUniform } from './rng'
 import {
-  ALCOHOL, SMOKING,
+  ALCOHOL, SMOKING, SODIUM_MG_PER_G_SALT,
   type AdherenceSpec, type Alcohol, type ChangePlan, type Curves, type EngineConstants, type EvidenceWarning, type Exposures,
   type FirstDisease, type NormalizedPlan, type Person, type Sex, type Smoking, type StartAgeGain,
 } from './types'
@@ -462,7 +462,21 @@ export function createEngine(constants: EngineConstants) {
     const cut = reg['sleep.cutpoints']
     if (x.sleep_h < cut[0] || x.sleep_h > cut[cut.length - 1]) out.push({ field: 'sleep_h', message: `睡眠 ${x.sleep_h} 小时超出主要研究覆盖范围` })
     if (bmiMax < BMI_SUPPORTED[0] || bmiMax > BMI_SUPPORTED[1]) out.push({ field: 'bmi', message: `BMI ${bmiMax.toFixed(1)} 超出 15–45 的研究范围` })
+    const c = sexOf(person.sex).coef
+    if (x.vegetables_g != null && x.vegetables_g > c.veg_cap) out.push({ field: 'vegetables_g', message: `蔬菜超过 ${c.veg_cap} g/天的部分不再计入` })
+    if (x.sodium_mg != null && (x.sodium_mg < c.sodium_lo || x.sodium_mg > c.sodium_hi)) {
+      const [lo, hi] = [c.sodium_lo, c.sodium_hi].map(mg => Math.round(mg / SODIUM_MG_PER_G_SALT))
+      out.push({ field: 'sodium_mg', message: `盐在约 ${lo}–${hi} g/天以外的部分不再计入` })
+    }
     return out
+  }
+
+  /** Input rule for a hypertension diagnosis without a reading: never below what age and BMI predict. */
+  function assumedSbp(person: Person): number | null {
+    const { risk } = person
+    if (risk?.sbp_mmhg != null || !risk?.conditions?.includes('hypertension')) return null
+    const bmi = person.weight_kg / Math.pow(person.height_cm / 100, 2)
+    return Math.max(regOf(person.sex)['input.clinical_mapping'].assumed_sbp, factors.expectedSbp(person.sex, person.age, bmi))
   }
 
   /** How much of the result rests on real answers, 0–100 (registry input.completeness_weights). */
@@ -488,6 +502,7 @@ export function createEngine(constants: EngineConstants) {
 
   return {
     adherenceOptions,
+    assumedSbp,
     branches,
     completeness,
     curves,

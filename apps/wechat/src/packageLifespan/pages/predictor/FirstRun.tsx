@@ -13,6 +13,7 @@ interface FirstRunProps {
 export function FirstRun({ onDone }: FirstRunProps) {
   const [draft, setDraft] = useState<PersonDraft>(() => emptyDraft(SELF_LABEL))
   const [filled, setFilled] = useState(0)
+  const [diagnosesFilled, setDiagnosesFilled] = useState(false)
   const [error, setError] = useState('')
   const touched = useRef(false)
 
@@ -25,6 +26,7 @@ export function FirstRun({ onDone }: FirstRunProps) {
         const next = draftWithHealthProfile(draft, profile, new Date())
         setDraft(next)
         setFilled(basicsFilled(next))
+        setDiagnosesFilled(next.conditions !== null)
       })
       .catch(() => undefined)
     return () => { cancelled = true }
@@ -50,6 +52,7 @@ export function FirstRun({ onDone }: FirstRunProps) {
         <Text className='lp-card__title'>先算一次</Text>
         {filled === 4 && <Text className='lp-fine'>性别、年龄、身高、体重已从健康档案带入。习惯选个大概就行，之后都能调。</Text>}
         {filled > 0 && filled < 4 && <Text className='lp-fine'>已从健康档案带入一部分，空着的请补上。习惯选个大概就行，之后都能调。</Text>}
+        {diagnosesFilled && <Text className='lp-fine'>档案里的病史也带入了。档案没问过心脏病、中风、癌症和慢阻肺，有的话请在下面补选。</Text>}
         <PersonForm
           draft={draft}
           error={error}

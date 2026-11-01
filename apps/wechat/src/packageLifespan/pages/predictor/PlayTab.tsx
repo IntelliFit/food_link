@@ -7,7 +7,7 @@ import { HABIT_CHOICES, habitSlidersFor, type HabitSlider } from '../../model/ha
 import type { Predictee } from '../../model/people'
 import {
   adherenceOptions, applyLifeCards, atAge, axisEndAge, DEFAULT_PLAN, DISCLAIMER, isSameExposures, lateStart, lifeCardValues,
-  milestoneAge, parallelLives, percent, personWarnings, planOf, planPhrase, playOutcome, signedYears, years, type PlanChoice, type PredictorModel,
+  milestoneAge, parallelLives, percent, personWarnings, planOf, planPhrase, playOutcome, signedYears, tuningSummary, years, type PlanChoice, type PredictorModel,
 } from '../../model/predictor'
 import { playPoster, type PosterContent, type ShareOptions } from '../../model/share'
 import { Chips } from './PersonForm'
@@ -94,13 +94,7 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
 
   const shareSummary = (): string => {
     const when = livePlan ? `（${planPhrase(live.choice, options).replace(' · ', '，')}）` : ''
-    const names = cards.filter(card => applied.includes(card.id)).map(card => card.name)
-    if (names.length) return names.join('、') + when
-    const changed = sliders.filter(slider => Math.abs(liveValue(slider) - baseValue(slider)) > 1e-9)
-      .map(slider => `${slider.label}调到 ${slider.format(liveValue(slider))}`)
-    const choices = HABIT_CHOICES.filter(choice => live.play[choice.key] !== model.base[choice.key])
-      .map(choice => `${choice.label}改成${choice.names[live.play[choice.key] as never]}`)
-    return ([...changed, ...choices].join('、') || '什么都没改') + when
+    return tuningSummary(model, live.play, applied, cardsFrom) + when
   }
 
   const renderSlider = (slider: HabitSlider) => {
@@ -159,7 +153,7 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
           </View>
           {!today.disease.alreadyIll && (
             <View className='lp-pair__item lp-pair__item--wide'>
-              <Text className='lp-hero__dim'>没有重大慢病的年数（平均）</Text>
+              <Text className='lp-hero__dim'>无重大慢病的年数（平均）</Text>
               <Text className='lp-pair__value'>{years(today.healthy.mean_years_free)} → {years(outcome.curves.healthy.mean_years_free)} 年</Text>
             </View>
           )}
@@ -238,7 +232,7 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
           />
           <View className='lp-control__hint'><Text>“前两年好、之后松懈”：从九成慢慢降到五成</Text></View>
         </View>
-        <View className='lp-late__head'><Text>{late.title}</Text><Text>比照现在平均多活</Text></View>
+        <View className='lp-late__head'><Text>{late.title}</Text><Text>和照现在比</Text></View>
         {late.rows.map(row => (
           <View key={row.age} className={`lp-late${row.selected ? ' is-on' : ''}`} role='button' onClick={() => setStart(row.age, true)}>
             <Text className='lp-late__label'>{row.label}</Text>

@@ -3,6 +3,7 @@
 export const SMOKING = ['never', 'former', 'current_lt20', 'current_ge20'] as const
 export const ALCOHOL = ['less_than_daily', 'daily_1_29', 'daily_30_59', 'daily_ge60'] as const
 export const UNKNOWN = 'unknown'
+export const SODIUM_MG_PER_G_SALT = 393
 
 export type Sex = 'male' | 'female'
 /** `unknown` means not answered: the population's average risk is used. */
@@ -197,6 +198,7 @@ export interface Registry {
     fade: { type: 'decay'; start: number; end: number; half_life_years: number }
   }
   'input.completeness_weights': Record<string, number>
+  'input.clinical_mapping': { assumed_sbp: number; hba1c_diabetes: number }
   'person.education': Record<string, number>
   'person.marital': Record<string, number>
   'person.marital_min_age': number

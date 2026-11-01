@@ -1,7 +1,8 @@
 import Taro from '@tarojs/taro'
 
+import { ENGINE_CONSTANTS } from '../../src/packageLifespan/engine/constants'
 import { engine, type Exposures } from '../../src/packageLifespan/engine/engine'
-import { habitSlidersFor, lifeCardsFor } from '../../src/packageLifespan/model/habits'
+import { habitSlidersFor, lifeCardsFor, SODIUM_RANGE_MG, VEGETABLE_CAP_G } from '../../src/packageLifespan/model/habits'
 import {
   ageFromBirthday,
   clearPeople,
@@ -20,6 +21,7 @@ import {
   buildModel,
   completenessOf,
   DEFAULT_PLAN,
+  diagnosisNotes,
   firstDiseaseOf,
   isSameExposures,
   lateStart,
@@ -34,6 +36,7 @@ import {
   signedYears,
   todayWarnings,
   topChanges,
+  tuningSummary,
 } from '../../src/packageLifespan/model/predictor'
 
 const ME: Predictee = {
@@ -230,6 +233,66 @@ describe('engine 0.3 inputs and outputs', () => {
     const known = buildModel({ ...ME, risk: { conditions: ['hypertension', 'diabetes'] } })
     expect(known.branches[0].disease.alreadyIll).toBe(false)
     expect(known.branches[0].healthy.mean_years_free).toBeGreaterThan(0)
+  })
+
+  it('counts a hypertension diagnosis without a reading at the assumed blood pressure', () => {
+    const none = buildModel({ ...ME, age: 60, risk: { conditions: [] } }).branches[0].le.mean
+    const diagnosed = { ...ME, age: 60, risk: { conditions: ['hypertension'] } }
+    const assumed = buildModel(diagnosed).branches[0].le.mean
+    const explicit = buildModel({ ...diagnosed, risk: { conditions: ['hypertension'], sbp_mmhg: 150 } }).branches[0].le.mean
+    expect(assumed).toBeLessThan(none)
+    expect(assumed).toBeCloseTo(explicit, 10)
+    expect(diagnosisNotes(diagnosed)[0]).toContain('先按 150 mmHg 算')
+    expect(missingInputs(diagnosed)).not.toContain('血压')
+    expect(diagnosisNotes({ ...diagnosed, risk: { conditions: ['hypertension'], sbp_mmhg: 135 } })).toEqual([])
+  })
+
+  it('says high cholesterol is recorded but not counted', () => {
+    expect(diagnosisNotes({ ...ME, risk: { conditions: ['hyperlipidemia'] } })[0]).toContain('不计入寿命')
+    expect(diagnosisNotes({ ...ME, risk: { conditions: ['diabetes'] } })).toEqual([])
+  })
+
+  it('warns when vegetables or salt go past what the engine counts, and stops the sliders there', () => {
+    const fields = (play: Exposures) => playOutcome(buildModel(answered), play, null).warnings.map(warning => warning.field)
+    const base = buildModel(answered).base
+    expect(fields({ ...base, vegetables_g: 500, sodium_mg: 2000 })).toEqual(expect.not.arrayContaining(['vegetables_g', 'sodium_mg']))
+    expect(fields({ ...base, vegetables_g: 750 })).toContain('vegetables_g')
+    expect(fields({ ...base, sodium_mg: 1200 })).toContain('sodium_mg')
+    expect(fields({ ...base, sodium_mg: 8100 })).toContain('sodium_mg')
+
+    const { veg_cap, sodium_lo, sodium_hi } = ENGINE_CONSTANTS.sex.male.coef
+    expect(VEGETABLE_CAP_G).toBe(veg_cap)
+    expect(SODIUM_RANGE_MG).toEqual([sodium_lo, sodium_hi])
+    expect(lifeCardsFor({ ...answered, vegetables_g: 500 }).map(card => card.id)).not.toContain('veg')
+    expect(lifeCardsFor({ ...answered, sodium_mg: 2000 }).map(card => card.id)).not.toContain('salt')
+  })
+
+  it('names cards on the share card only when they alone explain the result', () => {
+    const tuned = buildModel(answered)
+    const { base } = tuned
+    expect(tuningSummary(tuned, applyLifeCards(tuned, ['tea']), ['tea'], base)).toBe('每天一杯奶茶')
+
+    const dragged = { ...base, fruit_g: 250 }
+    const both = applyLifeCards(tuned, ['tea'], dragged)
+    const summary = tuningSummary(tuned, both, ['tea'], dragged)
+    expect(summary).toContain('水果调到 250 g/天')
+    expect(summary).toContain('每天比维持体重多吃调到')
+    expect(summary).not.toContain('每天一杯奶茶')
+
+    const twice = applyLifeCards(tuned, ['salt'], { ...base, sodium_mg: 4800 })
+    expect(tuningSummary(tuned, twice, ['salt'], { ...base, sodium_mg: 4800 })).toBe('盐调到 约 9 g/天')
+    expect(tuningSummary(tuned, base, [], base)).toBe('什么都没改')
+  })
+
+  it('reads the late-start note correctly at 60 and for a harmful plan', () => {
+    const sixty = buildModel({ ...ME, age: 60 })
+    const options = adherenceOptions('male')
+    const reading = lateStart(sixty, sixty.branches[1].scenario, DEFAULT_PLAN, options).reading
+    expect(reading).toContain('拖到 70 岁才开始')
+    expect(reading).not.toContain('拖到 60 岁')
+    const harmful = lateStart(sixty, { ...sixty.base, smoking: 'current_ge20' }, DEFAULT_PLAN, options).reading
+    expect(harmful).toContain('平均是少活的')
+    expect(harmful).not.toContain('受益')
   })
 
   it('accepts people who would rather not say', () => {

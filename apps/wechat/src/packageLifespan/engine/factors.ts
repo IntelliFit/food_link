@@ -95,5 +95,5 @@ export function createFactors(constants: EngineConstants, attenuation: (sex: Sex
     })
   }
 
-  return { personLogHazard }
+  return { expectedSbp, personLogHazard }
 }

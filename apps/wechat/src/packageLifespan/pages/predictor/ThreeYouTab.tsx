@@ -5,8 +5,8 @@ import { LifeCanvas } from '../../charts/LifeCanvas'
 import { drawDistribution, drawFork, drawSurvival, drawTrioFigures, type Palette } from '../../charts/draw'
 import type { Predictee } from '../../model/people'
 import {
-  atAge, axisEndAge, deathAge, DISCLAIMER, DISEASE_NAMES, firstDiseaseOf, missingInputs, percent, signedPoints, signedYears, todayWarnings,
-  topChanges, years, type PredictorModel, type TopChange,
+  atAge, axisEndAge, deathAge, diagnosisNotes, DISCLAIMER, DISEASE_NAMES, firstDiseaseOf, missingInputs, percent, signedPoints, signedYears,
+  todayWarnings, topChanges, years, type PredictorModel, type TopChange,
 } from '../../model/predictor'
 import { threeYouPoster, type PosterContent, type ShareOptions } from '../../model/share'
 
@@ -40,13 +40,15 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
   const alreadyIll = today.disease.alreadyIll
   const longest = Math.max(...branches.map(branch => branch.le.mean - person.age), 1)
   const missing = missingInputs(person)
+  const notes = diagnosisNotes(person)
+  const worthChanging = gain >= 0.05 && changes.some(change => change.gain >= 0.05)
 
   return (
     <View>
       <View className='lp-hero'>
         {header}
         <Text className='lp-hero__title'>
-          {gain >= 0.3 ? <>把饮食吃对，平均多活 <Text className='lp-hero__num'>{years(gain)}</Text> 年</> : '吃法已经接近“吃对”，去自己调试试别的习惯'}
+          {worthChanging ? <>把饮食吃对，平均多活 <Text className='lp-hero__num'>{years(gain)}</Text> 年</> : '吃法已经接近“吃对”，去自己调试试别的习惯'}
         </Text>
         <LifeCanvas id='lpFork' className='lp-canvas lp-canvas--fork' deps={[model, age]} draw={(ctx, w, h) => drawFork(ctx, w, h, person, branches, age)} />
         <View className='lp-age'>
@@ -104,7 +106,7 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
         </View>
         <Text className='lp-reading'>
           {chart === 'alive' && `活到 ${age} 岁的概率：照现在这样吃 ${percent(alive[0].alive)}，把饮食吃对 ${percent(alive[1].alive)}，放飞自我 ${percent(alive[2].alive)}。`}
-          {chart === 'free' && `到 ${age} 岁还在世且没有重大慢病的概率：照现在这样吃 ${percent(alive[0].free)}，把饮食吃对 ${percent(alive[1].free)}，放飞自我 ${percent(alive[2].free)}。`}
+          {chart === 'free' && `到 ${age} 岁还在世且无重大慢病的概率：照现在这样吃 ${percent(alive[0].free)}，把饮食吃对 ${percent(alive[1].free)}，放飞自我 ${percent(alive[2].free)}。`}
           {chart === 'dist' && `离世年龄是一条分布，不是一个日期。吃对把分布${shift(gain)}，放飞把分布${shift(loose.le.mean - today.le.mean)}，三条分布大量重叠。`}
         </Text>
         <View className='lp-le'>
@@ -119,7 +121,7 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
       </View>
 
       <View className='lp-card'>
-        <Text className='lp-card__title'>还能活多少年，其中多少年没有重大慢病</Text>
+        <Text className='lp-card__title'>还能活多少年，其中多少年无重大慢病</Text>
         {alreadyIll ? (
           <Text className='lp-note'>已有心脏病、中风、癌症或慢阻肺时，这一项不适用。</Text>
         ) : branches.map((branch, index) => (
@@ -138,7 +140,7 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
       </View>
 
       <View className='lp-card'>
-        <Text className='lp-card__title'>最值得改的{CHANGE_COUNT[changes.length] ?? '三'}件事</Text>
+        <Text className='lp-card__title'>{changes.length === 0 ? '吃法已经达标' : `最值得改的${CHANGE_COUNT[changes.length] ?? '三'}件事`}</Text>
         {changes.length === 0 && <Text className='lp-fine'>按目前能算的几项（水果、鱼、体重，填了的话还有蔬菜和盐），这个人的吃法已经达标了。去“自己调”试试其他习惯。</Text>}
         {changes.slice(0, 3).map((change, index) => (
           <View key={change.factor} className='lp-change'>
@@ -156,8 +158,8 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
             <Button className='lp-btn lp-btn--small lp-btn--ghost' onClick={() => onAction(change.action.target)}>{change.action.label} ›</Button>
           </View>
         ))}
-        <Text className='lp-fine'>每一项单独计算，各项收益合计不等于全部一起改的收益。</Text>
-        <Button className='lp-btn lp-btn--ghost lp-btn--block' onClick={onPlay}>不只这三件，自己调调看 ›</Button>
+        {changes.length > 1 && <Text className='lp-fine'>每一项单独计算，各项收益合计不等于全部一起改的收益。</Text>}
+        <Button className='lp-btn lp-btn--ghost lp-btn--block' onClick={onPlay}>{changes.length >= 3 ? '不只这三件，自己调调看 ›' : '自己调调看 ›'}</Button>
       </View>
 
       <View className='lp-card'>
@@ -175,7 +177,7 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
                 <Text className='lp-dice__value'>{Math.floor(deathAge(person, branch, life))}<Text className='lp-dice__unit'> 岁</Text></Text>
                 <Text className='lp-fine'>这次模拟离世</Text>
                 <Text className='lp-dice__event'>
-                  {alreadyIll ? '已有重大慢病' : first ? `${Math.floor(first.age)} 岁首次${DISEASE_NAMES[first.type]}` : '没有新的重大慢病'}
+                  {alreadyIll ? '已有重大慢病' : first ? `${Math.floor(first.age)} 岁首次${DISEASE_NAMES[first.type]}` : '无新发重大慢病'}
                 </Text>
               </View>
             )
@@ -190,6 +192,7 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
       <View className='lp-card'>
         <Text className='lp-card__title'>这一版还没算的</Text>
         {missing.length > 0 && <Text className='lp-note'><Text className='lp-note__key'>没填的 </Text>{missing.join('、')}没填时不计入。在“换个人”里修改信息可以补上。</Text>}
+        {notes.map(note => <Text key={note} className='lp-note'><Text className='lp-note__key'>病史 </Text>{note}</Text>)}
         <Text className='lp-note'><Text className='lp-note__key'>其他因素 </Text>教育、婚姻、心理、社交和环境这一版还没有问，也不计入。</Text>
         <Text className='lp-note'><Text className='lp-note__key'>坚持程度 </Text>三个你假设长期坚持。到“自己调”里可以改成晚几年开始、只坚持一部分。</Text>
       </View>

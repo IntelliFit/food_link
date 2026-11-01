@@ -87,6 +87,17 @@ describe('predictor page', () => {
     ;(getHealthProfile as jest.Mock).mockResolvedValue({ gender: 'female', birthday: '1990-01-01', height: 165, weight: 55 })
     render(<LifespanPredictorPage />)
     expect(await screen.findByText(/已从健康档案带入/)).toBeInTheDocument()
+    expect(screen.queryByText(/档案里的病史也带入了/)).not.toBeInTheDocument()
+  })
+
+  it('says diagnoses came from the health profile and asks about the ones it never covered', async () => {
+    mockStorage(undefined)
+    ;(getAccessToken as jest.Mock).mockReturnValue('token')
+    ;(getHealthProfile as jest.Mock).mockResolvedValue({
+      gender: 'female', birthday: '1990-01-01', height: 165, weight: 55, health_condition: { medical_history: ['hypertension'] },
+    })
+    render(<LifespanPredictorPage />)
+    expect(await screen.findByText(/档案没问过心脏病、中风、癌症和慢阻肺/)).toBeInTheDocument()
   })
 
   it('still lets you fill the form in when the health profile cannot be read', async () => {
@@ -162,13 +173,14 @@ describe('predictor page', () => {
     mockStorage([{ ...STORED, risk: { conditions: ['hypertension'] } }])
     render(<LifespanPredictorPage />)
     fireEvent.click(await screen.findByText('三个你'))
-    expect(await screen.findByText('还能活多少年，其中多少年没有重大慢病')).toBeInTheDocument()
+    expect(await screen.findByText('还能活多少年，其中多少年无重大慢病')).toBeInTheDocument()
     expect(screen.queryByText(/这一项不适用/)).not.toBeInTheDocument()
     expect(screen.getAllByText(/^无重大慢病 \d+\.\d 年 · 带病 \d+\.\d 年$/)).toHaveLength(3)
     expect(screen.getByText(/已知的高血压和糖尿病不算已患病/)).toBeInTheDocument()
+    expect(screen.getByText(/没填血压，先按 150 mmHg 算/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('无重大慢病'))
-    expect(await screen.findByText(/还在世且没有重大慢病的概率/)).toBeInTheDocument()
+    expect(await screen.findByText(/还在世且无重大慢病的概率/)).toBeInTheDocument()
   })
 
   it('says disease-free years do not apply to someone who already has a major disease', async () => {
@@ -213,15 +225,25 @@ describe('predictor page', () => {
     render(<LifespanPredictorPage />)
     fireEvent.click(await screen.findByText('三个你'))
     await screen.findByText('第 1 次')
-    const events = screen.getAllByText(/岁首次(心血管病|癌症|慢性呼吸病)|没有新的重大慢病/)
+    const events = screen.getAllByText(/岁首次(心血管病|癌症|慢性呼吸病)|无新发重大慢病/)
     expect(events).toHaveLength(3)
+  })
+
+  it('does not promise three changes when there are none left', async () => {
+    mockStorage([{ ...STORED, height_cm: 170, weight_kg: 62, energy_balance_kcal: 0, fruit_g: 350, fish_g: 80 }])
+    render(<LifespanPredictorPage />)
+    fireEvent.click(await screen.findByText('三个你'))
+    expect((await screen.findAllByText('吃法已经达标')).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/最值得改的/)).not.toBeInTheDocument()
+    expect(screen.getByText('自己调调看 ›')).toBeInTheDocument()
+    expect(screen.queryByText(/各项收益合计/)).not.toBeInTheDocument()
   })
 
   it('only offers vegetables and salt once the person has answered them', async () => {
     mockStorage([STORED])
     const view = render(<LifespanPredictorPage />)
     await screen.findByText('78.7')
-    expect(view.container.querySelector('input[type="range"][min="0"][max="600"]')).toBeNull()
+    expect(view.container.querySelector('input[type="range"][min="0"][max="500"]')).toBeNull()
     expect(screen.queryByText('每天多吃半斤蔬菜')).not.toBeInTheDocument()
     expect(screen.getByText(/蔬菜和盐要先填个大概才能调/)).toBeInTheDocument()
     view.unmount()
@@ -230,7 +252,7 @@ describe('predictor page', () => {
     const filled = render(<LifespanPredictorPage />)
     expect(await screen.findByText('每天多吃半斤蔬菜')).toBeInTheDocument()
     expect(screen.getByText('每天少吃 3 克盐')).toBeInTheDocument()
-    expect(filled.container.querySelector('input[type="range"][min="0"][max="600"]')).not.toBeNull()
+    expect(filled.container.querySelector('input[type="range"][min="0"][max="500"]')).not.toBeNull()
     expect(screen.queryByText(/蔬菜和盐要先填个大概才能调/)).not.toBeInTheDocument()
   })
 

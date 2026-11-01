@@ -1,6 +1,6 @@
 // Everyday wording for the engine's inputs: labels, life cards, sliders and form levels.
 // Level values (MET-h, grams, kcal) are product mappings, not parameters from a paper.
-import { ALCOHOL, SMOKING, UNKNOWN, type Alcohol, type Condition, type Exposures, type Person, type Smoking } from '../engine/engine'
+import { ALCOHOL, SMOKING, SODIUM_MG_PER_G_SALT, UNKNOWN, type Alcohol, type Condition, type Exposures, type Person, type Smoking } from '../engine/engine'
 
 /** The form also lets people decline to answer; the tuning tab only offers real levels. */
 export const SMOKING_ANSWERS: readonly Smoking[] = [...SMOKING, UNKNOWN]
@@ -24,7 +24,10 @@ export const ALCOHOL_LABELS: Record<Alcohol, string> = {
 
 export type NumericHabit = 'fruit_g' | 'vegetables_g' | 'fish_g' | 'sodium_mg' | 'delta_intake_kcal' | 'pa_met_h' | 'sleep_h'
 
-const SODIUM_MG_PER_G_SALT = 393
+// Beyond these the engine stops counting, so the sliders stop there too.
+export const VEGETABLE_CAP_G = 500
+export const SODIUM_RANGE_MG = [2000, 8000] as const
+
 export const saltGrams = (mg: number): number => Math.round(mg / SODIUM_MG_PER_G_SALT)
 
 export interface HabitSlider {
@@ -44,7 +47,7 @@ export const HABIT_SLIDERS: HabitSlider[] = [
     hint: value => `约 ${(value / 200).toFixed(1)} 个苹果`,
   },
   {
-    key: 'vegetables_g', label: '蔬菜', min: 0, max: 600, step: 10,
+    key: 'vegetables_g', label: '蔬菜', min: 0, max: VEGETABLE_CAP_G, step: 10,
     format: value => `${Math.round(value)} g/天`,
     hint: value => `约 ${(value / 500).toFixed(1)} 斤`,
   },
@@ -54,7 +57,7 @@ export const HABIT_SLIDERS: HabitSlider[] = [
     hint: value => `约每周 ${(value * 7 / 100).toFixed(1)} 次，每次 100 g`,
   },
   {
-    key: 'sodium_mg', label: '盐', min: 1000, max: 9000, step: 100,
+    key: 'sodium_mg', label: '盐', min: SODIUM_RANGE_MG[0], max: SODIUM_RANGE_MG[1], step: 100,
     format: value => `约 ${saltGrams(value)} g/天`,
     hint: () => '含酱油和调料，全国平均约 11 g',
   },
@@ -100,13 +103,13 @@ export const LIFE_CARDS: LifeCard[] = [
   { id: 'apple', name: '每天多吃一个苹果', detail: '水果 +200 g/天', apply: x => ({ ...x, fruit_g: x.fruit_g + 200 }) },
   {
     id: 'veg', name: '每天多吃半斤蔬菜', detail: '蔬菜 +250 g/天',
-    applies: person => person.vegetables_g != null,
+    applies: person => person.vegetables_g != null && person.vegetables_g < VEGETABLE_CAP_G,
     apply: x => ({ ...x, vegetables_g: (x.vegetables_g ?? 0) + 250 }),
   },
   { id: 'fish', name: '每周多吃两次鱼', detail: '鱼 +30 g/天', apply: x => ({ ...x, fish_g: x.fish_g + 30 }) },
   {
     id: 'salt', name: '每天少吃 3 克盐', detail: '盐 −3 g/天',
-    applies: person => person.sodium_mg != null,
+    applies: person => person.sodium_mg != null && person.sodium_mg > SODIUM_RANGE_MG[0],
     apply: x => ({ ...x, sodium_mg: Math.max(0, (x.sodium_mg ?? 0) - 1200) }),
   },
   { id: 'rice', name: '每天少吃半碗米饭', detail: '−120 kcal/天', apply: x => ({ ...x, delta_intake_kcal: x.delta_intake_kcal - 120 }) },

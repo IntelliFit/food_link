@@ -1,6 +1,6 @@
 // Turns engine curves into what the predictor screens show.
 import { engine, type AdherenceSpec, type ChangePlan, type Curves, type DiseaseEventType, type EvidenceWarning, type Exposures, type FirstDisease, type Person, type Sex } from '../engine/engine'
-import { lifeCardsFor, saltGrams } from './habits'
+import { HABIT_CHOICES, habitSlidersFor, lifeCardsFor, saltGrams } from './habits'
 
 export const LIFE_SEED = 182772
 export const DISCLAIMER = '模拟估算，不用于诊断'
@@ -27,7 +27,14 @@ const BRANCH_NAMES: Record<BranchKey, [name: string, short: string]> = {
   diet_loose: ['放飞自我', '放飞'],
 }
 
-export function buildModel(person: Person): PredictorModel {
+/** A hypertension diagnosis counts through blood pressure, so without a reading the engine's assumed one is used. */
+function withAssumedSbp(person: Person): Person {
+  const sbp = engine.assumedSbp(person)
+  return sbp === null ? person : { ...person, risk: { ...person.risk, sbp_mmhg: sbp } }
+}
+
+export function buildModel(answers: Person): PredictorModel {
+  const person = withAssumedSbp(answers)
   const base = engine.current(person)
   const lag = engine.lagOf(person)
   const make = (key: BranchKey, scenario: Exposures): Branch => ({
@@ -227,6 +234,20 @@ export function isSameExposures(a: Exposures, b: Exposures): boolean {
     && (a.sodium_mg ?? null) === (b.sodium_mg ?? null)
 }
 
+/** What was changed, for the share card. Cards are named only when they alone explain the difference. */
+export function tuningSummary(model: PredictorModel, play: Exposures, applied: string[], cardsFrom: Exposures): string {
+  const { person, base } = model
+  if (applied.length && isSameExposures(cardsFrom, base)) {
+    return lifeCardsFor(person).filter(card => applied.includes(card.id)).map(card => card.name).join('、')
+  }
+  const sliders = habitSlidersFor(person)
+    .filter(slider => Math.abs((play[slider.key] ?? 0) - (base[slider.key] ?? 0)) > SAME_EPSILON)
+    .map(slider => `${slider.label}调到 ${slider.format(play[slider.key] ?? 0)}`)
+  const choices = HABIT_CHOICES.filter(choice => play[choice.key] !== base[choice.key])
+    .map(choice => `${choice.label}改成${choice.names[play[choice.key] as never]}`)
+  return [...sliders, ...choices].join('、') || '什么都没改'
+}
+
 export interface LateStart {
   title: string
   rows: Array<{ age: number; label: string; gain: number; selected: boolean; width: number }>
@@ -242,12 +263,14 @@ export function lateStart(model: PredictorModel, play: Exposures, choice: PlanCh
   const { rows } = engine.gainByStartAge(person, target, ages, options[choice.adherence].spec)
   const biggest = Math.max(0.1, ...rows.map(row => Math.abs(row.gain_years)))
   const first = rows[0]
-  const at60 = rows.find(row => row.change_start_age === 60)
+  const later = rows.find(row => row !== first && row.change_start_age >= 60)
   let reading = '开始得越晚，能受益的年数越少。'
   if (!changed && first && Math.abs(first.gain_years) < 0.05) {
     reading = '按引擎能算的饮食项，这个人已经接近“吃对”，先在上面调一个习惯再看。'
-  } else if (first && at60 && first.gain_years > 0.05) {
-    reading = `现在开始平均多活 ${years(first.gain_years)} 年；拖到 60 岁才开始，还有 ${years(at60.gain_years)} 年。越早越好，但晚开始也不是白做。`
+  } else if (first && first.gain_years < -0.05) {
+    reading = '这样改平均是少活的。开始得越晚，受影响的年数越少。'
+  } else if (first && later && first.gain_years > 0.05) {
+    reading = `现在开始平均多活 ${years(first.gain_years)} 年；拖到 ${later.change_start_age} 岁才开始，还有 ${years(later.gain_years)} 年。越早越好，但晚开始也不是白做。`
   }
   return {
     title: changed ? '晚开始还有没有用？（按你调的方案）' : '晚开始还有没有用？（以“把饮食吃对”为例）',
@@ -283,9 +306,18 @@ export function missingInputs(person: Person): string[] {
   const missing: string[] = []
   if (person.vegetables_g == null) missing.push('蔬菜')
   if (person.sodium_mg == null) missing.push('咸淡')
-  if (person.risk?.sbp_mmhg == null) missing.push('血压')
+  if (person.risk?.sbp_mmhg == null && engine.assumedSbp(person) === null) missing.push('血压')
   if (person.risk?.conditions == null) missing.push('病史')
   return missing
+}
+
+/** How a diagnosis was counted, when that is not obvious from the answers. */
+export function diagnosisNotes(person: Person): string[] {
+  const assumed = engine.assumedSbp(person)
+  return [
+    ...(assumed === null ? [] : [`高血压通过血压计入。没填血压，先按 ${Math.round(assumed)} mmHg 算，填上实际血压会更准。`]),
+    ...(person.risk?.conditions?.includes('hyperlipidemia') ? ['高血脂目前没有可用的全因死亡估计，已记录但不计入寿命。'] : []),
+  ]
 }
 
 export const completenessOf = (person: Person): number => engine.completeness(person)

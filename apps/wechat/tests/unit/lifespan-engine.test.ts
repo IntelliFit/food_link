@@ -157,4 +157,18 @@ describe('lifespan engine behaviour', () => {
     expect(fields).toEqual(expect.arrayContaining(['age', 'fruit_g', 'sleep_h', 'pa_met_h', 'bmi']))
     expect(engine.warnings(MALE_32, base, 26)).toEqual([])
   })
+
+  it('assumes the same blood pressure as the Python input adapter', () => {
+    const person = (sex: 'male' | 'female', age: number, height_cm: number, weight_kg: number) => (
+      { ...MALE_32, sex, age, height_cm, weight_kg, risk: { conditions: ['hypertension'] } }
+    )
+    // adapt_input in lifespan_predictor/input_adapter.py, engine 0.3.0.
+    expect(engine.assumedSbp(person('male', 60, 170, 70))).toBeCloseTo(150, 5)
+    expect(engine.assumedSbp(person('female', 75, 158, 60))).toBeCloseTo(150.262992, 5)
+    expect(engine.assumedSbp(person('male', 70, 175, 110))).toBeCloseTo(160.999354, 5)
+    expect(engine.assumedSbp(person('female', 25, 160, 50))).toBeCloseTo(150, 5)
+    expect(engine.assumedSbp(MALE_32)).toBeNull()
+    expect(engine.assumedSbp({ ...MALE_32, risk: { conditions: ['hypertension'], sbp_mmhg: 130 } })).toBeNull()
+    expect(engine.assumedSbp({ ...MALE_32, risk: { conditions: ['diabetes'] } })).toBeNull()
+  })
 })

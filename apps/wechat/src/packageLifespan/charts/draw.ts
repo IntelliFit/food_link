@@ -284,7 +284,7 @@ export function drawParallelLives(ctx: Ctx, width: number, height: number, perso
     for (let i = 0; i < count; i += 1) dot(ctx, center(bin), middle + 10 + i * gap, 2.4, tunedColor)
   })
   ageTicks(person.age, end).forEach(age => text(ctx, String(age), x(age), middle + 3.5, palette.muted, 'center'))
-  if (person.age < 85) line(ctx, x(85), 4, x(85), height - 4, palette.ink, [2, 3])
+  if (person.age < lives.milestone) line(ctx, x(lives.milestone), 4, x(lives.milestone), height - 4, palette.ink, [2, 3])
   text(ctx, '照现在', left, 12, palette.a, 'left', 11)
   text(ctx, '调完以后', left, height - 4, tunedColor, 'left', 11)
 }
