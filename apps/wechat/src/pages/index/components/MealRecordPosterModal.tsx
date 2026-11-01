@@ -7,8 +7,7 @@ import {
   getMyMembership, showUnifiedApiError, type FoodRecord,
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
-import { computePhotoPosterHeight, drawPhotoRecordPoster, type PhotoPosterLabels } from '../../../utils/photo-record-poster'
-import { computeWatermarkPosterHeight, drawWatermarkRecordPoster } from '../../../utils/watermark-record-poster'
+import { computeWatermarkPosterHeight, drawWatermarkRecordPoster, WATERMARK_STYLES, type PosterLabels, type WatermarkStyle } from '../../../utils/watermark-record-poster'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { getCurrentPosterUserProfile, getLocalPosterUserProfile, mergePosterUserProfile, type PosterUserProfile } from '../../../utils/poster-profile'
@@ -31,7 +30,10 @@ interface MealRecordPosterModalProps {
   allowReward?: boolean
 }
 
-type PosterStyle = 'classic' | 'photo' | 'watermark'
+/** 水印打卡图按 3 倍导出，照片分享出去不发糊；无照片的营养卡片维持 2 倍。 */
+const WATERMARK_EXPORT_SCALE = 3
+const CLASSIC_EXPORT_SCALE = 2
+
 type CanvasImage = { width: number; height: number }
 type PosterCanvas = HTMLCanvasElement & {
   createImage: () => CanvasImage & { src: string; onload: () => void; onerror: () => void }
@@ -42,8 +44,8 @@ function inviteCodeFor(userId: string) {
 }
 
 export function MealRecordPosterModal({ visible, record, onClose, onShareContextChange, afterSave = false, allowReward = true }: MealRecordPosterModalProps) {
-  const [style, setStyle] = useState<PosterStyle>('photo')
-  const [labels, setLabels] = useState<PhotoPosterLabels>('nutrients')
+  const [style, setStyle] = useState<WatermarkStyle>('strip')
+  const [labels, setLabels] = useState<PosterLabels>('nutrients')
   const [imageIndex, setImageIndex] = useState(0)
   const [generating, setGenerating] = useState(false)
   const [poster, setPoster] = useState<MealPosterSharePayload | null>(null)
@@ -60,9 +62,9 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
   const rewardClaiming = useRef(false)
   const images = record?.image_paths?.length ? record.image_paths : record?.image_path ? [record.image_path] : []
   const photoSrc = images[imageIndex] || images[0] || ''
-  const effectiveStyle = photoSrc ? style : 'classic'
-  const usesPhoto = effectiveStyle !== 'classic'
-  const key = usesPhoto ? `${effectiveStyle}:${labels}:${photoSrc}` : 'classic'
+  // 没有照片的记录（如文字记录）没法做水印，仍生成营养卡片。
+  const usesPhoto = Boolean(photoSrc)
+  const key = usesPhoto ? `${style}:${labels}:${photoSrc}` : 'classic'
   const currentPoster = posterKey === key ? poster : null
 
   useEffect(() => {
@@ -73,7 +75,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
     setPoster(null)
     setPosterKey('')
     setError('')
-    setStyle('photo')
+    setStyle('strip')
     setLabels('nutrients')
     setImageIndex(0)
   }, [visible, record])
@@ -141,22 +143,22 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
           return { profile, qrImg }
         })
       }
-      if (effectiveStyle === 'classic' && !classicDetails.current) {
+      if (!usesPhoto && !classicDetails.current) {
         classicDetails.current = Promise.all([
           isDebug ? Promise.resolve(null) : getMyMembership().catch(() => null),
           isDebug ? Promise.resolve(null) : getPosterCalorieCompare(record.id).catch(() => null),
         ]).then(([membership, compare]) => ({ membership, compare }))
       }
       const [mainImg, { profile, qrImg }, details] = await Promise.all([
-        loadImage(usesPhoto ? photoSrc : (record.image_path || images[0] || '')),
+        loadImage(photoSrc),
         ownerAssets.current,
-        effectiveStyle === 'classic' ? classicDetails.current : Promise.resolve(null),
+        usesPhoto ? Promise.resolve(null) : classicDetails.current,
       ])
       if (!active) return
       if (usesPhoto && (!mainImg || mainImg.width <= 0 || mainImg.height <= 0)) {
-        throw new Error('原图读取失败，请重试或选择经典海报')
+        throw new Error('原图读取失败，请重试')
       }
-      const avatarImg = effectiveStyle === 'classic' ? await loadImage(profile.avatar) : null
+      const avatarImg = usesPhoto ? null : await loadImage(profile.avatar)
       if (!active) return
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('画布不可用，请重试')
@@ -165,18 +167,15 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         mealPlanKcal: compare.meal_plan_kcal, hasBaseline: compare.has_baseline,
         deltaKcal: compare.delta_kcal, baselineKcal: compare.baseline_kcal,
       } : undefined
-      const height = effectiveStyle === 'watermark' && mainImg
-        ? computeWatermarkPosterHeight(mainImg, POSTER_WIDTH)
-        : effectiveStyle === 'photo' && mainImg
-          ? computePhotoPosterHeight(mainImg, POSTER_WIDTH)
-          : computePosterHeight(ctx, record, POSTER_WIDTH, membership?.is_pro, calorieCompare)
-      canvas.width = POSTER_WIDTH * 2
-      canvas.height = height * 2
-      ctx.scale(2, 2)
-      if (effectiveStyle === 'watermark' && mainImg) {
-        drawWatermarkRecordPoster(ctx, { width: POSTER_WIDTH, height, image: mainImg, record, labels, nickname: profile.nickname, qrCodeImage: qrImg })
-      } else if (effectiveStyle === 'photo' && mainImg) {
-        drawPhotoRecordPoster(ctx, { width: POSTER_WIDTH, height, image: mainImg, record, labels, nickname: profile.nickname, qrCodeImage: qrImg })
+      const height = usesPhoto && mainImg
+        ? computeWatermarkPosterHeight(style, mainImg, POSTER_WIDTH)
+        : computePosterHeight(ctx, record, POSTER_WIDTH, membership?.is_pro, calorieCompare)
+      const exportScale = usesPhoto ? WATERMARK_EXPORT_SCALE : CLASSIC_EXPORT_SCALE
+      canvas.width = POSTER_WIDTH * exportScale
+      canvas.height = height * exportScale
+      ctx.scale(exportScale, exportScale)
+      if (usesPhoto && mainImg) {
+        drawWatermarkRecordPoster(ctx, { style, width: POSTER_WIDTH, height, image: mainImg, record, labels, nickname: profile.nickname, qrCodeImage: qrImg })
       } else {
         drawRecordPoster(ctx, {
           width: POSTER_WIDTH, height, record, image: mainImg, qrCodeImage: qrImg,
@@ -184,7 +183,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         })
       }
       const exported = await Taro.canvasToTempFilePath({
-        canvas: canvas as any, destWidth: POSTER_WIDTH * 2, destHeight: height * 2, fileType: 'jpg', quality: 0.95,
+        canvas: canvas as any, destWidth: POSTER_WIDTH * exportScale, destHeight: height * exportScale, fileType: 'jpg', quality: 0.95,
       })
       if (!active) return
       const payload = {
@@ -204,7 +203,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
     return () => { active = false; clearTimeout(timer) }
     // images 内容由 record 决定，避免新数组触发重复导出。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, record, effectiveStyle, labels, photoSrc, key, retry])
+  }, [visible, record, style, labels, photoSrc, key, retry])
 
   const shareImage = useCallback(() => {
     if (!currentPoster || generating || !record) return
@@ -223,42 +222,53 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
   }, [currentPoster, generating, record, allowReward])
 
   if (!visible || !record) return null
+  const previewBody = generating ? <View className='record-share-placeholder'><View className='record-share-spinner' /></View> : currentPoster ? (
+    <Image
+      className={usesPhoto ? 'record-share-fit' : 'record-share-image'}
+      src={currentPoster.imageUrl}
+      mode={usesPhoto ? 'aspectFit' : 'widthFix'}
+      onClick={() => Taro.previewImage({ current: currentPoster.imageUrl, urls: [currentPoster.imageUrl] })}
+    />
+  ) : <View className='record-share-placeholder'><Text>{error}</Text><Button className='record-share-retry' onClick={() => { loadedImages.current.clear(); setRetry(n => n + 1) }}>重试</Button></View>
   return (
     <View className='record-share-panel'>
       <View className='record-share-header'>
         <View>
           <Text className='record-share-title'>{afterSave ? '已记录，分享这份美味' : '分享美食打卡'}</Text>
-          <Text className='record-share-subtitle'>选一张喜欢的打卡图</Text>
+          <Text className='record-share-subtitle'>{usesPhoto ? '选一款相机水印' : '这餐没有照片，生成营养卡片'}</Text>
         </View>
         <View className='record-share-close' onClick={onClose}>×</View>
       </View>
-      <View className='record-share-styles'>
-        <View className={`record-share-style record-share-style-classic ${effectiveStyle === 'classic' ? 'active' : ''}`} onClick={() => setStyle('classic')}>
-          <Text>经典海报</Text><Text className='record-share-style-desc'>原来的营养卡片</Text>
-        </View>
-        {photoSrc && <View className={`record-share-style record-share-style-photo ${effectiveStyle === 'photo' ? 'active' : ''}`} onClick={() => setStyle('photo')}>
-          <Text>原图贴纸</Text><Text className='record-share-style-desc'>照片 + 可爱标注</Text>
-        </View>}
-        {photoSrc && <View className={`record-share-style record-share-style-watermark ${effectiveStyle === 'watermark' ? 'active' : ''}`} onClick={() => setStyle('watermark')}>
-          <Text>相机水印</Text><Text className='record-share-style-desc'>信息收进底栏</Text>
-        </View>}
-      </View>
+      {usesPhoto
+        ? <View className='record-share-stage'>{previewBody}</View>
+        : <ScrollView scrollY className='record-share-preview'>{previewBody}</ScrollView>}
+      {usesPhoto && images.length > 1 && (
+        <ScrollView scrollX className='record-share-photos'>
+          {images.map((src, index) => <Image key={`${src}-${index}`} className={`record-share-photo ${imageIndex === index ? 'active' : ''}`} src={src} mode='aspectFill' onClick={() => setImageIndex(index)} />)}
+        </ScrollView>
+      )}
+      {usesPhoto && (
+        <ScrollView scrollX className='record-share-styles'>
+          {WATERMARK_STYLES.map(option => (
+            <View key={option.id} className={`record-share-style record-share-style-${option.id} ${style === option.id ? 'active' : ''}`} onClick={() => setStyle(option.id)}>
+              <View className={`wm-thumb wm-thumb-${option.id}`}>
+                <Image className='wm-thumb-photo' src={photoSrc} mode='aspectFill' />
+                <View className='wm-thumb-info'>
+                  <View className='wm-thumb-bar wm-thumb-bar-main' />
+                  <View className='wm-thumb-bar' />
+                </View>
+              </View>
+              <Text className='record-share-style-name'>{option.name}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
       {usesPhoto && (
         <View className='record-share-labels'>
           <View className={`record-share-label-calories ${labels === 'calories' ? 'active' : ''}`} onClick={() => setLabels('calories')}>只标热量</View>
           <View className={`record-share-label-nutrients ${labels === 'nutrients' ? 'active' : ''}`} onClick={() => setLabels('nutrients')}>热量 + 营养</View>
         </View>
       )}
-      {usesPhoto && images.length > 1 && (
-        <ScrollView scrollX className='record-share-photos'>
-          {images.map((src, index) => <Image key={`${src}-${index}`} className={`record-share-photo ${imageIndex === index ? 'active' : ''}`} src={src} mode='aspectFill' onClick={() => setImageIndex(index)} />)}
-        </ScrollView>
-      )}
-      <ScrollView scrollY className='record-share-preview'>
-        {generating ? <View className='record-share-placeholder'><View className='record-share-spinner' /></View> : currentPoster ? (
-          <Image className='record-share-image' src={currentPoster.imageUrl} mode='widthFix' onClick={() => Taro.previewImage({ current: currentPoster.imageUrl, urls: [currentPoster.imageUrl] })} />
-        ) : <View className='record-share-placeholder'><Text>{error}</Text><Button className='record-share-retry' onClick={() => { loadedImages.current.clear(); setRetry(n => n + 1) }}>重试</Button></View>}
-      </ScrollView>
       <View className='record-share-footer'>
         <Button className='record-share-submit' disabled={!currentPoster || generating} onClick={shareImage}>分享 / 保存图片</Button>
         <View className='record-share-skip' onClick={onClose}>{afterSave ? '先不分享，回首页' : '完成'}</View>
