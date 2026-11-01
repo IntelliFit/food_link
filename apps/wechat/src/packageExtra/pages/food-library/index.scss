@@ -266,6 +266,20 @@ $food-library-font-meta: 24rpx;
   position: relative;
 }
 
+.spot-dish-bar-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.spot-dish-bar-back {
+  flex-shrink: 0;
+  margin-left: 24rpx;
+}
+
 .sort-left {
   display: flex;
   gap: 32rpx;

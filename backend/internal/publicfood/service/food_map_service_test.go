@@ -25,6 +25,32 @@ func TestMapSpotFromCandidateUsesDirectMerchantLocation(t *testing.T) {
 	}
 }
 
+func TestMapSpotFromCandidatePrefersSQLSpotKey(t *testing.T) {
+	latitude, longitude := 31.2749, 121.5423
+	spot, ok := mapSpotFromCandidate(repo.MapFoodCandidate{
+		ID: "food-1", SpotKey: "food:31.27490:121.54230", SpotFoodCount: 279, DirectLatitude: &latitude, DirectLongitude: &longitude,
+	})
+	if !ok || spot.Key != "food:31.27490:121.54230" || spot.FoodCount != 279 {
+		t.Fatalf("unexpected spot: %+v ok=%v", spot, ok)
+	}
+}
+
+func TestValidMapSpotKey(t *testing.T) {
+	for key, want := range map[string]bool{
+		"food:31.27490:121.54230":                      true,
+		"canteen:5f3c1d9e-8a7b-4c6d-9e0f-1a2b3c4d5e6f": true,
+		"school:5f3c1d9e-8a7b-4c6d-9e0f-1a2b3c4d5e6f":  true,
+		"":                     false,
+		"food:abc:def":         false,
+		"canteen:1' OR '1'='1": false,
+		"window:5f3c1d9e-8a7b-4c6d-9e0f-1a2b3c4d5e6f": false,
+	} {
+		if got := validMapSpotKey(key); got != want {
+			t.Errorf("validMapSpotKey(%q) = %v, want %v", key, got, want)
+		}
+	}
+}
+
 func TestMapSpotFromCandidateFallsBackToCanteen(t *testing.T) {
 	lat, lng := 40.003, 116.326
 	spot, ok := mapSpotFromCandidate(repo.MapFoodCandidate{
