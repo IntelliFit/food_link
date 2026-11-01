@@ -4,7 +4,10 @@ import { engine } from '../../engine/engine'
 import { LifeCanvas } from '../../charts/LifeCanvas'
 import { drawDistribution, drawFork, drawSurvival, drawTrioFigures, type Palette } from '../../charts/draw'
 import type { Predictee } from '../../model/people'
-import { atAge, axisEndAge, deathAge, DISCLAIMER, percent, signedPoints, signedYears, todayWarnings, topChanges, years, type PredictorModel, type TopChange } from '../../model/predictor'
+import {
+  atAge, axisEndAge, deathAge, DISCLAIMER, DISEASE_NAMES, firstDiseaseOf, missingInputs, percent, signedPoints, signedYears, todayWarnings,
+  topChanges, years, type PredictorModel, type TopChange,
+} from '../../model/predictor'
 import { threeYouPoster, type PosterContent, type ShareOptions } from '../../model/share'
 
 interface ThreeYouTabProps {
@@ -27,12 +30,15 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
   const [today, right, loose] = branches
   const lastAge = axisEndAge(person)
   const [age, setAge] = useState(Math.min(lastAge, person.age + 18))
-  const [chart, setChart] = useState<'alive' | 'dist'>('alive')
+  const [chart, setChart] = useState<'alive' | 'free' | 'dist'>('alive')
   const [life, setLife] = useState(0)
   const changes = useMemo(() => topChanges(model), [model])
   const warnings = useMemo(() => todayWarnings(model), [model])
   const gain = right.le.mean - today.le.mean
   const alive = branches.map(branch => atAge(person, branch, age))
+  const alreadyIll = today.disease.alreadyIll
+  const longest = Math.max(...branches.map(branch => branch.le.mean - person.age), 1)
+  const missing = missingInputs(person)
 
   return (
     <View>
@@ -68,6 +74,7 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
                 <Text className='lp-trio__name'>{branch.name}</Text>
                 <Text className='lp-trio__weight'>{alive[index].weight.toFixed(0)} kg</Text>
                 <Text className='lp-hero__dim'>在世 {percent(alive[index].alive)}</Text>
+                <Text className='lp-hero__dim'>无重大慢病 {percent(alive[index].free)}</Text>
               </View>
             ))}
           </View>
@@ -78,7 +85,8 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
 
       <View className='lp-card'>
         <View className='lp-tabs'>
-          <View className={`lp-tabs__item${chart === 'alive' ? ' is-on' : ''}`} role='tab' onClick={() => setChart('alive')}>活到各年龄的概率</View>
+          <View className={`lp-tabs__item${chart === 'alive' ? ' is-on' : ''}`} role='tab' onClick={() => setChart('alive')}>活到各年龄</View>
+          <View className={`lp-tabs__item${chart === 'free' ? ' is-on' : ''}`} role='tab' onClick={() => setChart('free')}>无重大慢病</View>
           <View className={`lp-tabs__item${chart === 'dist' ? ' is-on' : ''}`} role='tab' onClick={() => setChart('dist')}>寿命分布</View>
         </View>
         <LifeCanvas
@@ -86,17 +94,17 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
           className='lp-canvas lp-canvas--chart'
           deps={[model, age, chart, palette]}
           draw={(ctx, w, h) => {
-            if (chart === 'alive') drawSurvival(ctx, w, h, person, branches, age, palette)
-            else drawDistribution(ctx, w, h, person, branches, palette)
+            if (chart === 'dist') drawDistribution(ctx, w, h, person, branches, palette)
+            else drawSurvival(ctx, w, h, person, branches.map(branch => (chart === 'free' ? branch.disease.free : branch.S)), age, palette)
           }}
         />
         <View className='lp-legend'>
           {branches.map((branch, index) => <Text key={branch.key} className={`lp-legend__item ${TONE_CLASSES[index]}`}>{branch.name}</Text>)}
         </View>
         <Text className='lp-reading'>
-          {chart === 'alive'
-            ? `活到 ${age} 岁的概率：照现在这样吃 ${percent(alive[0].alive)}，把饮食吃对 ${percent(alive[1].alive)}，放飞自我 ${percent(alive[2].alive)}。`
-            : `离世年龄是一条分布，不是一个日期。吃对把分布${shift(gain)}，放飞把分布${shift(loose.le.mean - today.le.mean)}，三条分布大量重叠。`}
+          {chart === 'alive' && `活到 ${age} 岁的概率：照现在这样吃 ${percent(alive[0].alive)}，把饮食吃对 ${percent(alive[1].alive)}，放飞自我 ${percent(alive[2].alive)}。`}
+          {chart === 'free' && `到 ${age} 岁还在世且没有重大慢病的概率：照现在这样吃 ${percent(alive[0].free)}，把饮食吃对 ${percent(alive[1].free)}，放飞自我 ${percent(alive[2].free)}。`}
+          {chart === 'dist' && `离世年龄是一条分布，不是一个日期。吃对把分布${shift(gain)}，放飞把分布${shift(loose.le.mean - today.le.mean)}，三条分布大量重叠。`}
         </Text>
         <View className='lp-le'>
           {branches.map((branch, index) => (
@@ -110,9 +118,28 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
       </View>
 
       <View className='lp-card'>
+        <Text className='lp-card__title'>还能活多少年，其中多少年没有重大慢病</Text>
+        {alreadyIll ? (
+          <Text className='lp-note'>已有心脏病、中风、癌症或慢阻肺时，这一项不适用。</Text>
+        ) : branches.map((branch, index) => (
+          <View key={branch.key} className='lp-years'>
+            <View className='lp-years__top'>
+              <Text className={`lp-le__name ${TONE_CLASSES[index]}`}>{branch.name}</Text>
+              <Text className='lp-fine'>无重大慢病 {years(branch.healthy.mean_years_free)} 年 · 带病 {years(branch.healthy.mean_years_with_disease)} 年</Text>
+            </View>
+            <View className='lp-years__bar'>
+              <View className={`lp-years__free ${TONE_CLASSES[index]}`} style={{ width: `${branch.healthy.mean_years_free / longest * 100}%` }} />
+              <View className={`lp-years__ill ${TONE_CLASSES[index]}`} style={{ width: `${branch.healthy.mean_years_with_disease / longest * 100}%` }} />
+            </View>
+          </View>
+        ))}
+        <Text className='lp-fine'>重大慢病指新发的心血管病（含新诊断的高血压）、癌症、慢性呼吸病。已知的高血压和糖尿病不算已患病。都是平均值。</Text>
+      </View>
+
+      <View className='lp-card'>
         <Text className='lp-card__title'>最值得改的三件事</Text>
         {changes.length === 0 && <Text className='lp-fine'>按引擎目前能算的三项（水果、鱼、体重），这个人的吃法已经达标了。去“自己调”试试其他习惯。</Text>}
-        {changes.map((change, index) => (
+        {changes.slice(0, 3).map((change, index) => (
           <View key={change.factor} className='lp-change'>
             <View className='lp-change__top'>
               <Text className='lp-change__rank'>{index + 1}</Text>
@@ -139,13 +166,17 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
         </View>
         <Text className='lp-fine'>三个你掷同一颗骰子，差别只来自吃法。这只是一次随机结果，不是你的命运。</Text>
         <View className='lp-dice'>
-          {branches.map((branch, index) => (
-            <View key={branch.key} className='lp-dice__col'>
-              <Text className={`lp-le__name ${TONE_CLASSES[index]}`}>{branch.name}</Text>
-              <Text className='lp-dice__value'>{Math.floor(deathAge(person, branch, life))}<Text className='lp-dice__unit'> 岁</Text></Text>
-              <Text className='lp-fine'>这次模拟离世</Text>
-            </View>
-          ))}
+          {branches.map((branch, index) => {
+            const first = firstDiseaseOf(person, branch, life)
+            return (
+              <View key={branch.key} className='lp-dice__col'>
+                <Text className={`lp-le__name ${TONE_CLASSES[index]}`}>{branch.name}</Text>
+                <Text className='lp-dice__value'>{Math.floor(deathAge(person, branch, life))}<Text className='lp-dice__unit'> 岁</Text></Text>
+                <Text className='lp-fine'>这次模拟离世</Text>
+                <Text className='lp-dice__event'>{first ? `${Math.floor(first.age)} 岁首次${DISEASE_NAMES[first.type]}` : '没有新的重大慢病'}</Text>
+              </View>
+            )
+          })}
         </View>
         <View className='lp-row'>
           <Button className='lp-btn lp-btn--ghost lp-grow' onClick={() => setLife(life + 1)}>再掷一次</Button>
@@ -155,8 +186,8 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
 
       <View className='lp-card'>
         <Text className='lp-card__title'>这一版还没算的</Text>
-        <Text className='lp-note'><Text className='lp-note__key'>疾病 </Text>高血压、糖尿病、心脏病等还没有模块，所以不显示“健康年数”和“哪一年生病”。</Text>
-        <Text className='lp-note'><Text className='lp-note__key'>盐、蔬菜 </Text>引擎目前只用 CKB 模型里的水果和鱼两个饮食变量。</Text>
+        {missing.length > 0 && <Text className='lp-note'><Text className='lp-note__key'>没填的 </Text>{missing.join('、')}没填时不计入。在“换个人”里修改信息可以补上。</Text>}
+        <Text className='lp-note'><Text className='lp-note__key'>其他因素 </Text>教育、婚姻、心理、社交和环境这一版还没有问，也不计入。</Text>
         <Text className='lp-note'><Text className='lp-note__key'>坚持程度 </Text>三个你假设长期坚持。到“自己调”里可以改成晚几年开始、只坚持一部分。</Text>
       </View>
 

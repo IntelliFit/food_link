@@ -8,6 +8,8 @@ import {
   type AdherenceSpec,
   type EngineConstants,
   type Exposures,
+  type FirstDisease,
+  type HealthyYears,
   type Person,
 } from '../../src/packageLifespan/engine/engine'
 
@@ -17,6 +19,9 @@ interface GoldenBranch {
   p_alive: Record<string, number>
   weight_kg: { start: number; mid: number; end: number }
   one_life: number[]
+  p_alive_disease_free: Record<string, number>
+  healthy_years: HealthyYears
+  first_disease: Array<FirstDisease | null>
 }
 
 interface GoldenCase {
@@ -58,7 +63,7 @@ describe('lifespan engine golden vectors', () => {
   it('uses constants and fixtures from the same engine version', () => {
     expect(constants.engine_version).toBe(golden.engine_version)
     expect(constants.registry_version).toBe(golden.registry_version)
-    expect(golden.cases.length).toBeGreaterThanOrEqual(240)
+    expect(golden.cases.length).toBeGreaterThanOrEqual(340)
   })
 
   it.each(golden.cases.map(cs => [cs.id, cs] as const))('%s matches the reference engine', (_id, cs) => {
@@ -77,6 +82,9 @@ describe('lifespan engine golden vectors', () => {
       for (const field of ['pa_met_h', 'fruit_g', 'fish_g', 'sleep_h', 'delta_intake_kcal'] as const) {
         expect(Math.abs(scn[field] - want.scenario[field])).toBeLessThanOrEqual(1e-6)
       }
+      expect(scn.vegetables_g ?? -1).toBeCloseTo(want.scenario.vegetables_g ?? -1, 6)
+      expect(scn.sodium_mg ?? -1).toBeCloseTo(want.scenario.sodium_mg ?? -1, 6)
+      expect(scn.sbp_log_change ?? 0).toBeCloseTo(want.scenario.sbp_log_change ?? 0, 6)
 
       const curves = engine.curves(cs.profile, scn, base, lag, index === 0 ? null : plan)
       for (const quantile of ['mean', 'median', 'p10', 'p90'] as const) {
@@ -92,7 +100,20 @@ describe('lifespan engine golden vectors', () => {
       want.one_life.forEach((death, life) => {
         const age = cs.profile.age + engine.deathTime(curves.hz, engine.lifeThreshold(cs.seed, life))
         expect(Math.abs(age - death)).toBeLessThanOrEqual(tolAge)
+        const first = engine.firstDisease(cs.profile, curves, age - cs.profile.age, cs.seed, life)
+        const wantFirst = want.first_disease[life]
+        expect(first?.type ?? null).toBe(wantFirst?.type ?? null)
+        if (first && wantFirst) expect(Math.abs(first.age - wantFirst.age)).toBeLessThanOrEqual(tolAge)
       })
+      for (const [age, value] of Object.entries(want.p_alive_disease_free)) {
+        expect(Math.abs((engine.freeAt(cs.profile.age, curves.disease, Number(age)) as number) - value)).toBeLessThanOrEqual(tolP)
+      }
+      const healthy = want.healthy_years
+      expect(curves.healthy.mean_years_free).toBeCloseTo(healthy.mean_years_free, 1)
+      expect(curves.healthy.mean_years_with_disease).toBeCloseTo(healthy.mean_years_with_disease, 1)
+      expect(curves.healthy.share_free).toBeCloseTo(healthy.share_free, 3)
+      if (healthy.median_age_until_major_disease === null) expect(curves.healthy.median_age_until_major_disease).toBeNull()
+      else expect(Math.abs((curves.healthy.median_age_until_major_disease as number) - healthy.median_age_until_major_disease)).toBeLessThanOrEqual(tolAge)
     })
   })
 })

@@ -154,8 +154,68 @@ describe('predictor page', () => {
     fireEvent.click(await screen.findByText('寿命分布'))
     const reading = await screen.findByText(/离世年龄是一条分布/)
     expect(reading.textContent).not.toContain('-')
-    expect(reading.textContent).toContain('放飞把分布往右推了')
+    expect(reading.textContent).toContain('放飞把分布往左拉了')
     expect(screen.getByText(/外推：年龄 18 岁/)).toBeInTheDocument()
+  })
+
+  it('shows disease-free years and does not treat known hypertension as being ill', async () => {
+    mockStorage([{ ...STORED, risk: { conditions: ['hypertension'] } }])
+    render(<LifespanPredictorPage />)
+    fireEvent.click(await screen.findByText('三个你'))
+    expect(await screen.findByText('还能活多少年，其中多少年没有重大慢病')).toBeInTheDocument()
+    expect(screen.queryByText(/这一项不适用/)).not.toBeInTheDocument()
+    expect(screen.getAllByText(/^无重大慢病 \d+\.\d 年 · 带病 \d+\.\d 年$/)).toHaveLength(3)
+    expect(screen.getByText(/已知的高血压和糖尿病不算已患病/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('无重大慢病'))
+    expect(await screen.findByText(/还在世且没有重大慢病的概率/)).toBeInTheDocument()
+  })
+
+  it('says disease-free years do not apply to someone who already has a major disease', async () => {
+    mockStorage([{ ...STORED, age: 60, risk: { conditions: ['chd'] } }])
+    render(<LifespanPredictorPage />)
+    fireEvent.click(await screen.findByText('三个你'))
+    expect(await screen.findByText(/这一项不适用/)).toBeInTheDocument()
+    expect(screen.queryByText(/^无重大慢病 \d+\.\d 年/)).not.toBeInTheDocument()
+    expect(screen.getAllByText('没有新的重大慢病')).toHaveLength(3)
+  })
+
+  it('shows the first disease for one simulated life', async () => {
+    mockStorage([STORED])
+    render(<LifespanPredictorPage />)
+    fireEvent.click(await screen.findByText('三个你'))
+    await screen.findByText('第 1 次')
+    const events = screen.getAllByText(/岁首次(心血管病|癌症|慢性呼吸病)|没有新的重大慢病/)
+    expect(events).toHaveLength(3)
+  })
+
+  it('only offers vegetables and salt once the person has answered them', async () => {
+    mockStorage([STORED])
+    const view = render(<LifespanPredictorPage />)
+    await screen.findByText('78.7')
+    expect(view.container.querySelector('input[type="range"][min="0"][max="600"]')).toBeNull()
+    expect(screen.queryByText('每天多吃半斤蔬菜')).not.toBeInTheDocument()
+    expect(screen.getByText(/蔬菜和盐要先填个大概才能调/)).toBeInTheDocument()
+    view.unmount()
+
+    mockStorage([{ ...STORED, vegetables_g: 250, sodium_mg: 4300 }])
+    const filled = render(<LifespanPredictorPage />)
+    expect(await screen.findByText('每天多吃半斤蔬菜')).toBeInTheDocument()
+    expect(screen.getByText('每天少吃 3 克盐')).toBeInTheDocument()
+    expect(filled.container.querySelector('input[type="range"][min="0"][max="600"]')).not.toBeNull()
+    expect(screen.queryByText(/蔬菜和盐要先填个大概才能调/)).not.toBeInTheDocument()
+  })
+
+  it('takes away the charts while a sheet is open and brings them back', async () => {
+    mockStorage([STORED])
+    const view = render(<LifespanPredictorPage />)
+    await screen.findByText('78.7')
+    const canvases = () => view.container.querySelectorAll('canvas').length
+    expect(canvases()).toBeGreaterThan(0)
+    fireEvent.click(screen.getByText('换个人'))
+    expect(canvases()).toBe(0)
+    fireEvent.click(screen.getByText('关闭'))
+    await waitFor(() => expect(canvases()).toBeGreaterThan(0))
   })
 
   it('switches between the two tabs and can reset', async () => {

@@ -1,7 +1,10 @@
-import { Canvas } from '@tarojs/components'
+import { Canvas, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { useEffect, useRef } from 'react'
+import { createContext, useContext, useEffect, useRef } from 'react'
 import type { Ctx } from './draw'
+
+/** Native canvases can paint above a sheet, so none are rendered while one is open. */
+export const CanvasHiddenContext = createContext(false)
 
 interface Surface {
   ctx: Ctx
@@ -29,11 +32,16 @@ function devicePixelRatio(): number {
 }
 
 export function LifeCanvas({ id, className, deps, draw }: LifeCanvasProps) {
+  const hidden = useContext(CanvasHiddenContext)
   const surface = useRef<Surface | null>(null)
   const latestDraw = useRef(draw)
   latestDraw.current = draw
 
   useEffect(() => {
+    if (hidden) {
+      surface.current = null
+      return undefined
+    }
     let cancelled = false
     let attempts = 0
     const paint = () => {
@@ -64,7 +72,7 @@ export function LifeCanvas({ id, className, deps, draw }: LifeCanvasProps) {
     return () => { cancelled = true }
     // deps are supplied by the caller; the latest draw is read through the ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+  }, [...deps, hidden])
 
-  return <Canvas type='2d' id={id} className={className} />
+  return hidden ? <View className={className} /> : <Canvas type='2d' id={id} className={className} />
 }

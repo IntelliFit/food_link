@@ -1,5 +1,5 @@
 // Turns engine curves into what the predictor screens show.
-import { engine, type AdherenceSpec, type ChangePlan, type Curves, type EvidenceWarning, type Exposures, type Person, type Sex } from '../engine/engine'
+import { engine, type AdherenceSpec, type ChangePlan, type Curves, type DiseaseEventType, type EvidenceWarning, type Exposures, type FirstDisease, type Person, type Sex } from '../engine/engine'
 import { lifeCardsFor } from './habits'
 
 export const LIFE_SEED = 182772
@@ -51,9 +51,9 @@ export const axisEndAge = (person: Person): number => Math.min(110, Math.max(100
 export const milestoneAge = (person: Person): number =>
   (person.age < 80 ? 85 : Math.min(110, Math.ceil((person.age + 10) / 5) * 5))
 
-export function atAge(person: Person, curves: Curves, age: number): { alive: number; weight: number; bmi: number } {
+export function atAge(person: Person, curves: Curves, age: number): { alive: number; free: number; weight: number; bmi: number } {
   const index = Math.max(0, Math.min(Math.round(age - person.age), curves.S.length - 1))
-  return { alive: curves.S[index], weight: curves.W[index], bmi: curves.B[index] }
+  return { alive: curves.S[index], free: curves.disease.free[index], weight: curves.W[index], bmi: curves.B[index] }
 }
 
 export const percent = (value: number): string => `${Math.round(value * 100)}%`
@@ -67,7 +67,7 @@ export function signedYears(value: number): string {
 // ---------- the most valuable changes ----------
 
 export interface TopChange {
-  factor: 'fruit_g' | 'fish_g' | 'delta_intake_kcal'
+  factor: 'fruit_g' | 'vegetables_g' | 'fish_g' | 'sodium_mg' | 'delta_intake_kcal'
   name: string
   from: string
   to: string
@@ -91,7 +91,7 @@ export function topChanges(model: PredictorModel): TopChange[] {
     factor: TopChange['factor'],
     fields: Pick<TopChange, 'name' | 'from' | 'to' | 'evidence' | 'action'>,
   ): TopChange | null => {
-    if (target[factor] === base[factor]) return null
+    if (target[factor] == null || target[factor] === base[factor]) return null
     const scenario = { ...base, [factor]: target[factor] }
     const result = engine.curves(person, scenario, base, lag)
     return {
@@ -108,9 +108,17 @@ export function topChanges(model: PredictorModel): TopChange[] {
       name: '多吃水果', from: grams(base.fruit_g), to: grams(target.fruit_g), evidence: ['中国队列'],
       action: { label: '下一餐加一份水果', target: 'next_meal' },
     }),
+    change('vegetables_g', {
+      name: '多吃蔬菜', from: grams(base.vegetables_g ?? 0), to: grams(target.vegetables_g ?? 0), evidence: ['荟萃分析'],
+      action: { label: '下一餐多一份蔬菜', target: 'next_meal' },
+    }),
     change('fish_g', {
       name: '每周多吃几次鱼', from: grams(base.fish_g), to: grams(target.fish_g), evidence: ['中国队列'],
       action: { label: '下一餐换成鱼', target: 'next_meal' },
+    }),
+    change('sodium_mg', {
+      name: '少盐', from: `钠 ${Math.round(base.sodium_mg ?? 0)} mg/天`, to: `${Math.round(target.sodium_mg ?? 0)} mg/天`, evidence: ['队列研究', '模型推算'],
+      action: { label: '让下一餐少盐一点', target: 'next_meal' },
     }),
     change('delta_intake_kcal', {
       name: finalBmi >= today.B[0] ? '把体重养回合理区间' : '把体重带回合理区间',
@@ -215,6 +223,8 @@ const SAME_EPSILON = 1e-9
 export function isSameExposures(a: Exposures, b: Exposures): boolean {
   return a.smoking === b.smoking && a.alcohol === b.alcohol
     && (['fruit_g', 'fish_g', 'delta_intake_kcal', 'pa_met_h', 'sleep_h'] as const).every(key => Math.abs(a[key] - b[key]) < SAME_EPSILON)
+    && (a.vegetables_g ?? null) === (b.vegetables_g ?? null)
+    && (a.sodium_mg ?? null) === (b.sodium_mg ?? null)
 }
 
 export interface LateStart {
@@ -257,6 +267,28 @@ export function lateStart(model: PredictorModel, play: Exposures, choice: PlanCh
 export function deathAge(person: Person, curves: Curves, lifeIndex: number): number {
   return person.age + engine.deathTime(curves.hz, engine.lifeThreshold(LIFE_SEED, lifeIndex))
 }
+
+export const DISEASE_NAMES: Record<DiseaseEventType, string> = {
+  cvd: '心血管病',
+  cancer: '癌症',
+  chronic_respiratory: '慢性呼吸病',
+}
+
+export function firstDiseaseOf(person: Person, curves: Curves, lifeIndex: number): FirstDisease | null {
+  return engine.firstDisease(person, curves, deathAge(person, curves, lifeIndex) - person.age, LIFE_SEED, lifeIndex)
+}
+
+/** What is still left out of this person's result, for the "not counted yet" note. */
+export function missingInputs(person: Person): string[] {
+  const missing: string[] = []
+  if (person.vegetables_g == null) missing.push('蔬菜')
+  if (person.sodium_mg == null) missing.push('咸淡')
+  if (person.risk?.sbp_mmhg == null) missing.push('血压')
+  if (person.risk?.conditions == null) missing.push('病史')
+  return missing
+}
+
+export const completenessOf = (person: Person): number => engine.completeness(person)
 
 export interface ParallelLives {
   /** Number of lives per 2-year bin, today's habits and the tuned plan. */

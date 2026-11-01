@@ -1,14 +1,14 @@
 // The people a user calculates for. Everything entered here stays on this phone:
 // it is kept in local storage and never sent to the backend.
 import Taro from '@tarojs/taro'
-import { ALCOHOL, SMOKING, type Alcohol, type Person, type Sex, type Smoking } from '../engine/engine'
+import { ALCOHOL, CONDITIONS, SMOKING, UNKNOWN, type Alcohol, type Person, type RiskFactors, type Sex, type Smoking } from '../engine/engine'
 import { ACTIVITY_LEVELS } from './habits'
 
 export const RELATIONS = ['爸爸', '妈妈', '伴侣', '朋友'] as const
 export const SELF_LABEL = '我'
 
 const STORAGE_KEY = 'lifespan_people_v1'
-const LIMITS = { age: [18, 100], height: [120, 220], weight: [30, 250], bmi: [10, 70] } as const
+const LIMITS = { age: [18, 100], height: [120, 220], weight: [30, 250], bmi: [10, 70], sbp: [60, 280] } as const
 
 export interface Predictee extends Person {
   id: string
@@ -16,12 +16,16 @@ export interface Predictee extends Person {
 }
 
 /** Form state: the three typed numbers stay strings until the form is submitted. */
-export interface PersonDraft extends Omit<Person, 'sex' | 'age' | 'height_cm' | 'weight_kg'> {
+export interface PersonDraft extends Omit<Person, 'sex' | 'age' | 'height_cm' | 'weight_kg' | 'risk'> {
   label: string
   sex: Sex | null
   age: string
   height: string
   weight: string
+  /** Blood pressure is optional; empty means unknown. */
+  sbp: string
+  /** null = not answered, [] = none of them. */
+  conditions: string[] | null
 }
 
 export function emptyDraft(label: string): PersonDraft {
@@ -38,6 +42,10 @@ export function emptyDraft(label: string): PersonDraft {
     fruit_g: 60,
     fish_g: 15,
     energy_balance_kcal: 0,
+    vegetables_g: null,
+    sodium_mg: null,
+    sbp: '',
+    conditions: null,
   }
 }
 
@@ -63,13 +71,15 @@ export interface HealthProfileFields {
   height?: number | null
   weight?: number | null
   activity_level?: string | null
-  health_condition?: { daily_life_activity_level?: string } | null
+  health_condition?: { daily_life_activity_level?: string; medical_history?: string[] } | null
 }
 
 /** Fill the basics from the health profile; anything missing stays blank for the user. */
 export function draftWithHealthProfile(draft: PersonDraft, profile: HealthProfileFields, now: Date): PersonDraft {
   const age = profile.birthday ? ageFromBirthday(profile.birthday, now) : null
   const activity = profile.health_condition?.daily_life_activity_level || profile.activity_level || ''
+  // The profile only asks about a few diseases, so "none listed" cannot mean "known to have none".
+  const known = (profile.health_condition?.medical_history ?? []).filter(item => (CONDITIONS as readonly string[]).includes(item))
   return {
     ...draft,
     sex: profile.gender === 'male' || profile.gender === 'female' ? profile.gender : draft.sex,
@@ -77,6 +87,7 @@ export function draftWithHealthProfile(draft: PersonDraft, profile: HealthProfil
     height: profile.height ? String(profile.height) : draft.height,
     weight: profile.weight ? String(profile.weight) : draft.weight,
     pa_met_h: ACTIVITY_BY_PROFILE[activity] ?? draft.pa_met_h,
+    conditions: known.length ? known : draft.conditions,
   }
 }
 
@@ -95,14 +106,20 @@ export function validateDraft(draft: PersonDraft): string | null {
   if (!draft.height.trim() || !inRange(Number(draft.height), LIMITS.height)) return '请填写 120–220 cm 之间的身高'
   if (!draft.weight.trim() || !inRange(Number(draft.weight), LIMITS.weight)) return '请填写 30–250 kg 之间的体重'
   if (!inRange(Number(draft.weight) / Math.pow(Number(draft.height) / 100, 2), LIMITS.bmi)) return '身高和体重对不上，请检查一下'
+  if (draft.sbp.trim() && !inRange(Number(draft.sbp), LIMITS.sbp)) return '收缩压请填 60–280 之间，不知道可以留空'
   return null
 }
 
 export function draftToPredictee(draft: PersonDraft, id: string): Predictee {
-  const { sex, age, height, weight, ...habits } = draft
+  const { sex, age, height, weight, sbp, conditions, ...habits } = draft
+  const risk: RiskFactors = {
+    ...(conditions ? { conditions } : {}),
+    ...(sbp.trim() ? { sbp_mmhg: Number(sbp) } : {}),
+  }
   return {
     ...habits,
     id,
+    risk: Object.keys(risk).length ? risk : null,
     sex: sex as Sex,
     age: Math.round(Number(age)),
     height_cm: Number(height),
@@ -111,8 +128,24 @@ export function draftToPredictee(draft: PersonDraft, id: string): Predictee {
 }
 
 export function predicteeToDraft(person: Predictee): PersonDraft {
-  const { id: _id, sex, age, height_cm, weight_kg, ...habits } = person
-  return { ...habits, sex, age: String(age), height: String(height_cm), weight: String(weight_kg) }
+  const { id: _id, sex, age, height_cm, weight_kg, risk, ...habits } = person
+  return {
+    ...habits,
+    vegetables_g: person.vegetables_g ?? null,
+    sodium_mg: person.sodium_mg ?? null,
+    sex,
+    age: String(age),
+    height: String(height_cm),
+    weight: String(weight_kg),
+    sbp: risk?.sbp_mmhg == null ? '' : String(risk.sbp_mmhg),
+    conditions: risk?.conditions ?? null,
+  }
+}
+
+function isStoredRisk(risk: RiskFactors): boolean {
+  return typeof risk === 'object'
+    && (risk.conditions == null || Array.isArray(risk.conditions))
+    && (risk.sbp_mmhg == null || Number.isFinite(risk.sbp_mmhg))
 }
 
 function isPredictee(value: unknown): value is Predictee {
@@ -124,9 +157,11 @@ function isPredictee(value: unknown): value is Predictee {
     && inRange(person.age, LIMITS.age)
     && inRange(person.height_cm, LIMITS.height)
     && inRange(person.weight_kg, LIMITS.weight)
-    && SMOKING.includes(person.smoking as Smoking)
-    && ALCOHOL.includes(person.alcohol as Alcohol)
+    && ([...SMOKING, UNKNOWN] as Smoking[]).includes(person.smoking)
+    && ([...ALCOHOL, UNKNOWN] as Alcohol[]).includes(person.alcohol)
     && [person.pa_met_h, person.fruit_g, person.fish_g, person.sleep_h, person.energy_balance_kcal].every(Number.isFinite)
+    && [person.vegetables_g, person.sodium_mg].every(amount => amount == null || Number.isFinite(amount))
+    && (person.risk == null || isStoredRisk(person.risk))
 }
 
 export function loadPeople(): Predictee[] {

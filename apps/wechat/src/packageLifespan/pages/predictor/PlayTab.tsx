@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { type Exposures } from '../../engine/engine'
 import { LifeCanvas } from '../../charts/LifeCanvas'
 import { drawParallelLives, drawPlayCurve, type Palette } from '../../charts/draw'
-import { HABIT_CHOICES, HABIT_SLIDERS, type HabitSlider } from '../../model/habits'
+import { HABIT_CHOICES, habitSlidersFor, type HabitSlider } from '../../model/habits'
 import type { Predictee } from '../../model/people'
 import {
   adherenceOptions, applyLifeCards, atAge, axisEndAge, DEFAULT_PLAN, DISCLAIMER, isSameExposures, lateStart, lifeCardValues,
@@ -85,6 +85,9 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
   const noteAge = Math.min(axisEndAge(person), person.age + 20)
   const milestone = milestoneAge(person)
   const generalWarnings = personWarnings(outcome.warnings)
+  const sliders = habitSlidersFor(person)
+  const baseValue = (slider: HabitSlider): number => model.base[slider.key] ?? 0
+  const liveValue = (slider: HabitSlider): number => live.play[slider.key] ?? 0
   const startAge = live.choice.start ?? person.age
   const maxStart = Math.max(person.age + 1, Math.min(100, axisEndAge(person) - 5))
   const warningOf = (field: string) => outcome.warnings.find(warning => warning.field === field)
@@ -93,21 +96,21 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
     const when = livePlan ? `（${planPhrase(live.choice, options).replace(' · ', '，')}）` : ''
     const names = cards.filter(card => applied.includes(card.id)).map(card => card.name)
     if (names.length) return names.join('、') + when
-    const changed = HABIT_SLIDERS.filter(slider => Math.abs(live.play[slider.key] - model.base[slider.key]) > 1e-9)
-      .map(slider => `${slider.label}调到 ${slider.format(live.play[slider.key])}`)
+    const changed = sliders.filter(slider => Math.abs(liveValue(slider) - baseValue(slider)) > 1e-9)
+      .map(slider => `${slider.label}调到 ${slider.format(liveValue(slider))}`)
     const choices = HABIT_CHOICES.filter(choice => live.play[choice.key] !== model.base[choice.key])
       .map(choice => `${choice.label}改成${choice.names[live.play[choice.key] as never]}`)
     return ([...changed, ...choices].join('、') || '什么都没改') + when
   }
 
   const renderSlider = (slider: HabitSlider) => {
-    const value = live.play[slider.key]
+    const value = liveValue(slider)
     const warning = warningOf(slider.key)
     return (
       <View key={slider.key} className='lp-control'>
         <View className='lp-control__top'>
           <Text className='lp-control__label'>{slider.label}</Text>
-          <Text className={`lp-control__value${Math.abs(value - model.base[slider.key]) > 1e-9 ? ' is-changed' : ''}`}>{slider.format(value)}</Text>
+          <Text className={`lp-control__value${Math.abs(value - baseValue(slider)) > 1e-9 ? ' is-changed' : ''}`}>{slider.format(value)}</Text>
         </View>
         <Slider
           min={slider.min}
@@ -121,7 +124,7 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
         />
         <View className='lp-control__hint'>
           <Text>{slider.hint(value)}</Text>
-          <Text>现在：{slider.format(model.base[slider.key])}</Text>
+          <Text>现在：{slider.format(baseValue(slider))}</Text>
         </View>
         {warning && <Text className='lp-warn'>外推：{warning.message}</Text>}
       </View>
@@ -154,6 +157,12 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
             <Text className='lp-hero__dim'>{noteAge} 岁时体重</Text>
             <Text className='lp-pair__value'>{atAge(person, today, noteAge).weight.toFixed(0)} → {atAge(person, outcome.curves, noteAge).weight.toFixed(0)} kg</Text>
           </View>
+          {!today.disease.alreadyIll && (
+            <View className='lp-pair__item lp-pair__item--wide'>
+              <Text className='lp-hero__dim'>没有重大慢病的年数（平均）</Text>
+              <Text className='lp-pair__value'>{years(today.healthy.mean_years_free)} → {years(outcome.curves.healthy.mean_years_free)} 年</Text>
+            </View>
+          )}
         </View>
         {generalWarnings.map(warning => <Text key={warning.message} className='lp-hero__warn'>外推：{warning.message}</Text>)}
         <Text className='lp-hero__hint'>{DISCLAIMER} · 结果默认改完以后长期坚持，下面可以改</Text>
@@ -180,7 +189,8 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
           <Text className='lp-card__title lp-grow'>细调每一项</Text>
           <Button className='lp-btn lp-btn--small lp-btn--line' onClick={() => { setApplied([]); setCardsFrom(model.base); commit({ play: model.base, choice: DEFAULT_PLAN }) }}>回到现在</Button>
         </View>
-        {HABIT_SLIDERS.map(renderSlider)}
+        {sliders.map(renderSlider)}
+        {sliders.length < 7 && <Text className='lp-fine'>蔬菜和盐要先填个大概才能调：顶部“换个人”，修改信息。</Text>}
         {HABIT_CHOICES.map(choice => (
           <View key={choice.key} className='lp-control'>
             <View className='lp-control__top'>

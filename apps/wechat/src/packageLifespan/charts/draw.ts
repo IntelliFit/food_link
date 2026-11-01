@@ -184,19 +184,21 @@ function chartFrame(ctx: Ctx, width: number, height: number, person: Person, max
   return { x, y, bottom: height - bottomPad, top }
 }
 
-export function drawSurvival(ctx: Ctx, width: number, height: number, person: Person, branches: Branch[], age: number, palette: Palette): void {
+/** One line per future from a per-year series: all-cause survival or survival without major disease. */
+export function drawSurvival(ctx: Ctx, width: number, height: number, person: Person, series: number[][], age: number, palette: Palette): void {
   const frame = chartFrame(ctx, width, height, person, 1, palette)
   const colors = [palette.a, palette.b, palette.c]
   const end = Math.min(110, axisEndAge(person) + 6)
-  branches.forEach((branch, index) => {
-    const points = branch.S.map((value, i): [number, number] => [frame.x(person.age + i), frame.y(value)]).slice(0, end - person.age + 1)
+  const at = Math.max(0, Math.min(Math.round(age - person.age), series[0].length - 1))
+  series.forEach((values, index) => {
+    const points = values.map((value, i): [number, number] => [frame.x(person.age + i), frame.y(value)]).slice(0, end - person.age + 1)
     ctx.strokeStyle = colors[index]
     ctx.lineWidth = 2.2
     polyline(ctx, points)
     ctx.stroke()
   })
   line(ctx, frame.x(age), frame.top, frame.x(age), frame.bottom, palette.ink, [3, 3])
-  branches.forEach((branch, index) => dot(ctx, frame.x(age), frame.y(atAge(person, branch, age).alive), 3.5, colors[index]))
+  series.forEach((values, index) => dot(ctx, frame.x(age), frame.y(values[at]), 3.5, colors[index]))
 }
 
 export function drawDistribution(ctx: Ctx, width: number, height: number, person: Person, branches: Branch[], palette: Palette): void {

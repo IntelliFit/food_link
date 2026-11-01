@@ -1,7 +1,7 @@
 import Taro from '@tarojs/taro'
 
 import { engine, type Exposures } from '../../src/packageLifespan/engine/engine'
-import { lifeCardsFor } from '../../src/packageLifespan/model/habits'
+import { habitSlidersFor, lifeCardsFor } from '../../src/packageLifespan/model/habits'
 import {
   ageFromBirthday,
   clearPeople,
@@ -18,11 +18,14 @@ import {
   adherenceOptions,
   applyLifeCards,
   buildModel,
+  completenessOf,
   DEFAULT_PLAN,
+  firstDiseaseOf,
   isSameExposures,
   lateStart,
   lifeCardValues,
   milestoneAge,
+  missingInputs,
   parallelLives,
   planOf,
   planPhrase,
@@ -173,6 +176,72 @@ describe('predictor model', () => {
   })
 })
 
+describe('engine 0.3 inputs and outputs', () => {
+  const answered: Predictee = { ...ME, vegetables_g: 100, sodium_mg: 6000, risk: { conditions: [], sbp_mmhg: 130 } }
+
+  it('ranks vegetables and salt only when the person gave them', () => {
+    const factors = (person: Predictee) => topChanges(buildModel(person)).map(change => change.factor)
+    expect(factors(ME)).not.toEqual(expect.arrayContaining(['vegetables_g']))
+    expect(factors(ME)).not.toEqual(expect.arrayContaining(['sodium_mg']))
+    expect(factors(answered)).toEqual(expect.arrayContaining(['vegetables_g', 'sodium_mg']))
+    const gains = topChanges(buildModel(answered)).map(change => change.gain)
+    expect(gains).toEqual([...gains].sort((a, b) => b - a))
+  })
+
+  it('offers the matching sliders and cards', () => {
+    expect(habitSlidersFor(ME).map(slider => slider.key)).not.toContain('vegetables_g')
+    expect(habitSlidersFor(answered).map(slider => slider.key)).toEqual(expect.arrayContaining(['vegetables_g', 'sodium_mg']))
+    expect(lifeCardsFor(ME).map(card => card.id)).not.toContain('salt')
+    expect(lifeCardsFor(answered).map(card => card.id)).toEqual(expect.arrayContaining(['veg', 'salt']))
+  })
+
+  it('moves the result when cutting salt', () => {
+    const salty = buildModel(answered)
+    const lower = applyLifeCards(salty, ['salt'])
+    expect(lower.sodium_mg).toBe(4800)
+    expect(playOutcome(salty, lower, null).delta).toBeGreaterThan(0)
+  })
+
+  it('compares vegetables and salt when deciding nothing changed', () => {
+    const base = buildModel(answered).base
+    expect(isSameExposures(base, { ...base })).toBe(true)
+    expect(isSameExposures(base, { ...base, sodium_mg: 4000 })).toBe(false)
+    expect(isSameExposures(base, { ...base, vegetables_g: 300 })).toBe(false)
+  })
+
+  it('says what is still missing and how complete the answers are', () => {
+    expect(missingInputs(ME)).toEqual(['蔬菜', '咸淡', '血压', '病史'])
+    expect(missingInputs(answered)).toEqual([])
+    expect(completenessOf(answered)).toBeGreaterThan(completenessOf(ME))
+  })
+
+  it('keeps first disease before death or none at all', () => {
+    const curves = buildModel(ME).branches[0]
+    for (let life = 0; life < 50; life += 1) {
+      const first = firstDiseaseOf(ME, curves, life)
+      if (first) expect(first.age).toBeGreaterThanOrEqual(ME.age)
+    }
+    const ill = buildModel({ ...ME, age: 60, risk: { conditions: ['stroke'] } })
+    expect(ill.branches[0].disease.alreadyIll).toBe(true)
+    expect(firstDiseaseOf(ill.person, ill.branches[0], 0)).toBeNull()
+  })
+
+  it('does not count hypertension or diabetes as already ill', () => {
+    const known = buildModel({ ...ME, risk: { conditions: ['hypertension', 'diabetes'] } })
+    expect(known.branches[0].disease.alreadyIll).toBe(false)
+    expect(known.branches[0].healthy.mean_years_free).toBeGreaterThan(0)
+  })
+
+  it('accepts people who would rather not say', () => {
+    const quiet = buildModel({ ...ME, smoking: 'unknown', alcohol: 'unknown' })
+    expect(quiet.branches[0].le.mean).toBeGreaterThan(ME.age)
+    const pack = lifeCardsFor(quiet.person).find(card => card.id === 'pack')
+    expect(pack?.apply(quiet.base).smoking).toBe('current_ge20')
+    const baijiu = lifeCardsFor(quiet.person).find(card => card.id === 'baijiu')
+    expect(baijiu?.apply(quiet.base).alcohol).toBe('daily_30_59')
+  })
+})
+
 describe('people on this phone', () => {
   const now = new Date(2026, 10, 1)
 
@@ -189,6 +258,30 @@ describe('people on this phone', () => {
     expect(filled).toMatchObject({ sex: 'female', age: '36', height: '165', weight: '55', pa_met_h: 22 })
     const partial = draftWithHealthProfile(emptyDraft('我'), { gender: 'other', height: null }, now)
     expect(partial).toMatchObject({ sex: null, age: '', height: '', pa_met_h: 14 })
+  })
+
+  it('brings over diagnoses the engine knows and keeps "not answered" otherwise', () => {
+    const profile = (medical_history: string[]) => draftWithHealthProfile(emptyDraft('我'), { health_condition: { medical_history } }, now)
+    expect(profile(['hypertension', 'gout']).conditions).toEqual(['hypertension'])
+    expect(profile(['gout']).conditions).toBeNull()
+    expect(profile([]).conditions).toBeNull()
+  })
+
+  it('checks blood pressure only when it is filled in', () => {
+    const good = { ...emptyDraft('爸爸'), sex: 'male' as const, age: '58', height: '170', weight: '80' }
+    expect(validateDraft({ ...good, sbp: '' })).toBeNull()
+    expect(validateDraft({ ...good, sbp: '135' })).toBeNull()
+    expect(validateDraft({ ...good, sbp: '20' })).toContain('收缩压')
+    expect(validateDraft({ ...good, sbp: '高' })).toContain('收缩压')
+  })
+
+  it('round-trips the optional answers', () => {
+    const base = { ...emptyDraft('爸爸'), sex: 'male' as const, age: '58', height: '170', weight: '80' }
+    expect(draftToPredictee(base, 'dad').risk).toBeNull()
+    const person = draftToPredictee({ ...base, vegetables_g: 250, sodium_mg: 6000, sbp: '135', conditions: [] }, 'dad')
+    expect(person).toMatchObject({ vegetables_g: 250, sodium_mg: 6000, risk: { conditions: [], sbp_mmhg: 135 } })
+    expect(predicteeToDraft(person)).toMatchObject({ vegetables_g: 250, sodium_mg: 6000, sbp: '135', conditions: [] })
+    expect(predicteeToDraft(draftToPredictee(base, 'dad'))).toMatchObject({ vegetables_g: null, sodium_mg: null, sbp: '', conditions: null })
   })
 
   it('validates what the engine can take', () => {
@@ -220,6 +313,9 @@ describe('people on this phone', () => {
     expect(loadPeople()).toEqual([ME])
     store.set('lifespan_people_v1', [ME, { id: 'x', label: 'x', sex: 'male', age: 10 }, null])
     expect(loadPeople()).toEqual([ME])
+    const quiet = { ...ME, id: 'q', smoking: 'unknown', alcohol: 'unknown', risk: { conditions: ['hypertension'] } }
+    store.set('lifespan_people_v1', [quiet, { ...ME, id: 'bad', risk: 'oops' }, { ...ME, id: 'bad2', sodium_mg: 'lots' }])
+    expect(loadPeople()).toEqual([quiet])
     clearPeople()
     expect(loadPeople()).toEqual([])
   })

@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { DARK_PALETTE, LIGHT_PALETTE } from '../../charts/draw'
+import { CanvasHiddenContext } from '../../charts/LifeCanvas'
 import { clearPeople, loadPeople, savePeople, type Predictee } from '../../model/people'
-import { buildModel, type TopChange } from '../../model/predictor'
+import { buildModel, completenessOf, type TopChange } from '../../model/predictor'
 import type { PosterContent, ShareOptions } from '../../model/share'
 import { FirstRun } from './FirstRun'
 import { PersonSheet } from './PersonSheet'
@@ -73,7 +74,7 @@ function LifespanPredictorPage() {
     else void Taro.navigateTo({ url: extraPkgUrl('/pages/nutrition-plans/index') })
   }
 
-  const rootClass = `lp${dark ? ' lp--dark' : ''}${sheetOpen || poster ? ' lp--sheet-open' : ''}`
+  const rootClass = `lp${dark ? ' lp--dark' : ''}`
   if (!person || !model) {
     return <View className={rootClass}><FirstRun onDone={savePerson} /></View>
   }
@@ -88,6 +89,7 @@ function LifespanPredictorPage() {
         <Text className='lp-hero__dim lp-grow'>在算：{person.label} · {person.sex === 'male' ? '男' : '女'} {person.age} 岁 · 只在这台手机上计算</Text>
         <View className='lp-who__change' role='button' onClick={() => setSheetOpen(true)}>换个人</View>
       </View>
+      <Text className='lp-hero__dim lp-who__complete'>信息完整度 {completenessOf(person)}%，答得越多越准</Text>
     </View>
   )
   const openPoster = (build: BuildPoster) => setPoster(() => build)
@@ -96,6 +98,7 @@ function LifespanPredictorPage() {
 
   return (
     <View className={rootClass}>
+      <CanvasHiddenContext.Provider value={sheetOpen || poster !== null}>
       {tab === 'three' ? (
         <ThreeYouTab
           key={personKey}
@@ -121,6 +124,7 @@ function LifespanPredictorPage() {
           onShare={openPoster}
         />
       )}
+      </CanvasHiddenContext.Provider>
       {sheetOpen && (
         <PersonSheet
           people={people}
