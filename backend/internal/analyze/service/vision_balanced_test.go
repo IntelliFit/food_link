@@ -172,3 +172,83 @@ func TestBalancedVisionKeepsPriorUntilEnoughSamples(t *testing.T) {
 	s.visionChannels.record(key, 30*time.Second, nil, time.Now())
 	require.Equal(t, "a6:"+gemini3FlashModel, s.SelectFoodImageModel(defaultExecutionMode, "task"))
 }
+
+func newOrdinaryModelRoutingService(t *testing.T, c balancedChannels, ordinaryModel string) *AnalyzeService {
+	t.Helper()
+	s := newBalancedRoutingService(t, c)
+	s.ConfigureA6VisionRouting("", "", config.VisionRoutingConfig{BalancedRoutingEnabled: true, ResponseWaitSeconds: 5, OrdinaryImageModel: ordinaryModel})
+	s.visionChannels.a6 = c.a6
+	return s
+}
+
+func TestBalancedVisionOrdinaryPhotoUsesConfiguredModel(t *testing.T) {
+	c := balancedChannels{
+		wanjie:           &channelFixture{result: channelFood("万界米饭")},
+		wanjie35:         &channelFixture{result: channelFood("万界3.5米饭")},
+		openlux:          &channelFixture{result: channelFood("米饭"), args: make(chan channelCallArgs, 1)},
+		openluxPrecision: &channelFixture{result: channelFood("精准米饭")},
+		a6:               &channelFixture{result: channelFood("a6米饭")},
+	}
+	s := newOrdinaryModelRoutingService(t, c, precisionGeminiFlashModel)
+
+	require.Equal(t, openLuxPrecisionGeminiRoute, s.SelectFoodImageModel(defaultExecutionMode, "task-1"))
+	outcome, err := s.runBalancedGeminiVision(standardVisionCtx(), "food_image", geminiOpenLuxUpstream, precisionGeminiFlashModel, "prompt", []string{"image"}, 0, validateNonEmptyFoodAnalysisResult)
+	require.NoError(t, err, "an ordinary payload must pass the ordinary validation")
+	require.Equal(t, geminiOpenLuxUpstream, outcome.upstream)
+	require.Equal(t, precisionGeminiFlashModel, outcome.model)
+	require.Equal(t, precisionGeminiFlashModel, (<-c.openlux.args).model)
+	require.Zero(t, c.wanjie35.calls.Load(), "ordinary photos stay off the precision channel family")
+	require.Zero(t, c.openluxPrecision.calls.Load())
+}
+
+func TestBalancedVisionOrdinaryModelKeepsWanjieOnGemini3(t *testing.T) {
+	c := balancedChannels{
+		wanjie:  &channelFixture{result: channelFood("万界米饭"), args: make(chan channelCallArgs, 1)},
+		openlux: &channelFixture{err: errors.New("upstream 500")},
+		a6:      &channelFixture{err: errors.New("upstream 500"), args: make(chan channelCallArgs, 1)},
+	}
+	s := newOrdinaryModelRoutingService(t, c, precisionGeminiFlashModel)
+
+	outcome, err := s.runBalancedGeminiVision(standardVisionCtx(), "food_image", geminiOpenLuxUpstream, precisionGeminiFlashModel, "prompt", []string{"image"}, 0, validateNonEmptyFoodAnalysisResult)
+	require.NoError(t, err)
+	require.Equal(t, precisionGeminiFlashModel, (<-c.a6.args).model)
+	require.Equal(t, geminiPrimaryUpstream, outcome.upstream)
+	require.Equal(t, gemini3FlashModel, (<-c.wanjie.args).model, "Wanjie cannot serve Gemini 3.6")
+}
+
+func TestBalancedVisionOrdinaryModelLeavesTextAndPrecisionAlone(t *testing.T) {
+	c := balancedChannels{
+		wanjie35:         &channelFixture{result: channelFood("红烧肉")},
+		openlux:          &channelFixture{result: channelFood("米饭"), args: make(chan channelCallArgs, 1)},
+		openluxPrecision: &channelFixture{result: channelFood("openlux红烧肉")},
+		a6:               &channelFixture{result: channelFood("a6红烧肉")},
+	}
+	s := newOrdinaryModelRoutingService(t, c, precisionGeminiFlashModel)
+
+	_, err := s.runBalancedGeminiChannels(standardVisionCtx(), "food_text", geminiOpenLuxUpstream, gemini3FlashModel, "prompt", nil, 0, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, gemini3FlashModel, (<-c.openlux.args).model, "text analysis keeps Gemini 3 Flash")
+
+	ctx := WithVisionRequest(context.Background(), precisionExecutionMode, "session-1", false)
+	require.Equal(t, gemini35FlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session-1"))
+	outcome, err := s.runBalancedGeminiVision(ctx, "precision", geminiPrimaryUpstream, gemini35FlashModel, "prompt", []string{"image"}, 0, nil)
+	require.NoError(t, err)
+	require.Equal(t, gemini35FlashModel, outcome.model)
+}
+
+func TestBalancedVisionOrdinaryModelDefaultsToGemini3(t *testing.T) {
+	c := balancedChannels{wanjie: &channelFixture{}, openlux: &channelFixture{}, a6: &channelFixture{}}
+	for _, configured := range []string{"", "gemini-9-flash", gemini35FlashModel, gemini3FlashModel} {
+		s := newOrdinaryModelRoutingService(t, c, configured)
+		require.Equal(t, gemini3FlashModel, s.ordinaryImageModel(), configured)
+		require.Equal(t, openLuxGemini3Route, s.SelectFoodImageModel(defaultExecutionMode, "task"), configured)
+	}
+	s := newOrdinaryModelRoutingService(t, c, " "+relayGemini37FlashModel+" ")
+	require.Equal(t, "openlux:"+relayGemini37FlashModel, s.SelectFoodImageModel(defaultExecutionMode, "task"))
+}
+
+func TestResolveModelConfigMapsA6Gemini36Route(t *testing.T) {
+	provider, model := resolveModelConfig("a6:" + precisionGeminiFlashModel)
+	require.Equal(t, "gemini", provider)
+	require.Equal(t, precisionGeminiFlashModel, model)
+}

@@ -2703,7 +2703,7 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if normalized == precisionGeminiFlashModel || normalized == "gemini36-flash" || normalized == "gemini36_flash" {
 		return "gemini", precisionGeminiFlashModel
 	}
-	if normalized == openLuxPrecisionGeminiRoute {
+	if normalized == openLuxPrecisionGeminiRoute || normalized == "a6:"+precisionGeminiFlashModel {
 		return "gemini", precisionGeminiFlashModel
 	}
 	if strings.HasPrefix(normalized, "ofox-gemini:") {

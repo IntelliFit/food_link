@@ -149,7 +149,9 @@ type ExternalConfig struct {
 	NutritionEmbeddingDimensions  int                 `mapstructure:"nutrition_embedding_dimensions"`
 }
 
-// VisionRoutingConfig controls channel scheduling, without changing product models.
+// VisionRoutingConfig controls channel scheduling. Only OrdinaryImageModel
+// changes a product model: the Gemini model ordinary photos use on the relay
+// channels.
 type VisionRoutingConfig struct {
 	BalancedRoutingEnabled bool     `mapstructure:"balanced_routing_enabled"`
 	ResponseWaitSeconds    int      `mapstructure:"response_wait_seconds"`
@@ -166,6 +168,7 @@ type VisionRoutingConfig struct {
 	CircuitFailures        int      `mapstructure:"circuit_failures"`
 	CircuitCooldownSeconds int      `mapstructure:"circuit_cooldown_seconds"`
 	UncertainReviewEnabled bool     `mapstructure:"uncertain_review_enabled"`
+	OrdinaryImageModel     string   `mapstructure:"ordinary_image_model"`
 }
 
 type AppAuthConfig struct {
@@ -1641,6 +1644,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.vision_routing.circuit_failures", 3)
 	v.SetDefault("external.vision_routing.circuit_cooldown_seconds", 60)
 	v.SetDefault("external.vision_routing.uncertain_review_enabled", false)
+	v.SetDefault("external.vision_routing.ordinary_image_model", "gemini-3-flash-preview")
 	v.SetDefault("external.openlux_ordinary_gemini_traffic_percent", 50)
 	v.SetDefault("external.openlux_precision_gemini_traffic_percent", 50)
 	v.SetDefault("external.nutrition_embedding_base_url", "https://yunwu.ai/v1")
