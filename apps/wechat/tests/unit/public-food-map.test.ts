@@ -9,6 +9,8 @@ import {
   type FoodMapSpot,
   formatFoodMapDistance,
   hasValidFoodCoordinates,
+  mapSpotDishesLabel,
+  mapSpotOpensDishList,
 } from '../../src/packageExtra/pages/food-library/food-map'
 import type { PublicFoodLibraryItem, PublicFoodMapSpotPayload } from '../../src/utils/api'
 import { existsSync, readFileSync } from 'fs'
@@ -189,5 +191,17 @@ describe('food map clustering', () => {
   it('caps the cluster label', () => {
     expect(formatFoodMapClusterCount(99)).toBe('99')
     expect(formatFoodMapClusterCount(100)).toBe('99+')
+  })
+})
+
+describe('map spot dish list', () => {
+  it('opens a list only when a spot has more than one dish', () => {
+    expect(mapSpotOpensDishList({ foodCount: 279 })).toBe(true)
+    expect(mapSpotOpensDishList({ foodCount: 1 })).toBe(false)
+  })
+
+  it('says how many dishes the button leads to', () => {
+    expect(mapSpotDishesLabel(279)).toBe('查看 279 道餐食')
+    expect(mapSpotDishesLabel(1)).toBe('查看餐食')
   })
 })

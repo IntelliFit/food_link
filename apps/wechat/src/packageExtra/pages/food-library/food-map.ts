@@ -190,6 +190,15 @@ export function buildFoodMapSpots(
     })
 }
 
+/** 只有一道菜的地点直接进详情，多道菜先看地点的餐食列表。 */
+export function mapSpotOpensDishList(spot: Pick<FoodMapSpot, 'foodCount'>): boolean {
+  return spot.foodCount > 1
+}
+
+export function mapSpotDishesLabel(foodCount: number): string {
+  return foodCount > 1 ? `查看 ${foodCount} 道餐食` : '查看餐食'
+}
+
 export function buildFoodMapSpotsFromPayload(
   spots: PublicFoodMapSpotPayload[],
   userLocation?: FoodMapLocation | null,

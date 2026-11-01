@@ -449,6 +449,11 @@ func (s *PublicFoodService) List(ctx context.Context, userID string, filter repo
 		logger.Warn(ctx, "食堂地点筛选参数无效", slog.String("user_id", userID))
 		return nil, commonerrors.ErrBadRequest
 	}
+	filter.SpotKey = strings.TrimSpace(filter.SpotKey)
+	if filter.SpotKey != "" && !validMapSpotKey(filter.SpotKey) {
+		logger.Warn(ctx, "地图点位参数无效", slog.String("user_id", userID))
+		return nil, commonerrors.ErrBadRequest
+	}
 	filter.CanteenScope = strings.TrimSpace(filter.CanteenScope)
 	switch filter.CanteenScope {
 	case "", "all", "campus", "community":

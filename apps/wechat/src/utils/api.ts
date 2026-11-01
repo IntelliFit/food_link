@@ -8558,6 +8558,8 @@ export interface PublicFoodLibraryListParams {
   keyword?: string
   /** 只返回可展示在地图上的有效经纬度条目 */
   has_location?: boolean
+  /** 只返回该地图点位的餐食，取值为地图接口返回的 key */
+  spot_key?: string
   suitable_for_fat_loss?: boolean
   merchant_name?: string
   min_calories?: number
@@ -8601,6 +8603,7 @@ export async function getPublicFoodLibraryList(
   if (params?.city) q.set('city', params.city)
   if (params?.keyword) q.set('keyword', params.keyword)
   if (params?.has_location !== undefined) q.set('has_location', String(params.has_location))
+  if (params?.spot_key) q.set('spot_key', params.spot_key)
   if (params?.suitable_for_fat_loss !== undefined) q.set('suitable_for_fat_loss', String(params.suitable_for_fat_loss))
   if (params?.merchant_name) q.set('merchant_name', params.merchant_name)
   if (params?.min_calories !== undefined) q.set('min_calories', String(params.min_calories))
