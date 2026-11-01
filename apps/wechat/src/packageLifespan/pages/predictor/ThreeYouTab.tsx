@@ -4,7 +4,7 @@ import { engine } from '../../engine/engine'
 import { LifeCanvas } from '../../charts/LifeCanvas'
 import { drawDistribution, drawFork, drawSurvival, drawTrioFigures, type Palette } from '../../charts/draw'
 import type { Predictee } from '../../model/people'
-import { atAge, axisEndAge, deathAge, DISCLAIMER, percent, signedYears, topChanges, years, type PredictorModel, type TopChange } from '../../model/predictor'
+import { atAge, axisEndAge, deathAge, DISCLAIMER, percent, signedPoints, signedYears, todayWarnings, topChanges, years, type PredictorModel, type TopChange } from '../../model/predictor'
 import { threeYouPoster, type PosterContent, type ShareOptions } from '../../model/share'
 
 interface ThreeYouTabProps {
@@ -20,6 +20,8 @@ interface ThreeYouTabProps {
 
 const TONE_CLASSES = ['is-a', 'is-b', 'is-c']
 
+const shift = (value: number): string => `${value >= 0 ? '往右推了' : '往左拉了'}约 ${years(Math.abs(value))} 年`
+
 export function ThreeYouTab({ model, person, palette, header, onAction, onShare, onPlay, onDeleteData }: ThreeYouTabProps) {
   const { branches } = model
   const [today, right, loose] = branches
@@ -28,8 +30,8 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
   const [chart, setChart] = useState<'alive' | 'dist'>('alive')
   const [life, setLife] = useState(0)
   const changes = useMemo(() => topChanges(model), [model])
+  const warnings = useMemo(() => todayWarnings(model), [model])
   const gain = right.le.mean - today.le.mean
-  const loss = today.le.mean - loose.le.mean
   const alive = branches.map(branch => atAge(person, branch, age))
 
   return (
@@ -70,6 +72,7 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
             ))}
           </View>
         </View>
+        {warnings.map(warning => <Text key={warning.message} className='lp-hero__warn'>外推：{warning.message}</Text>)}
         <Text className='lp-hero__hint'>人物为示意，体型随 BMI 变化 · {DISCLAIMER}</Text>
       </View>
 
@@ -93,7 +96,7 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
         <Text className='lp-reading'>
           {chart === 'alive'
             ? `活到 ${age} 岁的概率：照现在这样吃 ${percent(alive[0].alive)}，把饮食吃对 ${percent(alive[1].alive)}，放飞自我 ${percent(alive[2].alive)}。`
-            : `离世年龄是一条分布，不是一个日期。吃对把分布往右推了约 ${years(gain)} 年，放飞往左拉了约 ${years(loss)} 年，三条分布大量重叠。`}
+            : `离世年龄是一条分布，不是一个日期。吃对把分布${shift(gain)}，放飞把分布${shift(loose.le.mean - today.le.mean)}，三条分布大量重叠。`}
         </Text>
         <View className='lp-le'>
           {branches.map((branch, index) => (
@@ -117,7 +120,7 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
               <Text className='lp-change__gain'>{signedYears(change.gain)} 年</Text>
             </View>
             <Text className='lp-change__detail'>现在 {change.from} → {change.to}</Text>
-            {change.p85Points !== null && <Text className='lp-fine'>活到 85 岁的概率 +{change.p85Points.toFixed(1)} 个百分点</Text>}
+            {change.p85Points !== null && <Text className='lp-fine'>活到 85 岁的概率 {signedPoints(change.p85Points)} 个百分点</Text>}
             <View className='lp-badges'>
               {change.evidence.map(item => <Text key={item} className='lp-badge'>{item}</Text>)}
               {change.extrapolated && <Text className='lp-badge lp-badge--warn'>目标超出队列观察范围 · 外推</Text>}
@@ -139,8 +142,8 @@ export function ThreeYouTab({ model, person, palette, header, onAction, onShare,
           {branches.map((branch, index) => (
             <View key={branch.key} className='lp-dice__col'>
               <Text className={`lp-le__name ${TONE_CLASSES[index]}`}>{branch.name}</Text>
-              <Text className='lp-dice__value'>{Math.floor(deathAge(person, branch, life))}<Text className='lp-fine'> 岁</Text></Text>
-              <Text className='lp-fine'>离世</Text>
+              <Text className='lp-dice__value'>{Math.floor(deathAge(person, branch, life))}<Text className='lp-dice__unit'> 岁</Text></Text>
+              <Text className='lp-fine'>这次模拟离世</Text>
             </View>
           ))}
         </View>

@@ -1,4 +1,4 @@
-import { Button, Text, View } from '@tarojs/components'
+import { Button, ScrollView, Text, View } from '@tarojs/components'
 import { useState } from 'react'
 import {
   draftToPredictee, emptyDraft, predicteeToDraft, RELATIONS, validateDraft, type PersonDraft, type Predictee,
@@ -40,11 +40,13 @@ export function PersonSheet({ people, activeId, onPick, onSave, onDelete, onClos
           <Button className='lp-btn lp-btn--small lp-btn--line' onClick={editing ? () => { setEditing(null); setError('') } : onClose}>{editing ? '返回' : '关闭'}</Button>
         </View>
         {editing ? (
-          <PersonForm
-            draft={editing.draft}
-            error={error}
-            onChange={(next) => setEditing(prev => prev && { ...prev, draft: { ...prev.draft, ...next } })}
-          />
+          <ScrollView scrollY className='lp-sheet__scroll'>
+            <PersonForm
+              draft={editing.draft}
+              error={error}
+              onChange={(next) => setEditing(prev => prev && { ...prev, draft: { ...prev.draft, ...next } })}
+            />
+          </ScrollView>
         ) : (
           <View className='lp-people'>
             {people.map(person => (

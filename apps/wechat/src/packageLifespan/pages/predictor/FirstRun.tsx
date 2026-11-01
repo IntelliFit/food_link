@@ -2,7 +2,7 @@ import { Button, Text, View } from '@tarojs/components'
 import { useEffect, useRef, useState } from 'react'
 import { getAccessToken, getHealthProfile } from '../../../utils/api'
 import { DISCLAIMER } from '../../model/predictor'
-import { draftToPredictee, draftWithHealthProfile, emptyDraft, SELF_LABEL, validateDraft, type PersonDraft, type Predictee } from '../../model/people'
+import { basicsFilled, draftToPredictee, draftWithHealthProfile, emptyDraft, SELF_LABEL, validateDraft, type PersonDraft, type Predictee } from '../../model/people'
 import { PersonForm } from './PersonForm'
 
 interface FirstRunProps {
@@ -12,7 +12,7 @@ interface FirstRunProps {
 /** No records and no login needed: the health profile only saves typing when it exists. */
 export function FirstRun({ onDone }: FirstRunProps) {
   const [draft, setDraft] = useState<PersonDraft>(() => emptyDraft(SELF_LABEL))
-  const [filled, setFilled] = useState(false)
+  const [filled, setFilled] = useState(0)
   const [error, setError] = useState('')
   const touched = useRef(false)
 
@@ -22,11 +22,14 @@ export function FirstRun({ onDone }: FirstRunProps) {
     getHealthProfile()
       .then((profile) => {
         if (cancelled || touched.current) return
-        setDraft(prev => draftWithHealthProfile(prev, profile, new Date()))
-        setFilled(true)
+        const next = draftWithHealthProfile(draft, profile, new Date())
+        setDraft(next)
+        setFilled(basicsFilled(next))
       })
       .catch(() => undefined)
     return () => { cancelled = true }
+    // Runs once on open; later edits win over the profile through `touched`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const submit = () => {
@@ -45,7 +48,8 @@ export function FirstRun({ onDone }: FirstRunProps) {
       </View>
       <View className='lp-card'>
         <Text className='lp-card__title'>先算一次</Text>
-        {filled && <Text className='lp-fine'>性别、年龄、身高、体重已从健康档案带入。习惯选个大概就行，之后都能调。</Text>}
+        {filled === 4 && <Text className='lp-fine'>性别、年龄、身高、体重已从健康档案带入。习惯选个大概就行，之后都能调。</Text>}
+        {filled > 0 && filled < 4 && <Text className='lp-fine'>已从健康档案带入一部分，空着的请补上。习惯选个大概就行，之后都能调。</Text>}
         <PersonForm
           draft={draft}
           error={error}

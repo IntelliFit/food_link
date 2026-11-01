@@ -123,6 +123,41 @@ describe('predictor page', () => {
     expect(screen.getAllByText('+1.0 年').length).toBeGreaterThan(0)
   })
 
+  it('keeps slider changes when a life card is added afterwards', async () => {
+    mockStorage([STORED])
+    const view = render(<LifespanPredictorPage />)
+    await screen.findByText('78.7')
+    const slider = view.container.querySelector('input[type="range"][max="400"]') as Element
+    const props = Object.entries(slider).find(([key]) => key.startsWith('__reactProps'))?.[1] as { onChange: (e: unknown) => void }
+    act(() => props.onChange({ detail: { value: 300 } }))
+    fireEvent.click(screen.getByText('每天多吃一个苹果'))
+    expect(await screen.findByText('500 g/天')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('每天多吃一个苹果'))
+    expect(await screen.findByText('300 g/天')).toBeInTheDocument()
+  })
+
+  it('keeps what was tuned when switching tabs and back', async () => {
+    mockStorage([STORED])
+    render(<LifespanPredictorPage />)
+    await screen.findByText('78.7')
+    fireEvent.click(screen.getByText('每天多吃一个苹果'))
+    fireEvent.click(screen.getByText('三个你'))
+    fireEvent.click(await screen.findByText('自己调'))
+    expect(await screen.findByText(/已加上/)).toBeInTheDocument()
+    expect(screen.queryByText('78.7')).not.toBeInTheDocument()
+  })
+
+  it('reads correctly when letting go would lengthen life for an underweight person', async () => {
+    mockStorage([{ ...STORED, age: 18, height_cm: 150, weight_kg: 40, energy_balance_kcal: 0, fruit_g: 60, fish_g: 15 }])
+    render(<LifespanPredictorPage />)
+    fireEvent.click(await screen.findByText('三个你'))
+    fireEvent.click(await screen.findByText('寿命分布'))
+    const reading = await screen.findByText(/离世年龄是一条分布/)
+    expect(reading.textContent).not.toContain('-')
+    expect(reading.textContent).toContain('放飞把分布往右推了')
+    expect(screen.getByText(/外推：年龄 18 岁/)).toBeInTheDocument()
+  })
+
   it('switches between the two tabs and can reset', async () => {
     mockStorage([STORED])
     render(<LifespanPredictorPage />)
@@ -207,6 +242,20 @@ describe('share cards', () => {
     const play = textOf(playPoster(share, shown))
     expect(play).toContain('kg')
     expect(play).toContain('从 32 岁起')
+  })
+
+  it('keeps the body shape neutral until weight is shown', () => {
+    const neutral = threeYouPoster('我', model, 0, hidden).columns.map(column => column.bmi)
+    expect(new Set(neutral).size).toBe(1)
+    const real = threeYouPoster('我', model, 0, shown).columns.map(column => column.bmi)
+    expect(new Set(real).size).toBeGreaterThan(1)
+    expect(new Set(playPoster(share, hidden).columns.map(column => column.bmi)).size).toBe(1)
+  })
+
+  it('labels one life as one simulation and uses a later note age for older people', () => {
+    expect(threeYouPoster('我', model, 0, hidden).columns[0].caption).toBe('这次模拟')
+    const older = buildModel({ ...person, age: 70 })
+    expect(threeYouPoster('爸爸', older, 0, shown).columns[0].note).toContain('90 岁')
   })
 
   it('says fewer years when the change makes things worse', () => {

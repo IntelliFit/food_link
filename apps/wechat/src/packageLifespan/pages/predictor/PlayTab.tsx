@@ -7,7 +7,7 @@ import { HABIT_CHOICES, HABIT_SLIDERS, type HabitSlider } from '../../model/habi
 import type { Predictee } from '../../model/people'
 import {
   adherenceOptions, applyLifeCards, atAge, axisEndAge, DEFAULT_PLAN, DISCLAIMER, isSameExposures, lateStart, lifeCardValues,
-  parallelLives, percent, planOf, planPhrase, playOutcome, signedYears, years, type PlanChoice, type PredictorModel,
+  milestoneAge, parallelLives, percent, personWarnings, planOf, planPhrase, playOutcome, signedYears, years, type PlanChoice, type PredictorModel,
 } from '../../model/predictor'
 import { playPoster, type PosterContent, type ShareOptions } from '../../model/share'
 import { Chips } from './PersonForm'
@@ -32,6 +32,7 @@ interface Tuning {
 export interface KeptTuning {
   tuning: Tuning
   applied: string[]
+  cardsFrom: Exposures
 }
 
 const toneOf = (value: number): string => (value >= 0.05 ? 'is-up' : value <= -0.05 ? 'is-down' : '')
@@ -42,8 +43,10 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
   const [live, setLive] = useState<Tuning>(kept?.tuning ?? { play: model.base, choice: DEFAULT_PLAN })
   const [settled, setSettled] = useState<Tuning>(live)
   const [applied, setApplied] = useState<string[]>(kept?.applied ?? [])
+  // What life cards stack on: today's habits, or wherever the sliders were last left.
+  const [cardsFrom, setCardsFrom] = useState<Exposures>(kept?.cardsFrom ?? model.base)
 
-  useEffect(() => { onKeep({ tuning: settled, applied }) }, [settled, applied]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { onKeep({ tuning: settled, applied, cardsFrom }) }, [settled, applied, cardsFrom]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const drag = (next: Partial<Tuning>) => setLive(prev => ({ ...prev, ...next }))
   const commit = (next: Partial<Tuning>) => {
@@ -54,13 +57,14 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
   const setHabit = (patch: Partial<Exposures>, release: boolean) => {
     const play = { ...live.play, ...patch }
     if (applied.length) setApplied([])
+    setCardsFrom(play)
     if (release) commit({ play })
     else drag({ play })
   }
   const toggleCard = (id: string) => {
     const next = applied.includes(id) ? applied.filter(item => item !== id) : [...applied, id]
     setApplied(next)
-    commit({ play: applyLifeCards(model, next) })
+    commit({ play: applyLifeCards(model, next, cardsFrom) })
   }
   const setStart = (age: number, release: boolean) => {
     const choice = { ...live.choice, start: age <= person.age ? null : age }
@@ -79,6 +83,8 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
 
   const gained = outcome.delta >= -0.05
   const noteAge = Math.min(axisEndAge(person), person.age + 20)
+  const milestone = milestoneAge(person)
+  const generalWarnings = personWarnings(outcome.warnings)
   const startAge = live.choice.start ?? person.age
   const maxStart = Math.max(person.age + 1, Math.min(100, axisEndAge(person) - 5))
   const warningOf = (field: string) => outcome.warnings.find(warning => warning.field === field)
@@ -141,14 +147,15 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
         />
         <View className='lp-pair'>
           <View className='lp-pair__item'>
-            <Text className='lp-hero__dim'>活到 85 岁的概率</Text>
-            <Text className='lp-pair__value'>{today.p85 === null || outcome.curves.p85 === null ? '—' : `${percent(today.p85)} → ${percent(outcome.curves.p85)}`}</Text>
+            <Text className='lp-hero__dim'>活到 {milestone} 岁的概率</Text>
+            <Text className='lp-pair__value'>{percent(atAge(person, today, milestone).alive)} → {percent(atAge(person, outcome.curves, milestone).alive)}</Text>
           </View>
           <View className='lp-pair__item'>
             <Text className='lp-hero__dim'>{noteAge} 岁时体重</Text>
             <Text className='lp-pair__value'>{atAge(person, today, noteAge).weight.toFixed(0)} → {atAge(person, outcome.curves, noteAge).weight.toFixed(0)} kg</Text>
           </View>
         </View>
+        {generalWarnings.map(warning => <Text key={warning.message} className='lp-hero__warn'>外推：{warning.message}</Text>)}
         <Text className='lp-hero__hint'>{DISCLAIMER} · 结果默认改完以后长期坚持，下面可以改</Text>
       </View>
 
@@ -171,7 +178,7 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
       <View className='lp-card'>
         <View className='lp-row'>
           <Text className='lp-card__title lp-grow'>细调每一项</Text>
-          <Button className='lp-btn lp-btn--small lp-btn--line' onClick={() => { setApplied([]); commit({ play: model.base, choice: DEFAULT_PLAN }) }}>回到现在</Button>
+          <Button className='lp-btn lp-btn--small lp-btn--line' onClick={() => { setApplied([]); setCardsFrom(model.base); commit({ play: model.base, choice: DEFAULT_PLAN }) }}>回到现在</Button>
         </View>
         {HABIT_SLIDERS.map(renderSlider)}
         {HABIT_CHOICES.map(choice => (
@@ -242,14 +249,14 @@ export function PlayTab({ model, person, palette, header, kept, onKeep, onSetUpP
           deps={[lives, palette, settledOutcome.delta]}
           draw={(ctx, w, h) => drawParallelLives(ctx, w, h, person, lives, settledOutcome.delta >= -0.05, palette)}
         />
-        <Text className='lp-reading'>100 个平行的你里，照现在有 {lives.over85Today} 个活过 85 岁，调完以后有 {lives.over85Tuned} 个。同一颗骰子下，每个人多活或少活的年数都不一样。</Text>
+        <Text className='lp-reading'>100 个平行的你里，照现在有 {lives.overToday} 个活过 {lives.milestone} 岁，调完以后有 {lives.overTuned} 个。同一颗骰子下，每个人多活或少活的年数都不一样。</Text>
       </View>
 
       <View className='lp-row lp-actions'>
         <Button className='lp-btn lp-btn--line lp-grow' onClick={onSetUpPlan}>去设置饮食方案</Button>
         <Button
           className='lp-btn lp-grow'
-          disabled={isSameExposures(live.play, model.base) && !livePlan}
+          disabled={isSameExposures(live.play, model.base)}
           onClick={() => onShare(shareOptions => playPoster({
             person, label: person.label, summary: shareSummary(), today, tuned: outcome.curves, delta: outcome.delta,
           }, shareOptions))}

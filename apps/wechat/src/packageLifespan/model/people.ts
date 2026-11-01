@@ -8,7 +8,7 @@ export const RELATIONS = ['爸爸', '妈妈', '伴侣', '朋友'] as const
 export const SELF_LABEL = '我'
 
 const STORAGE_KEY = 'lifespan_people_v1'
-const LIMITS = { age: [18, 100], height: [120, 220], weight: [30, 250] } as const
+const LIMITS = { age: [18, 100], height: [120, 220], weight: [30, 250], bmi: [10, 70] } as const
 
 export interface Predictee extends Person {
   id: string
@@ -82,6 +82,11 @@ export function draftWithHealthProfile(draft: PersonDraft, profile: HealthProfil
 
 const inRange = (value: number, [lo, hi]: readonly [number, number]): boolean => Number.isFinite(value) && value >= lo && value <= hi
 
+/** How many of the four basics the health profile supplied. */
+export function basicsFilled(draft: PersonDraft): number {
+  return [draft.sex, draft.age, draft.height, draft.weight].filter(Boolean).length
+}
+
 export function validateDraft(draft: PersonDraft): string | null {
   if (!draft.sex) return '请选择性别'
   const age = Number(draft.age)
@@ -89,6 +94,7 @@ export function validateDraft(draft: PersonDraft): string | null {
   if (!draft.age.trim() || !inRange(age, LIMITS.age)) return '请填写 18–100 岁之间的年龄'
   if (!draft.height.trim() || !inRange(Number(draft.height), LIMITS.height)) return '请填写 120–220 cm 之间的身高'
   if (!draft.weight.trim() || !inRange(Number(draft.weight), LIMITS.weight)) return '请填写 30–250 kg 之间的体重'
+  if (!inRange(Number(draft.weight) / Math.pow(Number(draft.height) / 100, 2), LIMITS.bmi)) return '身高和体重对不上，请检查一下'
   return null
 }
 

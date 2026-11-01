@@ -1,6 +1,6 @@
 import { Text, View } from '@tarojs/components'
 import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { DARK_PALETTE, LIGHT_PALETTE } from '../../charts/draw'
@@ -32,10 +32,13 @@ function LifespanPredictorPage() {
   const model = useMemo(() => (person ? buildModel(person) : null), [person])
   const palette = dark ? DARK_PALETTE : LIGHT_PALETTE
 
-  useDidShow(() => {
+  const applyNavigationBar = () => {
     void Taro.setNavigationBarColor({ frontColor: '#ffffff', backgroundColor: dark ? '#0e3d2e' : '#0d4a37' })
-  })
-  useShareAppMessage(() => ({ title: '每天一个苹果能多活多久？试试寿命预测器', path: `/${PREDICTOR_PAGE}` }))
+  }
+  // The colour scheme hook resets the bar when it mounts, so this has to run after it.
+  useEffect(applyNavigationBar, [dark]) // eslint-disable-line react-hooks/exhaustive-deps
+  useDidShow(applyNavigationBar)
+  useShareAppMessage(() => ({ title: '每天一个苹果能多活多久？寿命预测器（模拟估算，不用于诊断）', path: `/${PREDICTOR_PAGE}` }))
 
   const updatePeople = (next: Predictee[]) => {
     setPeople(next)
@@ -60,7 +63,7 @@ function LifespanPredictorPage() {
     setSheetOpen(false)
   }
   const deleteAll = async () => {
-    if (!(await confirm('清除寿命预测器数据？', '这台手机上保存的所有人都会被删除。'))) return
+    if (!(await confirm('清除这台手机上的数据？', '这里保存的所有人都会被删除。'))) return
     clearPeople()
     setPeople([])
     setActiveId(null)
@@ -70,7 +73,7 @@ function LifespanPredictorPage() {
     else void Taro.navigateTo({ url: extraPkgUrl('/pages/nutrition-plans/index') })
   }
 
-  const rootClass = `lp${dark ? ' lp--dark' : ''}`
+  const rootClass = `lp${dark ? ' lp--dark' : ''}${sheetOpen || poster ? ' lp--sheet-open' : ''}`
   if (!person || !model) {
     return <View className={rootClass}><FirstRun onDone={savePerson} /></View>
   }

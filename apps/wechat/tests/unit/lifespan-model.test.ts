@@ -22,11 +22,14 @@ import {
   isSameExposures,
   lateStart,
   lifeCardValues,
+  milestoneAge,
   parallelLives,
   planOf,
   planPhrase,
   playOutcome,
+  signedPoints,
   signedYears,
+  todayWarnings,
   topChanges,
 } from '../../src/packageLifespan/model/predictor'
 
@@ -121,8 +124,38 @@ describe('predictor model', () => {
     const total = (bins: Map<number, number>) => Array.from(bins.values()).reduce((sum, count) => sum + count, 0)
     expect(total(lives.today)).toBe(100)
     expect(total(lives.tuned)).toBe(100)
-    expect(lives.over85Tuned).toBeGreaterThanOrEqual(lives.over85Today)
+    expect(lives.overTuned).toBeGreaterThanOrEqual(lives.overToday)
     expect(lives.tallest).toBeGreaterThan(0)
+  })
+
+  it('stacks cards on what the sliders were left at, not on today', () => {
+    const fromSliders = { ...model.base, fruit_g: 300 }
+    expect(applyLifeCards(model, ['rice'], fromSliders)).toMatchObject({ fruit_g: 300, delta_intake_kcal: -60 })
+  })
+
+  it('moves the "chance of reaching" age for people already near 85', () => {
+    expect(milestoneAge(ME)).toBe(85)
+    expect(milestoneAge({ ...ME, age: 79 })).toBe(85)
+    expect(milestoneAge({ ...ME, age: 85 })).toBe(95)
+    expect(milestoneAge({ ...ME, age: 100 })).toBe(110)
+    const old = buildModel({ ...ME, age: 85 })
+    const lives = parallelLives(old.person, old.branches[0], old.branches[1])
+    expect(lives.milestone).toBe(95)
+    expect(lives.overToday).toBeLessThan(100)
+  })
+
+  it('warns about the person, not just about habits', () => {
+    expect(todayWarnings(model)).toEqual([])
+    expect(todayWarnings(buildModel({ ...ME, age: 25 })).map(warning => warning.field)).toEqual(['age'])
+    expect(todayWarnings(buildModel({ ...ME, weight_kg: 140 })).map(warning => warning.field)).toEqual(['bmi'])
+    const thin = buildModel({ ...ME, height_cm: 150, weight_kg: 48, energy_balance_kcal: 0 })
+    const starving = playOutcome(thin, { ...thin.base, delta_intake_kcal: -600 }, null)
+    expect(starving.warnings.find(warning => warning.field === 'bmi')?.message).toContain('BMI 最低降到')
+  })
+
+  it('never prints a doubled sign', () => {
+    expect(signedPoints(1.26)).toBe('+1.3')
+    expect(signedPoints(-0.4)).toBe('−0.4')
   })
 
   it('formats signed years without a false sign around zero', () => {
@@ -167,6 +200,7 @@ describe('people on this phone', () => {
     expect(validateDraft({ ...good, age: '130' })).toContain('年龄')
     expect(validateDraft({ ...good, height: '90' })).toContain('身高')
     expect(validateDraft({ ...good, weight: 'abc' })).toContain('体重')
+    expect(validateDraft({ ...good, age: '18', height: '120', weight: '250' })).toContain('对不上')
   })
 
   it('round-trips between the form and a person', () => {

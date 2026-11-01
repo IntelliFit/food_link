@@ -128,7 +128,8 @@ export function drawFork(ctx: Ctx, width: number, height: number, person: Person
 
   ageTicks(person.age, end).forEach((age) => {
     line(ctx, x(age), top, x(age), height - bottom, HERO.line)
-    text(ctx, `${age} 岁`, x(age), height - 6, HERO.dim, 'center')
+    // A tick at the very start of the axis would be cut off if it were centred.
+    text(ctx, `${age} 岁`, x(age), height - 6, HERO.dim, x(age) < 20 ? 'left' : 'center')
   })
   branches.forEach((branch, index) => {
     const color = HERO_COLORS[index]

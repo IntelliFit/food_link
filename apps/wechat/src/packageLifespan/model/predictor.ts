@@ -47,6 +47,10 @@ export function buildModel(person: Person): PredictorModel {
 
 export const axisEndAge = (person: Person): number => Math.min(110, Math.max(100, person.age + 20))
 
+/** The "chance of reaching" age: 85, or a later round age for people already close to it. */
+export const milestoneAge = (person: Person): number =>
+  (person.age < 80 ? 85 : Math.min(110, Math.ceil((person.age + 10) / 5) * 5))
+
 export function atAge(person: Person, curves: Curves, age: number): { alive: number; weight: number; bmi: number } {
   const index = Math.max(0, Math.min(Math.round(age - person.age), curves.S.length - 1))
   return { alive: curves.S[index], weight: curves.W[index], bmi: curves.B[index] }
@@ -54,6 +58,7 @@ export function atAge(person: Person, curves: Curves, age: number): { alive: num
 
 export const percent = (value: number): string => `${Math.round(value * 100)}%`
 export const years = (value: number): string => value.toFixed(1)
+export const signedPoints = (value: number): string => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(1)}`
 export function signedYears(value: number): string {
   if (Math.abs(value) < 0.05) return '±0.0'
   return `${value > 0 ? '+' : '−'}${Math.abs(value).toFixed(1)}`
@@ -158,14 +163,29 @@ export interface PlayOutcome {
   warnings: EvidenceWarning[]
 }
 
+const BMI_FLOOR = 15
+
+function warningsOf(person: Person, exposures: Exposures, curves: Curves): EvidenceWarning[] {
+  const lowest = Math.min(...curves.B)
+  const low = lowest < BMI_FLOOR ? [{ field: 'bmi', message: `BMI 最低降到 ${lowest.toFixed(1)}，超出 15–45 的研究范围` }] : []
+  return [...engine.warnings(person, exposures, Math.max(...curves.B)), ...low]
+}
+
 export function playOutcome(model: PredictorModel, play: Exposures, plan: ChangePlan | null): PlayOutcome {
   const curves = engine.curves(model.person, play, model.base, model.lag, plan)
   return {
     curves,
     delta: curves.le.mean - model.branches[0].le.mean,
-    warnings: engine.warnings(model.person, play, Math.max(...curves.B)),
+    warnings: warningsOf(model.person, play, curves),
   }
 }
+
+/** Warnings about the person rather than one habit, shown near the headline. */
+export const personWarnings = (warnings: EvidenceWarning[]): EvidenceWarning[] =>
+  warnings.filter(warning => warning.field === 'age' || warning.field === 'bmi')
+
+export const todayWarnings = (model: PredictorModel): EvidenceWarning[] =>
+  personWarnings(warningsOf(model.person, model.base, model.branches[0]))
 
 export interface LifeCardValue {
   id: string
@@ -183,11 +203,11 @@ export function lifeCardValues(model: PredictorModel, plan: ChangePlan | null): 
   }))
 }
 
-/** Cards stack: each applied card acts on the result of the previous ones, in display order. */
-export function applyLifeCards(model: PredictorModel, applied: string[]): Exposures {
+/** Cards stack on `from` (what the sliders were left at), in display order. */
+export function applyLifeCards(model: PredictorModel, applied: string[], from: Exposures = model.base): Exposures {
   return lifeCardsFor(model.person)
     .filter(card => applied.includes(card.id))
-    .reduce((exposures, card) => card.apply(exposures), model.base)
+    .reduce((exposures, card) => card.apply(exposures), from)
 }
 
 const SAME_EPSILON = 1e-9
@@ -242,8 +262,9 @@ export interface ParallelLives {
   /** Number of lives per 2-year bin, today's habits and the tuned plan. */
   today: Map<number, number>
   tuned: Map<number, number>
-  over85Today: number
-  over85Tuned: number
+  milestone: number
+  overToday: number
+  overTuned: number
   binYears: number
   tallest: number
 }
@@ -256,21 +277,23 @@ export function parallelLives(person: Person, today: Curves, tuned: Curves, coun
   }
   let binsToday = new Map<number, number>()
   let binsTuned = new Map<number, number>()
-  let over85Today = 0
-  let over85Tuned = 0
+  const milestone = milestoneAge(person)
+  let overToday = 0
+  let overTuned = 0
   for (let life = 0; life < count; life += 1) {
     const ageToday = deathAge(person, today, life)
     const ageTuned = deathAge(person, tuned, life)
     binsToday = add(binsToday, ageToday)
     binsTuned = add(binsTuned, ageTuned)
-    if (ageToday >= 85) over85Today += 1
-    if (ageTuned >= 85) over85Tuned += 1
+    if (ageToday >= milestone) overToday += 1
+    if (ageTuned >= milestone) overTuned += 1
   }
   return {
     today: binsToday,
     tuned: binsTuned,
-    over85Today,
-    over85Tuned,
+    milestone,
+    overToday,
+    overTuned,
     binYears,
     tallest: Math.max(...binsToday.values(), ...binsTuned.values()),
   }

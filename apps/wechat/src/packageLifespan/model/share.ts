@@ -2,6 +2,9 @@
 import type { Curves, Person } from '../engine/engine'
 import { atAge, axisEndAge, deathAge, DISCLAIMER, years, type PredictorModel } from './predictor'
 
+/** Body shape stays neutral unless the user chooses to show weight. */
+const NEUTRAL_BMI = 22
+
 export interface ShareOptions {
   showWeight: boolean
   showAge: boolean
@@ -14,6 +17,7 @@ export interface PosterColumn {
   bmi: number
   value: string
   name: string
+  caption: string | null
   note: string | null
 }
 
@@ -29,7 +33,7 @@ const whoOf = (label: string): string => label || '我'
 
 export function threeYouPoster(label: string, model: PredictorModel, lifeIndex: number, options: ShareOptions): PosterContent {
   const { person, branches } = model
-  const noteAge = Math.min(55, axisEndAge(person))
+  const noteAge = Math.min(axisEndAge(person), Math.max(55, person.age + 20))
   const tones: PosterTone[] = ['a', 'b', 'c']
   return {
     title: `同一个${whoOf(label)}，三种吃法`,
@@ -39,9 +43,10 @@ export function threeYouPoster(label: string, model: PredictorModel, lifeIndex: 
       const at = atAge(person, branch, noteAge)
       return {
         tone: tones[index],
-        bmi: at.bmi,
+        bmi: options.showWeight ? at.bmi : NEUTRAL_BMI,
         value: String(Math.floor(deathAge(person, branch, lifeIndex))),
         name: branch.name,
+        caption: '这次模拟',
         note: options.showWeight ? `${noteAge} 岁 ${at.weight.toFixed(0)} kg` : null,
       }
     }),
@@ -72,8 +77,8 @@ export function playPoster(share: PlayShare, options: ShareOptions): PosterConte
     subtitle: '',
     highlight: { before: `在这个模型里，平均${gained ? '多活' : '少活'}`, value: Math.abs(delta).toFixed(1), after: '年', tone },
     columns: [
-      { tone: 'a', bmi: atAge(person, today, noteAge).bmi, value: years(today.le.mean), name: '照现在', note: note(today) },
-      { tone, bmi: atAge(person, tuned, noteAge).bmi, value: years(tuned.le.mean), name: '调完以后', note: note(tuned) },
+      { tone: 'a', bmi: options.showWeight ? atAge(person, today, noteAge).bmi : NEUTRAL_BMI, value: years(today.le.mean), name: '照现在', caption: '平均寿命', note: note(today) },
+      { tone, bmi: options.showWeight ? atAge(person, tuned, noteAge).bmi : NEUTRAL_BMI, value: years(tuned.le.mean), name: '调完以后', caption: '平均寿命', note: note(tuned) },
     ],
     footer: [`${options.showAge ? `从 ${person.age} 岁起 · ` : ''}平均寿命，假设长期坚持。`, DISCLAIMER],
   }

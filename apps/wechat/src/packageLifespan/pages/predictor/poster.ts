@@ -9,6 +9,11 @@ export const PREDICTOR_PAGE = 'packageLifespan/pages/predictor/index'
 
 type MiniCanvas = HTMLCanvasElement & { createImage: () => HTMLImageElement }
 
+export interface PosterAssets {
+  canvas: MiniCanvas
+  qr: HTMLImageElement | null
+}
+
 const WIDTH = 750
 const HEIGHT = 1040
 const PAD = 60
@@ -111,7 +116,8 @@ function drawColumns(ctx: Ctx, content: PosterContent, top: number): void {
     ctx.fillStyle = HERO.dim
     ctx.font = '26px sans-serif'
     ctx.fillText(column.name, center, top + 374)
-    if (column.note) ctx.fillText(column.note, center, top + 410)
+    if (column.caption) ctx.fillText(column.caption, center, top + 410)
+    if (column.note) ctx.fillText(column.note, center, top + 446)
   })
 }
 
@@ -130,9 +136,13 @@ function drawFooter(ctx: Ctx, content: PosterContent, qr: HTMLImageElement | nul
   ctx.drawImage(qr, WIDTH - PAD - QR_SIZE, top + 30, QR_SIZE, QR_SIZE)
 }
 
-export async function createLifespanPoster(content: PosterContent): Promise<string> {
+export async function loadPosterAssets(): Promise<PosterAssets> {
   const canvas = await queryCanvas()
-  const qr = await loadQrImage(canvas)
+  return { canvas, qr: await loadQrImage(canvas) }
+}
+
+/** All cards share one canvas, so callers must not run two of these at the same time. */
+export async function renderLifespanPoster({ canvas, qr }: PosterAssets, content: PosterContent): Promise<string> {
   canvas.width = WIDTH
   canvas.height = HEIGHT
   const ctx = canvas.getContext('2d')
