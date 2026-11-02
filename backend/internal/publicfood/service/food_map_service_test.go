@@ -1,8 +1,11 @@
 package service
 
 import (
+	"errors"
 	"testing"
+	"time"
 
+	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
 
 	"github.com/stretchr/testify/require"
@@ -32,6 +35,42 @@ func TestMapSpotFromCandidatePrefersSQLSpotKey(t *testing.T) {
 	})
 	if !ok || spot.Key != "food:31.27490:121.54230" || spot.FoodCount != 279 {
 		t.Fatalf("unexpected spot: %+v ok=%v", spot, ok)
+	}
+}
+
+func TestMapSpotCacheReusesSpotsUntilExpiry(t *testing.T) {
+	current := time.Date(2026, 11, 2, 8, 0, 0, 0, time.UTC)
+	cache := mapSpotCache{now: func() time.Time { return current }}
+	loads := 0
+	load := func() ([]domain.PublicFoodMapSpot, error) {
+		loads++
+		return []domain.PublicFoodMapSpot{{Key: "food:1"}}, nil
+	}
+	for range 3 {
+		if _, err := cache.get(load); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if loads != 1 {
+		t.Fatalf("loads = %d, want 1 while fresh", loads)
+	}
+	current = current.Add(mapSpotCacheTTL)
+	if _, err := cache.get(load); err != nil {
+		t.Fatal(err)
+	}
+	if loads != 2 {
+		t.Fatalf("loads = %d, want 2 after expiry", loads)
+	}
+}
+
+func TestMapSpotCacheDoesNotKeepFailures(t *testing.T) {
+	cache := mapSpotCache{}
+	if _, err := cache.get(func() ([]domain.PublicFoodMapSpot, error) { return nil, errors.New("db down") }); err == nil {
+		t.Fatal("want error")
+	}
+	spots, err := cache.get(func() ([]domain.PublicFoodMapSpot, error) { return []domain.PublicFoodMapSpot{{Key: "a"}}, nil })
+	if err != nil || len(spots) != 1 {
+		t.Fatalf("spots=%v err=%v", spots, err)
 	}
 }
 

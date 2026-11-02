@@ -456,22 +456,20 @@ function FoodLibraryPage() {
     setMapLoading(true)
     setMapError(false)
     setMapLocating(true)
+    // 定位可能卡在授权框或等 GPS，点位不等它：先画地图，定位回来再移动过去。
+    const locationTask = Taro.getLocation({ type: 'gcj02' }).catch(() => null)
     try {
-      const [foodResult, locationResult] = await Promise.allSettled([
-        getPublicFoodMapSpots(),
-        Taro.getLocation({ type: 'gcj02' }),
-      ])
+      const foodResult = await getPublicFoodMapSpots()
+      setMapSpotPayloads(foodResult.spots || [])
+      setMapLoading(false)
 
-      if (foodResult.status === 'rejected') throw foodResult.reason
-      const mappedSpots = foodResult.value.spots || []
-      setMapSpotPayloads(mappedSpots)
-
-      if (locationResult.status === 'fulfilled') {
+      const locationResult = await locationTask
+      if (locationResult) {
         if (locationOwner !== getAccessToken()) return
-        rememberMealLocation(locationOwner, { latitude: locationResult.value.latitude, longitude: locationResult.value.longitude, accuracy_m: locationResult.value.accuracy, captured_at: Date.now(), coordinate_type: 'gcj02' })
+        rememberMealLocation(locationOwner, { latitude: locationResult.latitude, longitude: locationResult.longitude, accuracy_m: locationResult.accuracy, captured_at: Date.now(), coordinate_type: 'gcj02' })
         const location = {
-          latitude: locationResult.value.latitude,
-          longitude: locationResult.value.longitude,
+          latitude: locationResult.latitude,
+          longitude: locationResult.longitude,
         }
         setUserLocation(location)
         setMapCenter(location)
