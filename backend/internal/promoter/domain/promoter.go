@@ -24,9 +24,10 @@ const (
 )
 
 // CommissionPayChannels are the membership payment channels that earn
-// commission. Virtual payments settle to another merchant after a platform
-// fee and manual_admin orders are not real sales, so neither is listed.
-var CommissionPayChannels = []string{"wechat_mini_program", "wechat_app", "alipay_app", "wechat_papay"}
+// commission. Virtual payment is how the mini program sells memberships now;
+// commission is on what the buyer paid, before WeChat's fee. manual_admin
+// orders are not real sales, so they are not listed.
+var CommissionPayChannels = []string{"wechat_mini_program", "wechat_virtual_payment", "wechat_app", "alipay_app", "wechat_papay"}
 
 type Promoter struct {
 	ID                string     `gorm:"column:id;primaryKey" json:"id"`

@@ -35,6 +35,9 @@ import {
   formatFoodMapClusterCount,
   formatFoodMapDistance,
   type FoodMapLocation,
+  type FoodMapSpot,
+  mapSpotDishesLabel,
+  mapSpotOpensDishList,
 } from './food-map'
 
 // 缓存键名常量
@@ -123,6 +126,21 @@ function hasDisplayableNutrition(item: PublicFoodLibraryItem): boolean {
     .some(value => Number.isFinite(value) && value > 0)
 }
 
+const SPOT_DISH_PAGE_SIZE = 50
+
+interface SpotDishSource {
+  key: string
+  title: string
+  foodCount: number
+}
+
+interface SpotDishList extends SpotDishSource {
+  items: PublicFoodLibraryItem[]
+  loading: boolean
+  hasMore: boolean
+  error: boolean
+}
+
 function FoodLibraryPage() {
   const { scheme } = useAppColorScheme()
   const router = useRouter()
@@ -141,6 +159,8 @@ function FoodLibraryPage() {
   const [mapScale, setMapScale] = useState(14)
   const [userLocation, setUserLocation] = useState<FoodMapLocation | null>(null)
   const [selectedMapSpotKey, setSelectedMapSpotKey] = useState('')
+  const [spotDishes, setSpotDishes] = useState<SpotDishList | null>(null)
+  const spotDishRequestRef = useRef(0)
   const [campusList, setCampusList] = useState<PublicFoodLibraryItem[]>([])
   const [campusLoading, setCampusLoading] = useState(false)
   const [collectionList, setCollectionList] = useState<PublicFoodLibraryItem[]>([])
@@ -543,6 +563,9 @@ function FoodLibraryPage() {
       return
     }
 
+    // 从详情返回地点餐食列表时保留列表和滚动位置
+    if (spotDishes) return
+
     // 1. 立即从缓存加载数据
     const hasCache = loadFromCache()
 
@@ -577,7 +600,7 @@ function FoodLibraryPage() {
     if (tabMode === 'all') {
       if (viewMode === 'map') {
         loadMapList(false)
-      } else {
+      } else if (!spotDishes) {
         clearCache()
         loadList(false, true)
       }
@@ -588,6 +611,52 @@ function FoodLibraryPage() {
     }
   }, [loggedIn, tabMode, viewMode])
 
+  const loadSpotDishes = useCallback(async (source: SpotDishSource, items: PublicFoodLibraryItem[]) => {
+    const requestId = ++spotDishRequestRef.current
+    const { key, title, foodCount } = source
+    setSpotDishes({ key, title, foodCount, items, loading: true, hasMore: false, error: false })
+    try {
+      const res = await getPublicFoodLibraryList({ spot_key: key, limit: SPOT_DISH_PAGE_SIZE, offset: items.length })
+      if (requestId !== spotDishRequestRef.current) return
+      const page = res.list || []
+      setSpotDishes({
+        key, title, foodCount, items: [...items, ...page], loading: false,
+        hasMore: page.length === SPOT_DISH_PAGE_SIZE, error: false,
+      })
+    } catch (e: any) {
+      if (requestId !== spotDishRequestRef.current) return
+      setSpotDishes({ key, title, foodCount, items, loading: false, hasMore: false, error: true })
+      await showUnifiedApiError(e, '获取餐食失败')
+    }
+  }, [])
+
+  const closeSpotDishes = useCallback(() => {
+    spotDishRequestRef.current += 1
+    setSpotDishes(null)
+  }, [])
+
+  // 切到地图或其他分类时退出地点餐食列表
+  useEffect(() => {
+    if (viewMode !== 'list' || tabMode !== 'all') closeSpotDishes()
+  }, [viewMode, tabMode, closeSpotDishes])
+
+  const openMapSpot = (spot: FoodMapSpot) => {
+    if (!mapSpotOpensDishList(spot)) {
+      goDetail(spot.featuredItem.id)
+      return
+    }
+    setViewMode('list')
+    void loadSpotDishes({
+      key: spot.key,
+      title: spot.locationName || foodMapPlace(spot.featuredItem),
+      foodCount: spot.foodCount,
+    }, [])
+  }
+
+  const loadMoreSpotDishes = () => {
+    if (spotDishes?.hasMore && !spotDishes.loading) void loadSpotDishes(spotDishes, spotDishes.items)
+  }
+
   // 下拉刷新处理
   const handleRefresherRefresh = useCallback(() => {
     if (!getAccessToken()) {
@@ -595,6 +664,10 @@ function FoodLibraryPage() {
       return
     }
     setRefreshing(true)
+    if (spotDishes && tabMode === 'all') {
+      loadSpotDishes(spotDishes, []).finally(() => setRefreshing(false))
+      return
+    }
     if (tabMode === 'collections') {
       loadCollectionList(true).finally(() => setRefreshing(false))
     } else if (tabMode === 'campus') {
@@ -609,6 +682,7 @@ function FoodLibraryPage() {
   // 搜索
   const handleSearch = (keyword = searchKeyword) => {
     const kw = keyword.trim()
+    closeSpotDishes()
     setSearchKeyword(kw)
     setSearchMerchant(kw)
     if (viewMode === 'map') {
@@ -911,8 +985,8 @@ function FoodLibraryPage() {
     )
   }
 
-  const displayList = tabMode === 'all' ? list : tabMode === 'campus' ? campusList : tabMode === 'mine' ? mineList : collectionList
-  const isLoading = tabMode === 'all' ? loading : tabMode === 'campus' ? campusLoading : tabMode === 'mine' ? mineLoading : collectionLoading
+  const displayList = spotDishes && tabMode === 'all' ? spotDishes.items : tabMode === 'all' ? list : tabMode === 'campus' ? campusList : tabMode === 'mine' ? mineList : collectionList
+  const isLoading = spotDishes && tabMode === 'all' ? spotDishes.loading : tabMode === 'all' ? loading : tabMode === 'campus' ? campusLoading : tabMode === 'mine' ? mineLoading : collectionLoading
 
   return (
     <FlPageThemeRoot>
@@ -997,8 +1071,15 @@ function FoodLibraryPage() {
         </View>
       )}
 
+      {spotDishes && tabMode === 'all' && viewMode === 'list' && (
+        <View className='sort-section spot-dish-bar'>
+          <Text className='sort-item spot-dish-bar-title'>{spotDishes.title} · {spotDishes.foodCount} 道</Text>
+          <View className='sort-item spot-dish-bar-back' onClick={() => setViewMode('map')}>返回地图</View>
+        </View>
+      )}
+
       {/* 排序区（仅全部时显示） */}
-      {tabMode === 'all' && viewMode === 'list' && (
+      {tabMode === 'all' && viewMode === 'list' && !spotDishes && (
         <View className='sort-section'>
           <View className='sort-left'>
             <View
@@ -1028,7 +1109,7 @@ function FoodLibraryPage() {
       )}
 
       {/* 筛选下拉面板 */}
-      {tabMode === 'all' && viewMode === 'list' && showFilterPanel && (
+      {tabMode === 'all' && viewMode === 'list' && !spotDishes && showFilterPanel && (
         <View className='filter-dropdown-panel'>
           <View className='filter-dropdown-row'>
             <Text className='filter-dropdown-label'>类型</Text>
@@ -1083,7 +1164,7 @@ function FoodLibraryPage() {
             </View>
 
             {!mapLoading && !mapError && selectedMapSpot && (
-              <View className='map-food-sheet' onClick={() => goDetail(selectedMapSpot.featuredItem.id)}>
+              <View className='map-food-sheet' onClick={() => openMapSpot(selectedMapSpot)}>
                 <View className='map-food-sheet-main'>
                   <View className='map-food-sheet-image-wrap'>
                     {foodMapImage(selectedMapSpot.featuredItem) ? (
@@ -1111,9 +1192,9 @@ function FoodLibraryPage() {
                 <View className='map-food-sheet-actions'>
                   <View
                     className='map-food-action map-food-action--secondary'
-                    onClick={(e) => { e.stopPropagation(); goDetail(selectedMapSpot.featuredItem.id) }}
+                    onClick={(e) => { e.stopPropagation(); openMapSpot(selectedMapSpot) }}
                   >
-                    查看餐食
+                    {mapSpotDishesLabel(selectedMapSpot.foodCount)}
                   </View>
                   <View
                     className='map-food-action map-food-action--primary'
@@ -1169,6 +1250,7 @@ function FoodLibraryPage() {
         refresherTriggered={refreshing}
         onRefresherRefresh={handleRefresherRefresh}
         refresherDefaultStyle='black'
+        onScrollToLower={loadMoreSpotDishes}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
@@ -1197,10 +1279,10 @@ function FoodLibraryPage() {
             <View className='loading-state'>
               <View className='loading-spinner-md' />
             </View>
-          ) : tabMode === 'all' && listError && displayList.length === 0 ? (
+          ) : tabMode === 'all' && (spotDishes ? spotDishes.error : listError) && displayList.length === 0 ? (
             <View className='empty-state'>
               <Text className='empty-text'>餐食暂时未取到</Text>
-              <Button className='empty-btn' onClick={() => void loadList(false, true)}>重试</Button>
+              <Button className='empty-btn' onClick={() => void (spotDishes ? loadSpotDishes(spotDishes, []) : loadList(false, true))}>重试</Button>
             </View>
           ) : tabMode === 'collections' && displayList.length === 0 ? (
             <View className='empty-state'>
@@ -1338,6 +1420,11 @@ function FoodLibraryPage() {
               </View>
             )
           })
+          )}
+          {spotDishes?.loading && spotDishes.items.length > 0 && (
+            <View className='loading-state'>
+              <View className='loading-spinner-md' />
+            </View>
           )}
         </View>
       </ScrollView>

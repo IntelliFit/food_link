@@ -169,6 +169,7 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 		CanteenName:          c.Query("canteen_name"),
 		Floor:                c.Query("floor"),
 		WindowName:           c.Query("window_name"),
+		SpotKey:              c.Query("spot_key"),
 	}
 	if raw := c.Query("suitable_for_fat_loss"); raw != "" {
 		if v, err := strconv.ParseBool(raw); err == nil {

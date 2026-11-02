@@ -33,7 +33,7 @@ export function withdrawRuleText(me: Pick<PromoterMe, 'withdraw_min_cents' | 'wi
 export function ruleLines(me: Pick<PromoterMe, 'rate_bps' | 'settle_delay_days'>): string[] {
   return [
     '新用户通过你的推广码或分享链接进入，并在注册后 24 小时内登录，即与你绑定；每位用户只绑定一次。',
-    `绑定后 365 天内，对方购买会员的实付金额按 ${formatRate(me.rate_bps)} 计算佣金。小程序虚拟支付订单暂不计佣。`,
+    `绑定后 365 天内，对方购买会员的实付金额按 ${formatRate(me.rate_bps)} 计算佣金。`,
     `订单支付 ${me.settle_delay_days} 天后佣金转为可提现；在此之前退款的订单不计佣，之后退款的会从余额中扣回。`,
     '只按真实付费订单结算，不奖励转发、点击或注册本身。不得自买自返、刷单或诱导分享，违规将取消资格并扣回佣金。',
     '佣金属于推广劳务报酬，公司按国家规定处理相关税费。',

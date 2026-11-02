@@ -621,6 +621,34 @@ func TestPublicFoodRepo_ListPublishedMapCandidatesReturnsOneRowPerSpotWithFoodCo
 	require.Equal(t, 1, rows[1].SpotFoodCount)
 }
 
+func TestPublicFoodRepo_ListPublishedSpotKeyReturnsThatSpotsDishes(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	now := time.Now().UTC()
+	shopLatitude, shopLongitude := 31.2749, 121.5423
+	otherLatitude, otherLongitude := 39.9, 116.4
+	photo := "https://example.com/dish.jpg"
+	require.NoError(t, db.Create(&[]domain.PublicFoodItem{
+		{ID: "a-no-photo", UserID: "user-1", FoodName: "无图菜", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "b-photo", UserID: "user-1", FoodName: "有图菜", Type: "common", MerchantName: "一家店", ImagePath: &photo, Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "c-no-photo", UserID: "user-1", FoodName: "无图菜二", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "published", CreatedAt: &now},
+		{ID: "d-other", UserID: "user-1", FoodName: "别家菜", Type: "common", MerchantName: "一家店", Latitude: &otherLatitude, Longitude: &otherLongitude, Status: "published", CreatedAt: &now},
+		{ID: "e-draft", UserID: "user-1", FoodName: "下架菜", Type: "common", MerchantName: "一家店", Latitude: &shopLatitude, Longitude: &shopLongitude, Status: "deleted", CreatedAt: &now},
+	}).Error)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+	candidates, err := r.ListPublishedMapCandidates(ctx, "viewer-1")
+	require.NoError(t, err)
+	require.Equal(t, "food:31.27490:121.54230", candidates[0].SpotKey)
+
+	page, err := r.ListPublished(ctx, ListFilter{SpotKey: candidates[0].SpotKey, ViewerUserID: "viewer-1", Limit: 2})
+	require.NoError(t, err)
+	require.Equal(t, []string{"b-photo", "a-no-photo"}, []string{page[0].ID, page[1].ID})
+	next, err := r.ListPublished(ctx, ListFilter{SpotKey: candidates[0].SpotKey, ViewerUserID: "viewer-1", Limit: 2, Offset: 2})
+	require.NoError(t, err)
+	require.Len(t, next, 1)
+	require.Equal(t, "c-no-photo", next[0].ID)
+}
+
 func stringPtr(value string) *string { return &value }
 
 func TestPublicFoodRepo_ListPublishedCampusFiltersFloorAndWindow(t *testing.T) {
