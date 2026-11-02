@@ -20,6 +20,7 @@ import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { openRecordedMealPoster } from '../../../utils/open-analyze-task'
 import MealDishPrompt from '../../../components/MealDishPrompt'
+import { WaitingPetCompanion, petQuizLine, type PetReaction } from './WaitingPetCompanion'
 import {
   markAnalyzeTaskRecognizing,
   readAutoRecordPreference,
@@ -1319,6 +1320,7 @@ function AnalyzeLoadingPage() {
   const [lastTaskStatusText, setLastTaskStatusText] = useState('已提交')
   const [interactionIndex, setInteractionIndex] = useState(() => getNextInteractionIndex())
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null)
+  const [petReaction, setPetReaction] = useState<PetReaction | null>(null)
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [isCorrectionMode, setIsCorrectionMode] = useState(() =>
     Taro.getCurrentInstance().router?.params?.correction === '1'
@@ -1944,12 +1946,15 @@ function AnalyzeLoadingPage() {
           </View>
         </View>
 
-        <View className='game-tip-container'>
-          <View className='game-tip-box'>
-            <Text className='game-tip-label'>小贴士</Text>
-            <Text className='game-tip-text'>{HEALTH_TIPS[tipIndex]}</Text>
-          </View>
-        </View>
+        <WaitingPetCompanion
+          tip={HEALTH_TIPS[tipIndex]}
+          reaction={petReaction}
+          elapsedSeconds={elapsedSeconds}
+          taskType={taskType}
+          isCorrection={isCorrectionMode}
+          isPrecision={showPrecisionLongWaitNotice}
+          recognitionReady={showMealDish && recognitionReady}
+        />
 
         <View className='steps-panel'>
           <View className='stage-summary'>
@@ -2005,7 +2010,12 @@ function AnalyzeLoadingPage() {
                     <View
                       key={option}
                       className={`waiting-quiz-option${chosen ? ' chosen' : ''}${revealed && correct ? ' correct' : ''}`}
-                      onClick={() => setSelectedQuizOption(index)}
+                      onClick={() => {
+                        if (selectedQuizOption === null) {
+                          setPetReaction({ id: Date.now(), text: petQuizLine(correct) })
+                        }
+                        setSelectedQuizOption(index)
+                      }}
                     >
                       <Text className='waiting-quiz-option-text'>{option}</Text>
                     </View>
