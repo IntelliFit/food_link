@@ -2,8 +2,10 @@ package handler
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -165,6 +167,44 @@ func TestPublicFoodHandlerListsMapSpots(t *testing.T) {
 	require.Len(t, payload.Data.Spots, 1)
 	require.Equal(t, "三生晓", payload.Data.Spots[0].LocationName)
 	require.Equal(t, 73, payload.Data.Spots[0].FoodCount)
+}
+
+func TestPublicFoodHandlerMapSpotsAreSlimAndGzipped(t *testing.T) {
+	photo := "https://example.com/dish.jpg"
+	svc := &mockPublicFoodService{mapSpots: []domain.PublicFoodMapSpot{{
+		Key: "food:1:2", LocationName: "一家店", FoodCount: 3,
+		FeaturedItem: domain.PublicFoodItem{ID: "dish-1", FoodName: "白切鸡", Description: "很长的说明", ImagePath: &photo, Price: 18, Insight: "不该下发"},
+	}}}
+	router := setupPublicFoodHandlerRouter(svc)
+	req := httptest.NewRequest(http.MethodGet, "/api/public-food-library/map-spots", nil)
+	req.Header.Set("Authorization", "Bearer test")
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, "gzip", resp.Header().Get("Content-Encoding"))
+	reader, err := gzip.NewReader(resp.Body)
+	require.NoError(t, err)
+	body, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	var payload struct {
+		Code int `json:"code"`
+		Data struct {
+			Spots []map[string]any `json:"spots"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &payload))
+	require.Zero(t, payload.Code)
+	require.Equal(t, "food:1:2", payload.Data.Spots[0]["key"])
+	featured := payload.Data.Spots[0]["featured_item"].(map[string]any)
+	require.Equal(t, "dish-1", featured["id"])
+	require.Equal(t, "白切鸡", featured["food_name"])
+	require.Equal(t, photo, featured["image_path"])
+	require.NotContains(t, featured, "insight")
+	require.NotContains(t, featured, "description")
+	require.NotContains(t, featured, "total_calories")
 }
 
 func TestContributeCampusImages(t *testing.T) {

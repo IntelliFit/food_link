@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type PublicFoodItem struct {
 	ID                 string           `gorm:"column:id" json:"id"`
@@ -161,6 +164,42 @@ type PublicFoodMapSpot struct {
 	Address       string         `json:"address,omitempty"`
 	FoodCount     int            `json:"food_count"`
 	FeaturedItem  PublicFoodItem `json:"featured_item"`
+}
+
+// mapFeaturedItem holds only what the map sheet shows. With thousands of spots the
+// full item made the response several megabytes; details load when a dish is opened.
+type mapFeaturedItem struct {
+	ID                 string  `json:"id"`
+	FoodName           string  `json:"food_name,omitempty"`
+	Description        string  `json:"description,omitempty"`
+	ImagePath          *string `json:"image_path,omitempty"`
+	MerchantName       string  `json:"merchant_name,omitempty"`
+	SchoolName         string  `json:"school_name,omitempty"`
+	CanteenName        string  `json:"canteen_name,omitempty"`
+	CampusLocationText string  `json:"campus_location_text,omitempty"`
+	Price              float64 `json:"price,omitempty"`
+	PriceType          string  `json:"price_type,omitempty"`
+	PriceMin           float64 `json:"price_min,omitempty"`
+	PriceMax           float64 `json:"price_max,omitempty"`
+	PriceUnit          string  `json:"price_unit,omitempty"`
+}
+
+func (s PublicFoodMapSpot) MarshalJSON() ([]byte, error) {
+	item := s.FeaturedItem
+	featured := mapFeaturedItem{
+		ID: item.ID, FoodName: item.FoodName, ImagePath: item.ImagePath,
+		MerchantName: item.MerchantName, SchoolName: item.SchoolName, CanteenName: item.CanteenName,
+		CampusLocationText: item.CampusLocationText, Price: item.Price, PriceType: item.PriceType,
+		PriceMin: item.PriceMin, PriceMax: item.PriceMax, PriceUnit: item.PriceUnit,
+	}
+	if item.FoodName == "" {
+		featured.Description = item.Description
+	}
+	type spotFields PublicFoodMapSpot
+	return json.Marshal(struct {
+		spotFields
+		FeaturedItem mapFeaturedItem `json:"featured_item"`
+	}{spotFields: spotFields(s), FeaturedItem: featured})
 }
 
 type CampusFoodMetric struct {

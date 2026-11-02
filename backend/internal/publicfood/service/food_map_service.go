@@ -6,12 +6,60 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
 )
 
+const mapSpotCacheTTL = time.Minute
+
+// mapSpotCache keeps the shared map for a short while: every opening of the map page
+// would otherwise rerun an aggregate over the whole library. Filling holds the lock,
+// so concurrent misses share one query.
+type mapSpotCache struct {
+	mu        sync.Mutex
+	spots     []domain.PublicFoodMapSpot
+	expiresAt time.Time
+	now       func() time.Time
+}
+
+func (c *mapSpotCache) get(load func() ([]domain.PublicFoodMapSpot, error)) ([]domain.PublicFoodMapSpot, error) {
+	now := time.Now
+	if c.now != nil {
+		now = c.now
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.spots != nil && now().Before(c.expiresAt) {
+		return c.spots, nil
+	}
+	spots, err := load()
+	if err != nil {
+		return nil, err
+	}
+	c.spots, c.expiresAt = spots, now().Add(mapSpotCacheTTL)
+	return spots, nil
+}
+
+// ListMapSpots returns spots that callers must treat as read-only: they may be shared.
 func (s *PublicFoodService) ListMapSpots(ctx context.Context, userID string) ([]domain.PublicFoodMapSpot, error) {
+	if userID != "" {
+		blocked, err := s.repo.ViewerHasBlocks(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if blocked {
+			return s.loadMapSpots(ctx, userID)
+		}
+	}
+	return s.mapSpots.get(func() ([]domain.PublicFoodMapSpot, error) {
+		return s.loadMapSpots(ctx, "")
+	})
+}
+
+func (s *PublicFoodService) loadMapSpots(ctx context.Context, userID string) ([]domain.PublicFoodMapSpot, error) {
 	candidates, err := s.repo.ListPublishedMapCandidates(ctx, userID)
 	if err != nil {
 		return nil, err

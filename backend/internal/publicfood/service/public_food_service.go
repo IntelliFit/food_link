@@ -29,6 +29,7 @@ type PublicFoodService struct {
 	blockChecker BlockChecker
 	membership   CampusMembershipChecker
 	campusWriter CampusCatalogWriter
+	mapSpots     mapSpotCache
 }
 
 type RewardTaskAwarder interface {

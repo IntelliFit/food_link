@@ -381,6 +381,16 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 
 const mapSpotLimit = 5000
 
+// ViewerHasBlocks reports whether any block involves this viewer, which is the only
+// thing that makes their map differ from everyone else's.
+func (r *PublicFoodRepo) ViewerHasBlocks(ctx context.Context, viewerUserID string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Table("user_blocks").
+		Where("blocker_user_id = ? OR blocked_user_id = ?", viewerUserID, viewerUserID).
+		Limit(1).Count(&count).Error
+	return count > 0, err
+}
+
 func (r *PublicFoodRepo) ListPublishedMapCandidates(ctx context.Context, viewerUserID string) ([]MapFoodCandidate, error) {
 	var rows []MapFoodCandidate
 	q := r.publishedMapCandidatesQuery(ctx, viewerUserID)

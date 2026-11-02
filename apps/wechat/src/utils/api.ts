@@ -8654,7 +8654,7 @@ export async function getPublicFoodLibraryList(
 export async function getPublicFoodMapSpots(): Promise<{ spots: PublicFoodMapSpotPayload[] }> {
   const response = await authenticatedRequest('/api/public-food-library/map-spots', {
     method: 'GET',
-    timeout: 15000,
+    timeout: 30000,
   })
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取美食地图失败')
