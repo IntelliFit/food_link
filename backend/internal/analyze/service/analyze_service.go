@@ -1787,7 +1787,11 @@ JSON:
   "uncertaintyNotes":[]
 	}`, compact, imageInputHint, additionalLine)
 		if isOrdinaryFoodImageMode(executionMode) && analysisEngineProducesNutrition(input.AnalysisEngine) {
-			return combinedOrdinaryPhotoPrompt(prompt)
+			prompt = combinedOrdinaryPhotoPrompt(prompt)
+			if input.AnalysisEngine == analysisEngineSmart {
+				prompt = withSmartNutritionFields(prompt)
+			}
+			return prompt
 		}
 		return prompt
 	}
@@ -2691,7 +2695,7 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if normalized == precisionGeminiFlashModel || normalized == "gemini36-flash" || normalized == "gemini36_flash" {
 		return "gemini", precisionGeminiFlashModel
 	}
-	if normalized == openLuxPrecisionGeminiRoute {
+	if normalized == openLuxPrecisionGeminiRoute || normalized == "a6:"+precisionGeminiFlashModel {
 		return "gemini", precisionGeminiFlashModel
 	}
 	if strings.HasPrefix(normalized, "ofox-gemini:") {
@@ -5912,6 +5916,8 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 		resp = s.applyAIThenExactDBNutrition(ctx, resp, input)
 	case analysisEngineDBCandidates:
 		resp = s.applyCandidateGuidedNutrition(ctx, resp, input)
+	case analysisEngineSmart:
+		resp = s.applySmartNutrition(ctx, resp)
 	default:
 		resp = s.applyDBFirstNutritionWithOptions(ctx, resp, dbFirstNutritionOptions{
 			additionalContext:            fullNutritionContext(input),

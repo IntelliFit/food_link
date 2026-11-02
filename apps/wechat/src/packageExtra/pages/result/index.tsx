@@ -36,7 +36,7 @@ import {
   showUnifiedApiError,
 } from '../../../utils/api'
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
-import { ANALYSIS_ENGINE_OPTIONS, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
+import { analysisEngineLabel, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { MealRecordPosterModal } from '../../../pages/index/components/MealRecordPosterModal'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
@@ -2703,7 +2703,7 @@ function ResultPage() {
               </View>
               <View className='analysis-engine-result-tag'>
                 <Text className='analysis-engine-result-tag-text'>
-                  {ANALYSIS_ENGINE_OPTIONS.find(option => option.value === analysisEngine)?.label || '营养估算'}
+                  {analysisEngineLabel(analysisEngine)}
                 </Text>
               </View>
               <Text className='execution-mode-default-link' onClick={handleDefaultModeEdit}>

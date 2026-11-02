@@ -67,3 +67,25 @@ func inlinePrecisionNutrients(raw map[string]any) map[string]any {
 	}
 	return out
 }
+
+// precisionRoutingFields are the estimate fields the smart nutrition engine
+// routes on (packaged identity, dish ingredient split). Other engines ignore
+// them, so keeping them is harmless.
+var precisionRoutingFields = []string{"type", "brand", "productName", "flavorText", "specText", "barcode", "isComposite", "addedIngredients", "components"}
+
+func copyPrecisionRoutingFields(raw, item map[string]any) {
+	for _, key := range precisionRoutingFields {
+		if value, ok := raw[key]; ok && value != nil {
+			item[key] = value
+		}
+	}
+}
+
+// withPrecisionEngineFields asks for the routing fields only when the session
+// runs on the smart engine, leaving every other engine's prompt unchanged.
+func withPrecisionEngineFields(payload map[string]any, prompt string) string {
+	if strings.TrimSpace(stringFromMap(payload, "analysis_engine")) != "smart" {
+		return prompt
+	}
+	return prompt + "\n" + analyzeservice.SmartNutritionFieldsRule()
+}

@@ -136,11 +136,60 @@ func (s *AnalyzeService) balancedVisionPlans(precision bool) []channelPlan {
 	return plans
 }
 
+// ordinaryImageModel is the Gemini model ordinary photos use on the relay
+// channels. On the weighed photos (2026-10-28) Gemini 3.6 Flash beat Gemini 3
+// Flash in two harnesses: median weight error 31% to 25% scored on the weighed
+// target, 29% to 15.5% through the smart flow on net weight (overstated, the
+// labels are gross). It costs about 3-5s more p50 latency.
+func (s *AnalyzeService) ordinaryImageModel() string {
+	if s.visionChannels == nil || s.visionChannels.config.OrdinaryImageModel == "" {
+		return gemini3FlashModel
+	}
+	return s.visionChannels.config.OrdinaryImageModel
+}
+
+// balancedImagePlans maps the channels for photo recognition. Ordinary photos
+// run OpenLux and A6 on the configured model; Wanjie cannot serve Gemini
+// 3.6/3.7 and stays on Gemini 3 Flash as the last fallback.
+func (s *AnalyzeService) balancedImagePlans(precision bool) []channelPlan {
+	plans := s.balancedVisionPlans(precision)
+	model := s.ordinaryImageModel()
+	if precision || model == gemini3FlashModel {
+		return plans
+	}
+	mapped := make([]channelPlan, 0, len(plans))
+	for _, p := range plans {
+		if p.upstream != geminiPrimaryUpstream {
+			p.model = model
+		}
+		mapped = append(mapped, p)
+	}
+	return mapped
+}
+
+// balancedPrecisionCall reports whether a balanced call uses the precision
+// channel family. Any model other than Gemini 3 Flash used to imply precision;
+// an ordinary photo on the configured ordinary model now stays ordinary.
+func (s *AnalyzeService) balancedPrecisionCall(ctx context.Context, primaryModel string, image bool) bool {
+	if primaryModel == gemini3FlashModel {
+		return false
+	}
+	if image && primaryModel == s.ordinaryImageModel() {
+		if req, ok := ctx.Value(visionRequestKey{}).(*visionRequest); ok && isOrdinaryFoodImageMode(req.mode) {
+			return false
+		}
+	}
+	return true
+}
+
 // orderedBalancedPlans puts recently healthy channels first, each group in the
 // measured priority order, so a channel that starts failing stops taking the
 // lead within minutes and gets it back once its samples recover.
-func (s *AnalyzeService) orderedBalancedPlans(mode string, precision bool) []channelPlan {
+func (s *AnalyzeService) orderedBalancedPlans(mode string, precision, image bool) []channelPlan {
 	plans := s.balancedVisionPlans(precision)
+	if image {
+		plans = s.balancedImagePlans(precision)
+	}
 	priority := balancedOrdinaryPriority
 	if precision {
 		priority = balancedPrecisionPriority
@@ -279,7 +328,7 @@ func (r *visionChannelRouter) balancedHedgeDelay(key string, fallback time.Durat
 // third of users to the slowest channel.
 func (s *AnalyzeService) selectBalancedVisionModel(mode, _ string) string {
 	precision := isPrecisionLikeExecutionMode(mode) || isGemini35ExecutionMode(mode)
-	plans := s.orderedBalancedPlans(mode, precision)
+	plans := s.orderedBalancedPlans(mode, precision, true)
 	if len(plans) == 0 {
 		if precision {
 			return gemini35FlashModel
@@ -295,7 +344,7 @@ func (s *AnalyzeService) selectBalancedVisionModel(mode, _ string) string {
 // retries the same channel or downgrades to a domestic/Lite model.
 func (s *AnalyzeService) runBalancedGeminiVision(ctx context.Context, stage, primaryUpstream, primaryModel, prompt string, imageURLs []string, temperature float64, validate func(map[string]any) error) (geminiVisionHedgeOutcome, error) {
 	payloadCheck := validateBalancedFoodPayload
-	if primaryModel != gemini3FlashModel {
+	if s.balancedPrecisionCall(ctx, primaryModel, len(imageURLs) > 0) {
 		payloadCheck = validateBalancedPrecisionPayload
 	}
 	return s.runBalancedGeminiChannels(ctx, stage, primaryUpstream, primaryModel, prompt, imageURLs, temperature, validate, payloadCheck)
@@ -310,12 +359,13 @@ func (s *AnalyzeService) runBalancedGeminiChannels(ctx context.Context, stage, p
 	if req == nil {
 		req = &visionRequest{mode: stage}
 	}
-	precision := primaryModel != gemini3FlashModel
+	image := len(imageURLs) > 0
+	precision := s.balancedPrecisionCall(ctx, primaryModel, image)
 	fallbackDelay := balancedHedgeDelayOrdinary
 	if precision {
 		fallbackDelay = balancedHedgeDelayPrecision
 	}
-	plans := s.orderedBalancedPlans(req.mode, precision)
+	plans := s.orderedBalancedPlans(req.mode, precision, image)
 	wait := time.Duration(r.config.ResponseWaitSeconds) * time.Second
 	outcome := geminiVisionHedgeOutcome{upstream: primaryUpstream, model: primaryModel, primaryUpstream: primaryUpstream, primaryModel: primaryModel}
 	hedgeCtx, cancelAll := context.WithCancel(ctx)

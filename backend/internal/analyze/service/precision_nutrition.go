@@ -67,6 +67,8 @@ func (s *AnalyzeService) ApplyPrecisionNutrition(ctx context.Context, items []ma
 		resp = s.applyAIThenExactDBNutrition(ctx, resp, input)
 	case analysisEngineDBCandidates:
 		resp = s.applyCandidateGuidedNutrition(ctx, resp, input)
+	case analysisEngineSmart:
+		resp = s.applySmartNutrition(ctx, resp)
 	default:
 		resp = s.applyDBFirstNutrition(ctx, resp, contextText)
 	}

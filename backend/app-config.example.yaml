@@ -80,6 +80,8 @@ external:
     circuit_failures: 3
     circuit_cooldown_seconds: 60
     uncertain_review_enabled: false # 低置信度额外复核，最多增加4秒；按质量样本按需启用
+    # 普通模式拍照识别在 OpenLux/A6 上用的模型：gemini-3-flash-preview（默认）/ gemini-3.6-flash / gemini-3.7-flash；万界固定 Gemini 3 兜底。文字识别、精准模式不受影响
+    ordinary_image_model: gemini-3-flash-preview
   # 旧兼容字段；普通模式主识别固定 Gemini，且 Gemini 失败时不回退 Qwen。
   qwen38_ordinary_traffic_percent: 50
   deepseek_api_key: ""

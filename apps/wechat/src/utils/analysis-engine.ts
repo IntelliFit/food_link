@@ -1,25 +1,33 @@
 import type { AnalysisEngine, ExecutionMode } from './api'
 
-export const ANALYSIS_ENGINE_OPTIONS: Array<{
-  value: AnalysisEngine
-  label: string
-  description: string
-}> = [
-  { value: 'ai_direct', label: 'AI估算', description: '速度最快，完整理解描述，不套标准食物库' },
-  { value: 'ai_then_db_exact', label: '标准库校准', description: '速度较慢；精确命中时营养和微量元素更稳定' },
-  { value: 'db_candidates_ai', label: '数据库候选', description: '速度较慢；AI复核候选，微量元素通常更准确' },
-]
+/**
+ * New analyses always use the smart engine: the backend matches each food
+ * against the library that fits it (packaged, standard food, or a dish split
+ * into ingredients) and keeps the AI estimate when nothing matches reliably.
+ * Older backends treat the unknown value as their per-mode default.
+ */
+export const SUBMIT_ANALYSIS_ENGINE: AnalysisEngine = 'smart'
 
-export const defaultAnalysisEngineForMode = (mode: ExecutionMode): AnalysisEngine => {
-  if (mode === 'fast' || mode === 'fast_web_search' || mode === 'lite') return 'ai_direct'
-  if (mode === 'strict' || mode === 'strict_separate' || mode === 'strict_web_search' || mode === 'gemini35_flash' || mode === 'gemini35_flash_grouped') {
-    return 'db_candidates_ai'
-  }
-  return 'ai_direct'
+const ANALYSIS_ENGINE_LABELS: Record<string, string> = {
+  smart: '智能匹配',
+  ai_direct: 'AI估算',
+  legacy_direct: 'AI估算',
+  ai_then_db_exact: '标准库校准',
+  db_candidates_ai: '数据库候选',
+  db_first: '数据库候选',
 }
-export const normalizeAnalysisEngine = (value: unknown, mode: ExecutionMode = 'standard'): AnalysisEngine => {
-  if (value === 'ai_direct' || value === 'ai_then_db_exact' || value === 'db_candidates_ai') return value
+
+/** Label for the engine a (possibly historical) result was computed with. */
+export const analysisEngineLabel = (value: unknown): string => (
+  ANALYSIS_ENGINE_LABELS[String(value || '')] || '营养估算'
+)
+
+export const defaultAnalysisEngineForMode = (_mode?: ExecutionMode): AnalysisEngine => SUBMIT_ANALYSIS_ENGINE
+
+/** Keeps the engine a stored result reports; anything unknown becomes smart. */
+export const normalizeAnalysisEngine = (value: unknown, _mode: ExecutionMode = 'standard'): AnalysisEngine => {
+  if (value === 'smart' || value === 'ai_direct' || value === 'ai_then_db_exact' || value === 'db_candidates_ai') return value
   if (value === 'legacy_direct') return 'ai_direct'
-  if (value === 'db_first') return defaultAnalysisEngineForMode(mode)
-  return defaultAnalysisEngineForMode(mode)
+  if (value === 'db_first') return 'db_candidates_ai'
+  return SUBMIT_ANALYSIS_ENGINE
 }
