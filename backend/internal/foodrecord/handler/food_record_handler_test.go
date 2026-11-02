@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/internal/foodrecord/service"
@@ -35,6 +36,9 @@ type mockFoodRecordService struct {
 	deleteErr               error
 	shareRecord             *domain.FoodRecord
 	shareErr                error
+	shareAccess             service.ShareAccess
+	shareToken              string
+	shareTokenErr           error
 	saveCriticalSamplesErr  error
 	recommendMealType       string
 	recommendMealTypeSource string
@@ -62,8 +66,12 @@ func (m *mockFoodRecordService) Update(ctx context.Context, userID, recordID str
 func (m *mockFoodRecordService) Delete(ctx context.Context, userID, recordID string) error {
 	return m.deleteErr
 }
-func (m *mockFoodRecordService) Share(ctx context.Context, recordID string) (*domain.FoodRecord, error) {
+func (m *mockFoodRecordService) Share(ctx context.Context, recordID string, access service.ShareAccess) (*domain.FoodRecord, error) {
+	m.shareAccess = access
 	return m.shareRecord, m.shareErr
+}
+func (m *mockFoodRecordService) CreateShareToken(ctx context.Context, userID, recordID string) (string, error) {
+	return m.shareToken, m.shareTokenErr
 }
 func (m *mockFoodRecordService) SaveCriticalSamples(ctx context.Context, userID string, items []domain.CriticalSample) error {
 	return m.saveCriticalSamplesErr
@@ -466,6 +474,38 @@ func TestShareFoodRecord(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestShareFoodRecordPassesViewerAndToken(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareRecord: &domain.FoodRecord{ID: "r1", MealType: "lunch"}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := gin.New()
+	r.GET("/api/food-record/share/:record_id", func(c *gin.Context) {
+		c.Set(authmw.ContextUserIDKey, "viewer-1")
+	}, h.ShareFoodRecord)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-record/share/r1?share_token=abc", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, service.ShareAccess{ViewerUserID: "viewer-1", Token: "abc"}, mockSvc.shareAccess)
+}
+
+func TestFoodRecordShareTokenReturnsToken(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareToken: "token-1"}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := gin.New()
+	r.GET("/api/food-record/:record_id/share-token", func(c *gin.Context) {
+		c.Set(authmw.ContextUserIDKey, "owner-1")
+	}, h.FoodRecordShareToken)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/food-record/r1/share-token", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "token-1")
+}
+
 func TestShareFoodRecordAllowsHealthymaxCORS(t *testing.T) {
 	mockSvc := &mockFoodRecordService{shareRecord: &domain.FoodRecord{ID: "r1", MealType: "lunch"}}
 	h := NewFoodRecordHandler(mockSvc, nil, nil)
@@ -508,6 +548,18 @@ func TestShareFoodRecordOptionsAllowsHealthymaxCORS(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.Equal(t, "https://healthymax.cn", w.Header().Get("Access-Control-Allow-Origin"))
 	assert.Contains(t, w.Header().Get("Access-Control-Allow-Methods"), http.MethodGet)
+}
+
+func TestShareFoodRecordPageKeepsShareToken(t *testing.T) {
+	h := NewFoodRecordHandler(&mockFoodRecordService{}, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/r1?share_token=abc", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "https://healthymax.cn/share/food-record/r1?share_token=abc", w.Header().Get("Location"))
 }
 
 func TestShareFoodRecordPageRedirectsToFrontend(t *testing.T) {

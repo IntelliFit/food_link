@@ -124,6 +124,12 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	}
 	if input.PublicRecords != nil {
 		updates["public_records"] = *input.PublicRecords
+		updates["public_records_reconfirm_pending"] = false
+		if *input.PublicRecords {
+			updates["public_records_consented_at"] = time.Now().UTC()
+		} else {
+			updates["public_records_consented_at"] = nil
+		}
 	}
 	if input.PublicFavoriteRecipes != nil {
 		updates["public_favorite_recipes"] = *input.PublicFavoriteRecipes
@@ -767,38 +773,39 @@ func buildProfileResponse(user *repo.User) map[string]any {
 func buildProfileResponseWithStorage(user *repo.User, storageClient *storage.Client) map[string]any {
 	onboardingStatus := resolveOnboardingStatus(user)
 	return map[string]any{
-		"id":                      user.ID,
-		"openid":                  user.OpenID,
-		"unionid":                 user.UnionID,
-		"username":                user.Username,
-		"has_password":            user.PasswordHash != nil && strings.TrimSpace(*user.PasswordHash) != "",
-		"password_set_at":         user.PasswordSetAt,
-		"nickname":                user.Nickname,
-		"avatar":                  user.Avatar,
-		"telephone":               user.Telephone,
-		"create_time":             user.CreatedAt,
-		"height":                  user.Height,
-		"weight":                  user.Weight,
-		"birthday":                user.Birthday,
-		"gender":                  user.Gender,
-		"activity_level":          user.ActivityLevel,
-		"health_condition":        normalizeHealthConditionResponse(user.HealthCondition, storageClient),
-		"bmr":                     user.BMR,
-		"tdee":                    user.TDEE,
-		"onboarding_completed":    onboardingStatus != onboardingStatusPending,
-		"onboarding_status":       onboardingStatus,
-		"onboarding_draft_step":   user.OnboardingDraftStep,
-		"diet_goal":               user.DietGoal,
-		"execution_mode":          normalizeExecutionMode(user.ExecutionMode),
-		"mode_set_by":             user.ModeSetBy,
-		"mode_set_at":             user.ModeSetAt,
-		"mode_reason":             user.ModeReason,
-		"mode_commitment_days":    user.ModeCommitmentDays,
-		"mode_switch_count_30d":   user.ModeSwitchCount30d,
-		"searchable":              user.Searchable,
-		"public_records":          user.PublicRecords,
-		"public_favorite_recipes": user.PublicFavoriteRecipes,
-		"motto":                   user.Motto,
+		"id":                               user.ID,
+		"openid":                           user.OpenID,
+		"unionid":                          user.UnionID,
+		"username":                         user.Username,
+		"has_password":                     user.PasswordHash != nil && strings.TrimSpace(*user.PasswordHash) != "",
+		"password_set_at":                  user.PasswordSetAt,
+		"nickname":                         user.Nickname,
+		"avatar":                           user.Avatar,
+		"telephone":                        user.Telephone,
+		"create_time":                      user.CreatedAt,
+		"height":                           user.Height,
+		"weight":                           user.Weight,
+		"birthday":                         user.Birthday,
+		"gender":                           user.Gender,
+		"activity_level":                   user.ActivityLevel,
+		"health_condition":                 normalizeHealthConditionResponse(user.HealthCondition, storageClient),
+		"bmr":                              user.BMR,
+		"tdee":                             user.TDEE,
+		"onboarding_completed":             onboardingStatus != onboardingStatusPending,
+		"onboarding_status":                onboardingStatus,
+		"onboarding_draft_step":            user.OnboardingDraftStep,
+		"diet_goal":                        user.DietGoal,
+		"execution_mode":                   normalizeExecutionMode(user.ExecutionMode),
+		"mode_set_by":                      user.ModeSetBy,
+		"mode_set_at":                      user.ModeSetAt,
+		"mode_reason":                      user.ModeReason,
+		"mode_commitment_days":             user.ModeCommitmentDays,
+		"mode_switch_count_30d":            user.ModeSwitchCount30d,
+		"searchable":                       user.Searchable,
+		"public_records":                   user.PublicRecords,
+		"public_records_reconfirm_pending": user.PublicRecordsReconfirmPending,
+		"public_favorite_recipes":          user.PublicFavoriteRecipes,
+		"motto":                            user.Motto,
 	}
 }
 

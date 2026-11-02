@@ -549,6 +549,8 @@ export type FoodRecordEntryType =
 
 /** 确认记录请求：餐次 + 识别结果与营养汇总 + 用户状态与专业分析 */
 export interface SaveFoodRecordRequest {
+  /** 这条记录是否同步到圈子；不传时后端按账号的公开设置决定 */
+  share_to_feed?: boolean
   meal_type: MealType
   image_path?: string
   image_paths?: string[]
@@ -656,6 +658,7 @@ export interface ExerciseActivityItem {
 export interface FoodRecord {
   id: string
   user_id: string
+  hidden_from_feed?: boolean
   meal_type: MealType
   image_path?: string | null
   image_paths?: string[] | null
@@ -1876,6 +1879,7 @@ export interface UserInfo {
   mode_switch_count_30d?: number | null
   searchable?: boolean
   public_records?: boolean
+  public_records_reconfirm_pending?: boolean
 	public_favorite_recipes?: boolean
 }
 
@@ -4283,20 +4287,22 @@ export async function deleteFoodRecord(recordId: string): Promise<void> {
 
 /**
  * 获取分享的饮食记录详情（无需登录，供别人通过分享链接查看）
- * 若记录所有者设置了「不公开饮食记录」则后端会返回 403。
+ * 本人、记录主动分享出的链接（share_token）、好友可以查看不公开的记录，其余情况后端返回 403。
  */
-export async function getSharedFoodRecord(recordId: string): Promise<{ record: FoodRecord }> {
-  const res = await Taro.request({
-    url: `${API_BASE_URL}/api/food-record/share/${encodeURIComponent(recordId)}`,
+export async function getSharedFoodRecord(recordId: string, shareToken?: string): Promise<{ record: FoodRecord }> {
+  const query = shareToken ? `?share_token=${encodeURIComponent(shareToken)}` : ''
+  const res = await publicRequest(`/api/food-record/share/${encodeURIComponent(recordId)}${query}`, {
     method: 'GET',
-    header: withNgrokBypassHeaders(),
     timeout: 10000
   })
-  if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || '获取记录详情失败'
-    throw new Error(msg)
-  }
   return unwrapResponse<{ record: FoodRecord }>(res)
+}
+
+/** 本人分享记录时取得链接凭证，收到链接的人无需登录也能查看这一条。 */
+export async function getFoodRecordShareToken(recordId: string): Promise<string> {
+  const res = await authenticatedRequest(`/api/food-record/${encodeURIComponent(recordId)}/share-token`, { method: 'GET' })
+  if (res.statusCode !== 200) throw new Error('获取分享链接失败')
+  return unwrapResponse<{ share_token: string }>(res).share_token
 }
 
 /**
@@ -9232,9 +9238,13 @@ export async function createExerciseLog(data: {
   average_heart_rate?: number
   distance_km?: number
   exercise_breakdown?: string
+  share_to_feed?: boolean
 }): Promise<{ task_id: string; message: string }> {
   const trimmed = data.exercise_desc.trim()
   const parts: string[] = [`exercise_desc=${encodeURIComponent(trimmed)}`]
+  if (typeof data.share_to_feed === 'boolean') {
+    parts.push(`share_to_feed=${data.share_to_feed}`)
+  }
   if (data.image_url) {
     parts.push(`image_url=${encodeURIComponent(data.image_url)}`)
   }

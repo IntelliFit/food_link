@@ -707,30 +707,165 @@ func TestFoodRecordService_Share(t *testing.T) {
 	svc := NewFoodRecordService(r, tr, ur)
 	ctx := context.Background()
 
-	now := time.Now().UTC()
-	record := &domain.FoodRecord{UserID: "u1", MealType: "lunch", RecordTime: &now, TotalCalories: 500}
-	require.NoError(t, r.Create(ctx, record))
-
 	public := true
 	require.NoError(t, ur.Create(ctx, &repo.User{OpenID: "o1", PublicRecords: &public}))
 	user, _ := ur.FindByOpenID(ctx, "o1")
-	require.NoError(t, db.Model(&domain.FoodRecord{}).Where("id = ?", record.ID).Update("user_id", user.ID).Error)
+	now := time.Now().UTC()
+	record := &domain.FoodRecord{UserID: user.ID, MealType: "lunch", RecordTime: &now, TotalCalories: 500}
+	require.NoError(t, r.Create(ctx, record))
 
-	shared, err := svc.Share(ctx, record.ID)
+	shared, err := svc.Share(ctx, record.ID, ShareAccess{})
 	require.NoError(t, err)
 	assert.NotNil(t, shared)
 
 	// not found
-	_, err = svc.Share(ctx, "nonexistent")
+	_, err = svc.Share(ctx, "nonexistent", ShareAccess{})
 	assert.Equal(t, commonerrors.ErrNotFound, err)
 }
 
 func TestFoodRecordService_ShareInvalidID(t *testing.T) {
 	svc := NewFoodRecordService(nil, nil, nil)
 
-	_, err := svc.Share(context.Background(), "not-a-real-record")
+	_, err := svc.Share(context.Background(), "not-a-real-record", ShareAccess{})
 
 	require.ErrorIs(t, err, commonerrors.ErrNotFound)
+}
+
+func setupFeedPrivacyService(t *testing.T) (*FoodRecordService, *foodrepo.FoodRecordRepo, *gorm.DB, *repo.User, *repo.User) {
+	t.Helper()
+	db := setupServiceTestDB(t)
+	require.NoError(t, db.Exec(`CREATE TABLE IF NOT EXISTS user_friends (user_id text, friend_id text)`).Error)
+	r := foodrepo.NewFoodRecordRepo(db)
+	ur := repo.NewUserRepo(db)
+	svc := NewFoodRecordService(r, foodrepo.NewAnalysisTaskRepo(db), ur)
+	svc.ConfigureShareTokenSecret("test-secret")
+	ctx := context.Background()
+	public, private := true, false
+	require.NoError(t, ur.Create(ctx, &repo.User{OpenID: "public-owner", PublicRecords: &public}))
+	require.NoError(t, ur.Create(ctx, &repo.User{OpenID: "private-owner", PublicRecords: &private}))
+	publicOwner, err := ur.FindByOpenID(ctx, "public-owner")
+	require.NoError(t, err)
+	privateOwner, err := ur.FindByOpenID(ctx, "private-owner")
+	require.NoError(t, err)
+	return svc, r, db, publicOwner, privateOwner
+}
+
+func TestFoodRecordRepoCreateResolvesFeedVisibility(t *testing.T) {
+	_, r, _, publicOwner, privateOwner := setupFeedPrivacyService(t)
+	ctx := context.Background()
+	share, keep := true, false
+	now := time.Now().UTC()
+
+	cases := []struct {
+		name       string
+		userID     string
+		choice     *bool
+		wantHidden bool
+	}{
+		{"private owner without a choice stays out of the feed", privateOwner.ID, nil, true},
+		{"private owner can share one record", privateOwner.ID, &share, false},
+		{"public owner shares by default", publicOwner.ID, nil, false},
+		{"public owner can keep one record out", publicOwner.ID, &keep, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			record := &domain.FoodRecord{UserID: tc.userID, MealType: "lunch", RecordTime: &now, ShareToFeed: tc.choice}
+			require.NoError(t, r.Create(ctx, record))
+			stored, err := r.GetByID(ctx, record.ID)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantHidden, stored.HiddenFromFeed)
+		})
+	}
+}
+
+func TestReturnExistingRecordAppliesLatestExplicitChoice(t *testing.T) {
+	svc, r, _, _, privateOwner := setupFeedPrivacyService(t)
+	ctx := context.Background()
+	share, keep := true, false
+	now := time.Now().UTC()
+	record := &domain.FoodRecord{UserID: privateOwner.ID, MealType: "lunch", RecordTime: &now, ShareToFeed: &share}
+	require.NoError(t, r.Create(ctx, record))
+	stored, err := r.GetByID(ctx, record.ID)
+	require.NoError(t, err)
+
+	got, err := svc.returnExistingRecord(ctx, privateOwner.ID, stored, nil)
+	require.NoError(t, err)
+	assert.False(t, got.HiddenFromFeed, "no choice leaves the record alone")
+
+	got, err = svc.returnExistingRecord(ctx, privateOwner.ID, stored, &keep)
+	require.NoError(t, err)
+	assert.True(t, got.AlreadySaved)
+	stored, err = r.GetByID(ctx, record.ID)
+	require.NoError(t, err)
+	assert.True(t, stored.HiddenFromFeed)
+}
+
+func TestFoodRecordServiceShareAccessRules(t *testing.T) {
+	svc, r, db, publicOwner, privateOwner := setupFeedPrivacyService(t)
+	ctx := context.Background()
+	share, keep := true, false
+	now := time.Now().UTC()
+	create := func(userID string, choice *bool) *domain.FoodRecord {
+		record := &domain.FoodRecord{UserID: userID, MealType: "lunch", RecordTime: &now, ShareToFeed: choice}
+		require.NoError(t, r.Create(ctx, record))
+		return record
+	}
+	publicShared := create(publicOwner.ID, &share)
+	publicKept := create(publicOwner.ID, &keep)
+	privateShared := create(privateOwner.ID, &share)
+	privateKept := create(privateOwner.ID, &keep)
+	const friendID, strangerID = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+	require.NoError(t, db.Exec(`INSERT INTO user_friends (user_id, friend_id) VALUES (?, ?)`, privateOwner.ID, friendID).Error)
+
+	cases := []struct {
+		name    string
+		record  *domain.FoodRecord
+		access  ShareAccess
+		allowed bool
+	}{
+		{"guest opens a public shared record", publicShared, ShareAccess{}, true},
+		{"guest cannot open a public record kept out of the feed", publicKept, ShareAccess{}, false},
+		{"guest cannot open a private owner's record", privateShared, ShareAccess{}, false},
+		{"stranger cannot open a private owner's record", privateShared, ShareAccess{ViewerUserID: strangerID}, false},
+		{"friend opens a private owner's shared record", privateShared, ShareAccess{ViewerUserID: friendID}, true},
+		{"friend cannot open a record kept out of the feed", privateKept, ShareAccess{ViewerUserID: friendID}, false},
+		{"owner always opens their own record", privateKept, ShareAccess{ViewerUserID: privateOwner.ID}, true},
+		{"owner-issued link opens a private record", privateKept, ShareAccess{Token: svc.shareToken(privateKept.ID)}, true},
+		{"a link for another record is rejected", privateKept, ShareAccess{Token: svc.shareToken(privateShared.ID)}, false},
+		{"a made-up link is rejected", privateKept, ShareAccess{Token: "made-up"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := svc.Share(ctx, tc.record.ID, tc.access)
+			if tc.allowed {
+				assert.NoError(t, err)
+				return
+			}
+			assert.Equal(t, commonerrors.ErrForbidden, err)
+		})
+	}
+}
+
+func TestFoodRecordServiceCreateShareTokenOwnerOnly(t *testing.T) {
+	svc, r, _, publicOwner, privateOwner := setupFeedPrivacyService(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	record := &domain.FoodRecord{UserID: privateOwner.ID, MealType: "lunch", RecordTime: &now}
+	require.NoError(t, r.Create(ctx, record))
+
+	token, err := svc.CreateShareToken(ctx, privateOwner.ID, record.ID)
+	require.NoError(t, err)
+	_, err = svc.Share(ctx, record.ID, ShareAccess{Token: token})
+	assert.NoError(t, err)
+
+	_, err = svc.CreateShareToken(ctx, publicOwner.ID, record.ID)
+	assert.Error(t, err)
+}
+
+func TestFoodRecordServiceShareTokenDisabledWithoutSecret(t *testing.T) {
+	svc := &FoodRecordService{}
+
+	assert.False(t, svc.validShareToken("record", svc.shareToken("record")))
 }
 
 func TestFoodRecordService_Share_PrivateRecords(t *testing.T) {
@@ -751,7 +886,7 @@ func TestFoodRecordService_Share_PrivateRecords(t *testing.T) {
 	record := &domain.FoodRecord{UserID: user.ID, MealType: "lunch", RecordTime: &now}
 	require.NoError(t, r.Create(ctx, record))
 
-	_, err = svc.Share(ctx, record.ID)
+	_, err = svc.Share(ctx, record.ID, ShareAccess{})
 	assert.Equal(t, commonerrors.ErrForbidden, err)
 }
 
@@ -1080,7 +1215,7 @@ func TestFoodRecordService_Share_RepoError(t *testing.T) {
 	})
 	defer patches.Reset()
 
-	_, err := svc.Share(ctx, "id1")
+	_, err := svc.Share(ctx, "id1", ShareAccess{})
 	assert.Error(t, err)
 }
 
@@ -1101,7 +1236,7 @@ func TestFoodRecordService_Share_UserRepoError(t *testing.T) {
 	})
 	defer patches.Reset()
 
-	_, err := svc.Share(ctx, record.ID)
+	_, err := svc.Share(ctx, record.ID, ShareAccess{})
 	assert.Error(t, err)
 }
 

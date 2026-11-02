@@ -8,7 +8,7 @@ export default function PrivacyPage() {
         <ScrollView scrollY className='document-page'>
             <View className='document-content'>
                 <Text className='title'>隐私政策</Text>
-                <Text className='update-time'>最后更新日期：2026年02月</Text>
+                <Text className='update-time'>最后更新日期：2026年11月</Text>
 
                 <View className='section'>
                     <Text className='section-title'>引言</Text>
@@ -46,7 +46,13 @@ export default function PrivacyPage() {
                         除法律法规规定及得到您的单独同意外，我们不会向任何第三方共享、转让、出售您的隐私信息。
                     </Text>
                     <Text className='paragraph'>
-                        当您选择在“圈子”或“动态”中公开您的健康食谱或照片时，您的昵称和这些主动分享的内容将对其他用户可见。
+                        您的饮食、运动等记录默认不公开。只有当您在保存时选择“同步到圈子”，或发布圈子动态时，您的好友才能看到这些内容以及您的昵称和头像。
+                    </Text>
+                    <Text className='paragraph'>
+                        只有当您在“我的-隐私设置”中开启“公开我的圈子动态”后，已同步到圈子的内容才会对所有用户（包括未登录的访客）可见。您可以随时关闭，关闭后这些内容不再对好友以外的用户展示。
+                    </Text>
+                    <Text className='paragraph'>
+                        当您主动把某条记录分享给他人时，收到链接的人可以查看这条记录。
                     </Text>
                 </View>
 

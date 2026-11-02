@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/pkg/feedprivacy"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -30,6 +31,7 @@ func (r *ExerciseRepo) CreateExerciseLog(ctx context.Context, log *domain.Exerci
 	if log.ExerciseItems == nil {
 		log.ExerciseItems = []map[string]any{}
 	}
+	log.HiddenFromFeed = feedprivacy.ResolveHidden(ctx, r.db, log.UserID, log.ShareToFeed)
 	q := r.db.WithContext(ctx)
 	if !q.Migrator().HasColumn(&domain.ExerciseLog{}, "exercise_items") {
 		q = q.Omit("ExerciseItems")

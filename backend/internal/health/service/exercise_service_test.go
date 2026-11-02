@@ -840,6 +840,22 @@ func TestExerciseService_CreateLogWithDateAndDetailsPersistsPrecisionPayload(t *
 	assert.Equal(t, "深蹲4组12次，俯卧撑4组10次", details["breakdown"])
 }
 
+func TestExerciseService_CreateLogCarriesFeedChoiceInTask(t *testing.T) {
+	repo := &mockExerciseRepo{}
+	svc := NewExerciseService(repo)
+	share := true
+
+	_, err := svc.CreateLogWithDateAndDetails(context.Background(), "u1", "跑步", "", "", ExercisePrecisionDetails{ShareToFeed: &share})
+	require.NoError(t, err)
+	_, err = svc.CreateLogWithDateAndDetails(context.Background(), "u1", "跳绳", "", "", ExercisePrecisionDetails{})
+	require.NoError(t, err)
+
+	require.Len(t, repo.tasks, 2)
+	assert.Equal(t, true, repo.tasks[0].Payload["share_to_feed"])
+	_, hasChoice := repo.tasks[1].Payload["share_to_feed"]
+	assert.False(t, hasChoice, "no choice must stay absent so the owner's setting decides")
+}
+
 func TestExerciseService_ProcessExerciseTaskPrecisionUsesDetailsButKeepsOriginalText(t *testing.T) {
 	repo := &mockExerciseRepo{}
 	svc := NewExerciseService(repo, &config.Config{

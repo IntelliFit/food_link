@@ -47,6 +47,8 @@ type User struct {
 	ModeSwitchCount30d             *int           `gorm:"column:mode_switch_count_30d"`
 	Searchable                     *bool          `gorm:"column:searchable"`
 	PublicRecords                  *bool          `gorm:"column:public_records"`
+	PublicRecordsConsentedAt       *time.Time     `gorm:"column:public_records_consented_at"`
+	PublicRecordsReconfirmPending  bool           `gorm:"column:public_records_reconfirm_pending"`
 	PublicFavoriteRecipes          *bool          `gorm:"column:public_favorite_recipes"`
 	LastSeenAnalyzeHistory         *time.Time     `gorm:"column:last_seen_analyze_history_at"`
 	RegistrationInviteCode         *string        `gorm:"column:registration_invite_code"`

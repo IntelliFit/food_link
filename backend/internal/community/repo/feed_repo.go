@@ -136,6 +136,28 @@ func (r *FeedRepo) ListPublicFeed(ctx context.Context, authorIDs []string, conte
 	return r.listFeedByAuthors(ctx, authorIDs, true, contentType, mealType, dietGoal, date, sortBy, limit, cursor)
 }
 
+// MergeFeedRecords combines two feed lists under the same sort, keeping one copy
+// of a target present in both.
+func MergeFeedRecords(primary, extra []FeedRecord, sortBy string, limit int) []FeedRecord {
+	seen := make(map[string]bool, len(primary)+len(extra))
+	merged := make([]FeedRecord, 0, len(primary)+len(extra))
+	for _, list := range [][]FeedRecord{primary, extra} {
+		for _, row := range list {
+			key := row.FeedType + ":" + row.ID
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			merged = append(merged, row)
+		}
+	}
+	sortFeedRecords(merged, sortBy)
+	if limit > 0 && len(merged) > limit {
+		merged = merged[:limit]
+	}
+	return merged
+}
+
 func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
 	if len(authorIDs) == 0 {
 		return nil, nil
@@ -303,7 +325,7 @@ func (r *FeedRepo) applyFeedAuthorScope(q *gorm.DB, authorIDs []string, publicOn
 	if publicOnly {
 		publicUsers := r.db.Table("weapp_user").
 			Select("id").
-			Where("COALESCE(public_records, TRUE) = TRUE")
+			Where("COALESCE(public_records, FALSE) = TRUE")
 		q = q.Where("user_id IN (?)", publicUsers)
 	}
 	return q

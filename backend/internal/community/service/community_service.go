@@ -415,6 +415,30 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 	return s.publicFeed(ctx, params, params.ViewerUserID)
 }
 
+// withViewerOwnRecords lets a private account still see what it shared with friends
+// in the default tab; otherwise its own posts would look like they failed to publish.
+// No other viewer gains access: the own records are added for this request only.
+func (s *CommunityService) withViewerOwnRecords(ctx context.Context, records []repo.FeedRecord, viewerUserID string, params FeedParams, limit int, cursor *repo.FeedCursor) ([]repo.FeedRecord, error) {
+	if viewerUserID == "" || s.userRepo == nil || repo.NormalizeTargetType(params.ContentType) == "campus_food" {
+		return records, nil
+	}
+	if params.AuthorID != "" && params.AuthorID != viewerUserID {
+		return records, nil
+	}
+	viewer, err := s.userRepo.FindByID(ctx, viewerUserID)
+	if err != nil {
+		return nil, err
+	}
+	if viewer == nil || (viewer.PublicRecords != nil && *viewer.PublicRecords) {
+		return records, nil
+	}
+	own, err := s.feedRepo.ListFriendFeed(ctx, []string{viewerUserID}, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, limit, cursor)
+	if err != nil {
+		return nil, err
+	}
+	return repo.MergeFeedRecords(records, own, params.SortBy, limit), nil
+}
+
 func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, viewerUserID string) ([]FeedItem, error) {
 	customRank := params.SortBy == "recommended" || params.SortBy == "hot" || params.SortBy == "balanced"
 	candidateLimit := params.Offset + params.Limit
@@ -431,6 +455,10 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 		authorIDs = []string{params.AuthorID}
 	}
 	records, err := s.feedRepo.ListPublicFeed(ctx, authorIDs, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit, cursor)
+	if err != nil {
+		return nil, err
+	}
+	records, err = s.withViewerOwnRecords(ctx, records, viewerUserID, params, candidateLimit, cursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1051,10 +1079,25 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 	if err != nil {
 		return nil, err
 	}
+	// 未公开的账号只对本人和好友出现在榜单上，否则昵称和记录次数会暴露给所有人。
+	visibleFriends := map[string]bool{viewerUserID: viewerUserID != ""}
+	if viewerUserID != "" {
+		friendIDs, err := s.feedRepo.GetFriendIDs(ctx, viewerUserID)
+		if err != nil {
+			return nil, err
+		}
+		for _, friendID := range friendIDs {
+			visibleFriends[friendID] = true
+		}
+	}
 
 	items := make([]LeaderboardItem, 0, len(authorIDs))
 	for _, uid := range authorIDs {
 		p := profiles[uid]
+		isPublic := p != nil && p.PublicRecords != nil && *p.PublicRecords
+		if !isPublic && !visibleFriends[uid] {
+			continue
+		}
 		nickname := "用户"
 		avatar := ""
 		if p != nil {
@@ -1522,7 +1565,7 @@ func (s *CommunityService) getFeedRecordInteractionContext(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	if owner != nil && (owner.PublicRecords == nil || *owner.PublicRecords) {
+	if owner != nil && owner.PublicRecords != nil && *owner.PublicRecords {
 		return &FeedContextResult{Allowed: true, Reason: "public"}, nil
 	}
 	if userID != "" && record.UserID != "" {

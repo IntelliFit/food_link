@@ -35,6 +35,8 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import FeedShareSwitch from '../../../components/FeedShareSwitch'
+import { useFeedShareChoice } from '../../../hooks/useFeedShareChoice'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { roundTo } from '../../../utils/number-format'
@@ -537,6 +539,7 @@ function RecordManualPage() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<ManualFoodSearchResult[]>([])
   const [saving, setSaving] = useState(false)
+  const { shareToFeed, setShareToFeed, accountPublic } = useFeedShareChoice()
   const [showCustomPanel, setShowCustomPanel] = useState(false)
   const [customName, setCustomName] = useState('')
   const [customWeight, setCustomWeight] = useState('100')
@@ -1359,6 +1362,7 @@ function RecordManualPage() {
         total_fat: roundTo(totalNutrients.fat, 1),
         total_weight_grams: totalWeight,
         entry_type: entryTypeRef.current,
+        share_to_feed: shareToFeed,
       })
 
       const targetDate = getStoredRecordTargetDate()
@@ -1970,6 +1974,7 @@ function RecordManualPage() {
             <ScrollView className='selected-drawer-scroll' scrollY>
               {renderSelectedList('drawer')}
             </ScrollView>
+            {!pickerMode && <FeedShareSwitch value={shareToFeed} accountPublic={accountPublic} onChange={setShareToFeed} disabled={saving} />}
             <View className='selected-drawer-actions'>
               <View className='selected-drawer-secondary' onClick={() => setShowSelectedDrawer(false)}>
                 <Text>继续添加</Text>

@@ -49,6 +49,8 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 		mode_switch_count_30d INTEGER,
 		searchable BOOLEAN,
 		public_records BOOLEAN,
+		public_records_consented_at TIMESTAMPTZ,
+		public_records_reconfirm_pending BOOLEAN NOT NULL DEFAULT FALSE,
 		public_favorite_recipes BOOLEAN,
 		last_seen_analyze_history_at TIMESTAMP,
 		registration_invite_code TEXT,

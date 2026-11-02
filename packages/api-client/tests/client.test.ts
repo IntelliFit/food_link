@@ -1885,6 +1885,7 @@ describe('FoodLinkApiClient', () => {
     })
 
     expect(client.buildFoodRecordShareUrl('record-1')).toBe('https://healthymax.cn/share/food-record/record-1?api_env=dev')
+    expect(client.buildFoodRecordShareUrl('record-1', 'token-1')).toBe('https://healthymax.cn/share/food-record/record-1?api_env=dev&share_token=token-1')
   })
 
   it('saves custom manual food with full backend payload', async () => {

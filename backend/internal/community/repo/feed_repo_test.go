@@ -47,6 +47,32 @@ func testStringPtr(value string) *string {
 	return &value
 }
 
+func TestFeedRepoListPublicFeedTreatsUnsetSettingAsPrivate(t *testing.T) {
+	db := setupFeedTestDB(t)
+	r := NewFeedRepo(db)
+	ctx := context.Background()
+	assert.NoError(t, db.Exec(`INSERT INTO weapp_user (id, nickname, avatar, public_records) VALUES ('unset', 'U', 'a', NULL)`).Error)
+	assert.NoError(t, db.Create(&FeedRecord{ID: "unset-record", UserID: "unset", MealType: "lunch"}).Error)
+
+	rows, err := r.ListPublicFeed(ctx, nil, FeedTargetFoodRecord, "", "", "", "latest", 10, nil)
+
+	assert.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+func TestMergeFeedRecordsKeepsOneCopyOfEachTarget(t *testing.T) {
+	older := time.Now().Add(-time.Hour)
+	newer := time.Now()
+	merged := MergeFeedRecords(
+		[]FeedRecord{{ID: "a", FeedType: "food_record", CreatedAt: &older}},
+		[]FeedRecord{{ID: "a", FeedType: "food_record", CreatedAt: &older}, {ID: "b", FeedType: "food_record", CreatedAt: &newer}},
+		"latest", 10,
+	)
+
+	assert.Len(t, merged, 2)
+	assert.Equal(t, "b", merged[0].ID)
+}
+
 func TestFeedRepoListPublicFeed(t *testing.T) {
 	db := setupFeedTestDB(t)
 	r := NewFeedRepo(db)

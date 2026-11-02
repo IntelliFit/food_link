@@ -57,6 +57,8 @@ import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
 import { useRecordDate } from '../../../hooks/useRecordDate'
 import RecordDateField from '../../../components/RecordDateField'
+import FeedShareSwitch from '../../../components/FeedShareSwitch'
+import { useFeedShareChoice } from '../../../hooks/useFeedShareChoice'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -598,6 +600,7 @@ function ResultPage() {
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const { shareToFeed, setShareToFeed, accountPublic } = useFeedShareChoice()
   const recordSaveLock = useRef(false)
 	const [savingRecipe, setSavingRecipe] = useState(false)
 	const [savedRecipeId, setSavedRecipeId] = useState<string | null>(null)
@@ -2060,6 +2063,7 @@ function ResultPage() {
 
         const sourceTaskId = recordContext.taskId || undefined
         const payload: SaveFoodRecordRequest = {
+          share_to_feed: shareToFeed,
           date: recordDate,
           meal_type: mealType as MealType,
           image_path: hasUploadableImage ? (imagePath || undefined) : undefined,
@@ -3317,6 +3321,9 @@ function ResultPage() {
           </View>
         )}
         <View className='pba-safe-area'>
+          {!(isAnalyzeSessionCommitted() || committedRecordId) && (
+            <FeedShareSwitch value={shareToFeed} accountPublic={accountPublic} onChange={setShareToFeed} disabled={saving} />
+          )}
           <View className='action-grid'>
             <View
               className={`secondary-btn ${savingRecipe ? 'loading' : ''} ${savedRecipeId ? 'is-favorited' : ''}`}

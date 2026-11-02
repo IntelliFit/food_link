@@ -3708,7 +3708,7 @@ func ensureMottoColumn(ctx context.Context, db *gorm.DB) error {
 func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 	result := db.WithContext(ctx).Exec(`
 		UPDATE weapp_user
-		SET public_records = TRUE
+		SET public_records = FALSE
 		WHERE public_records IS NULL
 	`)
 	if result.Error != nil {

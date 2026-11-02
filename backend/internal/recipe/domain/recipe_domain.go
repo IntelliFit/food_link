@@ -92,6 +92,7 @@ type FoodRecord struct {
 	EntryType        *string          `gorm:"column:entry_type" json:"entry_type,omitempty"`
 	RecipeID         *string          `gorm:"column:recipe_id" json:"recipe_id,omitempty"`
 	RecordTime       *time.Time       `gorm:"column:record_time" json:"record_time"`
+	HiddenFromFeed   bool             `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
 	CreatedAt        *time.Time       `gorm:"column:created_at" json:"created_at"`
 }
 

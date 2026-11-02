@@ -37,6 +37,12 @@ func main() {
 	onlyCampusDirectoryReviewed := flag.Bool("only-campus-directory-reviewed", false, "only publish the reviewed Beijing campus dining directory")
 	onlyCampusDirectoryPending := flag.Bool("only-campus-directory-pending", false, "only import pending-review campus dining research in one transaction")
 	onlyFoodRecordMood := flag.Bool("only-food-record-mood", false, "only add the optional food-record eating mood column and constraint")
+	onlyFeedPrivacy := flag.Bool("only-feed-privacy", false, "only add consent columns and make public records default to off; existing choices are kept")
+	flipFeedPrivacy := flag.Bool("flip-feed-privacy", false, "count accounts that never explicitly agreed to public records; read-only unless -flip-feed-privacy-apply is set")
+	flipFeedPrivacyApply := flag.Bool("flip-feed-privacy-apply", false, "with -flip-feed-privacy, turn those accounts private and ask them once in the mini program")
+	officialAccount := flag.Bool("official-account", false, "count what the no-login official account and its posts would add; read-only unless -official-account-apply is set")
+	officialAccountApply := flag.Bool("official-account-apply", false, "with -official-account, create the account and publish its posts")
+	officialAccountPrivacyPost := flag.Bool("official-account-privacy-post", false, "with -official-account, also include the privacy announcement; use after the new mini program is released")
 	onlyManualFoodSausage := flag.Bool("only-manual-food-sausage", false, "only reclassify Taiwanese grilled sausage as an independently packaged 38g food and relink historical records")
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	onlyCanteenCollectors := flag.Bool("only-canteen-collectors", false, "only extend collector authorization to community, office park and corporate canteens")
@@ -60,6 +66,12 @@ func main() {
 	onlyAnalytics := flag.Bool("only-analytics", false, "only migrate admin roles and isolated analytics tables")
 	printTarget := flag.Bool("print-target", false, "print resolved database target without credentials; do not connect or migrate")
 	flag.Parse()
+	if *flipFeedPrivacyApply && !*flipFeedPrivacy {
+		log.Fatal("--flip-feed-privacy-apply 须与 --flip-feed-privacy 一起使用")
+	}
+	if (*officialAccountApply || *officialAccountPrivacyPost) && !*officialAccount {
+		log.Fatal("--official-account-apply 和 --official-account-privacy-post 须与 --official-account 一起使用")
+	}
 	if (!*onlySupplementProduct && (*productBefore != "" || *productApply)) || (*productApply && *productBefore == "") {
 		log.Fatal("补剂产品补齐参数须与 --only-supplement-feed-product 及截止时间一起使用")
 	}
@@ -88,7 +100,7 @@ func main() {
 	if *onlySupplementProduct {
 		selectedOnlyModes++
 	}
-	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyWechatTransfer, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyWechatTransfer, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyFeedPrivacy, *flipFeedPrivacy, *officialAccount, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -293,6 +305,16 @@ func main() {
 		migrateErr = migration.ImportPendingCampusDirectoryResearch(ctx, db, cfg.Database.Schema)
 	} else if *onlyFoodRecordMood {
 		migrateErr = migration.MigrateFoodRecordMood(ctx, db, cfg.Database.Schema)
+	} else if *onlyFeedPrivacy {
+		migrateErr = migration.MigrateFeedPrivacySchema(ctx, db, cfg.Database.Schema)
+	} else if *flipFeedPrivacy {
+		flipResult, flipErr := migration.FlipUnconsentedRecordsToPrivate(ctx, db, cfg.Database.Schema, *flipFeedPrivacyApply)
+		migrateErr = flipErr
+		log.Printf("未明确同意公开的账号: 候选=%d 已转不公开=%d 已执行=%t", flipResult.Candidates, flipResult.Flipped, flipResult.Applied)
+	} else if *officialAccount {
+		accountResult, accountErr := migration.SeedOfficialAccount(ctx, db, cfg.Database.Schema, migration.OfficialAccountOptions{Apply: *officialAccountApply, PrivacyPost: *officialAccountPrivacyPost})
+		migrateErr = accountErr
+		log.Printf("官方账号: 字段就绪=%t 已存在=%t 新建=%t 动态已有=%d 新发=%d 待发=%d 已执行=%t", accountResult.SchemaReady, accountResult.AccountExists, accountResult.AccountCreated, accountResult.PostsExisting, accountResult.PostsCreated, accountResult.PostsPending, accountResult.Applied)
 	} else if *onlyManualFoodSausage {
 		migrateErr = migration.MigrateManualFoodSausage(ctx, db, cfg.Database.Schema)
 	} else if *onlyCampusCatalogPublishing {
@@ -357,6 +379,13 @@ func main() {
 	}
 	if *onlyFoodRecordMood {
 		log.Printf("食探记录心情字段迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyFeedPrivacy {
+		log.Printf("圈子公开设置字段迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *flipFeedPrivacy || *officialAccount {
 		return
 	}
 	if *onlyManualFoodSausage {

@@ -60,6 +60,7 @@ type ExerciseLog struct {
 	AIReasoning    *string          `gorm:"column:ai_reasoning"`
 	ExerciseItems  []map[string]any `gorm:"column:exercise_items;serializer:json"`
 	HiddenFromFeed bool             `gorm:"column:hidden_from_feed"`
+	ShareToFeed    *bool            `gorm:"-"`
 	CreatedAt      *time.Time       `gorm:"column:created_at"`
 }
 

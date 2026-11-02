@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
-  getShareQrEnvVersion, getUnlimitedQRCode, getFriendInviteProfile, getPosterCalorieCompare,
+  getShareQrEnvVersion, getUnlimitedQRCode, getFriendInviteProfile, getPosterCalorieCompare, getFoodRecordShareToken,
   getMyMembership, showUnifiedApiError, type FoodRecord,
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
@@ -186,9 +186,12 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         canvas: canvas as any, destWidth: POSTER_WIDTH * exportScale, destHeight: height * exportScale, fileType: 'jpg', quality: 0.95,
       })
       if (!active) return
+      // 只有本人能取到凭证；取不到时分享照常，对方按圈子可见范围查看。
+      const shareToken = isDebug ? '' : await getFoodRecordShareToken(record.id).catch(() => '')
+      if (!active) return
       const payload = {
         imageUrl: exported.tempFilePath,
-        path: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}&from_user_id=${encodeURIComponent(ownerId)}${profile.inviteCode ? `&invite_code=${encodeURIComponent(profile.inviteCode)}` : ''}`,
+        path: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}&from_user_id=${encodeURIComponent(ownerId)}${profile.inviteCode ? `&invite_code=${encodeURIComponent(profile.inviteCode)}` : ''}${shareToken ? `&share_token=${encodeURIComponent(shareToken)}` : ''}`,
         title: `${profile.nickname || '我'}的${Math.round(record.total_calories || 0)} kcal 美食打卡`,
       }
       cache.current.set(key, payload)

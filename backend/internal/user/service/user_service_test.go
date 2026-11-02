@@ -50,6 +50,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		mode_switch_count_30d INTEGER,
 		searchable BOOLEAN,
 		public_records BOOLEAN,
+		public_records_consented_at TIMESTAMPTZ,
+		public_records_reconfirm_pending BOOLEAN NOT NULL DEFAULT FALSE,
 		public_favorite_recipes BOOLEAN,
 		last_seen_analyze_history_at TIMESTAMP,
 		registration_invite_code TEXT,
@@ -193,6 +195,32 @@ func TestUserService_UpdateProfile(t *testing.T) {
 	result, err := svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{Nickname: &nickname})
 	assert.NoError(t, err)
 	assert.Equal(t, "New", result["nickname"])
+}
+
+func TestUserService_UpdateProfileRecordsPublicRecordsConsent(t *testing.T) {
+	db := setupTestDB(t)
+	userRepo := repo.NewUserRepo(db)
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
+	ctx := context.Background()
+	user := &repo.User{OpenID: "o1", Nickname: "Old", PublicRecordsReconfirmPending: true}
+	assert.NoError(t, userRepo.Create(ctx, user))
+	on, off := true, false
+
+	result, err := svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{PublicRecords: &on})
+	assert.NoError(t, err)
+	assert.Equal(t, false, result["public_records_reconfirm_pending"])
+	stored, err := userRepo.FindByID(ctx, user.ID)
+	assert.NoError(t, err)
+	assert.True(t, *stored.PublicRecords)
+	assert.NotNil(t, stored.PublicRecordsConsentedAt)
+
+	_, err = svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{PublicRecords: &off})
+	assert.NoError(t, err)
+	stored, err = userRepo.FindByID(ctx, user.ID)
+	assert.NoError(t, err)
+	assert.False(t, *stored.PublicRecords)
+	assert.Nil(t, stored.PublicRecordsConsentedAt)
+	assert.False(t, stored.PublicRecordsReconfirmPending)
 }
 
 func TestUserService_UpdateProfile_NotFound(t *testing.T) {

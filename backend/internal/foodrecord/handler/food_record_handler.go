@@ -37,7 +37,8 @@ type FoodRecordService interface {
 	Get(ctx context.Context, userID, recordID string) (*domain.FoodRecord, error)
 	Update(ctx context.Context, userID, recordID string, input service.UpdateFoodRecordInput) (*domain.FoodRecord, error)
 	Delete(ctx context.Context, userID, recordID string) error
-	Share(ctx context.Context, recordID string) (*domain.FoodRecord, error)
+	Share(ctx context.Context, recordID string, access service.ShareAccess) (*domain.FoodRecord, error)
+	CreateShareToken(ctx context.Context, userID, recordID string) (string, error)
 	SaveCriticalSamples(ctx context.Context, userID string, items []domain.CriticalSample) error
 	GetEntryDistribution(ctx context.Context, userID, startDate, endDate string) (*service.EntryDistributionResult, error)
 	RecommendMealType(ctx context.Context, userID string, date string, refTime *time.Time) (string, string, error)
@@ -111,6 +112,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		EntryType        *string           `json:"entry_type"`
 		RecipeID         *string           `json:"recipe_id"`
 		Date             *string           `json:"date"`
+		ShareToFeed      *bool             `json:"share_to_feed"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -147,6 +149,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		EntryType:        body.EntryType,
 		RecipeID:         body.RecipeID,
 		Date:             body.Date,
+		ShareToFeed:      body.ShareToFeed,
 	})
 	if err != nil {
 		logFoodRecordAPIError(c, "save", err, taskIDAttr(c))
@@ -285,7 +288,10 @@ func (h *FoodRecordHandler) DeleteFoodRecord(c *gin.Context) {
 func (h *FoodRecordHandler) ShareFoodRecord(c *gin.Context) {
 	applyFoodRecordShareCORS(c)
 	recordID := c.Param("record_id")
-	record, err := h.recordSvc.Share(c.Request.Context(), recordID)
+	record, err := h.recordSvc.Share(c.Request.Context(), recordID, service.ShareAccess{
+		ViewerUserID: c.GetString(authmw.ContextUserIDKey),
+		Token:        c.Query("share_token"),
+	})
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -295,6 +301,16 @@ func (h *FoodRecordHandler) ShareFoodRecord(c *gin.Context) {
 		slog.String("meal_type", record.MealType),
 	)
 	response.Success(c, gin.H{"record": record})
+}
+
+// GET /api/food-record/:record_id/share-token
+func (h *FoodRecordHandler) FoodRecordShareToken(c *gin.Context) {
+	token, err := h.recordSvc.CreateShareToken(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("record_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"share_token": token})
 }
 
 // OPTIONS /api/food-record/share/:record_id
@@ -935,6 +951,9 @@ func buildFoodRecordFrontendShareURL(c *gin.Context, recordID string) string {
 	query := target.Query()
 	if apiEnv := foodRecordShareAPIEnv(c); apiEnv != "" {
 		query.Set("api_env", apiEnv)
+	}
+	if token := strings.TrimSpace(c.Query("share_token")); token != "" {
+		query.Set("share_token", token)
 	}
 	target.RawQuery = query.Encode()
 	return target.String()

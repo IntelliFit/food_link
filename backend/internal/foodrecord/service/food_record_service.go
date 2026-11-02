@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
@@ -37,12 +40,24 @@ var mealDisplayOrder = []string{
 }
 
 type FoodRecordService struct {
-	recordRepo      *repo.FoodRecordRepo
-	taskRepo        *repo.AnalysisTaskRepo
-	userRepo        *authrepo.UserRepo
-	storage         *storage.Client
-	rewards         InviteRewardActivator
-	contentSecurity *contentsecurity.Service
+	recordRepo       *repo.FoodRecordRepo
+	taskRepo         *repo.AnalysisTaskRepo
+	userRepo         *authrepo.UserRepo
+	shareTokenSecret []byte
+	storage          *storage.Client
+	rewards          InviteRewardActivator
+	contentSecurity  *contentsecurity.Service
+}
+
+// ShareAccess identifies who is opening a shared record link.
+type ShareAccess struct {
+	ViewerUserID string
+	Token        string
+}
+
+// ConfigureShareTokenSecret enables owner-issued share links for private records.
+func (s *FoodRecordService) ConfigureShareTokenSecret(secret string) {
+	s.shareTokenSecret = []byte(secret)
 }
 
 func (s *FoodRecordService) ConfigureContentSecurity(checker *contentsecurity.Service) {
@@ -97,6 +112,7 @@ type SaveFoodRecordInput struct {
 	EntryType        *string
 	RecipeID         *string
 	Date             *string
+	ShareToFeed      *bool
 }
 
 type UpdateFoodRecordInput struct {
@@ -151,8 +167,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 				return nil, err
 			}
 			if existing != nil {
-				existing.AlreadySaved = true
-				return existing, nil
+				return s.returnExistingRecord(ctx, userID, existing, input.ShareToFeed)
 			}
 			if err := s.rejectCorrectionOfRecordedMeal(ctx, userID, task); err != nil {
 				return nil, err
@@ -240,6 +255,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		EntryType:        entryType,
 		RecipeID:         recipeID,
 		RecordTime:       recordTime,
+		ShareToFeed:      input.ShareToFeed,
 	}
 	s.hydrateRecordAdvice(ctx, record)
 	if s.contentSecurity != nil {
@@ -254,14 +270,28 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 				return nil, lookupErr
 			}
 			if existing != nil {
-				existing.AlreadySaved = true
-				return existing, nil
+				return s.returnExistingRecord(ctx, userID, existing, input.ShareToFeed)
 			}
 		}
 		return nil, err
 	}
 	s.activateInviteReward(ctx, userID, "food_record")
 	return record, nil
+}
+
+// returnExistingRecord handles a repeated save of the same analysis. The latest
+// explicit circle choice still applies, e.g. a timed-out save retried with the
+// switch turned off.
+func (s *FoodRecordService) returnExistingRecord(ctx context.Context, userID string, existing *domain.FoodRecord, shareToFeed *bool) (*domain.FoodRecord, error) {
+	existing.AlreadySaved = true
+	if shareToFeed == nil || existing.HiddenFromFeed == !*shareToFeed {
+		return existing, nil
+	}
+	if err := s.recordRepo.SetHiddenFromFeed(ctx, userID, existing.ID, !*shareToFeed); err != nil {
+		return nil, err
+	}
+	existing.HiddenFromFeed = !*shareToFeed
+	return existing, nil
 }
 
 func isDuplicateRecordError(err error) bool {
@@ -862,7 +892,7 @@ func (s *FoodRecordService) Delete(ctx context.Context, userID, recordID string)
 	return nil
 }
 
-func (s *FoodRecordService) Share(ctx context.Context, recordID string) (*domain.FoodRecord, error) {
+func (s *FoodRecordService) Share(ctx context.Context, recordID string, access ShareAccess) (*domain.FoodRecord, error) {
 	recordID = strings.TrimSpace(recordID)
 	if recordID == "" {
 		return nil, commonerrors.ErrNotFound
@@ -877,18 +907,74 @@ func (s *FoodRecordService) Share(ctx context.Context, recordID string) (*domain
 	if record == nil {
 		return nil, commonerrors.ErrNotFound
 	}
-	if record.UserID != "" {
-		owner, err := s.userRepo.FindByID(ctx, record.UserID)
-		if err != nil {
-			return nil, err
-		}
-		if owner != nil && owner.PublicRecords != nil && !*owner.PublicRecords {
-			return nil, commonerrors.ErrForbidden
-		}
+	allowed, err := s.canViewSharedRecord(ctx, record, access)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, commonerrors.ErrForbidden
 	}
 	record = s.hydrateRecordWithContext(ctx, record)
 	record.MealType = normalizeMealType(record.MealType, record.RecordTime)
 	return record, nil
+}
+
+// canViewSharedRecord allows the owner and links the owner deliberately shared.
+// Everyone else follows the feed rules: the record must be in the circle, and the
+// viewer must be a friend unless the owner turned on public records.
+func (s *FoodRecordService) canViewSharedRecord(ctx context.Context, record *domain.FoodRecord, access ShareAccess) (bool, error) {
+	if access.ViewerUserID != "" && access.ViewerUserID == record.UserID {
+		return true, nil
+	}
+	if s.validShareToken(record.ID, access.Token) {
+		return true, nil
+	}
+	if record.HiddenFromFeed || record.UserID == "" {
+		return false, nil
+	}
+	owner, err := s.userRepo.FindByID(ctx, record.UserID)
+	if err != nil {
+		return false, err
+	}
+	if owner != nil && owner.PublicRecords != nil && *owner.PublicRecords {
+		return true, nil
+	}
+	if access.ViewerUserID == "" {
+		return false, nil
+	}
+	return s.recordRepo.AreFriends(ctx, access.ViewerUserID, record.UserID)
+}
+
+// CreateShareToken issues the link token for a record its owner chooses to share.
+func (s *FoodRecordService) CreateShareToken(ctx context.Context, userID, recordID string) (string, error) {
+	if _, err := uuid.Parse(strings.TrimSpace(recordID)); err != nil {
+		return "", commonerrors.ErrNotFound
+	}
+	record, err := s.recordRepo.GetByID(ctx, strings.TrimSpace(recordID))
+	if err != nil {
+		return "", err
+	}
+	if record == nil || len(s.shareTokenSecret) == 0 {
+		return "", commonerrors.ErrNotFound
+	}
+	if record.UserID != userID {
+		return "", commonerrors.ErrForbidden
+	}
+	return s.shareToken(record.ID), nil
+}
+
+func (s *FoodRecordService) shareToken(recordID string) string {
+	mac := hmac.New(sha256.New, s.shareTokenSecret)
+	mac.Write([]byte("food-record-share:" + recordID))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:16])
+}
+
+func (s *FoodRecordService) validShareToken(recordID, token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" || len(s.shareTokenSecret) == 0 {
+		return false
+	}
+	return hmac.Equal([]byte(token), []byte(s.shareToken(recordID)))
 }
 
 func (s *FoodRecordService) SaveCriticalSamples(ctx context.Context, userID string, items []domain.CriticalSample) error {

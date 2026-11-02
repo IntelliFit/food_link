@@ -186,7 +186,7 @@
 // 内容容器 - 白卡盖住头图底部，圆角与阴影压在图片上方
 .content-container {
   position: relative;
-  padding: 32rpx 32rpx 500rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
+  padding: 32rpx 32rpx 600rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
   z-index: 3;
   pointer-events: auto;
   display: flex;

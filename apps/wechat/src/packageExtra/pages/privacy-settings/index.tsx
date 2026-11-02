@@ -8,7 +8,7 @@ import { withAuth } from '../../../utils/withAuth'
 
 function PrivacySettings() {
     const [searchable, setSearchable] = useState(true)
-    const [publicRecords, setPublicRecords] = useState(true)
+    const [publicRecords, setPublicRecords] = useState(false)
 	const [publicFavoriteRecipes, setPublicFavoriteRecipes] = useState(true)
     const [loading, setLoading] = useState(true)
 
@@ -22,7 +22,7 @@ function PrivacySettings() {
             const profile = await getUserProfile()
             // API 应该返回这两个字段
             setSearchable(profile.searchable ?? true)
-            setPublicRecords(profile.public_records ?? true)
+            setPublicRecords(profile.public_records ?? false)
 			setPublicFavoriteRecipes(profile.public_favorite_recipes ?? true)
         } catch (e) {
             console.error('Failed to fetch privacy settings:', e)
@@ -81,8 +81,8 @@ function PrivacySettings() {
                     }
                 />
                 <Cell
-                  title='公开我的饮食记录'
-                  brief='开启后，其他用户在圈子里可以看到您的动态和饮食记录。'
+                  title='公开我的圈子动态'
+                  brief='开启后，所有用户（包括未登录的访客）都能看到您同步到圈子的饮食、运动等记录和照片，包括历史记录。关闭后只有好友能看到。'
                   rightIcon={
                         <Switch
                           checked={publicRecords}

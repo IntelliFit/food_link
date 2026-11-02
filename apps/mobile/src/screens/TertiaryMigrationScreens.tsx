@@ -2973,7 +2973,7 @@ export function CampusCanteenScreen() {
 
 export function PrivacySettingsScreen() {
   const [searchable, setSearchable] = useState(true)
-  const [publicRecords, setPublicRecords] = useState(true)
+  const [publicRecords, setPublicRecords] = useState(false)
   const [loading, setLoading] = useState(false)
   const [savingKey, setSavingKey] = useState<'searchable' | 'public_records' | null>(null)
 
@@ -2982,7 +2982,7 @@ export function PrivacySettingsScreen() {
     try {
       const data = await apiClient.getUserProfile()
       setSearchable(data.searchable ?? true)
-      setPublicRecords(data.public_records ?? true)
+      setPublicRecords(data.public_records ?? false)
     } catch (error) {
       showError('获取隐私设置失败', error)
     } finally {
@@ -3049,8 +3049,8 @@ export function PrivacySettingsScreen() {
 
               <View style={styles.privacySettingRow}>
                 <View style={styles.privacySettingCopy}>
-                  <Text style={styles.privacySettingTitle}>公开我的饮食记录</Text>
-                  <Text style={styles.privacySettingBrief}>开启后，其他用户在圈子里可以看到您的动态和饮食记录。</Text>
+                  <Text style={styles.privacySettingTitle}>公开我的圈子动态</Text>
+                  <Text style={styles.privacySettingBrief}>开启后，所有用户（包括未登录的访客）都能看到您同步到圈子的记录和照片，包括历史记录。关闭后只有好友能看到。</Text>
                 </View>
                 <View style={styles.privacySwitchWrap}>
                   {savingKey === 'public_records' ? (

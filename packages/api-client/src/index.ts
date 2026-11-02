@@ -1488,13 +1488,20 @@ export class FoodLinkApiClient {
     })
   }
 
-  buildFoodRecordShareUrl(recordId: string): string {
+  buildFoodRecordShareUrl(recordId: string, shareToken?: string): string {
     const id = recordId.trim()
     if (!id) throw new Error('缺少饮食记录 ID')
     const url = new URL(`/share/food-record/${encodeURIComponent(id)}`, `${this.shareBaseUrl}/`)
     const apiEnv = inferShareApiEnv(this.baseUrl)
     if (apiEnv) url.searchParams.set('api_env', apiEnv)
+    if (shareToken) url.searchParams.set('share_token', shareToken)
     return url.toString()
+  }
+
+  /** 本人分享记录时取得链接凭证，收到链接的人无需登录也能查看这一条。 */
+  async getFoodRecordShareToken(recordId: string): Promise<string> {
+    const result = await this.authenticatedRequest<{ share_token: string }>(`/api/food-record/${encodeURIComponent(recordId)}/share-token`, { method: 'GET' })
+    return result.share_token
   }
 
   async updateFoodRecord(recordId: string, body: UpdateFoodRecordRequest): Promise<{ message: string; record: FoodRecord }> {

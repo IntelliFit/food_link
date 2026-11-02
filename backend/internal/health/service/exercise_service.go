@@ -68,6 +68,8 @@ type ExercisePrecisionDetails struct {
 	AverageHeartRate int
 	DistanceKm       float64
 	Breakdown        string
+	// ShareToFeed is the per-log circle choice; nil follows the owner's setting.
+	ShareToFeed *bool
 }
 
 type exerciseJSONLLMConfig struct {
@@ -261,6 +263,7 @@ func (s *ExerciseService) CreateLogWithDateAndDetails(ctx context.Context, userI
 	if len([]rune(desc)) > exerciseMaxDescriptionRunes {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述过长", HTTPStatus: 400}
 	}
+	shareToFeed := precision.ShareToFeed
 	precision, err := normalizeExercisePrecisionDetails(precision)
 	if err != nil {
 		return nil, err
@@ -293,6 +296,9 @@ func (s *ExerciseService) CreateLogWithDateAndDetails(ctx context.Context, userI
 			"estimation_source": "go_exercise_worker",
 		},
 		CreatedAt: &now,
+	}
+	if shareToFeed != nil {
+		task.Payload["share_to_feed"] = *shareToFeed
 	}
 	if precision.Enabled {
 		task.Payload["estimation_mode"] = "precision"
@@ -618,8 +624,13 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		value := strings.TrimSpace(estimate.ExerciseType)
 		exerciseType = &value
 	}
+	var shareToFeed *bool
+	if value, ok := payload["share_to_feed"].(bool); ok {
+		shareToFeed = &value
+	}
 	log := &domain.ExerciseLog{
 		UserID:         userID,
+		ShareToFeed:    shareToFeed,
 		ExerciseDesc:   logDesc,
 		ExerciseType:   exerciseType,
 		ImageURL:       storedImageURL,

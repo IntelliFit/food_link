@@ -8,6 +8,7 @@ import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import {
   communityGetFeedContext,
   createCirclePost,
+  getUserProfile,
   showUnifiedApiError,
   type CirclePostNutritionInput,
   type CommunityFeedTargetType,
@@ -17,6 +18,7 @@ import {
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { withAuth } from '../../../utils/withAuth'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { formatMacroNutrient, formatMicroNutrient } from '../../../utils/number-format'
 
 import './index.scss'
@@ -108,6 +110,13 @@ function CirclePostEditPage() {
   const [images, setImages] = useState<ImageItem[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [accountPublic, setAccountPublic] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    void getUserProfile().then((profile) => setAccountPublic(profile.public_records === true)).catch(() => {
+      /* 读取失败时不显示可见范围提示 */
+    })
+  }, [])
   const [nutritionEnabled, setNutritionEnabled] = useState(false)
   const [nutrition, setNutrition] = useState<NutritionFormState>(EMPTY_NUTRITION)
 
@@ -323,6 +332,11 @@ function CirclePostEditPage() {
   return (
     <FlPageThemeRoot>
       <View className='circle-post-edit-page'>
+        {accountPublic === false && (
+          <View className='circle-post-edit-audience-hint' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/privacy-settings/index') })}>
+            <Text>这条动态目前只有好友能看到。想让所有用户看到，去隐私设置开启公开</Text>
+          </View>
+        )}
         <View className='circle-post-edit-card circle-post-edit-image-section'>
           <View className='circle-post-edit-title-row'>
             <Text className='circle-post-edit-section-title'>图片</Text>

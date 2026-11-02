@@ -35,6 +35,8 @@ type FoodRecord struct {
 	RecipeID          *string    `gorm:"column:recipe_id" json:"recipe_id,omitempty"`
 	RecordTime        *time.Time `gorm:"column:record_time" json:"record_time"`
 	CreatedAt         *time.Time `gorm:"column:created_at" json:"created_at"`
+	HiddenFromFeed    bool       `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
+	ShareToFeed       *bool      `gorm:"-" json:"-"`
 	AlreadySaved      bool       `gorm:"-" json:"-"`
 }
 

@@ -20,6 +20,8 @@ import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
 import { useRecordDate } from '../../../hooks/useRecordDate'
 import RecordDateField from '../../../components/RecordDateField'
+import FeedShareSwitch from '../../../components/FeedShareSwitch'
+import { useFeedShareChoice } from '../../../hooks/useFeedShareChoice'
 
 import './index.scss'
 
@@ -140,6 +142,7 @@ function ResultTextPage() {
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const { shareToFeed, setShareToFeed, accountPublic } = useFeedShareChoice()
   const recordSaveLock = useRef(false)
   const [noData, setNoData] = useState(false)
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
@@ -452,6 +455,7 @@ function ResultTextPage() {
         absorption_notes: absorptionNotes ?? undefined,
         context_advice: contextAdvice ?? undefined,
         entry_type: 'food_text' as const,
+        share_to_feed: shareToFeed,
       }
       const saveResult = await saveFoodRecord(payload)
       const targetDate = recordDate
@@ -745,6 +749,7 @@ function ResultTextPage() {
       <View className='footer-actions'>
         <View className='pba-safe-area'>
           <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />
+          <FeedShareSwitch value={shareToFeed} accountPublic={accountPublic} onChange={setShareToFeed} disabled={saving} />
           <View className='action-grid'>
             <View className={`primary-btn ${saving ? 'loading' : ''}`} onClick={saving ? undefined : handleConfirmAndShare}>
               {saving ? <View className='btn-spinner' /> : <Text className='btn-text'>确认记录</Text>}

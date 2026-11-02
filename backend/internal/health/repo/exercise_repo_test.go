@@ -36,6 +36,39 @@ func setupExerciseTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+func TestExerciseRepo_CreateResolvesFeedVisibility(t *testing.T) {
+	db := setupExerciseTestDB(t)
+	require.NoError(t, db.Exec(`DROP TABLE IF EXISTS weapp_user`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE weapp_user (id TEXT PRIMARY KEY, public_records BOOLEAN)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO weapp_user (id, public_records) VALUES ('public-user', TRUE), ('private-user', FALSE)`).Error)
+	r := NewExerciseRepo(db)
+	ctx := context.Background()
+	share, keep := true, false
+
+	cases := []struct {
+		name       string
+		userID     string
+		choice     *bool
+		wantHidden bool
+	}{
+		{"private owner stays out of the feed by default", "private-user", nil, true},
+		{"private owner can share one log", "private-user", &share, false},
+		{"public owner shares by default", "public-user", nil, false},
+		{"public owner can keep one log out", "public-user", &keep, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Now().UTC()
+			log := &domain.ExerciseLog{UserID: tc.userID, ExerciseDesc: "跑步", ShareToFeed: tc.choice, RecordedOn: &now, CreatedAt: &now}
+			require.NoError(t, r.CreateExerciseLog(ctx, log))
+			found, err := r.GetExerciseLogByID(ctx, tc.userID, log.ID)
+			require.NoError(t, err)
+			require.NotNil(t, found)
+			assert.Equal(t, tc.wantHidden, found.HiddenFromFeed)
+		})
+	}
+}
+
 func TestExerciseRepo_CRUD(t *testing.T) {
 	db := setupExerciseTestDB(t)
 	r := NewExerciseRepo(db)

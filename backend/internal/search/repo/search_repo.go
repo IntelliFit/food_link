@@ -185,7 +185,7 @@ LIMIT ? OFFSET ?
 // - friends of the current user
 const visibleUsersCTE = `
 _search_visible_users AS (
-  SELECT id AS user_id FROM weapp_user WHERE COALESCE(public_records, TRUE) = TRUE
+  SELECT id AS user_id FROM weapp_user WHERE COALESCE(public_records, FALSE) = TRUE
   UNION
   SELECT ? AS user_id
   UNION
