@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	commonerrors "food_link/backend/internal/common/errors"
@@ -19,6 +20,11 @@ import (
 )
 
 var versionPattern = regexp.MustCompile(`^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$`)
+var noticeTimezone = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+// A notice nobody saw within this window is dropped instead of queueing up.
+const noticeLifetime = 24 * time.Hour
+
 var ErrConflict = &commonerrors.AppError{Code: 10005, Message: "通知状态已变化，请刷新；已发布内容不可修改", HTTPStatus: http.StatusConflict}
 
 type Input struct {
@@ -70,6 +76,17 @@ func (s *Service) List(ctx context.Context, userID, version string, admin bool) 
 	if !admin && !ValidVersion(version) {
 		return nil, commonerrors.ErrBadRequest
 	}
+	now := time.Now()
+	if !admin && userID != "" {
+		// At most one notice a day: a receipt from today ends it for this user.
+		seen, err := s.repo.AcknowledgedSince(ctx, userID, noticeDayStart(now))
+		if err != nil {
+			return nil, s.result(ctx, err, "list", "")
+		}
+		if seen {
+			return []domain.Update{}, nil
+		}
+	}
 	items, err := s.repo.List(ctx, userID, admin)
 	if err != nil {
 		return nil, s.result(ctx, err, "list", "")
@@ -77,13 +94,18 @@ func (s *Service) List(ctx context.Context, userID, version string, admin bool) 
 	if admin {
 		return items, nil
 	}
-	visible := make([]domain.Update, 0)
 	for _, item := range items {
-		if Eligible(version, item.MinVersion) {
-			visible = append(visible, item)
+		fresh := item.PublishedAt != nil && now.Sub(*item.PublishedAt) <= noticeLifetime
+		if fresh && Eligible(version, item.MinVersion) {
+			return []domain.Update{item}, nil
 		}
 	}
-	return visible, nil
+	return []domain.Update{}, nil
+}
+
+func noticeDayStart(now time.Time) time.Time {
+	year, month, day := now.In(noticeTimezone).Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, noticeTimezone)
 }
 func (s *Service) Save(ctx context.Context, id, admin string, in Input) (*domain.Update, error) {
 	if err := in.Validate(); err != nil {

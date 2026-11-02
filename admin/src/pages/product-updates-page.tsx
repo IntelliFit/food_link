@@ -83,7 +83,7 @@ export function ProductUpdatesPage({ onLogout, onMenuChange }: {
         <header className='flex items-start justify-between gap-4'>
           <div>
             <h1 className='flex items-center gap-2 text-2xl font-bold'><Megaphone className='size-6' />产品更新通知</h1>
-            <p className='mt-2 text-sm text-muted-foreground'>用户打开小程序时逐条确认。登录用户跨设备同步确认状态，游客在当前设备保存。</p>
+            <p className='mt-2 text-sm text-muted-foreground'>用户打开小程序时每天最多弹一条，只弹发布 24 小时内最新的一条，错过不再补弹。登录用户跨设备同步确认状态，游客在当前设备保存。</p>
           </div>
           <Button variant='outline' disabled={loading || busy} onClick={() => void reload()}><RefreshCcw className='size-4' />刷新</Button>
         </header>
