@@ -77,8 +77,9 @@ function unwrapRecordResponse(payload: unknown): SharedFoodRecord {
   return direct.record
 }
 
-async function fetchSharedFoodRecord(recordId: string, apiBaseUrl: string, signal: AbortSignal): Promise<SharedFoodRecord> {
-  const response = await fetch(`${apiBaseUrl}/api/food-record/share/${encodeURIComponent(recordId)}`, { signal })
+async function fetchSharedFoodRecord(recordId: string, apiBaseUrl: string, shareToken: string, signal: AbortSignal): Promise<SharedFoodRecord> {
+  const query = shareToken ? `?share_token=${encodeURIComponent(shareToken)}` : ''
+  const response = await fetch(`${apiBaseUrl}/api/food-record/share/${encodeURIComponent(recordId)}${query}`, { signal })
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
     const message = payload && typeof payload === 'object' && 'message' in payload
@@ -322,7 +323,8 @@ export function FoodRecordSharePage() {
   const [state, setState] = useState<LoadState>({ status: 'loading', requestKey: '' })
   const [showBrowserGuide, setShowBrowserGuide] = useState(false)
   const trimmedRecordId = recordId.trim()
-  const requestKey = useMemo(() => `${apiBaseUrl}::${trimmedRecordId}`, [apiBaseUrl, trimmedRecordId])
+  const shareToken = String(searchParams.get('share_token') || '').trim()
+  const requestKey = useMemo(() => `${apiBaseUrl}::${trimmedRecordId}::${shareToken}`, [apiBaseUrl, trimmedRecordId, shareToken])
   const missingRecordState: Extract<LoadState, { status: 'error' }> | null = trimmedRecordId
     ? null
     : { status: 'error', requestKey, title: '缺少记录', message: '分享链接缺少饮食记录 ID。' }
@@ -330,7 +332,7 @@ export function FoodRecordSharePage() {
   useEffect(() => {
     if (!trimmedRecordId) return
     const controller = new AbortController()
-    fetchSharedFoodRecord(trimmedRecordId, apiBaseUrl, controller.signal)
+    fetchSharedFoodRecord(trimmedRecordId, apiBaseUrl, shareToken, controller.signal)
       .then((record) => setState({ status: 'ready', requestKey, record }))
       .catch((error) => {
         if (controller.signal.aborted) return
@@ -342,7 +344,7 @@ export function FoodRecordSharePage() {
         })
       })
     return () => controller.abort()
-  }, [apiBaseUrl, requestKey, trimmedRecordId])
+  }, [apiBaseUrl, requestKey, shareToken, trimmedRecordId])
 
   const pageUrl = useMemo(() => {
     if (typeof window === 'undefined') return absoluteUrl(`/share/food-record/${encodeURIComponent(trimmedRecordId)}`)
