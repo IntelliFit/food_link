@@ -1,6 +1,7 @@
 export * from './types'
 export * from './meal'
 export * from './food-record'
+export * from './custom-food-import'
 export * from './insight-markdown'
 export * from './pet-appearance'
 export * from './photo-frame'

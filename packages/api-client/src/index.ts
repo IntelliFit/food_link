@@ -504,6 +504,8 @@ export interface ManualFoodCatalogOptions {
 
 export interface SaveCustomFoodInput {
   title: string
+  /** 不传时后端保留原分类，新建的归入自定义 */
+  category?: 'custom' | 'snack'
   defaultWeightGrams?: number
   totalCalories: number
   totalProtein?: number
@@ -1988,6 +1990,7 @@ export class FoodLinkApiClient {
       method: 'POST',
       body: {
         title,
+        ...(input.category ? { category: input.category } : {}),
         default_weight_grams: normalizeNumber(input.defaultWeightGrams) || 100,
         total_calories: calories,
         total_protein: protein,

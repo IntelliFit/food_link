@@ -1879,6 +1879,10 @@ export interface PackagedProductExtractResult {
   product_family_key?: string
   flavor_text?: string
   package_category?: string
+  /** 后端归好的食物库分类键，如 snack / dairy / other */
+  catalog_category?: string
+  /** 有包装依据的一份重量，没有依据时是整包净含量 */
+  default_portion_g?: number
   net_content_value?: number
   net_content_unit?: string
   unit_count?: number
@@ -1901,6 +1905,7 @@ export interface PackagedProductExtractResult {
   extract_confidence?: number
   needs_more_images?: string[]
   missing_fields?: string[]
+  needs_user_confirmation?: boolean
   auto_ingest_result?: PackagedAutoIngestResult
   packaged_food_id?: string
   ocr_raw_text?: string
