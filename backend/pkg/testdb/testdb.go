@@ -6,7 +6,9 @@ package testdb
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -22,10 +24,16 @@ import (
 )
 
 var (
-	once    sync.Once
-	server  *embeddedpostgres.EmbeddedPostgres
-	baseDSN string
-	initErr error
+	mu        sync.Mutex
+	server    *embeddedpostgres.EmbeddedPostgres
+	baseDSN   string
+	initErr   error
+	serverDir string
+	watcher   io.Closer
+
+	// runtimeRoot overrides where runtime directories go, so tests can isolate
+	// them from sweeps by other test processes while sharing the binaries.
+	runtimeRoot string
 )
 
 // baseDirs returns the shared cache/binary directories and a per-process runtime directory.
@@ -33,6 +41,9 @@ func baseDirs(port int) (cacheDir, binDir, runtimeDir string) {
 	root := filepath.Join(testTempDir(), "embedded-postgres-go")
 	cacheDir = filepath.Join(root, "cache")
 	binDir = filepath.Join(root, "bin")
+	if runtimeRoot != "" {
+		root = runtimeRoot
+	}
 	runtimeDir = filepath.Join(root, fmt.Sprintf("pg-%d-%d", os.Getpid(), port))
 	return
 }
@@ -150,9 +161,19 @@ func startServer() {
 		return
 	}
 
+	// In the background: removing many old directories must not stall this test.
+	go sweepAndReport(filepath.Dir(runtimeDir), binDir)
+
 	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
 		initErr = fmt.Errorf("failed to create embedded postgres runtime dir: %w", err)
 		return
+	}
+
+	// Before the server starts, so a process killed during initdb is covered.
+	// Without a watcher this run can still leak, and the next sweep collects it.
+	ownerWatcher, err := spawnWatcher(binDir, dataDir, runtimeDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "testdb: %v\n", err)
 	}
 
 	cfg := embeddedpostgres.DefaultConfig().
@@ -165,12 +186,23 @@ func startServer() {
 		DataPath(dataDir).
 		BinariesPath(binDir)
 
-	server = embeddedpostgres.NewDatabase(cfg)
-	if initErr = server.Start(); initErr != nil {
+	started := embeddedpostgres.NewDatabase(cfg)
+	if initErr = started.Start(); initErr != nil {
+		closeWatcher(ownerWatcher)
+		_ = removeDir(runtimeDir)
 		return
 	}
 
+	server = started
+	serverDir = runtimeDir
+	watcher = ownerWatcher
 	baseDSN = fmt.Sprintf("host=localhost port=%d user=postgres password=postgres dbname=postgres sslmode=disable", port)
+}
+
+func closeWatcher(w io.Closer) {
+	if w != nil {
+		_ = w.Close()
+	}
 }
 
 func freePort() (int, error) {
@@ -182,21 +214,27 @@ func freePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-// New starts the shared embedded postgres server (once per process) and creates
+// New starts the shared embedded postgres server if it is not running and creates
 // a fresh database for the calling test. The returned *gorm.DB is configured
 // against a real PostgreSQL-compatible database, so production schema tags and
-// defaults work unchanged.
+// defaults work unchanged. The server goes away with this process; see
+// startWatcher.
 func New(t *testing.T) *gorm.DB {
 	t.Helper()
 
-	once.Do(startServer)
-	if initErr != nil {
-		t.Fatalf("failed to start embedded postgres: %v", initErr)
+	mu.Lock()
+	if server == nil && initErr == nil {
+		startServer()
+	}
+	serverDSN, startErr := baseDSN, initErr
+	mu.Unlock()
+	if startErr != nil {
+		t.Fatalf("failed to start embedded postgres: %v", startErr)
 	}
 
 	dbName := "test_" + uuid.New().String()[:8]
 
-	admin, err := sql.Open("postgres", baseDSN)
+	admin, err := sql.Open("postgres", serverDSN)
 	if err != nil {
 		t.Fatalf("failed to open postgres admin connection: %v", err)
 	}
@@ -206,7 +244,7 @@ func New(t *testing.T) *gorm.DB {
 		t.Fatalf("failed to create test database %s: %v", dbName, err)
 	}
 
-	dsn := baseDSN + " dbname=" + dbName
+	dsn := serverDSN + " dbname=" + dbName
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("failed to connect to test database %s: %v", dbName, err)
@@ -215,12 +253,19 @@ func New(t *testing.T) *gorm.DB {
 	return db
 }
 
-// Stop terminates the shared embedded postgres server. Call it from a
-// TestMain or package-level cleanup if desired; it is safe to call multiple
-// times.
+// Stop terminates the shared embedded postgres server and deletes its data
+// without waiting for this process to exit. Tests do not need to call it. It is
+// safe to call multiple times, and a later New starts a new server.
 func Stop() error {
+	mu.Lock()
+	defer mu.Unlock()
 	if server == nil {
 		return nil
 	}
-	return server.Stop()
+
+	stopErr := server.Stop()
+	removeErr := removeDir(serverDir)
+	closeWatcher(watcher)
+	server, baseDSN, serverDir, watcher = nil, "", "", nil
+	return errors.Join(stopErr, removeErr)
 }
