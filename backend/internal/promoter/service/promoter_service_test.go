@@ -185,7 +185,7 @@ func TestSyncAccruesSettlesAndReverses(t *testing.T) {
 
 	f.payment(t, invitee, "wechat_mini_program", 19.9, f.now.Add(-2*time.Hour)) // before binding
 	paid := f.payment(t, invitee, "wechat_mini_program", 19.9, f.now.Add(time.Minute))
-	f.payment(t, invitee, "wechat_virtual_payment", 19.9, f.now.Add(2*time.Minute))
+	f.payment(t, invitee, "manual_admin", 19.9, f.now.Add(2*time.Minute))
 	refundedEarly := f.payment(t, invitee, "wechat_papay", 9.9, f.now.Add(3*time.Minute))
 	f.now = f.now.Add(10 * time.Minute)
 
@@ -243,6 +243,37 @@ func TestSyncAccruesSettlesAndReverses(t *testing.T) {
 	require.NoError(t, f.db.Exec(`UPDATE promoter_bindings SET status = 'active' WHERE invitee_user_id = ?`, invitee).Error)
 	f.payment(t, invitee, "wechat_app", 30, f.now.Add(2*time.Minute))
 	require.Equal(t, domain.SyncResult{}, sync(), "terminated promoters stop earning")
+}
+
+func TestVirtualPaymentOrdersEarnCommission(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t, true)
+	promoterUser := f.user(t, "推广员", f.now.Add(-60*24*time.Hour))
+	_, code := f.activePromoter(t, promoterUser)
+	invitee := f.user(t, "小明同学", f.now.Add(-time.Hour))
+	_, err := f.svc.Bind(ctx, invitee, BindInput{PromoCode: code})
+	require.NoError(t, err)
+
+	kept := f.payment(t, invitee, "wechat_virtual_payment", 19.9, f.now.Add(time.Minute))
+	refunded := f.payment(t, invitee, "wechat_virtual_payment", 50, f.now.Add(2*time.Minute))
+	f.now = f.now.Add(10 * time.Minute)
+	sync := func() domain.SyncResult {
+		t.Helper()
+		out, _, err := f.svc.SyncCommissions(ctx)
+		require.NoError(t, err)
+		return out
+	}
+	require.Equal(t, domain.SyncResult{Accrued: 2}, sync())
+	var cents int64
+	require.NoError(t, f.db.Raw(`SELECT commission_cents FROM promoter_commissions WHERE payment_id = ?`, kept).Scan(&cents).Error)
+	require.Equal(t, int64(398), cents, "20% of what the buyer paid")
+
+	// A full virtual payment refund marks the order refunded, as handleXPayRefundNotify does.
+	require.NoError(t, f.db.Exec(`UPDATE pro_membership_payment_records SET status = 'refunded', refunded_at = now() WHERE id = ?`, refunded).Error)
+	require.Equal(t, domain.SyncResult{Cancelled: 1}, sync())
+	f.now = f.now.Add(7 * 24 * time.Hour)
+	require.Equal(t, domain.SyncResult{Settled: 1}, sync())
+	require.Equal(t, int64(398), f.summary(t, promoterUser).AvailableCents)
 }
 
 func TestSyncKeepsFreezeForLateOrdersAndFlagsStuckOnes(t *testing.T) {
