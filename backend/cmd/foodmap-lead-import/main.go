@@ -98,6 +98,11 @@ func main() {
 	if *apply && *idsPath == "" {
 		log.Fatal("--ids is required with --apply so the import can be rolled back")
 	}
+	if *apply {
+		if _, err := os.Stat(*idsPath); err == nil {
+			log.Fatalf("%s already exists; it may be the only rollback list of an earlier import", *idsPath)
+		}
+	}
 	rows, err := loadRows(*rowsPath, *cities)
 	if err != nil {
 		log.Fatalf("读取导入文件失败: %v", err)
