@@ -45,6 +45,8 @@ type Config struct {
 	AIUsagePricing AIUsagePricingConfig `mapstructure:"ai_usage_pricing"`
 	Apollo         ApolloConfig         `mapstructure:"apollo"`
 	CanteenCapture CanteenCaptureConfig `mapstructure:"canteen_capture"`
+	Promoter       PromoterConfig       `mapstructure:"promoter"`
+	WechatTransfer WechatTransferConfig `mapstructure:"wechat_transfer"`
 }
 
 type PushConfig struct {
@@ -277,6 +279,32 @@ type CanteenCaptureConfig struct {
 	WithdrawMinCents    int64                            `mapstructure:"withdraw_min_cents"`
 	DisableAutoPublish  bool                             `mapstructure:"disable_auto_publish"`
 	MembershipOptions   []CanteenCaptureMembershipOption `mapstructure:"membership_options"`
+}
+
+// PromoterConfig sets the promoter commission rules. The feature stays off
+// until Enabled is set; zero values fall back to the defaults documented in
+// docs/design/promoter-commission-withdrawal-2026-10-26.md.
+type PromoterConfig struct {
+	Enabled          bool   `mapstructure:"enabled"`
+	DefaultRateBps   int    `mapstructure:"default_rate_bps"`
+	SettleDelayHours int    `mapstructure:"settle_delay_hours"`
+	BindingValidDays int    `mapstructure:"binding_valid_days"`
+	BindWindowHours  int    `mapstructure:"bind_window_hours"`
+	AgreementVersion string `mapstructure:"agreement_version"`
+	SyncIntervalSecs int    `mapstructure:"sync_interval_seconds"`
+	WithdrawMinCents int64  `mapstructure:"withdraw_min_cents"`
+	WithdrawMaxCents int64  `mapstructure:"withdraw_max_cents"`
+	WithdrawPerDay   int    `mapstructure:"withdraw_daily_limit"`
+}
+
+// WechatTransferConfig switches on WeChat Pay merchant transfers (商家转账)
+// for payouts. The merchant and keys come from wechat.pay; app_id defaults to
+// the mini program and notify_url to the API host for app.env.
+type WechatTransferConfig struct {
+	Enabled           bool   `mapstructure:"enabled"`
+	AppID             string `mapstructure:"app_id"`
+	NotifyURL         string `mapstructure:"notify_url"`
+	QueryIntervalSecs int    `mapstructure:"query_interval_seconds"`
 }
 
 type CanteenCaptureMembershipOption struct {
@@ -1325,7 +1353,7 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.OpenLuxAPIKey = strings.TrimSpace(cfg.OpenLuxAPIKey)
 	cfg.OpenLuxBaseURL = strings.TrimRight(strings.TrimSpace(cfg.OpenLuxBaseURL), "/")
 	cfg.A6APIKey = strings.TrimSpace(cfg.A6APIKey)
-	cfg.A6BaseURL = strings.TrimRight(strings.TrimSpace(cfg.A6BaseURL), "/")
+	cfg.A6BaseURL = NormalizeA6BaseURL(cfg.A6BaseURL)
 	cfg.LLMProvider = strings.TrimSpace(cfg.LLMProvider)
 	cfg.DeepSeekAPIKey = strings.TrimSpace(cfg.DeepSeekAPIKey)
 	cfg.DeepSeekBaseURL = strings.TrimSpace(cfg.DeepSeekBaseURL)
@@ -1611,7 +1639,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.qwen38_ordinary_traffic_percent", 0)
 	v.SetDefault("external.qwen38_precision_traffic_percent", 20)
 	v.SetDefault("external.openlux_base_url", "https://api.openlux.ai/v1")
-	v.SetDefault("external.a6_base_url", "https://api.a6api.com")
+	v.SetDefault("external.a6_base_url", DefaultA6BaseURL)
 	v.SetDefault("external.vision_routing.balanced_routing_enabled", true)
 	v.SetDefault("external.vision_routing.response_wait_seconds", 45)
 	v.SetDefault("external.vision_routing.a6_shadow_percent", 10)

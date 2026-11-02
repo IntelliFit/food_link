@@ -31,6 +31,53 @@ func TestBuildPackagedProductExtractPromptTreatsImagesAsOneProduct(t *testing.T)
 	}
 }
 
+func TestBuildPackagedProductExtractPromptAsksForFoodType(t *testing.T) {
+	prompt := buildPackagedProductExtractPrompt("", 2)
+
+	for _, want := range []string{`"food_type": ""`, "food_type 只能是", "snack"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
+func TestPackagedCatalogCategory(t *testing.T) {
+	cases := []struct {
+		name   string
+		result PackagedProductExtractResult
+		want   string
+	}{
+		{name: "model says snack", result: PackagedProductExtractResult{FoodType: "snack", ProductName: "每日黑巧"}, want: "snack"},
+		{name: "model type is case insensitive", result: PackagedProductExtractResult{FoodType: " Snack ", ProductName: "牛肉粒"}, want: "snack"},
+		{name: "model type beats keywords", result: PackagedProductExtractResult{FoodType: "dairy", ProductName: "巧克力牛奶"}, want: "dairy"},
+		{name: "unknown type falls back to keywords", result: PackagedProductExtractResult{FoodType: "零嘴", ProductName: "乐事薯片"}, want: "snack"},
+		{name: "keyword in package category", result: PackagedProductExtractResult{ProductName: "好丽友呀土豆", PackageCategory: "膨化食品"}, want: "snack"},
+		{name: "keyword missing from shared catalog list", result: PackagedProductExtractResult{ProductName: "卫龙大面筋辣条"}, want: "snack"},
+		{name: "plain milk is not a snack", result: PackagedProductExtractResult{ProductName: "蒙牛纯牛奶"}, want: "dairy"},
+		{name: "nothing recognised", result: PackagedProductExtractResult{}, want: "other"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.result
+			assert.Equal(t, tc.want, packagedCatalogCategory(&result))
+		})
+	}
+}
+
+func TestEnrichPackagedProductExtractResultFillsCatalogFields(t *testing.T) {
+	result := parsePackagedProductExtractResult(map[string]any{
+		"product_name": "乐事薯片",
+		"food_type":    "snack",
+		"net_weight_g": 75.0,
+	}, []string{"https://cdn.example.com/front.jpg"})
+
+	enrichPackagedProductExtractResult(result)
+
+	assert.Equal(t, "snack", result.FoodType)
+	assert.Equal(t, "snack", result.CatalogCategory)
+	assert.Equal(t, 75.0, result.DefaultPortionG)
+}
+
 func TestBuildPackagedProductExtractPromptMentionsActualImageCount(t *testing.T) {
 	cases := []struct {
 		name       string

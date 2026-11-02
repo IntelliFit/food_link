@@ -65,6 +65,9 @@ import (
 	marketingqrhandler "food_link/backend/internal/marketingqr/handler"
 	marketingqrrepo "food_link/backend/internal/marketingqr/repo"
 	marketingqrservice "food_link/backend/internal/marketingqr/service"
+	mealdishhandler "food_link/backend/internal/mealdish/handler"
+	mealdishrepo "food_link/backend/internal/mealdish/repo"
+	mealdishservice "food_link/backend/internal/mealdish/service"
 	mealmeetuphandler "food_link/backend/internal/mealmeetup/handler"
 	mealmeetuprepo "food_link/backend/internal/mealmeetup/repo"
 	mealmeetupservice "food_link/backend/internal/mealmeetup/service"
@@ -87,6 +90,9 @@ import (
 	productupdatehandler "food_link/backend/internal/productupdate/handler"
 	productupdaterepo "food_link/backend/internal/productupdate/repo"
 	productupdateservice "food_link/backend/internal/productupdate/service"
+	promoterhandler "food_link/backend/internal/promoter/handler"
+	promoterrepo "food_link/backend/internal/promoter/repo"
+	promoterservice "food_link/backend/internal/promoter/service"
 	publicfoodhandler "food_link/backend/internal/publicfood/handler"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
@@ -153,6 +159,10 @@ type App struct {
 	pushDone              chan struct{}
 	mealReminderCancel    context.CancelFunc
 	mealReminderDone      chan struct{}
+	promoterSyncCancel    context.CancelFunc
+	promoterSyncDone      chan struct{}
+	transferPollCancel    context.CancelFunc
+	transferPollDone      chan struct{}
 	taskQueue             taskqueue.Queue
 	campusCatalogService  *campuscatalogservice.CatalogService
 	contentSecurity       *contentsecurityservice.Service
@@ -546,6 +556,15 @@ func New(cfg *config.Config) (*App, error) {
 	experimentHandler.ConfigureRateLimiter(openPlatformLimiter)
 	onboardingHandler := onboardinghandler.NewOnboardingHandler(onboardingservice.NewService(onboardingrepo.NewOnboardingRepo(db), analyzeSvc))
 	onboardingHandler.ConfigureRateLimiter(openPlatformLimiter)
+	promoterSvc := promoterservice.NewPromoterService(promoterrepo.NewPromoterRepo(db), promoterservice.RulesFromConfig(cfg.Promoter))
+	promoterHandler := promoterhandler.NewPromoterHandler(promoterSvc)
+	transferSvc, err := newWechatTransferService(cfg, db)
+	if err != nil {
+		return nil, err
+	}
+	if transferSvc != nil {
+		promoterSvc.ConfigureTransfer(transferSvc)
+	}
 	foodContributionRepo := foodcontributionrepo.NewContributionRepo(db)
 	foodContributionSvc := foodcontributionservice.NewContributionService(foodContributionRepo, membershipSvc, storageClient)
 	foodContributionHandler := foodcontributionhandler.NewContributionHandler(foodContributionSvc)
@@ -576,6 +595,13 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Utility module DI
 	locationSvc := utilityservice.NewLocationService(cfg)
+	// While a photo is recognised, the user can say which canteen dish it is;
+	// a dish without a real photo can take theirs (content-checked, rewarded).
+	mealDishHandler := mealdishhandler.New(mealdishservice.New(mealdishservice.Deps{
+		Repo: mealdishrepo.New(db), Storage: storageClient, Geocoder: locationSvc,
+		Contributor: mealDishPhotoContributor{publicFood: publicFoodSvc}, Rewards: membershipSvc, Publication: contentSecurity,
+		Prices: mealDishPriceCorrector{catalog: campusCatalogSvc},
+	}))
 	qrcodeSvc := utilityservice.NewQRCodeService(cfg)
 	manualFoodRepo := utilityrepo.NewManualFoodRepo(db, storageClient)
 	manualFoodSvc := utilityservice.NewManualFoodService(manualFoodRepo)
@@ -631,6 +657,13 @@ func New(cfg *config.Config) (*App, error) {
 		app.mealReminderCancel = mealReminderCancel
 		app.mealReminderDone = make(chan struct{})
 		go func() { defer close(app.mealReminderDone); mealMeetupSvc.RunReminders(mealReminderCtx) }()
+		if cfg.Promoter.Enabled {
+			promoterSyncCtx, promoterSyncCancel := context.WithCancel(context.Background())
+			app.promoterSyncCancel = promoterSyncCancel
+			app.promoterSyncDone = make(chan struct{})
+			go func() { defer close(app.promoterSyncDone); promoterSvc.RunSync(promoterSyncCtx) }()
+		}
+		app.startWechatTransferPoller(transferSvc)
 		app.startOpenPlatformReconciliation(openPlatformSvc)
 		app.startNutritionEmbeddingMaintenance(nutritionEmbeddingMaintainer)
 	}
@@ -856,6 +889,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/wechat/content-security/notify", contentCallback.Notify)
 	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
+	if transferSvc != nil {
+		engine.POST(wechatTransferNotifyPath, transferSvc.NotifyHandler)
+	}
 	engine.POST("/api/membership/auto-renew/signing", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePapaySigning)
 	engine.POST("/api/membership/auto-renew/cancel", authmw.RequireJWT(jwtSvc), membershipHandler.CancelPapayContract)
 	engine.POST("/api/payment/wechat/papay/contract/notify", membershipHandler.PapayContractNotify)
@@ -887,6 +923,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.List)
 	engine.GET("/api/public-food-library/map-spots", authmw.RequireJWT(jwtSvc), publicFoodHandler.ListMapSpots)
 	engine.GET("/api/public-food-library/canteen-locations", authmw.RequireJWT(jwtSvc), canteenLocationHandler.List)
+	engine.POST("/api/meal-dish/prompts", authmw.RequireJWT(jwtSvc), mealDishHandler.Start)
+	engine.GET("/api/meal-dish/prompts", authmw.RequireJWT(jwtSvc), mealDishHandler.ForTask)
+	engine.POST("/api/meal-dish/prompts/:prompt_id/answers", authmw.RequireJWT(jwtSvc), mealDishHandler.Answer)
+	engine.GET("/api/meal-dish/canteens/:canteen_id/dishes", authmw.RequireJWT(jwtSvc), mealDishHandler.Dishes)
 	engine.POST("/api/food-nutrition-contributions", authmw.RequireJWT(jwtSvc), foodContributionHandler.Submit)
 	engine.GET("/api/food-nutrition-contributions/mine", authmw.RequireJWT(jwtSvc), foodContributionHandler.Mine)
 	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), contentGuard(3), publicFoodHandler.Create)
@@ -932,6 +972,13 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/onboarding/config", onboardingHandler.PublicConfig)
 	engine.GET("/api/onboarding/stats", onboardingHandler.Stats)
 	engine.POST("/api/onboarding/try", authmw.OptionalJWT(jwtSvc), onboardingHandler.Try)
+	engine.GET("/api/promoter/me", authmw.RequireJWT(jwtSvc), promoterHandler.Me)
+	engine.POST("/api/promoter/apply", authmw.RequireJWT(jwtSvc), promoterHandler.Apply)
+	engine.POST("/api/promoter/bind", authmw.RequireJWT(jwtSvc), promoterHandler.Bind)
+	engine.GET("/api/promoter/commissions", authmw.RequireJWT(jwtSvc), promoterHandler.Commissions)
+	engine.POST("/api/promoter/withdrawals", authmw.RequireJWT(jwtSvc), promoterHandler.Withdraw)
+	engine.GET("/api/promoter/withdrawals", authmw.RequireJWT(jwtSvc), promoterHandler.Withdrawals)
+	engine.POST("/api/promoter/withdrawals/:withdrawal_id/refresh", authmw.RequireJWT(jwtSvc), promoterHandler.RefreshWithdrawal)
 
 	// Recipe routes
 	engine.GET("/api/recipes", authmw.RequireJWT(jwtSvc), recipeHandler.List)
@@ -1099,6 +1146,16 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/experiments/:key/summary", adminAuth, experimentHandler.AdminSummary)
 	adminAPI.GET("/onboarding/config", adminAuth, onboardingHandler.AdminGetConfig)
 	adminAPI.PUT("/onboarding/config", adminAuth, onboardingHandler.AdminSaveConfig)
+	adminAPI.GET("/promoters", adminAuth, promoterHandler.AdminList)
+	adminAPI.POST("/promoters/:promoter_id/review", adminAuth, promoterHandler.AdminReview)
+	adminAPI.POST("/promoters/:promoter_id/status", adminAuth, promoterHandler.AdminChangeStatus)
+	adminAPI.PUT("/promoters/:promoter_id/rate", adminAuth, promoterHandler.AdminSetRate)
+	adminAPI.GET("/promoters/:promoter_id/commissions", adminAuth, promoterHandler.AdminCommissions)
+	adminAPI.POST("/promoter-commissions/:commission_id/reverse", adminAuth, promoterHandler.AdminReverseCommission)
+	adminAPI.GET("/promoter-withdrawals", adminAuth, promoterHandler.AdminWithdrawals)
+	adminAPI.POST("/promoter-withdrawals/:withdrawal_id/review", adminAuth, promoterHandler.AdminReviewWithdrawal)
+	adminAPI.POST("/promoter-withdrawals/:withdrawal_id/payout", adminAuth, promoterHandler.AdminRecordPayout)
+	adminAPI.POST("/promoter-withdrawals/:withdrawal_id/sync-transfer", adminAuth, promoterHandler.AdminSyncTransfer)
 	adminAPI.GET("/user-food-photos", adminAuth, adminUserFoodPhotoHandler.List)
 	adminAPI.PUT("/user-food-photos/annotation", adminAuth, adminUserFoodPhotoHandler.SaveAnnotation)
 	adminAPI.GET("/campus-directory/schools", adminAuth, adminCampusDirectoryHandler.ListSchools)
@@ -1594,6 +1651,17 @@ func (a *App) Close(ctx context.Context) error {
 			logger.Warn(context.Background(), "约饭提醒巡检关闭超时", logger.Err(ctx.Err()))
 		}
 	}
+	if a.promoterSyncCancel != nil {
+		a.promoterSyncCancel()
+	}
+	if a.promoterSyncDone != nil {
+		select {
+		case <-a.promoterSyncDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "推广佣金同步关闭超时", logger.Err(ctx.Err()))
+		}
+	}
+	a.stopWechatTransferPoller(ctx)
 	if a.openPlatformCancel != nil {
 		a.openPlatformCancel()
 	}

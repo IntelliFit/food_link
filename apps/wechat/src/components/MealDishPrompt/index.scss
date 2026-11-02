@@ -1,0 +1,417 @@
+// 识别等待页 / 结果页的“这一餐是哪个食堂的哪道菜”卡片。
+// glass：铺在照片背景上的等待页；light：结果页的白卡片。
+
+.meal-dish-card {
+  position: relative;
+  width: 100%;
+  // 等待页是定高的 flex 列，overflow: hidden 的卡片会被压扁，不允许收缩。
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 24rpx 26rpx;
+  border-radius: 28rpx;
+  overflow: hidden;
+
+  --md-text: #0f172a;
+  --md-sub: #64748b;
+  --md-chip-bg: #f1f5f9;
+  --md-chip-border: transparent;
+  --md-chip-active-bg: rgba(0, 188, 125, 0.12);
+  --md-chip-active-text: #00a06a;
+  --md-tile-bg: #f8fafc;
+  --md-primary: #00bc7d;
+  --md-primary-text: #ffffff;
+  --md-placeholder: #e2e8f0;
+  --md-placeholder-text: #94a3b8;
+}
+
+.meal-dish-card--glass {
+  max-width: 630rpx;
+  margin: 2rpx 0 22rpx;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1rpx solid rgba(255, 255, 255, 0.24);
+  box-shadow: 0 16rpx 42rpx rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(18rpx);
+  -webkit-backdrop-filter: blur(18rpx);
+
+  --md-text: rgba(255, 255, 255, 0.96);
+  --md-sub: rgba(255, 255, 255, 0.78);
+  --md-chip-bg: rgba(255, 255, 255, 0.12);
+  --md-chip-border: rgba(255, 255, 255, 0.3);
+  --md-chip-active-bg: rgba(16, 185, 129, 0.28);
+  --md-chip-active-text: #ffffff;
+  --md-tile-bg: rgba(255, 255, 255, 0.1);
+  --md-placeholder: rgba(255, 255, 255, 0.16);
+  --md-placeholder-text: rgba(255, 255, 255, 0.8);
+
+  .meal-dish-title,
+  .meal-dish-sub,
+  .meal-dish-tile-name {
+    text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.35);
+  }
+}
+
+.meal-dish-card--light {
+  margin: 0 0 24rpx;
+  background: #ffffff;
+  box-shadow: 0 8rpx 28rpx rgba(15, 23, 42, 0.06);
+}
+
+.meal-dish-card--light.meal-dish-card--dark {
+  background: #1e2329;
+  box-shadow: none;
+
+  --md-text: #f1f5f9;
+  --md-sub: #94a3b8;
+  --md-chip-bg: #2a3038;
+  --md-chip-active-bg: rgba(0, 188, 125, 0.2);
+  --md-chip-active-text: #34d399;
+  --md-tile-bg: #252b32;
+  --md-placeholder: #323943;
+  --md-placeholder-text: #94a3b8;
+}
+
+.meal-dish-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.meal-dish-eyebrow {
+  flex: 1;
+  min-width: 0;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: var(--md-chip-active-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meal-dish-skip {
+  flex-shrink: 0;
+  margin-left: 16rpx;
+  font-size: 22rpx;
+  color: var(--md-sub);
+  padding: 6rpx 0 6rpx 12rpx;
+}
+
+.meal-dish-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--md-text);
+  line-height: 1.35;
+}
+
+.meal-dish-sub {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 23rpx;
+  color: var(--md-sub);
+  line-height: 1.5;
+}
+
+.meal-dish-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.meal-dish-btn {
+  flex: 1;
+  height: 72rpx;
+  border-radius: 36rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--md-chip-bg);
+  border: 1rpx solid var(--md-chip-border);
+}
+
+.meal-dish-btn--primary {
+  background: var(--md-primary);
+  border-color: var(--md-primary);
+
+  .meal-dish-btn-text {
+    color: var(--md-primary-text);
+  }
+}
+
+.meal-dish-btn-text {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--md-text);
+}
+
+.meal-dish-canteens {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.meal-dish-canteen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 76rpx;
+  padding: 0 24rpx;
+  border-radius: 20rpx;
+  background: var(--md-chip-bg);
+  border: 1rpx solid var(--md-chip-border);
+}
+
+.meal-dish-canteen--other {
+  border-style: dashed;
+}
+
+.meal-dish-canteen-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 27rpx;
+  font-weight: 600;
+  color: var(--md-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meal-dish-canteen-hint {
+  flex-shrink: 0;
+  margin-left: 16rpx;
+  font-size: 22rpx;
+  color: var(--md-sub);
+}
+
+.meal-dish-windows {
+  width: 100%;
+  margin-top: 16rpx;
+  white-space: nowrap;
+}
+
+.meal-dish-window {
+  display: inline-flex;
+  align-items: center;
+  height: 52rpx;
+  padding: 0 22rpx;
+  margin-right: 12rpx;
+  border-radius: 26rpx;
+  background: var(--md-chip-bg);
+  border: 1rpx solid var(--md-chip-border);
+
+  &.active {
+    background: var(--md-chip-active-bg);
+    border-color: var(--md-primary);
+
+    .meal-dish-window-text {
+      color: var(--md-chip-active-text);
+      font-weight: 600;
+    }
+  }
+}
+
+.meal-dish-window-text {
+  font-size: 23rpx;
+  color: var(--md-text);
+}
+
+.meal-dish-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.meal-dish-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.meal-dish-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 8rpx 8rpx 12rpx;
+  border-radius: 18rpx;
+  background: var(--md-tile-bg);
+  border: 2rpx solid transparent;
+
+  &.best {
+    border-color: var(--md-primary);
+  }
+}
+
+.meal-dish-tile--skeleton {
+  height: 190rpx;
+  background: linear-gradient(90deg, var(--md-placeholder) 25%, var(--md-tile-bg) 50%, var(--md-placeholder) 75%);
+  background-size: 400% 100%;
+  animation: meal-dish-shimmer 1.4s ease-in-out infinite;
+}
+
+.meal-dish-tile-image {
+  width: 100%;
+  height: 120rpx;
+  border-radius: 12rpx;
+  background: var(--md-placeholder);
+}
+
+.meal-dish-tile-image--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-dish-tile-initial {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: var(--md-placeholder-text);
+}
+
+.meal-dish-tile-badge {
+  position: absolute;
+  top: 12rpx;
+  left: 12rpx;
+  padding: 2rpx 10rpx;
+  border-radius: 10rpx;
+  font-size: 19rpx;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--md-primary);
+}
+
+.meal-dish-tile-name {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: var(--md-text);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.meal-dish-tile-price {
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  color: var(--md-sub);
+}
+
+.meal-dish-link {
+  display: block;
+  margin-top: 14rpx;
+  text-align: center;
+  font-size: 23rpx;
+  color: var(--md-chip-active-text);
+}
+
+.meal-dish-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-top: 6rpx;
+}
+
+.meal-dish-photo {
+  flex-shrink: 0;
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 18rpx;
+}
+
+.meal-dish-photo-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.meal-dish-done {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.meal-dish-done-mark {
+  flex-shrink: 0;
+  width: 52rpx;
+  height: 52rpx;
+  line-height: 52rpx;
+  text-align: center;
+  border-radius: 50%;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--md-primary);
+}
+
+.meal-dish-done-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.meal-dish-done-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--md-text);
+  line-height: 1.4;
+}
+
+.meal-dish-pending {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 4rpx;
+  background: linear-gradient(90deg, transparent, var(--md-primary), transparent);
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  animation: meal-dish-progress 1s linear infinite;
+}
+
+@keyframes meal-dish-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+@keyframes meal-dish-progress {
+  0% { background-position: -50% 0; }
+  100% { background-position: 150% 0; }
+}
+
+.meal-dish-price-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.meal-dish-price-input {
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  padding: 0 24rpx;
+  border-radius: 36rpx;
+  font-size: 28rpx;
+  color: var(--md-text);
+  background: var(--md-chip-bg);
+  border: 1rpx solid var(--md-chip-border);
+}
+
+.meal-dish-price-unit {
+  flex-shrink: 0;
+  font-size: 26rpx;
+  color: var(--md-sub);
+}
+
+.meal-dish-price-submit {
+  flex: 0 0 132rpx;
+
+  &.is-disabled {
+    opacity: 0.45;
+  }
+}
+
+.meal-dish-photo.meal-dish-tile-image--empty {
+  background: var(--md-placeholder);
+}

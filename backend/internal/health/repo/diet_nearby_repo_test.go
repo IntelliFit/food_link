@@ -20,7 +20,7 @@ func TestNearbyDietQueryFiltersRadiusVisibilityBudgetAndUsesCampusCoordinates(t 
 	defer sqlDB.Close()
 	sqlDB.SetMaxOpenConns(1)
 	for _, ddl := range []string{
-		`CREATE TABLE public_food_library (id TEXT, user_id TEXT,food_name TEXT,description TEXT,items TEXT,status TEXT,type TEXT,total_calories REAL,total_protein REAL,total_carbs REAL,total_fat REAL,is_campus_food BOOLEAN,school_id TEXT,school_name TEXT,campus_id TEXT,campus_name TEXT,canteen_id TEXT,canteen_name TEXT,window_id TEXT,window_name TEXT,floor TEXT,price REAL,price_unit TEXT,image_path TEXT,merchant_name TEXT,merchant_address TEXT,detail_address TEXT,latitude REAL,longitude REAL)`,
+		`CREATE TABLE public_food_library (id TEXT, user_id TEXT,food_name TEXT,description TEXT,items TEXT,status TEXT,type TEXT,total_calories REAL,total_protein REAL,total_carbs REAL,total_fat REAL,is_campus_food BOOLEAN,school_id TEXT,school_name TEXT,campus_id TEXT,campus_name TEXT,canteen_id TEXT,canteen_name TEXT,window_id TEXT,window_name TEXT,floor TEXT,price REAL,price_unit TEXT,image_path TEXT,merchant_name TEXT,merchant_address TEXT,detail_address TEXT,latitude REAL,longitude REAL,availability_status TEXT)`,
 		`CREATE TABLE school_canteens (id TEXT,campus_id TEXT,school_id TEXT,status TEXT,latitude REAL,longitude REAL)`,
 		`CREATE TABLE school_campuses (id TEXT,school_id TEXT,status TEXT,address TEXT,latitude REAL,longitude REAL)`,
 		`CREATE TABLE schools (id TEXT,status TEXT,latitude REAL,longitude REAL,name TEXT,location_type TEXT)`,

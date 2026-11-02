@@ -27,6 +27,8 @@ func main() {
 	onlyMealMeetups := flag.Bool("only-meal-meetups", false, "only add meal meetup activities, participation, events, and reports")
 	timeout := flag.Duration("timeout", 5*time.Minute, "migration timeout")
 	onlyPapay := flag.Bool("only-papay", false, "only migrate WeChat automatic-renewal contracts")
+	onlyPromoterCommission := flag.Bool("only-promoter-commission", false, "only add promoters, bindings, commissions and withdrawal requests")
+	onlyWechatTransfer := flag.Bool("only-wechat-transfer", false, "only add the WeChat Pay merchant transfer bill table")
 	onlyNutritionQuality := flag.Bool("only-nutrition-quality", false, "only migrate nutrition quality tiers and alias approval status")
 	onlyNutritionStates := flag.Bool("only-nutrition-states", false, "only add nutrition state dimensions and reviewed common-state seeds")
 	verifyNutritionStates := flag.Bool("verify-nutrition-states", false, "read-only verification of nutrition state dimensions, seeds, aliases, and index")
@@ -39,6 +41,7 @@ func main() {
 	onlyCampusCatalogPublishing := flag.Bool("only-campus-catalog-publishing", false, "only add campus catalog publishing schema")
 	onlyCanteenCollectors := flag.Bool("only-canteen-collectors", false, "only extend collector authorization to community, office park and corporate canteens")
 	onlyCanteenCapture := flag.Bool("only-canteen-capture", false, "only add window capture sessions, capture photos and the collector earnings ledger")
+	onlyMealDish := flag.Bool("only-meal-dish", false, "only add meal-to-canteen-dish prompts and anonymous canteen location samples")
 	onlySupplements := flag.Bool("only-supplements", false, "only add supplement catalog, cabinet, intake schema, and catalog seeds")
 	onlySupplementFeed := flag.Bool("only-supplement-feed", false, "only add supplement intake feed visibility and update feed interaction target constraints")
 	onlySupplementProduct := flag.Bool("only-supplement-feed-product", false, "only add optional supplement bottle identity snapshots")
@@ -72,6 +75,9 @@ func main() {
 	if *onlyCanteenCapture {
 		selectedOnlyModes++
 	}
+	if *onlyMealDish {
+		selectedOnlyModes++
+	}
 	if *onlyProductUpdates {
 		selectedOnlyModes++
 	}
@@ -84,7 +90,7 @@ func main() {
 	if *onlySupplementProduct {
 		selectedOnlyModes++
 	}
-	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyExperiments, *onlyContentConfigs, *onlyCampusMapLocations} {
+	for _, selected := range []bool{*onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyWechatTransfer, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyExperiments, *onlyContentConfigs, *onlyCampusMapLocations} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -271,6 +277,10 @@ func main() {
 		migrateErr = migration.MigrateSleepRecords(ctx, db, cfg.Database.Schema)
 	} else if *onlyPapay {
 		migrateErr = migration.MigratePapayContracts(ctx, db, cfg.Database.Schema)
+	} else if *onlyPromoterCommission {
+		migrateErr = migration.MigratePromoterCommission(ctx, db, cfg.Database.Schema)
+	} else if *onlyWechatTransfer {
+		migrateErr = migration.MigrateWechatTransfer(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionQuality {
 		migrateErr = migration.MigrateNutritionQuality(ctx, db, cfg.Database.Schema)
 	} else if *onlyNutritionStates {
@@ -293,6 +303,8 @@ func main() {
 		migrateErr = migration.MigrateCanteenCollectors(ctx, db, cfg.Database.Schema)
 	} else if *onlyCanteenCapture {
 		migrateErr = migration.MigrateCanteenCapture(ctx, db, cfg.Database.Schema)
+	} else if *onlyMealDish {
+		migrateErr = migration.MigrateMealDish(ctx, db, cfg.Database.Schema)
 	} else if *onlySupplements {
 		migrateErr = migration.MigrateSupplements(ctx, db, cfg.Database.Schema)
 	} else if *onlySupplementFeed {
@@ -319,6 +331,14 @@ func main() {
 	}
 	if *onlyPapay {
 		log.Printf("微信自动续费迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyPromoterCommission {
+		log.Printf("推广佣金迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyWechatTransfer {
+		log.Printf("商家转账单迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	if *onlyNutritionQuality {

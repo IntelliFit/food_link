@@ -1884,7 +1884,9 @@ transitiontransition
   }
 }
 
-.snack-drawer-scroll {
+.drawer-scroll.snack-drawer-scroll {
+  flex: none;
+  height: auto;
   max-height: 58vh;
 }
 
@@ -1983,7 +1985,10 @@ transitiontransition
   }
 }
 
-.food-edit-drawer-scroll {
+/* 抽屉只有 max-height，没有确定高度：iOS 上 .drawer-scroll 的 flex:1 + height:0 会被算成 0 高，表单整片空白 */
+.drawer-scroll.food-edit-drawer-scroll {
+  flex: none;
+  height: auto;
   max-height: 62vh;
 }
 

@@ -45,7 +45,7 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 		Joins(`LEFT JOIN schools s ON s.status = 'active' AND s.location_type = 'university' AND
 			(s.id = COALESCE(ca.school_id, c.school_id, p.school_id) OR
 			(COALESCE(ca.school_id, c.school_id, p.school_id) IS NULL AND s.name = p.school_name))`).
-		Where("p.status = ?", "published")
+		Where("p.status = ? AND COALESCE(p.availability_status, '') <> 'unknown'", "published")
 	if !f.AllowUnknownNutrition {
 		base = base.Where("p.total_calories > 0")
 	}

@@ -28,6 +28,7 @@ import { CampusDirectoryPage as CampusDirectoryGovernancePage } from '@/pages/ca
 import { CampusDirectoryPage } from '@/pages/campus-directory-hierarchy-page'
 import { CampusFoodCollectionPage } from '@/pages/campus-food-collection-page'
 import { PaymentTestPage } from '@/pages/payment-test-page'
+import { PromotersPage } from '@/pages/promoters-page'
 import { UserRewardPage } from '@/pages/user-reward-page'
 import { UserFoodPhotosPage } from '@/pages/user-food-photos-page'
 import { ProductUpdatesPage } from '@/pages/product-updates-page'
@@ -53,6 +54,7 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   'feed-reports': '/feed-reports',
   'payment-test': '/payment-test',
   'user-rewards': '/user-rewards',
+  promoters: '/promoters',
   'user-food-photos': '/user-food-photos',
   settings: '/settings',
   'product-updates': '/product-updates',
@@ -167,6 +169,7 @@ export function App() {
         <Route path='/campus-food-collection' element={<CampusFoodCollectionPage {...pageProps} />} />
         <Route path='/payment-test' element={<PaymentTestPage {...pageProps} />} />
         <Route path='/user-rewards' element={<UserRewardPage {...pageProps} />} />
+        <Route path='/promoters' element={<PromotersPage {...pageProps} />} />
         <Route path='/user-food-photos' element={<UserFoodPhotosPage {...pageProps} />} />
         <Route path='/product-updates' element={<ProductUpdatesPage {...pageProps} />} />
         <Route path='/onboarding' element={<OnboardingPage {...pageProps} />} />

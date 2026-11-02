@@ -40,6 +40,7 @@ import { ANALYSIS_ENGINE_OPTIONS, normalizeAnalysisEngine } from '../../../utils
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { MealRecordPosterModal } from '../../../pages/index/components/MealRecordPosterModal'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
+import MealDishPrompt from '../../../components/MealDishPrompt'
 import { getRecommendedMealTypeWithFallback, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
 import { withAuth } from '../../../utils/withAuth'
@@ -2686,6 +2687,9 @@ function ResultPage() {
         >
         <View className='content-container'>
           <AdaptiveImageGrid urls={imagePaths} className='result-photo-gallery' presentation='detail' />
+          {taskType === 'food' && recordContext.taskId && imagePaths.length > 0 && (
+            <MealDishPrompt taskId={recordContext.taskId} surface='result' photoUrl={imagePaths[0]} />
+          )}
           <View className='execution-mode-row'>
             <View className='execution-mode-left'>
               <View className={`execution-mode-tag ${executionMode}`}>

@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 
+	"food_link/backend/internal/foodcategory"
 	"food_link/backend/internal/foodrecord/domain"
 )
 
@@ -17,6 +18,24 @@ type PackagedImportIngestOptions struct {
 	Source       string
 	IngestMethod string
 	ForceApply   bool
+}
+
+// packagedSnackKeywords 补充共享目录关键词里没有的常见包装零食，只在模型没给 food_type 时兜底。
+var packagedSnackKeywords = []string{"膨化", "休闲食品", "辣条", "肉脯", "牛肉干", "海苔", "果冻", "蜜饯", "果干", "威化", "爆米花", "锅巴", "魔芋爽", "蛋白棒", "能量棒"}
+
+// packagedCatalogCategory 优先相信模型看包装给出的 food_type，再按名称关键词兜底。
+func packagedCatalogCategory(result *PackagedProductExtractResult) string {
+	foodType := strings.ToLower(strings.TrimSpace(result.FoodType))
+	if foodType != "" && foodcategory.NormalizeFilter(foodType) == foodType {
+		return foodType
+	}
+	text := strings.TrimSpace(result.ProductName + " " + result.PackageCategory)
+	for _, keyword := range packagedSnackKeywords {
+		if strings.Contains(text, keyword) {
+			return "snack"
+		}
+	}
+	return foodcategory.Infer(text)
 }
 
 func (s *FoodNutritionService) IngestPackagedProductExtract(

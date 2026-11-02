@@ -47,8 +47,8 @@ node scripts/model-compare.mjs --open
 | 万界方舟 3 Flash Preview | `https://maas-openapi.wanjiedata.com/api/v1beta/models/gemini-3-flash-preview:generateContent` | `Authorization: Bearer <key>` | 同上 |
 | OpenLux 3.7 | `https://api.openlux.ai/v1beta/models/gemini-3.7-flash:generateContent?sort=success_rate` | `Authorization: Bearer <key>` | 同上 |
 | OpenLux 3 Flash Preview | `https://api.openlux.ai/v1beta/models/gemini-3-flash-preview:generateContent?sort=success_rate` | `Authorization: Bearer <key>` | 同上 |
-| A6 3.7 | `https://api.a6api.com/v1beta/models/gemini-3.7-flash:generateContent` | `x-goog-api-key: <key>` | 同上 |
-| A6 3 Flash Preview | `https://api.a6api.com/v1beta/models/gemini-3-flash-preview:generateContent` | `x-goog-api-key: <key>` | 同上 |
+| A6 3.7 | `https://api.a6api.vip/v1beta/models/gemini-3.7-flash:generateContent` | `x-goog-api-key: <key>` | 同上 |
+| A6 3 Flash Preview | `https://api.a6api.vip/v1beta/models/gemini-3-flash-preview:generateContent` | `x-goog-api-key: <key>` | 同上 |
 
 共有请求体（`data`是原始图片字节的Base64，不是URL，也不带data URI前缀）：
 

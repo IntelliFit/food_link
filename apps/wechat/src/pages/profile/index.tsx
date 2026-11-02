@@ -30,6 +30,10 @@ import { clearRecentConsoleLogs } from '../../utils/console-log-buffer'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
+import { getPromoterMe } from '../../utils/promoter-api'
+
+// 一次启动只查一次推广功能是否开放，避免每次切到「我的」都多一个请求。
+let cachedPromoterEntryVisible: boolean | null = null
 
 declare const __APP_VERSION__: string
 
@@ -122,9 +126,20 @@ function ProfilePage() {
   const [friendCount, setFriendCount] = React.useState(0)
   const [favoriteCount, setFavoriteCount] = React.useState(0)
 
+  // 推广中心入口：功能开放或已经申请过才显示
+  const [promoterEntryVisible, setPromoterEntryVisible] = React.useState(cachedPromoterEntryVisible === true)
+
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
     loadUserInfo()
+    if (getAccessToken() && cachedPromoterEntryVisible === null) {
+      getPromoterMe()
+        .then((me) => {
+          cachedPromoterEntryVisible = me.enabled || me.status !== 'none'
+          setPromoterEntryVisible(cachedPromoterEntryVisible)
+        })
+        .catch(() => { /* 入口可选，读取失败时不显示 */ })
+    }
   })
 
   const loadUserInfo = async () => {
@@ -314,6 +329,13 @@ function ProfilePage() {
       path: extraPkgUrl('/pages/invite-friends/index')
     },
     {
+      id: 13,
+      iconClass: 'icon-zengji',
+      title: '推广赚佣金',
+      desc: '好友通过你的推广码开通会员，你得佣金',
+      path: '/packagePromoter/pages/center/index'
+    },
+    {
       id: 5,
       iconClass: 'icon-foodshop',
       title: '美食图谱',
@@ -348,7 +370,11 @@ function ProfilePage() {
     .sort((a, b) => [5, 9, 0, 4].indexOf(a.id) - [5, 9, 0, 4].indexOf(b.id))
   const serviceGroups = [
     { title: '记录与奖励', items: services.filter(service => [2, 6, 12].includes(service.id)) },
-    { title: '帮助与邀请', items: services.filter(service => [11, 8, 10].includes(service.id)) },
+    {
+      title: '帮助与邀请',
+      items: services.filter(service => [11, 8, 10].includes(service.id) || (service.id === 13 && promoterEntryVisible))
+        .sort((a, b) => [11, 13, 8, 10].indexOf(a.id) - [11, 13, 8, 10].indexOf(b.id)),
+    },
   ]
 
   // 设置项

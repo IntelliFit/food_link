@@ -19,6 +19,7 @@ import { getStoredRecordTargetDate, persistRecordTargetDate, getTaskRecordTarget
 import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { openRecordedMealPoster } from '../../../utils/open-analyze-task'
+import MealDishPrompt from '../../../components/MealDishPrompt'
 import {
   markAnalyzeTaskRecognizing,
   readAutoRecordPreference,
@@ -1055,6 +1056,8 @@ const getNextTipIndex = (current?: number) => {
 
 const POLL_INTERVAL = 2000
 const POLL_RETRY_MAX_INTERVAL = 16000
+/** 用户正在选菜时，识别完成后最多再等这么久才跳转。 */
+const MEAL_DISH_HOLD_MS = 8000
 const TIP_ROTATE_INTERVAL = 6000
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }> = {
@@ -1336,6 +1339,20 @@ function AnalyzeLoadingPage() {
   const pageVisibleRef = useRef(true)
   const autoRecordShareTaskRef = useRef('')
   const pendingAutoRecordPosterRef = useRef<{ taskId: string; recordId: string } | null>(null)
+  const mealDishBusyRef = useRef(false)
+  const [mealDishVisible, setMealDishVisible] = useState(false)
+  const [recognitionReady, setRecognitionReady] = useState(false)
+  const handleMealDishBusy = useCallback((busy: boolean) => { mealDishBusyRef.current = busy }, [])
+
+  /** 识别完成时用户还在选菜或决定照片：等他选完（最多 8 秒）再跳转。 */
+  const waitForMealDishAnswer = useCallback(async (isCancelled: () => boolean) => {
+    if (!mealDishBusyRef.current) return
+    setRecognitionReady(true)
+    const deadline = Date.now() + MEAL_DISH_HOLD_MS
+    while (mealDishBusyRef.current && Date.now() < deadline && !isCancelled()) {
+      await new Promise(resolve => setTimeout(resolve, 300))
+    }
+  }, [])
 
   const offerAutoRecordPoster = useCallback((recordId: string) => {
     if (!recordId || autoRecordShareTaskRef.current === taskId) return
@@ -1439,6 +1456,7 @@ function AnalyzeLoadingPage() {
       setInteractionIndex(prev => getNextInteractionIndex(prev))
       setSelectedQuizOption(null)
       setTipIndex(getNextTipIndex())
+      setRecognitionReady(false)
       startTimeRef.current = Date.now()
     }
     setTaskId(id)
@@ -1585,6 +1603,8 @@ function AnalyzeLoadingPage() {
             setTaskId(result.redirectTaskId)
             return
           }
+          await waitForMealDishAnswer(() => cancelled)
+          if (cancelled) return
           const needsPrecisionAction = needsPrecisionUserAction(result)
           if (needsPrecisionAction) {
             settled = true
@@ -1735,7 +1755,7 @@ function AnalyzeLoadingPage() {
       pollTimerRef.current = null
       pollFnRef.current = null
     }
-  }, [taskId, taskType, status, executionMode, isDebugMode])
+  }, [taskId, taskType, status, executionMode, isDebugMode, waitForMealDishAnswer])
 
   useEffect(() => {
     if (status !== 'loading') return
@@ -1870,6 +1890,7 @@ function AnalyzeLoadingPage() {
   const isTextFoodTask = taskType === 'food_text'
   const textRecordPreview = textRecordInput || '文字记录，未提供实物照片'
   const interactionCard = WAITING_INTERACTION_CARDS[interactionIndex]
+  const showMealDish = !!taskId && taskType === 'food' && !!imagePath && !isCorrectionMode && !isDebugMode
   const showPrecisionLongWaitNotice = taskType === 'food' && (executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search') && !isCorrectionMode
 
   return (
@@ -1953,43 +1974,57 @@ function AnalyzeLoadingPage() {
           )}
         </View>
 
-        <View className='waiting-interaction-card'>
-          <View className='waiting-interaction-head'>
-            <Text className='waiting-interaction-eyebrow'>{interactionCard.eyebrow}</Text>
-            <Text className='waiting-interaction-skip' onClick={handleNextInteraction}>
-              换一个
-            </Text>
-          </View>
-          <Text className='waiting-interaction-title'>{interactionCard.title}</Text>
-          {interactionCard.type === 'quiz' ? (
-            <View className='waiting-quiz-options'>
-              {interactionCard.options.map((option, index) => {
-                const chosen = selectedQuizOption === index
-                const correct = interactionCard.answerIndex === index
-                const revealed = selectedQuizOption !== null
-                return (
-                  <View
-                    key={option}
-                    className={`waiting-quiz-option${chosen ? ' chosen' : ''}${revealed && correct ? ' correct' : ''}`}
-                    onClick={() => setSelectedQuizOption(index)}
-                  >
-                    <Text className='waiting-quiz-option-text'>{option}</Text>
-                  </View>
-                )
-              })}
-              {selectedQuizOption !== null && (
-                <Text className='waiting-interaction-reveal'>{interactionCard.reveal}</Text>
-              )}
+        {showMealDish && (
+          <MealDishPrompt
+            key={taskId}
+            taskId={taskId}
+            surface='wait'
+            recognitionReady={recognitionReady}
+            photoUrl={imagePath}
+            onBusyChange={handleMealDishBusy}
+            onVisibleChange={setMealDishVisible}
+          />
+        )}
+
+        {!(showMealDish && mealDishVisible) && (
+          <View className='waiting-interaction-card'>
+            <View className='waiting-interaction-head'>
+              <Text className='waiting-interaction-eyebrow'>{interactionCard.eyebrow}</Text>
+              <Text className='waiting-interaction-skip' onClick={handleNextInteraction}>
+                换一个
+              </Text>
             </View>
-          ) : (
-            <View className='waiting-fact-body'>
-              <Text className='waiting-interaction-reveal'>{interactionCard.reveal}</Text>
-              <View className='waiting-fact-next' onClick={handleNextInteraction}>
-                <Text className='waiting-fact-next-text'>{interactionCard.actionText}</Text>
+            <Text className='waiting-interaction-title'>{interactionCard.title}</Text>
+            {interactionCard.type === 'quiz' ? (
+              <View className='waiting-quiz-options'>
+                {interactionCard.options.map((option, index) => {
+                  const chosen = selectedQuizOption === index
+                  const correct = interactionCard.answerIndex === index
+                  const revealed = selectedQuizOption !== null
+                  return (
+                    <View
+                      key={option}
+                      className={`waiting-quiz-option${chosen ? ' chosen' : ''}${revealed && correct ? ' correct' : ''}`}
+                      onClick={() => setSelectedQuizOption(index)}
+                    >
+                      <Text className='waiting-quiz-option-text'>{option}</Text>
+                    </View>
+                  )
+                })}
+                {selectedQuizOption !== null && (
+                  <Text className='waiting-interaction-reveal'>{interactionCard.reveal}</Text>
+                )}
               </View>
-            </View>
-          )}
-        </View>
+            ) : (
+              <View className='waiting-fact-body'>
+                <Text className='waiting-interaction-reveal'>{interactionCard.reveal}</Text>
+                <View className='waiting-fact-next' onClick={handleNextInteraction}>
+                  <Text className='waiting-fact-next-text'>{interactionCard.actionText}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
 
         <View className='bottom-actions'>
           {!isCorrectionMode && taskType !== 'exercise' && elapsedSeconds >= 5 && (

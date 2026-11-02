@@ -28,8 +28,9 @@ func New(r *repo.Repository, cfg config.PushConfig) *Service {
 }
 
 type SettingsResult struct {
-	Preferences   domain.Preferences `json:"preferences"`
-	PushAvailable bool               `json:"push_available"`
+	Preferences        domain.Preferences `json:"preferences"`
+	PushAvailable      bool               `json:"push_available"`
+	LocalMealSupported bool               `json:"local_meal_supported"`
 }
 
 func invalid(message string) error {
@@ -45,22 +46,26 @@ func (s *Service) Settings(ctx context.Context, userID string) (SettingsResult, 
 	if err != nil {
 		return SettingsResult{}, s.storageError(ctx, "read_preferences", userID)
 	}
-	return SettingsResult{Preferences: p.Preferences, PushAvailable: s.config.Enabled}, nil
+	return SettingsResult{Preferences: p.Preferences, PushAvailable: s.config.Enabled, LocalMealSupported: true}, nil
 }
-func (s *Service) SaveSettings(ctx context.Context, userID string, p domain.Preferences) (SettingsResult, error) {
+func (s *Service) SaveSettings(ctx context.Context, userID string, p domain.Preferences, localDevice ...string) (SettingsResult, error) {
+	if len(localDevice) > 1 || (len(localDevice) == 1 && !installationPattern.MatchString(localDevice[0])) {
+		logger.Warn(ctx, "本机提醒设备标识校验失败", slog.String("user_id", userID))
+		return SettingsResult{}, invalid("设备标识无效")
+	}
 	if err := p.Validate(); err != nil {
 		logger.Warn(ctx, "提醒偏好校验失败", slog.String("user_id", userID))
 		return SettingsResult{}, invalid(err.Error())
 	}
-	if p.Enabled && !s.config.Enabled {
+	if p.Enabled && !s.config.Enabled && (len(localDevice) == 0 || p.LogEnabled || p.ExpiryEnabled) {
 		logger.Warn(ctx, "提醒服务未启用，拒绝开启偏好", slog.String("user_id", userID))
 		return SettingsResult{}, &commonerrors.AppError{Code: 10005, Message: "消息提醒服务尚未启用", HTTPStatus: http.StatusServiceUnavailable}
 	}
-	if err := s.repo.SavePreferences(ctx, userID, p); err != nil {
+	if err := s.repo.SavePreferences(ctx, userID, p, localDevice...); err != nil {
 		return SettingsResult{}, s.storageError(ctx, "save_preferences", userID)
 	}
-	logger.Info(ctx, "提醒偏好已更新", slog.String("user_id", userID), slog.Bool("enabled", p.Enabled))
-	return SettingsResult{Preferences: p, PushAvailable: s.config.Enabled}, nil
+	logger.Info(ctx, "提醒偏好已更新", slog.String("user_id", userID), slog.Bool("enabled", p.Enabled), slog.Bool("local_meals", len(localDevice) == 1))
+	return s.Settings(ctx, userID)
 }
 
 type RegisterInput struct {
@@ -163,6 +168,9 @@ func (s *Service) Plan(ctx context.Context, now time.Time) error {
 						continue
 					}
 					for _, device := range devices {
+						if o.Kind == "meal" && setting.Preferences.MealsAreLocal(device.ID) {
+							continue
+						}
 						key := strings.Join([]string{setting.UserID, device.ID, o.Kind, o.MealType, o.Date}, ":")
 						job := migrationdo.PushDeliveryDO{UserID: setting.UserID, DeviceID: device.ID, DedupeKey: key, TokenHash: repo.TokenHash(device.Token), PreferencesVersion: setting.UpdatedAt, Kind: o.Kind, MealType: o.MealType, LocalDate: o.Date, Status: "pending", NotBefore: o.Due, ExpiresAt: o.Expires, CreatedAt: now, UpdatedAt: now}
 						if err = s.repo.Enqueue(ctx, job); err != nil {
@@ -212,6 +220,9 @@ func (s *Service) Dispatch(ctx context.Context, now time.Time) (bool, error) {
 	settings, err := s.repo.GetPreferences(ctx, job.UserID)
 	if err != nil {
 		return true, s.storageError(ctx, "read_preferences", job.UserID)
+	}
+	if job.Kind == "meal" && settings.Preferences.MealsAreLocal(job.DeviceID) {
+		return cancel("LocalMealSchedule")
 	}
 	p := settings.Preferences
 	if !p.Enabled || p.Validate() != nil || !settings.UpdatedAt.Equal(job.PreferencesVersion) {

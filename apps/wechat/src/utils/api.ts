@@ -6584,6 +6584,7 @@ export async function fetchManualFoodCatalog(
 export interface SaveManualCustomFoodRequest {
   id?: string
   title: string
+  category?: 'custom' | 'snack'
   default_weight_grams: number
   total_calories: number
   total_protein: number
@@ -6926,6 +6927,10 @@ export interface PackagedProductExtractResult {
   product_name?: string
   flavor_text?: string
   package_category?: string
+  /** 后端归好的食物库分类键，如 snack / dairy / other */
+  catalog_category?: string
+  /** 有包装依据的一份重量，没有依据时是整包净含量 */
+  default_portion_g?: number
   net_content_value?: number
   net_content_unit?: string
   unit_count?: number

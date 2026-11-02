@@ -108,9 +108,9 @@ func (s *AnalyzeService) ConfigureA6VisionRouting(apiKey, baseURL string, c conf
 	c = normalizeVisionRouting(c)
 	r := &visionChannelRouter{config: c, shadowSlots: make(chan struct{}, c.ShadowMaxConcurrent), health: make(map[string]*channelHealth)}
 	if strings.TrimSpace(apiKey) != "" {
-		baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+		baseURL = config.NormalizeA6BaseURL(baseURL)
 		if baseURL == "" {
-			baseURL = "https://api.a6api.com"
+			baseURL = config.DefaultA6BaseURL
 		}
 		r.a6 = NewOfoxAIClient(strings.TrimSpace(apiKey), gemini3FlashModel, baseURL)
 	}

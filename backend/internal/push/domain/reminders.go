@@ -22,6 +22,17 @@ type Preferences struct {
 	Timezone      string `json:"timezone"`
 	QuietStart    string `json:"quiet_start"`
 	QuietEnd      string `json:"quiet_end"`
+	// Server-managed routing in the existing preferences JSON, not push credentials.
+	LocalMealDevices []string `json:"local_meal_devices,omitempty"`
+}
+
+func (p Preferences) MealsAreLocal(deviceID string) bool {
+	for _, id := range p.LocalMealDevices {
+		if id == deviceID {
+			return true
+		}
+	}
+	return false
 }
 
 func DefaultPreferences() Preferences {

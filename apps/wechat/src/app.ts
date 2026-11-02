@@ -14,6 +14,7 @@ import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
 import { parseMarketingCodeFromLaunchOptions } from './utils/marketing-qr'
 import { ProductUpdatePrompt, PRODUCT_UPDATE_AUTH_EVENT } from './utils/product-updates'
 import { experiments } from './utils/experiments'
+import { bindPendingPromoCode, parsePromoCodeFromLaunchOptions, writePendingPromoCode } from './utils/promoter-api'
 
 import './app.scss'
 
@@ -145,12 +146,20 @@ function handleInviteScene(options?: any) {
   })
 }
 
+// 推广码只记下来，不改变落地页；已登录时立即尝试绑定，未登录的等登录后再绑。
+function handlePromoScene(options?: any) {
+  const { code, source } = parsePromoCodeFromLaunchOptions(options)
+  if (code) writePendingPromoCode(code, source)
+  void bindPendingPromoCode()
+}
+
 function App({ children }: PropsWithChildren<any>) {
   useLaunch((options) => {
     console.log('App launched.')
     resetPreviousCommunityFeedSession()
     cleanupGeneratedUserFiles().catch(() => { /* ignore startup cleanup errors */ })
     void experiments.refresh()
+    handlePromoScene(options)
     if (!handleMarketingScene(options)) {
       handleInviteScene(options)
       handleDeepLink(options)
@@ -166,7 +175,9 @@ function App({ children }: PropsWithChildren<any>) {
       void experiments.flush().finally(() => experiments.refresh())
     }
     Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, refreshExperiments)
+    const bindPromoAfterLogin = () => { void bindPendingPromoCode() }
     Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, checkProductUpdates)
+    Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, bindPromoAfterLogin)
     productUpdates.check()
     const getCurrentRoute = () => {
       try {
@@ -179,6 +190,7 @@ function App({ children }: PropsWithChildren<any>) {
     const onShow = (options: any) => {
       productUpdates.show()
       console.log('[app] onAppShow, options:', options)
+      handlePromoScene(options)
       if (!handleMarketingScene(options)) {
         handleInviteScene(options)
         handleDeepLink(options)
@@ -219,6 +231,7 @@ function App({ children }: PropsWithChildren<any>) {
       productUpdates.dispose()
       Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, checkProductUpdates)
       Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, refreshExperiments)
+      Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, bindPromoAfterLogin)
       Taro.offAppShow(onShow)
       Taro.offAppHide(onHide)
       taroAppEvents.offError?.(onGlobalError)
