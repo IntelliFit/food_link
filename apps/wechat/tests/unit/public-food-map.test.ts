@@ -2,7 +2,7 @@ import {
   buildFoodMapSpots,
   buildFoodMapSpotsFromPayload,
   clusterFoodMapSpots,
-  foodMapClusterCellSize,
+  foodMapClusterTier,
   foodMapDistanceKm,
   foodMapMarkerItemsInView,
   formatFoodMapClusterCount,
@@ -156,19 +156,39 @@ describe('food map clustering', () => {
     const cluster = items.find(item => item.kind === 'cluster')
     expect(items).toHaveLength(2)
     expect(cluster?.kind === 'cluster' && cluster.spots.map(item => item.key)).toEqual(['a', 'b'])
-    expect(cluster?.latitude).toBeCloseTo(39.90015)
     expect(items.find(item => item.kind === 'spot')?.key).toBe('far')
   })
 
   it('separates every spot at street level so each one can be opened', () => {
-    expect(foodMapClusterCellSize(17)).toBe(0)
     expect(clusterFoodMapSpots([nearA, nearB], 17).every(item => item.kind === 'spot')).toBe(true)
   })
 
-  it('uses smaller cells as the map zooms in', () => {
-    const sizes = [4, 6, 8, 10, 12, 14, 16].map(foodMapClusterCellSize)
-    expect(sizes).toEqual([...sizes].sort((left, right) => right - left))
-    expect(new Set(sizes).size).toBe(sizes.length)
+  it('splits a cluster as the map zooms in', () => {
+    const left = spot('left', 39.9, 116.4)
+    const right = spot('right', 39.9, 116.45)
+    expect(clusterFoodMapSpots([left, right], 7)).toHaveLength(1)
+    expect(clusterFoodMapSpots([left, right], 14)).toHaveLength(2)
+  })
+
+  it('keeps bubbles apart however the spots are spread', () => {
+    const spots = Array.from({ length: 600 }, (_, index) => spot(`s${index}`, 22 + (index * 7 % 23) * 0.9, 100 + (index * 13 % 29) * 0.9))
+    ;[4, 6, 8, 10].forEach((scale) => {
+      const pixels = (256 / 360) * 2 ** scale
+      const items = clusterFoodMapSpots(spots, scale)
+      expect(items.reduce((sum, item) => sum + (item.kind === 'cluster' ? item.spots.length : 1), 0)).toBe(600)
+      items.forEach((first, index) => items.slice(index + 1).forEach((second) => {
+        const dx = Math.abs(first.longitude - second.longitude) * pixels
+        const dy = Math.abs(first.latitude - second.latitude) * pixels
+        expect(dx > 40 || dy > 30).toBe(true)
+      }))
+    })
+  })
+
+  it('places a cluster on a real spot and zooms to the middle of its members', () => {
+    const [cluster] = clusterFoodMapSpots([nearA, nearB], 5)
+    expect(cluster.kind).toBe('cluster')
+    expect([cluster.latitude, cluster.longitude]).toEqual([nearA.latitude, nearA.longitude])
+    expect(cluster.kind === 'cluster' && cluster.focus.latitude).toBeCloseTo(39.90015)
   })
 
   it('keeps the selected spot as its own marker inside a cluster area', () => {
@@ -188,9 +208,17 @@ describe('food map clustering', () => {
     expect(foodMapMarkerItemsInView(items, { latitude: 39.9, longitude: 116.4 }, 6)).toHaveLength(2)
   })
 
-  it('caps the cluster label', () => {
-    expect(formatFoodMapClusterCount(99)).toBe('99')
-    expect(formatFoodMapClusterCount(100)).toBe('99+')
+  it('shows real counts and shortens thousands', () => {
+    expect(formatFoodMapClusterCount(8)).toBe('\u00A08\u00A0')
+    expect(formatFoodMapClusterCount(10)).toBe('10')
+    expect(formatFoodMapClusterCount(128)).toBe('128')
+    expect(formatFoodMapClusterCount(999)).toBe('999')
+    expect(formatFoodMapClusterCount(1000)).toBe('1.0k')
+    expect(formatFoodMapClusterCount(1890)).toBe('1.8k')
+  })
+
+  it('picks a stronger style for bigger clusters', () => {
+    expect([2, 9, 10, 99, 100].map(foodMapClusterTier)).toEqual(['small', 'small', 'medium', 'medium', 'large'])
   })
 })
 

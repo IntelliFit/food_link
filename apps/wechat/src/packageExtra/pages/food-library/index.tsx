@@ -29,6 +29,7 @@ import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import {
   buildFoodMapSpotsFromPayload,
   clusterFoodMapSpots,
+  foodMapClusterTier,
   FOOD_MAP_MAX_CLUSTER_ZOOM_SCALE,
   FOOD_MAP_MIN_SCALE,
   foodMapMarkerItemsInView,
@@ -53,10 +54,16 @@ const CACHE_DURATION = 5 * 60 * 1000
 type TabMode = 'all' | 'campus' | 'collections' | 'mine'
 type ViewMode = 'map' | 'list'
 const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
-const DEFAULT_MAP_LOCATION: FoodMapLocation = { latitude: 39.9042, longitude: 116.4074 }
 const FOOD_MAP_MARKER_ICON = '/assets/icons/food-map-marker.png'
 const FOOD_MAP_CLUSTER_ICON = '/assets/icons/food-map-cluster.png'
 const FOOD_MAP_ID = 'food-library-map'
+const FOOD_MAP_NEARBY_SCALE = 15
+const FOOD_MAP_ZOOM_AFTER_MARKERS_MS = 400
+const FOOD_MAP_CLUSTER_STYLES = {
+  small: { bgColor: '#ffffff', color: '#0a7a54', borderColor: '#0a7a54', fontSize: 12, padding: 4 },
+  medium: { bgColor: '#0a7a54', color: '#ffffff', borderColor: '#ffffff', fontSize: 13, padding: 5 },
+  large: { bgColor: '#0b4f3a', color: '#ffffff', borderColor: '#ffffff', fontSize: 14, padding: 6 },
+}
 const CHINA_OVERVIEW = { center: { latitude: 34, longitude: 108 }, scale: 4 }
 
 function campusLocation(item: PublicFoodLibraryItem): string {
@@ -155,8 +162,8 @@ function FoodLibraryPage() {
   const [mapError, setMapError] = useState(false)
   const [listError, setListError] = useState(false)
   const [mapLocating, setMapLocating] = useState(false)
-  const [mapCenter, setMapCenter] = useState<FoodMapLocation>(DEFAULT_MAP_LOCATION)
-  const [mapScale, setMapScale] = useState(14)
+  const [mapCenter, setMapCenter] = useState<FoodMapLocation>(CHINA_OVERVIEW.center)
+  const [mapScale, setMapScale] = useState(CHINA_OVERVIEW.scale)
   const [userLocation, setUserLocation] = useState<FoodMapLocation | null>(null)
   const [selectedMapSpotKey, setSelectedMapSpotKey] = useState('')
   const [spotDishes, setSpotDishes] = useState<SpotDishList | null>(null)
@@ -205,31 +212,26 @@ function FoodLibraryPage() {
     [mapSpots, mapScale, mapCenter, selectedMapSpotKey],
   )
   const mapMarkers = useMemo(() => mapMarkerItems.map((item, index) => {
-    const calloutBase = {
-      fontSize: 12,
-      borderWidth: 1,
-      borderColor: '#d5eee4',
-      bgColor: '#ffffff',
-      padding: 8,
-      textAlign: 'center' as const,
-    }
     if (item.kind === 'cluster') {
+      const count = item.spots.length
       return {
         id: index + 1,
         latitude: item.latitude,
         longitude: item.longitude,
         iconPath: FOOD_MAP_CLUSTER_ICON,
-        width: 34,
-        height: 34,
-        zIndex: 3,
+        width: 14,
+        height: 14,
+        // Bigger groups stay on top where bubbles come close.
+        zIndex: 3 + Math.min(count, 999),
         anchor: { x: 0.5, y: 0.5 },
         callout: {
-          ...calloutBase,
-          content: formatFoodMapClusterCount(item.spots.length),
-          color: '#0a7a54',
+          ...FOOD_MAP_CLUSTER_STYLES[foodMapClusterTier(count)],
+          content: formatFoodMapClusterCount(count),
+          borderWidth: 1,
+          textAlign: 'center' as const,
           anchorX: 0,
-          anchorY: 0,
-          borderRadius: 999,
+          anchorY: -2,
+          borderRadius: 16,
           display: 'ALWAYS' as const,
         },
       }
@@ -246,7 +248,12 @@ function FoodLibraryPage() {
       zIndex: selected ? 10 : 2,
       anchor: { x: 0.5, y: 1 },
       callout: {
-        ...calloutBase,
+        fontSize: 12,
+        borderWidth: 1,
+        borderColor: '#d5eee4',
+        bgColor: '#ffffff',
+        padding: 8,
+        textAlign: 'center' as const,
         content: `${spot.locationName || foodMapPlace(spot.featuredItem)}${spot.foodCount > 1 ? ` · ${spot.foodCount} 道` : ''}`,
         color: '#153129',
         anchorX: 0,
@@ -468,11 +475,9 @@ function FoodLibraryPage() {
         }
         setUserLocation(location)
         setMapCenter(location)
-        setMapScale(15)
+        // The native map drops a zoom sent in the same update as the full marker set.
+        setTimeout(() => setMapScale(FOOD_MAP_NEARBY_SCALE), FOOD_MAP_ZOOM_AFTER_MARKERS_MS)
       } else {
-        // Without a position, show the country and let the clusters guide the zoom.
-        setMapCenter(CHINA_OVERVIEW.center)
-        setMapScale(CHINA_OVERVIEW.scale)
       }
     } catch (e: any) {
       setMapError(true)
@@ -818,7 +823,7 @@ function FoodLibraryPage() {
     if (!item) return
     if (item.kind === 'cluster') {
       setSelectedMapSpotKey('')
-      setMapCenter({ latitude: item.latitude, longitude: item.longitude })
+      setMapCenter(item.focus)
       setMapScale(Math.min(mapScale + 2, FOOD_MAP_MAX_CLUSTER_ZOOM_SCALE))
       return
     }

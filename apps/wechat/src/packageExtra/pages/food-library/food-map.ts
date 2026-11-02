@@ -18,7 +18,16 @@ export interface FoodMapSpot extends FoodMapLocation {
 
 export type FoodMapMarkerItem =
   | { kind: 'spot', key: string, latitude: number, longitude: number, spot: FoodMapSpot }
-  | { kind: 'cluster', key: string, latitude: number, longitude: number, spots: FoodMapSpot[] }
+  | {
+    kind: 'cluster'
+    key: string
+    latitude: number
+    longitude: number
+    focus: FoodMapLocation
+    spots: FoodMapSpot[]
+  }
+
+export type FoodMapClusterTier = 'small' | 'medium' | 'large'
 
 const EARTH_RADIUS_KM = 6371
 export const FOOD_MAP_MIN_SCALE = 3
@@ -28,6 +37,14 @@ const VIEW_CULLING_MIN_SCALE = 7
 // Half the visible span is about 0.7 x 360 / 2^scale on a phone; keep a margin so
 // a short drag does not reveal an empty area before the markers refresh.
 const VIEW_SPAN_FACTOR = 2
+// Web Mercator tiles: the fewest on-screen pixels per degree a device can show.
+// Devices that render larger only spread the bubbles further apart.
+const PIXELS_PER_DEGREE_AT_SCALE_ZERO = 256 / 360
+// From this scale on, every spot keeps its own marker so each one can be opened.
+const NO_CLUSTER_SCALE = 17
+// A count bubble with its pointer is about 44 x 40 px: seeds this far apart cannot overlap.
+const CLUSTER_RADIUS_X_PX = 48
+const CLUSTER_RADIUS_Y_PX = 44
 
 function degreesToRadians(value: number): number {
   return value * Math.PI / 180
@@ -77,36 +94,25 @@ function spotCoordinateKey(item: PublicFoodLibraryItem): string {
   return `${Number(item.latitude).toFixed(5)}:${Number(item.longitude).toFixed(5)}`
 }
 
-/** Grid cell in degrees for a map scale; 0 means every spot stays separate. */
-export function foodMapClusterCellSize(scale: number): number {
-  if (scale <= 4) return 5.5
-  if (scale <= 5) return 2.8
-  if (scale <= 6) return 1.6
-  if (scale <= 7) return 0.9
-  if (scale <= 8) return 0.45
-  if (scale <= 9) return 0.24
-  if (scale <= 10) return 0.12
-  if (scale <= 11) return 0.06
-  if (scale <= 12) return 0.03
-  if (scale <= 13) return 0.015
-  if (scale <= 14) return 0.008
-  if (scale <= 15) return 0.004
-  if (scale <= 16) return 0.002
-  return 0
-}
-
 function spotMarkerItem(spot: FoodMapSpot): FoodMapMarkerItem {
   return { kind: 'spot', key: spot.key, latitude: spot.latitude, longitude: spot.longitude, spot }
 }
 
+/**
+ * Greedy merge by on-screen distance: a spot joins the first seed within reach,
+ * otherwise it becomes a seed. Each cluster sits on its seed, a real shop position,
+ * so bubbles stay apart; tapping zooms to the members' centre instead.
+ */
 export function clusterFoodMapSpots(
   spots: FoodMapSpot[],
   scale: number,
   selectedKey = '',
 ): FoodMapMarkerItem[] {
-  const cellSize = foodMapClusterCellSize(scale)
-  if (cellSize <= 0) return spots.map(spotMarkerItem)
-  const buckets = new Map<string, FoodMapSpot[]>()
+  if (scale >= NO_CLUSTER_SCALE) return spots.map(spotMarkerItem)
+  const pixelsPerDegree = PIXELS_PER_DEGREE_AT_SCALE_ZERO * 2 ** scale
+  const columnWidth = CLUSTER_RADIUS_X_PX / pixelsPerDegree
+  const seedsByColumn = new Map<number, { seed: FoodMapSpot, members: FoodMapSpot[] }[]>()
+  const groups: { seed: FoodMapSpot, members: FoodMapSpot[] }[] = []
   const items: FoodMapMarkerItem[] = []
   spots.forEach((spot) => {
     // The open spot keeps its own marker, whatever the zoom level.
@@ -114,20 +120,37 @@ export function clusterFoodMapSpots(
       items.push(spotMarkerItem(spot))
       return
     }
-    const cell = `${Math.floor(spot.latitude / cellSize)}:${Math.floor(spot.longitude / cellSize)}`
-    buckets.set(cell, [...(buckets.get(cell) || []), spot])
+    const column = Math.floor(spot.longitude / columnWidth)
+    // Latitude degrees stretch on screen away from the equator (Mercator).
+    const latitudePixels = pixelsPerDegree / Math.cos(degreesToRadians(spot.latitude))
+    const nearby = [column - 1, column, column + 1].flatMap(key => seedsByColumn.get(key) || [])
+    const group = nearby.find(candidate => (
+      Math.abs(candidate.seed.longitude - spot.longitude) * pixelsPerDegree <= CLUSTER_RADIUS_X_PX
+      && Math.abs(candidate.seed.latitude - spot.latitude) * latitudePixels <= CLUSTER_RADIUS_Y_PX
+    ))
+    if (group) {
+      group.members.push(spot)
+      return
+    }
+    const created = { seed: spot, members: [spot] }
+    groups.push(created)
+    seedsByColumn.set(column, [...(seedsByColumn.get(column) || []), created])
   })
-  buckets.forEach((bucket, cell) => {
-    if (bucket.length === 1) {
-      items.push(spotMarkerItem(bucket[0]))
+  groups.forEach(({ seed, members }) => {
+    if (members.length === 1) {
+      items.push(spotMarkerItem(seed))
       return
     }
     items.push({
       kind: 'cluster',
-      key: `cluster:${cell}`,
-      latitude: bucket.reduce((sum, spot) => sum + spot.latitude, 0) / bucket.length,
-      longitude: bucket.reduce((sum, spot) => sum + spot.longitude, 0) / bucket.length,
-      spots: bucket,
+      key: `cluster:${seed.key}`,
+      latitude: seed.latitude,
+      longitude: seed.longitude,
+      focus: {
+        latitude: members.reduce((sum, spot) => sum + spot.latitude, 0) / members.length,
+        longitude: members.reduce((sum, spot) => sum + spot.longitude, 0) / members.length,
+      },
+      spots: members,
     })
   })
   return items
@@ -148,7 +171,15 @@ export function foodMapMarkerItemsInView(
 }
 
 export function formatFoodMapClusterCount(count: number): string {
-  return count > 99 ? '99+' : String(count)
+  // Non-breaking spaces keep a one-digit bubble round rather than tall and thin.
+  if (count < 10) return `\u00A0${count}\u00A0`
+  if (count < 1000) return String(count)
+  return `${(Math.floor(count / 100) / 10).toFixed(1)}k`
+}
+
+export function foodMapClusterTier(count: number): FoodMapClusterTier {
+  if (count < 10) return 'small'
+  return count < 100 ? 'medium' : 'large'
 }
 
 export function buildFoodMapSpots(
