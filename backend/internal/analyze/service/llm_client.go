@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 )
 
@@ -361,7 +362,7 @@ func isGeminiNativeModel(model, baseURL string) bool {
 		return false
 	}
 	switch strings.ToLower(endpoint.Hostname()) {
-	case "maas-openapi.wanjiedata.com", "api.openlux.ai", "api.a6api.com":
+	case "maas-openapi.wanjiedata.com", "api.openlux.ai", config.A6APIHost:
 		return true
 	default:
 		return false
@@ -445,7 +446,7 @@ func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model 
 		return nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	if req.URL.Hostname() == "api.a6api.com" {
+	if req.URL.Hostname() == config.A6APIHost {
 		req.Header.Del("Authorization")
 		req.Header.Set("x-goog-api-key", c.APIKey)
 	}
@@ -526,7 +527,7 @@ func geminiNativeEndpoint(baseURL, model string) string {
 	}
 	endpoint.Path = "/api/v1beta/models/" + url.PathEscape(model) + ":generateContent"
 	endpoint.RawQuery = ""
-	if endpoint.Hostname() == "api.openlux.ai" || endpoint.Hostname() == "api.a6api.com" {
+	if endpoint.Hostname() == "api.openlux.ai" || endpoint.Hostname() == config.A6APIHost {
 		endpoint.Path = "/v1beta/models/" + url.PathEscape(model) + ":generateContent"
 	}
 	if endpoint.Hostname() == "api.openlux.ai" {

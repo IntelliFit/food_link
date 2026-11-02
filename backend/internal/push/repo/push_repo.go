@@ -45,12 +45,35 @@ func (r *Repository) GetPreferences(ctx context.Context, userID string) (Setting
 	return preferences(row), err
 }
 
-func (r *Repository) SavePreferences(ctx context.Context, userID string, p domain.Preferences) error {
-	b, _ := json.Marshal(p)
-	settings := map[string]any{}
-	_ = json.Unmarshal(b, &settings)
-	row := migrationdo.PushPreferencesDO{UserID: userID, Settings: settings, UpdatedAt: time.Now().UTC()}
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}}, DoUpdates: clause.AssignmentColumns([]string{"settings", "updated_at"})}).Create(&row).Error
+func (r *Repository) SavePreferences(ctx context.Context, userID string, p domain.Preferences, localDevice ...string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "push-preferences:"+userID).Error; err != nil {
+			return err
+		}
+		var old migrationdo.PushPreferencesDO
+		err := tx.Where("user_id = ?", userID).First(&old).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		// Legacy clients cannot erase routing, and body-supplied IDs are untrusted.
+		p.LocalMealDevices = preferences(old).Preferences.LocalMealDevices
+		if len(localDevice) == 1 && !p.MealsAreLocal(localDevice[0]) {
+			if len(p.LocalMealDevices) >= 32 {
+				return errors.New("本地提醒设备数量超限")
+			}
+			p.LocalMealDevices = append(p.LocalMealDevices, localDevice[0])
+		}
+		b, err := json.Marshal(p)
+		if err != nil {
+			return err
+		}
+		settings := map[string]any{}
+		if err = json.Unmarshal(b, &settings); err != nil {
+			return err
+		}
+		row := migrationdo.PushPreferencesDO{UserID: userID, Settings: settings, UpdatedAt: time.Now().UTC()}
+		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}}, DoUpdates: clause.AssignmentColumns([]string{"settings", "updated_at"})}).Create(&row).Error
+	})
 }
 
 func (r *Repository) ListPreferences(ctx context.Context, after string) ([]Settings, error) {

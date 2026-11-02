@@ -142,6 +142,19 @@ import {
   shouldOfferOnboardingGuide,
 } from '../../utils/onboarding-guide-storage'
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
+import { OnboardingWelcome } from '../../components/OnboardingWelcome'
+import { FirstBriefSheet } from '../../components/FirstBriefSheet'
+import { useExperiment } from '../../hooks/useExperiment'
+import { readPendingFriendInviteCode } from '../../utils/pending-friend-invite'
+import {
+  FIRST_DAY_KEY,
+  ONBOARDING_CONTROL,
+  ONBOARDING_EXPERIMENT,
+  ONBOARDING_PET_FLOW,
+  WELCOME_DONE_KEY,
+  localDateKey,
+  shouldOfferWelcome,
+} from '../../utils/onboarding-v2'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../utils/pet-events'
 import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
 import { openPetChat } from '../../utils/pet-navigation'
@@ -965,10 +978,15 @@ function IndexPage() {
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = React.useState<string | null>(null)
   const [showDailyPosterModal, setShowDailyPosterModal] = React.useState(false)
   const [showHealthProfilePrompt, setShowHealthProfilePrompt] = React.useState(false)
+  // onboarding_v2：只有首次打开的游客参与；两组在同一时刻记曝光，实验组再盖上小麦首屏
+  const [welcomeEligible] = React.useState(readWelcomeEligible)
+  const [welcomeClosed, setWelcomeClosed] = React.useState(false)
+  const onboardingExperiment = useExperiment(ONBOARDING_EXPERIMENT, ONBOARDING_CONTROL, { expose: welcomeEligible })
+  const showOnboardingWelcome = welcomeEligible && !welcomeClosed && onboardingExperiment.ready && onboardingExperiment.variant === ONBOARDING_PET_FLOW
 
   const promptLoginCheckIn = React.useCallback(async (center: RewardCenterResponse | null) => {
     const checkIn = center?.check_in
-    if (!checkIn || checkIn.claimed_today) return
+    if (!checkIn || checkIn.claimed_today || isOnboardingFirstDay()) return
     const token = getAccessToken()
     const snoozeKey = `home_check_in_snooze_v1:${homeLayoutOwner()}`
     const promptKey = `${homeLayoutOwner()}:${checkIn.today}`
@@ -1360,7 +1378,7 @@ function IndexPage() {
         const profile = profileResult.status === 'fulfilled' ? profileResult.value : null
         if (profile) {
           const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
-          setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed())
+          setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed() && !isOnboardingFirstDay())
         }
       }, 180)
     } else {
@@ -1376,7 +1394,7 @@ function IndexPage() {
       openRecordMenuFromRequest()
     } else {
       const requestedAfterOnboarding = consumeHomeRecordGuideAfterOnboarding()
-      if (requestedAfterOnboarding || shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
+      if (!isOnboardingFirstDay() && (requestedAfterOnboarding || shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY))) {
         if (homeGuideTimerRef.current) clearTimeout(homeGuideTimerRef.current)
         setHomeGuideTransitionPending(requestedAfterOnboarding)
         setShowHomeOnboardingGuide(false)
@@ -3698,7 +3716,7 @@ function IndexPage() {
       <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} selectedDate={selectedDate} />
 
       <OnboardingGuide
-        visible={showHomeOnboardingGuide}
+        visible={showHomeOnboardingGuide && !showOnboardingWelcome}
         steps={HOME_RECORD_ONBOARDING_STEPS}
         storageKey={ONBOARDING_HOME_RECORD_GUIDE_KEY}
         onClose={closeHomeOnboardingGuide}
@@ -3790,8 +3808,32 @@ function IndexPage() {
         onClose={() => setShowRecordPosterModal(false)}
         onShareContextChange={handleMealPosterShareContext}
       />
+
+      {showOnboardingWelcome && <OnboardingWelcome onClose={() => setWelcomeClosed(true)} />}
+      {!isGuest && <FirstBriefSheet eaten={intakeData.current} target={intakeData.target} ready={!dashboardBusy} />}
     </View>
   )
+}
+
+/** 新流程建档当天：不弹签到、不放 5 步讲解、不催填健康档案 */
+function isOnboardingFirstDay(): boolean {
+  try {
+    return Taro.getStorageSync(FIRST_DAY_KEY) === localDateKey()
+  } catch {
+    return false
+  }
+}
+
+function readWelcomeEligible(): boolean {
+  try {
+    return shouldOfferWelcome({
+      loggedIn: Boolean(getAccessToken()),
+      welcomeDone: Taro.getStorageSync(WELCOME_DONE_KEY) === '1',
+      hasPendingInvite: Boolean(readPendingFriendInviteCode()),
+    })
+  } catch {
+    return false
+  }
 }
 
 export default withAuth(IndexPage, { public: true })

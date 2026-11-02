@@ -69,7 +69,7 @@ func Providers(cfg config.ExternalConfig) []Provider {
 			rows[i].Base = "https://api.openlux.ai/v1"
 		}
 		if rows[i].Base == "" && rows[i].Channel == "a6" {
-			rows[i].Base = "https://api.a6api.com"
+			rows[i].Base = config.DefaultA6BaseURL
 		}
 		rows[i].Configured = rows[i].Key != "" && rows[i].Base != ""
 	}

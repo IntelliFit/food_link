@@ -35,6 +35,9 @@ import (
 	communityservice "food_link/backend/internal/community/service"
 	contentsecurityhandler "food_link/backend/internal/contentsecurity/handler"
 	contentsecurityservice "food_link/backend/internal/contentsecurity/service"
+	experimenthandler "food_link/backend/internal/experiment/handler"
+	experimentrepo "food_link/backend/internal/experiment/repo"
+	experimentservice "food_link/backend/internal/experiment/service"
 	expiryhandler "food_link/backend/internal/expiry/handler"
 	expiryrepo "food_link/backend/internal/expiry/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
@@ -75,6 +78,9 @@ import (
 	messagehandler "food_link/backend/internal/message/handler"
 	messagerepo "food_link/backend/internal/message/repo"
 	messageservice "food_link/backend/internal/message/service"
+	onboardinghandler "food_link/backend/internal/onboarding/handler"
+	onboardingrepo "food_link/backend/internal/onboarding/repo"
+	onboardingservice "food_link/backend/internal/onboarding/service"
 	openplatformhandler "food_link/backend/internal/openplatform/handler"
 	openplatformratelimit "food_link/backend/internal/openplatform/ratelimit"
 	openplatformrepo "food_link/backend/internal/openplatform/repo"
@@ -548,6 +554,10 @@ func New(cfg *config.Config) (*App, error) {
 	marketingQRRepo := marketingqrrepo.NewMarketingQRRepo(db)
 	marketingQRSvc := marketingqrservice.NewMarketingQRService(marketingQRRepo, storageClient)
 	marketingQRHandler := marketingqrhandler.NewMarketingQRHandler(marketingQRSvc)
+	experimentHandler := experimenthandler.NewExperimentHandler(experimentservice.NewService(experimentrepo.NewExperimentRepo(db)))
+	experimentHandler.ConfigureRateLimiter(openPlatformLimiter)
+	onboardingHandler := onboardinghandler.NewOnboardingHandler(onboardingservice.NewService(onboardingrepo.NewOnboardingRepo(db), analyzeSvc))
+	onboardingHandler.ConfigureRateLimiter(openPlatformLimiter)
 	promoterSvc := promoterservice.NewPromoterService(promoterrepo.NewPromoterRepo(db), promoterservice.RulesFromConfig(cfg.Promoter))
 	promoterHandler := promoterhandler.NewPromoterHandler(promoterSvc)
 	transferSvc, err := newWechatTransferService(cfg, db)
@@ -959,6 +969,12 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/marketing-qr/:code", authmw.OptionalJWT(jwtSvc), marketingQRHandler.Landing)
 	engine.POST("/api/marketing-qr/:code/events", authmw.OptionalJWT(jwtSvc), marketingQRHandler.Track)
 	engine.POST("/api/marketing-qr/:code/bind", authmw.RequireJWT(jwtSvc), marketingQRHandler.BindUser)
+	engine.POST("/api/experiments/assignments", authmw.OptionalJWT(jwtSvc), experimentHandler.Assignments)
+	engine.POST("/api/experiments/exposures", authmw.OptionalJWT(jwtSvc), experimentHandler.Exposures)
+	engine.POST("/api/app-events", authmw.OptionalJWT(jwtSvc), experimentHandler.Events)
+	engine.GET("/api/onboarding/config", onboardingHandler.PublicConfig)
+	engine.GET("/api/onboarding/stats", onboardingHandler.Stats)
+	engine.POST("/api/onboarding/try", authmw.OptionalJWT(jwtSvc), onboardingHandler.Try)
 	engine.GET("/api/promoter/me", authmw.RequireJWT(jwtSvc), promoterHandler.Me)
 	engine.POST("/api/promoter/apply", authmw.RequireJWT(jwtSvc), promoterHandler.Apply)
 	engine.POST("/api/promoter/bind", authmw.RequireJWT(jwtSvc), promoterHandler.Bind)
@@ -1129,6 +1145,11 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.PATCH("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Update)
 	adminAPI.DELETE("/public-food-library/:item_id", adminAuth, adminPublicFoodHandler.Delete)
 	adminAPI.GET("/marketing-qr/summary", adminAuth, marketingQRHandler.Summary)
+	adminAPI.GET("/experiments", adminAuth, experimentHandler.AdminList)
+	adminAPI.PUT("/experiments/:key", adminAuth, experimentHandler.AdminSave)
+	adminAPI.GET("/experiments/:key/summary", adminAuth, experimentHandler.AdminSummary)
+	adminAPI.GET("/onboarding/config", adminAuth, onboardingHandler.AdminGetConfig)
+	adminAPI.PUT("/onboarding/config", adminAuth, onboardingHandler.AdminSaveConfig)
 	adminAPI.GET("/promoters", adminAuth, promoterHandler.AdminList)
 	adminAPI.POST("/promoters/:promoter_id/review", adminAuth, promoterHandler.AdminReview)
 	adminAPI.POST("/promoters/:promoter_id/status", adminAuth, promoterHandler.AdminChangeStatus)

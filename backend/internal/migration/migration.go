@@ -206,6 +206,12 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureOnboardingStatus(ctx, db); err != nil {
 		return err
 	}
+	if err := MigrateExperimentTables(ctx, db); err != nil {
+		return err
+	}
+	if err := MigrateContentConfigTables(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureConstraints(ctx, db); err != nil {
 		return err
 	}

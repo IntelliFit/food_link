@@ -335,3 +335,32 @@ func TestUserRepo_TrialEntitlementCRUD(t *testing.T) {
 	require.NotNil(t, updated.FirstUserID)
 	assert.Equal(t, "user-trial-2", *updated.FirstUserID)
 }
+
+func TestUserRepo_DeleteByIDUnlinksExperimentData(t *testing.T) {
+	db := setupUserTestDB(t)
+	repo := NewUserRepo(db)
+	ctx := context.Background()
+	now := time.Now()
+	userID, otherUserID := "user-delete-experiments", "user-keep-experiments"
+	require.NoError(t, repo.Create(ctx, &User{ID: userID, OpenID: "openid-exp-delete", CreatedAt: &now}))
+	require.NoError(t, repo.Create(ctx, &User{ID: otherUserID, OpenID: "openid-exp-keep", CreatedAt: &now}))
+
+	exec := func(sql string, args ...any) {
+		require.NoError(t, db.Exec(sql, args...).Error)
+	}
+	exec(`CREATE TABLE experiment_assignments (id TEXT PRIMARY KEY, experiment_key TEXT, anon_id TEXT, user_id TEXT, excluded_reason TEXT)`)
+	exec(`CREATE TABLE app_visitors (anon_id TEXT PRIMARY KEY, user_id TEXT, bound_at TIMESTAMPTZ)`)
+	exec(`CREATE TABLE app_events (id TEXT PRIMARY KEY, anon_id TEXT, user_id TEXT)`)
+	exec(`INSERT INTO experiment_assignments VALUES ('a1', 'onboarding_v2', 'anon-1', ?, NULL), ('a2', 'onboarding_v2', 'anon-2', ?, NULL)`, userID, otherUserID)
+	exec(`INSERT INTO app_visitors VALUES ('anon-1', ?, now()), ('anon-2', ?, now())`, userID, otherUserID)
+	exec(`INSERT INTO app_events VALUES ('e1', 'anon-1', ?), ('e2', 'anon-2', ?)`, userID, otherUserID)
+
+	require.NoError(t, repo.DeleteByID(ctx, userID))
+
+	assert.Equal(t, int64(0), countTableRows(t, db, "app_events", "user_id = ?", userID))
+	assert.Equal(t, int64(1), countTableRows(t, db, "app_events", "user_id = ?", otherUserID))
+	assert.Equal(t, int64(0), countTableRows(t, db, "app_visitors", "user_id = ?", userID))
+	assert.Equal(t, int64(1), countTableRows(t, db, "app_visitors", "anon_id = 'anon-1' AND user_id IS NULL AND bound_at IS NULL"))
+	assert.Equal(t, int64(1), countTableRows(t, db, "experiment_assignments", "id = 'a1' AND user_id IS NULL AND excluded_reason IS NULL"))
+	assert.Equal(t, int64(1), countTableRows(t, db, "experiment_assignments", "id = 'a2' AND user_id = ? AND excluded_reason IS NULL", otherUserID))
+}

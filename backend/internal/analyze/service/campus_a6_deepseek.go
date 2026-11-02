@@ -14,6 +14,7 @@ import (
 	"time"
 
 	food "food_link/backend/internal/foodrecord/domain"
+	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 )
 
@@ -32,7 +33,7 @@ type campusA6Transport struct {
 }
 
 func newCampusDeepSeekEstimator(key string) *DeepSeekNutritionEstimator {
-	e := NewDeepSeekNutritionEstimator(key, "https://api.a6api.com/v1", campusA6DeepSeekModel)
+	e := NewDeepSeekNutritionEstimator(key, config.DefaultA6BaseURL+"/v1", campusA6DeepSeekModel)
 	e.client = &http.Client{
 		Timeout:       40 * time.Second,
 		Transport:     &campusA6Transport{delegate: http.DefaultTransport},
@@ -42,7 +43,7 @@ func newCampusDeepSeekEstimator(key string) *DeepSeekNutritionEstimator {
 }
 
 func (t *campusA6Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.URL.Scheme != "https" || req.URL.Host != "api.a6api.com" || req.URL.Path != "/v1/chat/completions" {
+	if req.URL.Scheme != "https" || req.URL.Host != config.A6APIHost || req.URL.Path != "/v1/chat/completions" {
 		return nil, fmt.Errorf("校园渠道目标不在允许范围")
 	}
 	t.mu.Lock()

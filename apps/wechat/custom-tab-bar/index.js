@@ -323,10 +323,11 @@ Component({
           const homePosterModalOpen = readStorageFlag('home_poster_modal_visible')
           const homeNutritionTargetOpen = readStorageFlag('home_nutrition_target_visible')
           const statsRiskDetailOpen = readStorageFlag('stats_risk_detail_visible')
+          const onboardingWelcomeOpen = readStorageFlag('onboarding_welcome_visible')
 
           const shouldHide =
             (currentPath === '/pages/community/index' && (communityCommentOpen || communityFilterDrawerOpen)) ||
-            (currentPath === '/pages/index/index' && (homePosterModalOpen || homeNutritionTargetOpen)) ||
+            (currentPath === '/pages/index/index' && (homePosterModalOpen || homeNutritionTargetOpen || onboardingWelcomeOpen)) ||
             (currentPath === '/pages/stats/index' && statsRiskDetailOpen)
 
           if (shouldHide !== this.data.hidden) {
