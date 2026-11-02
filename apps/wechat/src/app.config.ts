@@ -96,6 +96,7 @@ export default defineAppConfig({
     { root: 'packageOnboarding', name: 'onboarding', pages: ['pages/try/index', 'pages/profile/index'] },
     // packageExtra is close to the 2MB subpackage limit; the promoter center lives on its own.
     { root: 'packagePromoter', name: 'promoter', pages: ['pages/center/index'] },
+    { root: 'packageLifespan', name: 'lifespan', pages: ['pages/predictor/index'] },
     {
       root: 'packageExtra',
       name: 'extra',

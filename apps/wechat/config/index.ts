@@ -273,6 +273,45 @@ export default defineConfig<'vite'>(async (merge) => {
             }
           },
         },
+        // Taro moves every module with more than one importer into the main common.js. The lifespan
+        // predictor's engine, model and sheets are only used by its own page, so keep them in its subpackage.
+        {
+          name: 'lifespan-chunk-to-package-lifespan',
+          configResolved(config) {
+            const ro = config.build.rollupOptions
+            const outs = ro.output
+            const list = Array.isArray(outs) ? outs : outs ? [outs] : []
+            const apply = (o: NonNullable<(typeof list)[number]>) => {
+              if (!o || typeof o !== 'object') return
+              const prevManual = o.manualChunks
+              o.manualChunks = (id: string, ctx: unknown) => {
+                if (/[\\/]src[\\/]packageLifespan[\\/]/.test(id) && !/[\\/]pages[\\/]predictor[\\/]index(\.config)?\.(tsx?|scss)/.test(id)) {
+                  return 'lifespan-core'
+                }
+                if (typeof prevManual === 'function') {
+                  return (prevManual as (a: string, b: unknown) => string | void).call(o, id, ctx)
+                }
+                return undefined
+              }
+              const prevNames = o.chunkFileNames
+              o.chunkFileNames = (chunkInfo) => {
+                if (chunkInfo.name === 'lifespan-core') {
+                  return 'packageLifespan/lifespan-core.js'
+                }
+                if (typeof prevNames === 'function') return prevNames(chunkInfo)
+                if (typeof prevNames === 'string') return prevNames
+                return '[name]-[hash].js'
+              }
+            }
+            if (list.length === 0) {
+              const o: Record<string, unknown> = {}
+              ro.output = o
+              apply(o)
+            } else {
+              list.forEach(apply)
+            }
+          },
+        },
         {
           name: 'echarts-chunk-to-package-stats-metabolic',
           configResolved(config) {
