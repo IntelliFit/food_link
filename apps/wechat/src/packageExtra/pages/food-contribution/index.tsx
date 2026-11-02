@@ -10,6 +10,7 @@ const TYPES = [
   { key: 'standard', icon: 'icon-shiwu', title: '标准食物', desc: '米饭、鸡蛋、土豆等每100g营养数据' },
   { key: 'packaged', icon: 'icon-picture', title: '包装食品', desc: '拍包装正面、营养成分表和配料表' },
   { key: 'public', icon: 'icon-foodshop', title: '公共餐食', desc: '普通餐食或校园食堂真实菜品' },
+  { key: 'research', icon: 'icon-paizhao-xianxing', title: '称重科研数据', desc: '用食物秤称一份饭菜并拍照，共建中餐克重评测集' },
 ] as const
 
 export default function FoodContributionPage() {
@@ -20,6 +21,10 @@ export default function FoodContributionPage() {
   const openType = async (key: typeof TYPES[number]['key']) => {
     if (key === 'standard') {
       Taro.navigateTo({ url: extraPkgUrl('/pages/standard-food-contribution/index') })
+      return
+    }
+    if (key === 'research') {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/research-weight/index') })
       return
     }
     if (key === 'packaged') {
@@ -42,7 +47,7 @@ export default function FoodContributionPage() {
     applyThemeNavigationBar(scheme)
     if (focusHandledRef.current) return
     const focus = router.params?.focus
-    if (focus !== 'standard' && focus !== 'packaged' && focus !== 'public') return
+    if (focus !== 'standard' && focus !== 'packaged' && focus !== 'public' && focus !== 'research') return
     focusHandledRef.current = true
     setTimeout(() => void openType(focus), 0)
   })
@@ -67,7 +72,7 @@ export default function FoodContributionPage() {
         ))}
       </View>
       <View className='contribution-note'>
-        <Text>标准食物与包装食品审核通过后奖励1积分；公共餐食按现有奖励规则执行。</Text>
+        <Text>标准食物与包装食品审核通过后奖励1积分；称重科研数据整份2分、分项4分；公共餐食按现有奖励规则执行。</Text>
       </View>
     </View>
   )

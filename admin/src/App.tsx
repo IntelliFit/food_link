@@ -18,6 +18,7 @@ import { ExerciseEnergyPage } from '@/pages/exercise-energy-page'
 import { LoginPage } from '@/pages/login-page'
 import { OverviewPage } from '@/pages/overview-page'
 import { PackagedFoodCorrectionsPage } from '@/pages/packaged-food-corrections-page'
+import { ResearchWeightPage } from '@/pages/research-weight-page'
 import { PackagedFoodsPage } from '@/pages/packaged-foods-page'
 import { PackagedFoodTestPage } from '@/pages/packaged-food-test-page'
 import { PackagedFoodTestRunsPage } from '@/pages/packaged-food-test-runs-page'
@@ -42,6 +43,7 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   overview: '/',
   feedback: '/feedback',
   benchmark: '/benchmark',
+  'research-weight': '/research-weight',
   'packaged-foods': '/packaged-foods',
   'packaged-food-test': '/packaged-food-test',
   'packaged-food-corrections': '/packaged-food-corrections',
@@ -161,6 +163,7 @@ export function App() {
         <Route path='/packaged-food-test' element={<PackagedFoodTestPage {...pageProps} />} />
         <Route path='/packaged-food-test/runs/:foodId' element={<PackagedFoodTestRunsPage {...pageProps} />} />
         <Route path='/packaged-food-corrections' element={<PackagedFoodCorrectionsPage {...pageProps} />} />
+        <Route path='/research-weight' element={<ResearchWeightPage {...pageProps} />} />
         <Route path='/food-nutrition' element={<FoodNutritionPage {...pageProps} />} />
         <Route path='/nutrition-alias-review' element={<NutritionAliasReviewPage {...pageProps} />} />
         <Route path='/public-food-library' element={<PublicFoodLibraryPage {...pageProps} />} />
