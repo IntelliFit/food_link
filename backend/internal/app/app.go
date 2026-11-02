@@ -27,6 +27,7 @@ import (
 	campuscataloghandler "food_link/backend/internal/campuscatalog/handler"
 	campuscatalogrepo "food_link/backend/internal/campuscatalog/repo"
 	campuscatalogservice "food_link/backend/internal/campuscatalog/service"
+	"food_link/backend/internal/clienterror"
 	commonmw "food_link/backend/internal/common/middleware"
 	"food_link/backend/internal/common/routes"
 	communityhandler "food_link/backend/internal/community/handler"
@@ -1082,6 +1083,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminCampusCatalogHandler := campuscataloghandler.NewCatalogHandler(adminCampusCatalogSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
 	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
+	engine.POST("/api/client-errors", clienterror.NewHandler().Submit)
 	productUpdateHandler := productupdatehandler.New(productupdateservice.New(productupdaterepo.New(db)))
 	engine.GET("/api/product-updates", productUpdateHandler.Public)
 	engine.GET("/api/product-updates/pending", authmw.RequireJWT(jwtSvc), productUpdateHandler.Pending)
