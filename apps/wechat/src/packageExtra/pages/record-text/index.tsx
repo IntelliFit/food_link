@@ -9,6 +9,7 @@ import {
   type CanonicalMealType,
   type MembershipStatus,
   type AnalysisEngine,
+  type EatingMood,
   type ExecutionMode,
 } from '../../../utils/api'
 import {
@@ -24,6 +25,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
+import EatingMoodPicker from '../../../components/EatingMoodPicker'
 import { SUBMIT_ANALYSIS_ENGINE } from '../../../utils/analysis-engine'
 import './index.scss'
 
@@ -66,6 +68,7 @@ function RecordTextPage() {
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
+  const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
   const analysisEngine: AnalysisEngine = SUBMIT_ANALYSIS_ENGINE
   const executionMode: ExecutionMode = 'standard'
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -159,6 +162,7 @@ function RecordTextPage() {
         meal_type: selectedMeal as any,
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any,
+        eating_mood: eatingMood || undefined,
         suggest_ratio_enabled: readSuggestRatioPreference(),
         analysis_engine: analysisEngine,
         precise_micronutrients: true,
@@ -277,6 +281,11 @@ function RecordTextPage() {
               ))}
             </View>
           </View>
+        </View>
+
+        <View className='input-section'>
+          <Text className='section-title'>此刻心情（可选）</Text>
+          <EatingMoodPicker value={eatingMood} onChange={setEatingMood} />
         </View>
 
         <View className='text-advanced-toggle' onClick={() => setShowAdvanced(value => !value)}>

@@ -10,6 +10,6 @@
 | `ClaimSharePosterRewardResponse` | claimed, already_claimed, daily_cap_reached, share_poster_claims_today, credits, daily_credits_max, daily_credits_remaining, earned_credits_balance, total_credits_available, message | `backend/main.py:3227` |
 | `CreateMembershipPaymentRequest` | plan_code | `backend/main.py:3244` |
 | `CreateMembershipPaymentResponse` | order_no, plan_code, amount, pay_params | `backend/main.py:3256` |
-| `UpdateUserInfoRequest` | nickname, avatar, telephone, searchable, public_records | `backend/main.py:5956` |
+| `UpdateUserInfoRequest` | nickname, avatar, telephone, searchable, public_records, friends_can_view_records | `backend/main.py:5956` |
 | `BindPhoneRequest` | phoneCode | `backend/main.py:6743` |
 | `UploadAvatarRequest` | base64Image | `backend/main.py:6777` |

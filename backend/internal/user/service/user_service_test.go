@@ -52,6 +52,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		public_records BOOLEAN,
 		public_records_consented_at TIMESTAMPTZ,
 		public_records_reconfirm_pending BOOLEAN NOT NULL DEFAULT FALSE,
+		friends_can_view_records BOOLEAN NOT NULL DEFAULT TRUE,
 		public_favorite_recipes BOOLEAN,
 		last_seen_analyze_history_at TIMESTAMP,
 		registration_invite_code TEXT,
@@ -221,6 +222,51 @@ func TestUserService_UpdateProfileRecordsPublicRecordsConsent(t *testing.T) {
 	assert.False(t, *stored.PublicRecords)
 	assert.Nil(t, stored.PublicRecordsConsentedAt)
 	assert.False(t, stored.PublicRecordsReconfirmPending)
+}
+
+func TestUserService_UpdateProfileKeepsRecordSwitchesConsistent(t *testing.T) {
+	db := setupTestDB(t)
+	userRepo := repo.NewUserRepo(db)
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
+	ctx := context.Background()
+	user := &repo.User{OpenID: "o1", Nickname: "Old"}
+	assert.NoError(t, userRepo.Create(ctx, user))
+	on, off := true, false
+	read := func() *repo.User {
+		stored, err := userRepo.FindByID(ctx, user.ID)
+		assert.NoError(t, err)
+		return stored
+	}
+
+	assert.True(t, *read().FriendsCanViewRecords, "new accounts share with friends")
+
+	_, err := svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{PublicRecords: &on})
+	assert.NoError(t, err)
+	_, err = svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{FriendsCanViewRecords: &off})
+	assert.NoError(t, err)
+	stored := read()
+	assert.False(t, *stored.FriendsCanViewRecords)
+	assert.False(t, *stored.PublicRecords, "closing to friends also closes to strangers")
+	assert.Nil(t, stored.PublicRecordsConsentedAt)
+
+	result, err := svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{PublicRecords: &on})
+	assert.NoError(t, err)
+	assert.NotNil(t, result["friends_can_view_records"])
+	stored = read()
+	assert.True(t, *stored.FriendsCanViewRecords, "opening to strangers also opens to friends")
+	assert.True(t, *stored.PublicRecords)
+
+	_, err = svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{FriendsCanViewRecords: &off, PublicRecords: &on})
+	assert.NoError(t, err)
+	stored = read()
+	assert.False(t, *stored.FriendsCanViewRecords, "closing wins in a contradictory request")
+	assert.False(t, *stored.PublicRecords)
+
+	_, err = svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{FriendsCanViewRecords: &on})
+	assert.NoError(t, err)
+	stored = read()
+	assert.True(t, *stored.FriendsCanViewRecords)
+	assert.False(t, *stored.PublicRecords, "opening to friends leaves strangers closed")
 }
 
 func TestUserService_UpdateProfile_NotFound(t *testing.T) {

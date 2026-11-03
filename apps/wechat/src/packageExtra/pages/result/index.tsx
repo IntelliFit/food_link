@@ -57,8 +57,7 @@ import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
 import { useRecordDate } from '../../../hooks/useRecordDate'
 import RecordDateField from '../../../components/RecordDateField'
-import FeedShareSwitch from '../../../components/FeedShareSwitch'
-import { useFeedShareChoice } from '../../../hooks/useFeedShareChoice'
+import { clearPersistedEatingMood, readPersistedEatingMood } from '../../../utils/eating-mood'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -96,15 +95,6 @@ const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY = 'analysisHealthProfilePromptShown'
 const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 5
-const EATING_MOOD_OPTIONS = [
-  { value: 'happy', emoji: '😊', label: '开心' },
-  { value: 'calm', emoji: '😌', label: '平静' },
-  { value: 'stressed', emoji: '😣', label: '压力大' },
-  { value: 'tired', emoji: '😮‍💨', label: '疲惫' },
-  { value: 'bored', emoji: '😶', label: '无聊' },
-  { value: 'treat', emoji: '✨', label: '犒劳自己' },
-] as const
-type EatingMood = typeof EATING_MOOD_OPTIONS[number]['value']
 /** 用户在分析结果页停留超过此时间且未调整摄入比例，则视为疑似不信任识别结果 */
 const SUSPECT_DISTRUST_TIMEOUT_MS = 15000
 /** 判断当前识别会话是否已保存为饮食记录。
@@ -594,13 +584,12 @@ function ResultPage() {
   })
   const [healthAdvice, setHealthAdvice] = useState('')
   const [description, setDescription] = useState('')
-  const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
+  const [eatingMood] = useState(() => readPersistedEatingMood())
   const [pfcRatioComment, setPfcRatioComment] = useState<string | null>(null)
   const [eatingOrderAdvice, setEatingOrderAdvice] = useState<string | null>(null)
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const { shareToFeed, setShareToFeed, accountPublic } = useFeedShareChoice()
   const recordSaveLock = useRef(false)
 	const [savingRecipe, setSavingRecipe] = useState(false)
 	const [savedRecipeId, setSavedRecipeId] = useState<string | null>(null)
@@ -2060,10 +2049,10 @@ function ResultPage() {
         Taro.removeStorageSync('analyzeMealType')
         Taro.removeStorageSync('analyzeDietGoal')
         Taro.removeStorageSync('analyzeActivityTiming')
+        clearPersistedEatingMood()
 
         const sourceTaskId = recordContext.taskId || undefined
         const payload: SaveFoodRecordRequest = {
-          share_to_feed: shareToFeed,
           date: recordDate,
           meal_type: mealType as MealType,
           image_path: hasUploadableImage ? (imagePath || undefined) : undefined,
@@ -2569,6 +2558,7 @@ function ResultPage() {
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
               activity_timing: savedActivityTiming,
+              eating_mood: eatingMood || undefined,
               execution_mode: savedExecutionMode,
               analysis_engine: savedAnalysisEngine,
               suggest_ratio_enabled: readSuggestRatioPreference(),
@@ -2596,6 +2586,7 @@ function ResultPage() {
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
               activity_timing: savedActivityTiming,
+              eating_mood: eatingMood || undefined,
               execution_mode: savedExecutionMode,
               suggest_ratio_enabled: readSuggestRatioPreference(),
               previousResult,
@@ -3298,32 +3289,7 @@ function ResultPage() {
       {/* 底部固定栏：必须放在 scroll-view 外，避免 iOS 上 fixed 相对滚动容器失效 */}
       <View className='footer-actions'>
         {!isAnalyzeSessionCommitted() && !committedRecordId && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
-        {(taskType === 'food' || taskType === 'food_text') && !isAnalyzeSessionCommitted() && !committedRecordId && (
-          <View className='eating-mood-bar'>
-            <View className='eating-mood-heading'>
-              <Text className='eating-mood-title'>此刻心情</Text>
-              <Text className='eating-mood-hint'>可选</Text>
-            </View>
-            <ScrollView className='eating-mood-options' scrollX showScrollbar={false}>
-              <View className='eating-mood-options-inner'>
-                {EATING_MOOD_OPTIONS.map((option) => (
-                  <View
-                    key={option.value}
-                    className={`eating-mood-option ${eatingMood === option.value ? 'active' : ''}`}
-                    onClick={() => setEatingMood(current => current === option.value ? null : option.value)}
-                  >
-                    <Text className='eating-mood-emoji'>{option.emoji}</Text>
-                    <Text className='eating-mood-label'>{option.label}</Text>
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-        )}
         <View className='pba-safe-area'>
-          {!(isAnalyzeSessionCommitted() || committedRecordId) && (
-            <FeedShareSwitch value={shareToFeed} accountPublic={accountPublic} onChange={setShareToFeed} disabled={saving} />
-          )}
           <View className='action-grid'>
             <View
               className={`secondary-btn ${savingRecipe ? 'loading' : ''} ${savedRecipeId ? 'is-favorited' : ''}`}

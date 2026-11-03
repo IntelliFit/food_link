@@ -65,6 +65,22 @@ func TestFlipUnconsentedRecordsDryRunChangesNothing(t *testing.T) {
 	assert.False(t, row.Pending)
 }
 
+func TestMigrateFeedFriendsSchemaDefaultsExistingAccountsToOn(t *testing.T) {
+	db := setupFeedPrivacyUsers(t)
+	ctx := context.Background()
+
+	require.NoError(t, MigrateFeedFriendsSchema(ctx, db, "public"))
+	require.NoError(t, MigrateFeedFriendsSchema(ctx, db, "public"), "safe to run twice")
+
+	var off, total int64
+	require.NoError(t, db.Table("weapp_user").Count(&total).Error)
+	require.NoError(t, db.Table("weapp_user").Where("friends_can_view_records = FALSE").Count(&off).Error)
+	assert.Positive(t, total)
+	assert.Zero(t, off)
+	row := readFeedPrivacyRow(t, db, "defaulted")
+	assert.True(t, *row.PublicRecords, "other settings are untouched")
+}
+
 func TestFlipUnconsentedRecordsKeepsExplicitChoices(t *testing.T) {
 	db := setupFeedPrivacyUsers(t)
 	require.NoError(t, db.Exec(`INSERT INTO weapp_user (id, public_records, public_records_consented_at) VALUES ('consented', TRUE, now())`).Error)

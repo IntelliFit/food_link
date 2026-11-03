@@ -29,6 +29,18 @@ func MigrateFeedPrivacySchema(ctx context.Context, db *gorm.DB, schema string) e
 	})
 }
 
+// MigrateFeedFriendsSchema adds the switch that lets an account hide its records
+// from friends. Existing accounts keep today's behaviour: friends can see them.
+func MigrateFeedFriendsSchema(ctx context.Context, db *gorm.DB, schema string) error {
+	if err := prepareSchema(ctx, db, schema); err != nil {
+		return err
+	}
+	if err := db.WithContext(ctx).Exec(`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS friends_can_view_records boolean NOT NULL DEFAULT true`).Error; err != nil {
+		return fmt.Errorf("migrate feed friends schema: %w", err)
+	}
+	return nil
+}
+
 // FeedPrivacyFlipResult reports how many accounts the flip covers.
 type FeedPrivacyFlipResult struct {
 	Candidates int64

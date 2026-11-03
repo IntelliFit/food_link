@@ -44,6 +44,7 @@ type UserDO struct {
 	PublicRecords                  *bool      `gorm:"column:public_records;type:boolean;default:false"`
 	PublicRecordsConsentedAt       *time.Time `gorm:"column:public_records_consented_at;type:timestamptz"`
 	PublicRecordsReconfirmPending  bool       `gorm:"column:public_records_reconfirm_pending;type:boolean;not null;default:false"`
+	FriendsCanViewRecords          *bool      `gorm:"column:friends_can_view_records;type:boolean;not null;default:true"`
 	PublicFavoriteRecipes          *bool      `gorm:"column:public_favorite_recipes;type:boolean;default:true"`
 	LastSeenAnalyzeHistory         *time.Time `gorm:"column:last_seen_analyze_history_at;type:timestamptz"`
 	ExecutionMode                  *string    `gorm:"column:execution_mode;type:text;default:'standard'"`

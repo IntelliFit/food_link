@@ -49,6 +49,7 @@ type User struct {
 	PublicRecords                  *bool          `gorm:"column:public_records"`
 	PublicRecordsConsentedAt       *time.Time     `gorm:"column:public_records_consented_at"`
 	PublicRecordsReconfirmPending  bool           `gorm:"column:public_records_reconfirm_pending"`
+	FriendsCanViewRecords          *bool          `gorm:"column:friends_can_view_records;default:true"`
 	PublicFavoriteRecipes          *bool          `gorm:"column:public_favorite_recipes"`
 	LastSeenAnalyzeHistory         *time.Time     `gorm:"column:last_seen_analyze_history_at"`
 	RegistrationInviteCode         *string        `gorm:"column:registration_invite_code"`

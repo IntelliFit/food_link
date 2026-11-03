@@ -51,6 +51,7 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 		public_records BOOLEAN,
 		public_records_consented_at TIMESTAMPTZ,
 		public_records_reconfirm_pending BOOLEAN NOT NULL DEFAULT FALSE,
+		friends_can_view_records BOOLEAN NOT NULL DEFAULT TRUE,
 		public_favorite_recipes BOOLEAN,
 		last_seen_analyze_history_at TIMESTAMP,
 		registration_invite_code TEXT,

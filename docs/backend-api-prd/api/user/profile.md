@@ -28,7 +28,7 @@
         ## Request Contract
 
         - `GET /api/user/profile`: None
-- `PUT /api/user/profile`: `UpdateUserInfoRequest` (nickname, avatar, telephone, searchable, public_records)
+- `PUT /api/user/profile`: `UpdateUserInfoRequest` (nickname, avatar, telephone, searchable, public_records, friends_can_view_records)
 
         ## Response Contract
 

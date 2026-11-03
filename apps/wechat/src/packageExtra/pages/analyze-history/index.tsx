@@ -23,6 +23,7 @@ import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { persistEatingMoodFromPayload } from '../../../utils/eating-mood'
 import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import {
@@ -1209,6 +1210,7 @@ function AnalyzeHistoryPage() {
       Taro.setStorageSync('analyzeMealType', normalizedTaskMealType)
       Taro.setStorageSync('analyzeDietGoal', getTaskDietGoal(task))
       Taro.setStorageSync('analyzeActivityTiming', getTaskActivityTiming(task))
+      persistEatingMoodFromPayload(payload as Record<string, unknown>)
       Taro.setStorageSync('analyzeExecutionMode', pickExecutionMode(task))
       if (result.precisionSessionId) {
         Taro.setStorageSync('analyzePrecisionSessionId', result.precisionSessionId)

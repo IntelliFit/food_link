@@ -69,40 +69,7 @@
   line-height: 1.5;
 }
 
-.analysis-more-toggle {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  padding: 16rpx 20rpx;
-  border-top: 1rpx solid rgb(0 0 0 / 3%);
-
-  &:active {
-    background: rgb(0 0 0 / 2%);
-  }
-}
-
-.analysis-more-title {
-  font-size: 24rpx;
-  font-weight: 600;
-  color: #374151;
-}
-
-.analysis-more-summary {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: #00bc7d;
-  font-size: 20rpx;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.analysis-more-arrow {
-  color: #94a3b8;
-  font-size: 22rpx;
-}
-
-.analysis-more-panel .analysis-options-row {
+.analysis-options-row {
   border-top: none;
   padding-top: 0;
 }
@@ -926,6 +893,11 @@
   gap: 12rpx;
   margin-bottom: 8rpx;
   position: relative;
+}
+
+.section-optional {
+  font-size: 23rpx;
+  color: #94a3b8;
 }
 
 .section-title {

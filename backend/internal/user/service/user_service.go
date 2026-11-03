@@ -89,8 +89,34 @@ type UpdateProfileInput struct {
 	Telephone             *string `json:"telephone"`
 	Searchable            *bool   `json:"searchable"`
 	PublicRecords         *bool   `json:"public_records"`
+	FriendsCanViewRecords *bool   `json:"friends_can_view_records"`
 	PublicFavoriteRecipes *bool   `json:"public_favorite_recipes"`
 	Motto                 *string `json:"motto"`
+}
+
+// applyRecordVisibilityUpdates keeps the two record switches consistent: strangers
+// never see more than friends, so opening to strangers also opens to friends and
+// closing to friends also closes to strangers. Closing wins if a request does both.
+func applyRecordVisibilityUpdates(updates map[string]any, input UpdateProfileInput) {
+	publicRecords := input.PublicRecords
+	if input.FriendsCanViewRecords != nil {
+		updates["friends_can_view_records"] = *input.FriendsCanViewRecords
+		if !*input.FriendsCanViewRecords {
+			closed := false
+			publicRecords = &closed
+		}
+	}
+	if publicRecords == nil {
+		return
+	}
+	updates["public_records"] = *publicRecords
+	updates["public_records_reconfirm_pending"] = false
+	if *publicRecords {
+		updates["public_records_consented_at"] = time.Now().UTC()
+		updates["friends_can_view_records"] = true
+	} else {
+		updates["public_records_consented_at"] = nil
+	}
 }
 
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, input UpdateProfileInput) (map[string]any, error) {
@@ -122,15 +148,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	if input.Searchable != nil {
 		updates["searchable"] = *input.Searchable
 	}
-	if input.PublicRecords != nil {
-		updates["public_records"] = *input.PublicRecords
-		updates["public_records_reconfirm_pending"] = false
-		if *input.PublicRecords {
-			updates["public_records_consented_at"] = time.Now().UTC()
-		} else {
-			updates["public_records_consented_at"] = nil
-		}
-	}
+	applyRecordVisibilityUpdates(updates, input)
 	if input.PublicFavoriteRecipes != nil {
 		updates["public_favorite_recipes"] = *input.PublicFavoriteRecipes
 	}
@@ -804,6 +822,7 @@ func buildProfileResponseWithStorage(user *repo.User, storageClient *storage.Cli
 		"searchable":                       user.Searchable,
 		"public_records":                   user.PublicRecords,
 		"public_records_reconfirm_pending": user.PublicRecordsReconfirmPending,
+		"friends_can_view_records":         user.FriendsCanViewRecords,
 		"public_favorite_recipes":          user.PublicFavoriteRecipes,
 		"motto":                            user.Motto,
 	}

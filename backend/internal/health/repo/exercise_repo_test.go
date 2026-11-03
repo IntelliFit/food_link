@@ -39,8 +39,8 @@ func setupExerciseTestDB(t *testing.T) *gorm.DB {
 func TestExerciseRepo_CreateResolvesFeedVisibility(t *testing.T) {
 	db := setupExerciseTestDB(t)
 	require.NoError(t, db.Exec(`DROP TABLE IF EXISTS weapp_user`).Error)
-	require.NoError(t, db.Exec(`CREATE TABLE weapp_user (id TEXT PRIMARY KEY, public_records BOOLEAN)`).Error)
-	require.NoError(t, db.Exec(`INSERT INTO weapp_user (id, public_records) VALUES ('public-user', TRUE), ('private-user', FALSE)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE weapp_user (id TEXT PRIMARY KEY, public_records BOOLEAN, friends_can_view_records BOOLEAN NOT NULL DEFAULT TRUE)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO weapp_user (id, public_records, friends_can_view_records) VALUES ('public-user', TRUE, TRUE), ('friends-user', FALSE, TRUE), ('private-user', FALSE, FALSE)`).Error)
 	r := NewExerciseRepo(db)
 	ctx := context.Background()
 	share, keep := true, false
@@ -52,6 +52,7 @@ func TestExerciseRepo_CreateResolvesFeedVisibility(t *testing.T) {
 		wantHidden bool
 	}{
 		{"private owner stays out of the feed by default", "private-user", nil, true},
+		{"friends-only owner joins the feed by default", "friends-user", nil, false},
 		{"private owner can share one log", "private-user", &share, false},
 		{"public owner shares by default", "public-user", nil, false},
 		{"public owner can keep one log out", "public-user", &keep, true},

@@ -751,10 +751,12 @@ func setupFeedPrivacyService(t *testing.T) (*FoodRecordService, *foodrepo.FoodRe
 }
 
 func TestFoodRecordRepoCreateResolvesFeedVisibility(t *testing.T) {
-	_, r, _, publicOwner, privateOwner := setupFeedPrivacyService(t)
+	_, r, db, publicOwner, privateOwner := setupFeedPrivacyService(t)
 	ctx := context.Background()
 	share, keep := true, false
 	now := time.Now().UTC()
+	closedOwner := &repo.User{OpenID: "closed-owner", PublicRecords: &keep, FriendsCanViewRecords: &keep}
+	require.NoError(t, repo.NewUserRepo(db).Create(ctx, closedOwner))
 
 	cases := []struct {
 		name       string
@@ -762,7 +764,8 @@ func TestFoodRecordRepoCreateResolvesFeedVisibility(t *testing.T) {
 		choice     *bool
 		wantHidden bool
 	}{
-		{"private owner without a choice stays out of the feed", privateOwner.ID, nil, true},
+		{"friends-only owner joins the feed by default", privateOwner.ID, nil, false},
+		{"owner with both switches off stays out of the feed", closedOwner.ID, nil, true},
 		{"private owner can share one record", privateOwner.ID, &share, false},
 		{"public owner shares by default", publicOwner.ID, nil, false},
 		{"public owner can keep one record out", publicOwner.ID, &keep, true},
@@ -816,6 +819,10 @@ func TestFoodRecordServiceShareAccessRules(t *testing.T) {
 	privateKept := create(privateOwner.ID, &keep)
 	const friendID, strangerID = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
 	require.NoError(t, db.Exec(`INSERT INTO user_friends (user_id, friend_id) VALUES (?, ?)`, privateOwner.ID, friendID).Error)
+	closedOwner := &repo.User{OpenID: "closed-owner", PublicRecords: &keep, FriendsCanViewRecords: &keep}
+	require.NoError(t, repo.NewUserRepo(db).Create(ctx, closedOwner))
+	closedShared := create(closedOwner.ID, &share)
+	require.NoError(t, db.Exec(`INSERT INTO user_friends (user_id, friend_id) VALUES (?, ?)`, closedOwner.ID, friendID).Error)
 
 	cases := []struct {
 		name    string
@@ -823,6 +830,8 @@ func TestFoodRecordServiceShareAccessRules(t *testing.T) {
 		access  ShareAccess
 		allowed bool
 	}{
+		{"friend cannot open a record once the owner stops sharing with friends", closedShared, ShareAccess{ViewerUserID: friendID}, false},
+		{"owner-issued link still opens when the owner stops sharing with friends", closedShared, ShareAccess{Token: svc.shareToken(closedShared.ID)}, true},
 		{"guest opens a public shared record", publicShared, ShareAccess{}, true},
 		{"guest cannot open a public record kept out of the feed", publicKept, ShareAccess{}, false},
 		{"guest cannot open a private owner's record", privateShared, ShareAccess{}, false},

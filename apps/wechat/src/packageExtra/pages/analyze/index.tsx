@@ -26,6 +26,7 @@ import type {
   AnalyzeResponse,
   AnalyzeVideoUploadResult,
   AnalysisEngine,
+  EatingMood,
   ExecutionMode,
   PrecisionCaptureReferenceInput,
   PrecisionReferenceObjectInput,
@@ -57,6 +58,7 @@ import {
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
+import EatingMoodPicker from '../../../components/EatingMoodPicker'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import {
   defaultAnalysisEngineForMode,
@@ -444,7 +446,7 @@ function AnalyzePage() {
   const [videoUploadProgress, setVideoUploadProgress] = useState(0)
   const [isVideoUploading, setIsVideoUploading] = useState(false)
   const [suggestRatioEnabled, setSuggestRatioEnabled] = useState<boolean>(() => readSuggestRatioPreference())
-  const [showMoreSettings, setShowMoreSettings] = useState(false)
+  const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
@@ -519,11 +521,6 @@ function AnalyzePage() {
   const isStrictBaseModeSelected = selectedBaseMode === 'strict'
   const isVideoCaptureSelected = isStrictBaseModeSelected && precisionCaptureMode === 'video'
   const isSeparateFoodEstimateEnabled = isStrictBaseModeSelected && precisionSeparateEnabled
-  const moreSettingsSummary = [
-    isSeparateFoodEstimateEnabled ? '分项' : '',
-    isStrictBaseModeSelected && !precisionInteractiveEnabled ? '不确认' : '',
-    suggestRatioEnabled ? '' : 'AI比例关',
-  ].filter(Boolean).join(' · ')
   const selectedImagePaths = imagePaths.filter(Boolean)
   const precisionSlotsComplete = isPrecisionCaptureComplete(imagePaths)
   const videoCaptureComplete = isVideoKeyframeCaptureComplete(videoUploadResult?.keyframes || [])
@@ -1095,6 +1092,7 @@ function AnalyzePage() {
         meal_type: mealType,
         diet_goal: 'none',
         activity_timing: activityTiming,
+        eating_mood: eatingMood || undefined,
         additionalContext: additionalInfo || undefined,
         is_multi_view: isStrictBaseModeSelected,
         suggest_ratio_enabled: suggestRatioEnabled,
@@ -1503,72 +1501,62 @@ function AnalyzePage() {
           <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
         )}
 
-        {/* 更多设置：默认收起，只在有非默认设置时提示 */}
-        <View className='analysis-more-toggle' onClick={() => setShowMoreSettings(value => !value)}>
-          <Text className='analysis-more-title'>更多设置</Text>
-          <Text className='analysis-more-summary'>{moreSettingsSummary}</Text>
-          <Text className='analysis-more-arrow'>{showMoreSettings ? '收起' : '展开'}</Text>
-        </View>
-
-        {showMoreSettings && (
-          <View className='analysis-more-panel'>
-            <View className='analysis-options-row'>
-              <View className={`analysis-option-card ${suggestRatioEnabled ? 'active' : ''}`} onClick={toggleSuggestRatio}>
-                <View className='analysis-option-card-left'>
-                  <Text className='analysis-option-title'>AI摄入比例</Text>
-                  <View className='help-icon' onClick={(e) => {
-                    e.stopPropagation()
-                    openHelp('suggest_ratio')
-                  }}
-                  >
-                    <Text className='help-icon-text'>?</Text>
-                  </View>
-                </View>
-                <View className={`analysis-option-switch ${suggestRatioEnabled ? 'analysis-option-switch--on' : ''}`}>
-                  <View className='analysis-option-switch-knob' />
-                </View>
+        {/* 识别设置：直接展开，不用先点开才能看到 */}
+        <View className='analysis-options-row'>
+          <View className={`analysis-option-card ${suggestRatioEnabled ? 'active' : ''}`} onClick={toggleSuggestRatio}>
+            <View className='analysis-option-card-left'>
+              <Text className='analysis-option-title'>AI摄入比例</Text>
+              <View className='help-icon' onClick={(e) => {
+                e.stopPropagation()
+                openHelp('suggest_ratio')
+              }}
+              >
+                <Text className='help-icon-text'>?</Text>
               </View>
-
-              {isStrictBaseModeSelected && (
-                <View className={`analysis-option-card ${precisionInteractiveEnabled ? 'active' : ''}`} onClick={togglePrecisionInteractive}>
-                  <View className='analysis-option-card-left'>
-                    <Text className='analysis-option-title'>交互确认</Text>
-                    <View
-                      className='help-icon'
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setHelpSheet({ visible: true, title: '交互确认', content: '精准模式默认开启。只有食物身份、状态口径、参考尺度或关键烹饪信息不清楚时才暂停，每轮最多 3 个问题；你也可以按当前信息继续估算。' })
-                      }}
-                    >
-                      <Text className='help-icon-text'>?</Text>
-                    </View>
-                  </View>
-                  <View className={`analysis-option-switch ${precisionInteractiveEnabled ? 'analysis-option-switch--on' : ''}`}>
-                    <View className='analysis-option-switch-knob' />
-                  </View>
-                </View>
-              )}
-
-              {isStrictBaseModeSelected && (
-                <View className={`analysis-option-card ${isSeparateFoodEstimateEnabled ? 'active' : ''}`} onClick={toggleSeparateFoodEstimate}>
-                  <View className='analysis-option-card-left'>
-                    <Text className='analysis-option-title'>分项模式</Text>
-                    <View className='help-icon' onClick={(e) => {
-                      e.stopPropagation()
-                      openHelp('separate_foods')
-                    }}
-                    >
-                      <Text className='help-icon-text'>?</Text>
-                    </View>
-                  </View>
-                  <View className={`analysis-option-switch ${isSeparateFoodEstimateEnabled ? 'analysis-option-switch--on' : ''}`}>
-                    <View className='analysis-option-switch-knob' />
-                  </View>
-                </View>
-              )}
+            </View>
+            <View className={`analysis-option-switch ${suggestRatioEnabled ? 'analysis-option-switch--on' : ''}`}>
+              <View className='analysis-option-switch-knob' />
             </View>
           </View>
-        )}
+
+          {isStrictBaseModeSelected && (
+            <View className={`analysis-option-card ${precisionInteractiveEnabled ? 'active' : ''}`} onClick={togglePrecisionInteractive}>
+              <View className='analysis-option-card-left'>
+                <Text className='analysis-option-title'>交互确认</Text>
+                <View
+                  className='help-icon'
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setHelpSheet({ visible: true, title: '交互确认', content: '精准模式默认开启。只有食物身份、状态口径、参考尺度或关键烹饪信息不清楚时才暂停，每轮最多 3 个问题；你也可以按当前信息继续估算。' })
+                  }}
+                >
+                  <Text className='help-icon-text'>?</Text>
+                </View>
+              </View>
+              <View className={`analysis-option-switch ${precisionInteractiveEnabled ? 'analysis-option-switch--on' : ''}`}>
+                <View className='analysis-option-switch-knob' />
+              </View>
+            </View>
+          )}
+
+          {isStrictBaseModeSelected && (
+            <View className={`analysis-option-card ${isSeparateFoodEstimateEnabled ? 'active' : ''}`} onClick={toggleSeparateFoodEstimate}>
+              <View className='analysis-option-card-left'>
+                <Text className='analysis-option-title'>分项模式</Text>
+                <View className='help-icon' onClick={(e) => {
+                  e.stopPropagation()
+                  openHelp('separate_foods')
+                }}
+                >
+                  <Text className='help-icon-text'>?</Text>
+                </View>
+              </View>
+              <View className={`analysis-option-switch ${isSeparateFoodEstimateEnabled ? 'analysis-option-switch--on' : ''}`}>
+                <View className='analysis-option-switch-knob' />
+              </View>
+            </View>
+          )}
+        </View>
         </View>
       </View>
 
@@ -1734,6 +1722,15 @@ function AnalyzePage() {
             </View>
           ))}
         </View>
+      </View>
+
+      {/* 此刻心情：选填，随识别任务提交，记录时一起保存 */}
+      <View className='meal-section'>
+        <View className='section-header'>
+          <Text className='section-title'>此刻心情</Text>
+          <Text className='section-optional'>可选</Text>
+        </View>
+        <EatingMoodPicker value={eatingMood} onChange={setEatingMood} />
       </View>
 
       {/* 运动时机（状态二） */}

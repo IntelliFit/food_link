@@ -23,6 +23,7 @@ import (
 	"food_link/backend/internal/foodrecord/repo"
 	healthdomain "food_link/backend/internal/health/domain"
 	membershipdomain "food_link/backend/internal/membership/domain"
+	"food_link/backend/pkg/feedprivacy"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 	"gorm.io/gorm"
@@ -921,7 +922,8 @@ func (s *FoodRecordService) Share(ctx context.Context, recordID string, access S
 
 // canViewSharedRecord allows the owner and links the owner deliberately shared.
 // Everyone else follows the feed rules: the record must be in the circle, and the
-// viewer must be a friend unless the owner turned on public records.
+// viewer must be a friend the owner shares with, unless the owner turned on public
+// records.
 func (s *FoodRecordService) canViewSharedRecord(ctx context.Context, record *domain.FoodRecord, access ShareAccess) (bool, error) {
 	if access.ViewerUserID != "" && access.ViewerUserID == record.UserID {
 		return true, nil
@@ -940,6 +942,9 @@ func (s *FoodRecordService) canViewSharedRecord(ctx context.Context, record *dom
 		return true, nil
 	}
 	if access.ViewerUserID == "" {
+		return false, nil
+	}
+	if owner != nil && !feedprivacy.VisibleToFriends(owner.FriendsCanViewRecords, owner.PublicRecords) {
 		return false, nil
 	}
 	return s.recordRepo.AreFriends(ctx, access.ViewerUserID, record.UserID)

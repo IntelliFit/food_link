@@ -16,6 +16,7 @@ import {
   uploadCirclePostImage,
 } from '../../../utils/api'
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
+import { circlePostAudienceHint } from '../../../utils/feed-share'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -110,10 +111,10 @@ function CirclePostEditPage() {
   const [images, setImages] = useState<ImageItem[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [accountPublic, setAccountPublic] = useState<boolean | null>(null)
+  const [audienceHint, setAudienceHint] = useState('')
 
   useEffect(() => {
-    void getUserProfile().then((profile) => setAccountPublic(profile.public_records === true)).catch(() => {
+    void getUserProfile().then((profile) => setAudienceHint(circlePostAudienceHint(profile))).catch(() => {
       /* 读取失败时不显示可见范围提示 */
     })
   }, [])
@@ -332,9 +333,9 @@ function CirclePostEditPage() {
   return (
     <FlPageThemeRoot>
       <View className='circle-post-edit-page'>
-        {accountPublic === false && (
+        {!!audienceHint && (
           <View className='circle-post-edit-audience-hint' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/privacy-settings/index') })}>
-            <Text>这条动态目前只有好友能看到。想让所有用户看到，去隐私设置开启公开</Text>
+            <Text>{audienceHint}</Text>
           </View>
         )}
         <View className='circle-post-edit-card circle-post-edit-image-section'>

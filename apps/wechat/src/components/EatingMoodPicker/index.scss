@@ -1,0 +1,39 @@
+.eating-mood-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+
+.eating-mood-option {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 16rpx;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 100rpx;
+  background: #fff;
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  &.active {
+    border-color: #38c98d;
+    background: #eafaf2;
+  }
+}
+
+.eating-mood-emoji {
+  font-size: 28rpx;
+  line-height: 1;
+}
+
+.eating-mood-label {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #475569;
+}
+
+.eating-mood-option.active .eating-mood-label {
+  color: #058b5e;
+}

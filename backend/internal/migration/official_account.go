@@ -56,8 +56,8 @@ var officialAccountPosts = []officialPost{
 // Published only once the mini program that shows the save switch is live.
 var officialAccountPrivacyPost = officialPost{
 	key:   "privacy-default",
-	title: "你的记录默认只有自己能看到",
-	body:  "我们调整了圈子的隐私规则：\n\n1. 饮食和运动记录默认不公开。\n2. 保存时可以选择是否“同步到圈子”，开关下方会写明谁能看到。\n3. 同步到圈子的内容默认只有好友能看到。\n4. 想让所有用户看到，需要到【我的】-【隐私设置】开启公开，也可以随时关闭。\n\n之前的默认设置和提示没有做好，给大家带来困扰，很抱歉。",
+	title: "你的记录默认只有好友能看到",
+	body:  "我们调整了圈子的隐私规则：\n\n1. 饮食和运动记录不再对所有用户公开。\n2. 默认只有互相加了好友的人能看到。\n3. 谁能看到由【我的】-【隐私设置】里的两个开关决定：“互相好友可以看到”和“允许陌生人看到”，随时可以改。\n\n之前的默认设置和提示没有做好，给大家带来困扰，很抱歉。",
 }
 
 // OfficialAccountOptions selects what SeedOfficialAccount writes.

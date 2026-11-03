@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro'
 import { authenticatedRequest, getAccessToken, getUserProfile } from '../../src/utils/api'
-import { feedShareAudienceText, promptPublicRecordsReconfirm } from '../../src/utils/feed-share'
+import { circlePostAudienceHint, nextRecordVisibility, promptPublicRecordsReconfirm } from '../../src/utils/feed-share'
 
 jest.mock('@tarojs/taro', () => ({
   __esModule: true,
@@ -16,11 +16,36 @@ jest.mock('../../src/utils/api', () => ({
 const showModal = Taro.showModal as jest.Mock
 const update = authenticatedRequest as jest.Mock
 
-describe('feedShareAudienceText', () => {
-  it('says exactly who can see the record', () => {
-    expect(feedShareAudienceText(false, true)).toBe('只有你自己能看到')
-    expect(feedShareAudienceText(true, false)).toBe('只有好友能看到')
-    expect(feedShareAudienceText(true, true)).toContain('所有用户')
+describe('nextRecordVisibility', () => {
+  const friendsOnly = { friends_can_view_records: true, public_records: false }
+
+  it('opening to strangers also opens to friends', () => {
+    expect(nextRecordVisibility({ friends_can_view_records: false, public_records: false }, 'public_records', true))
+      .toEqual({ friends_can_view_records: true, public_records: true })
+  })
+
+  it('closing to friends also closes to strangers', () => {
+    expect(nextRecordVisibility({ friends_can_view_records: true, public_records: true }, 'friends_can_view_records', false))
+      .toEqual({ friends_can_view_records: false, public_records: false })
+  })
+
+  it('closing to strangers leaves friends alone', () => {
+    expect(nextRecordVisibility({ friends_can_view_records: true, public_records: true }, 'public_records', false))
+      .toEqual(friendsOnly)
+  })
+
+  it('opening to friends leaves strangers closed', () => {
+    expect(nextRecordVisibility({ friends_can_view_records: false, public_records: false }, 'friends_can_view_records', true))
+      .toEqual(friendsOnly)
+  })
+})
+
+describe('circlePostAudienceHint', () => {
+  it('says exactly who can see the post', () => {
+    expect(circlePostAudienceHint({ public_records: true, friends_can_view_records: true })).toBe('')
+    expect(circlePostAudienceHint({ public_records: false, friends_can_view_records: true })).toContain('只有好友能看到')
+    expect(circlePostAudienceHint({ public_records: false })).toContain('只有好友能看到')
+    expect(circlePostAudienceHint({ public_records: false, friends_can_view_records: false })).toContain('只有你自己能看到')
   })
 })
 

@@ -79,11 +79,12 @@ type UserFriend struct {
 func (UserFriend) TableName() string { return "user_friends" }
 
 type UserProfile struct {
-	ID            string `gorm:"column:id"`
-	Nickname      string `gorm:"column:nickname"`
-	Avatar        string `gorm:"column:avatar"`
-	PublicRecords *bool  `gorm:"column:public_records"`
-	PetLevel      *int   `gorm:"-"`
+	ID                    string `gorm:"column:id"`
+	Nickname              string `gorm:"column:nickname"`
+	Avatar                string `gorm:"column:avatar"`
+	PublicRecords         *bool  `gorm:"column:public_records"`
+	FriendsCanViewRecords *bool  `gorm:"column:friends_can_view_records;default:true"`
+	PetLevel              *int   `gorm:"-"`
 }
 
 type NutrientFoodRow struct {
@@ -754,16 +755,17 @@ func (r *FeedRepo) GetUserProfiles(ctx context.Context, userIDs []string) (map[s
 		return map[string]*UserProfile{}, nil
 	}
 	type userProfileRow struct {
-		ID            string `gorm:"column:id"`
-		Nickname      string `gorm:"column:nickname"`
-		Avatar        string `gorm:"column:avatar"`
-		PublicRecords *bool  `gorm:"column:public_records"`
-		PetLevel      *int   `gorm:"column:pet_level"`
+		ID                    string `gorm:"column:id"`
+		Nickname              string `gorm:"column:nickname"`
+		Avatar                string `gorm:"column:avatar"`
+		PublicRecords         *bool  `gorm:"column:public_records"`
+		FriendsCanViewRecords *bool  `gorm:"column:friends_can_view_records"`
+		PetLevel              *int   `gorm:"column:pet_level"`
 	}
 	var rows []userProfileRow
 	err := r.db.WithContext(ctx).
 		Table("weapp_user AS users").
-		Select("users.id, users.nickname, users.avatar, users.public_records, pets.level AS pet_level").
+		Select("users.id, users.nickname, users.avatar, users.public_records, users.friends_can_view_records, pets.level AS pet_level").
 		Joins("LEFT JOIN user_pets AS pets ON pets.user_id = users.id").
 		Where("users.id IN ?", userIDs).
 		Scan(&rows).Error
@@ -774,11 +776,12 @@ func (r *FeedRepo) GetUserProfiles(ctx context.Context, userIDs []string) (map[s
 	for i := range rows {
 		row := rows[i]
 		result[row.ID] = &UserProfile{
-			ID:            row.ID,
-			Nickname:      row.Nickname,
-			Avatar:        row.Avatar,
-			PublicRecords: row.PublicRecords,
-			PetLevel:      row.PetLevel,
+			ID:                    row.ID,
+			Nickname:              row.Nickname,
+			Avatar:                row.Avatar,
+			PublicRecords:         row.PublicRecords,
+			FriendsCanViewRecords: row.FriendsCanViewRecords,
+			PetLevel:              row.PetLevel,
 		}
 	}
 	return result, nil

@@ -453,6 +453,17 @@ func TestTaskService_SubmitAnalyzeTask_RejectsMoreThanFiveImages(t *testing.T) {
 	assert.Empty(t, guard.validateCalls)
 }
 
+func TestBuildSubmitTaskPayloadCarriesOnlyKnownEatingMood(t *testing.T) {
+	payload := buildSubmitTaskPayload(SubmitTaskInput{EatingMood: " calm "}, "2026-11-03", "standard")
+	assert.Equal(t, "calm", payload["eating_mood"])
+
+	for _, mood := range []string{"", "furious"} {
+		payload = buildSubmitTaskPayload(SubmitTaskInput{EatingMood: mood}, "2026-11-03", "standard")
+		_, present := payload["eating_mood"]
+		assert.False(t, present, mood)
+	}
+}
+
 func TestBuildSubmitTaskPayloadPreservesIntegratedPackagedCorrectionFields(t *testing.T) {
 	remaining := 520.5
 	offset := -480

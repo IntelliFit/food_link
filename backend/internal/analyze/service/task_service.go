@@ -101,6 +101,7 @@ type SubmitTaskInput struct {
 	District                string                         `json:"district"`
 	DietGoal                string                         `json:"diet_goal"`
 	ActivityTiming          string                         `json:"activity_timing"`
+	EatingMood              string                         `json:"eating_mood"`
 	UserGoal                string                         `json:"user_goal"`
 	RemainingCalories       *float64                       `json:"remaining_calories"`
 	SuggestRatioEnabled     bool                           `json:"suggest_ratio_enabled"`
@@ -669,7 +670,22 @@ func buildSubmitTaskPayload(input SubmitTaskInput, recordedOn, mode string) map[
 	return payload
 }
 
+// isTaskEatingMood accepts the moods a food record can store. The mood is chosen
+// before analysis and only carried on the task until the record is saved, so an
+// unknown value is dropped instead of failing the analysis.
+func isTaskEatingMood(mood string) bool {
+	switch mood {
+	case "happy", "calm", "stressed", "tired", "bored", "treat":
+		return true
+	default:
+		return false
+	}
+}
+
 func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInput) {
+	if mood := strings.TrimSpace(input.EatingMood); isTaskEatingMood(mood) {
+		payload["eating_mood"] = mood
+	}
 	if input.TimezoneOffsetMinutes != nil {
 		payload["timezone_offset_minutes"] = *input.TimezoneOffsetMinutes
 	}

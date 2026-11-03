@@ -17,6 +17,7 @@ import (
 	"food_link/backend/internal/community/repo"
 	contentsecurity "food_link/backend/internal/contentsecurity/service"
 	"food_link/backend/internal/foodmedia"
+	"food_link/backend/pkg/feedprivacy"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 
@@ -556,13 +557,37 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 	return items, nil
 }
 
+// friendsSharingRecords lists the friends whose records this user may see; a friend
+// can turn that off in privacy settings.
+func (s *CommunityService) friendsSharingRecords(ctx context.Context, userID string) ([]string, error) {
+	friendIDs, err := s.feedRepo.GetFriendIDs(ctx, userID)
+	if err != nil || len(friendIDs) == 0 {
+		return nil, err
+	}
+	profiles, err := s.feedRepo.GetUserProfiles(ctx, friendIDs)
+	if err != nil {
+		return nil, err
+	}
+	sharing := make([]string, 0, len(friendIDs))
+	for _, friendID := range friendIDs {
+		if profileVisibleToFriends(profiles[friendID]) {
+			sharing = append(sharing, friendID)
+		}
+	}
+	return sharing, nil
+}
+
+func profileVisibleToFriends(profile *repo.UserProfile) bool {
+	return profile != nil && feedprivacy.VisibleToFriends(profile.FriendsCanViewRecords, profile.PublicRecords)
+}
+
 func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params FeedParams) ([]FeedItem, error) {
 	params = NormalizeFeedParams(params)
 	if params.AuthorID == "" && params.AuthorScope == "public" {
 		return s.publicFeed(ctx, params, userID)
 	}
 
-	friendIDs, err := s.feedRepo.GetFriendIDs(ctx, userID)
+	friendIDs, err := s.friendsSharingRecords(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1082,7 +1107,7 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 	// 未公开的账号只对本人和好友出现在榜单上，否则昵称和记录次数会暴露给所有人。
 	visibleFriends := map[string]bool{viewerUserID: viewerUserID != ""}
 	if viewerUserID != "" {
-		friendIDs, err := s.feedRepo.GetFriendIDs(ctx, viewerUserID)
+		friendIDs, err := s.friendsSharingRecords(ctx, viewerUserID)
 		if err != nil {
 			return nil, err
 		}
@@ -1144,7 +1169,7 @@ func (s *CommunityService) HealthLeaderboard(ctx context.Context, viewerUserID s
 	if s.healthScoreProvider == nil {
 		return nil, fmt.Errorf("健康指数服务未配置")
 	}
-	friendIDs, err := s.feedRepo.GetFriendIDs(ctx, viewerUserID)
+	friendIDs, err := s.friendsSharingRecords(ctx, viewerUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -1567,6 +1592,9 @@ func (s *CommunityService) getFeedRecordInteractionContext(ctx context.Context, 
 	}
 	if owner != nil && owner.PublicRecords != nil && *owner.PublicRecords {
 		return &FeedContextResult{Allowed: true, Reason: "public"}, nil
+	}
+	if owner != nil && !feedprivacy.VisibleToFriends(owner.FriendsCanViewRecords, owner.PublicRecords) {
+		return &FeedContextResult{Allowed: false, Reason: "forbidden"}, nil
 	}
 	if userID != "" && record.UserID != "" {
 		isFriend, err := s.feedRepo.IsFriend(ctx, userID, record.UserID)

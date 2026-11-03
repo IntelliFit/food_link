@@ -623,6 +623,7 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		District                string                                 `json:"district"`
 		DietGoal                string                                 `json:"diet_goal"`
 		ActivityTiming          string                                 `json:"activity_timing"`
+		EatingMood              string                                 `json:"eating_mood"`
 		UserGoal                string                                 `json:"user_goal"`
 		RemainingCalories       *float64                               `json:"remaining_calories"`
 		SuggestRatioEnabled     bool                                   `json:"suggest_ratio_enabled"`
@@ -662,6 +663,7 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		District:                body.District,
 		DietGoal:                body.DietGoal,
 		ActivityTiming:          body.ActivityTiming,
+		EatingMood:              body.EatingMood,
 		UserGoal:                body.UserGoal,
 		RemainingCalories:       body.RemainingCalories,
 		SuggestRatioEnabled:     body.SuggestRatioEnabled,

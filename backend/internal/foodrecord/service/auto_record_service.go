@@ -60,6 +60,10 @@ func (s *FoodRecordService) AutoRecordCompletedTask(ctx context.Context, task *a
 	insight := nonEmptyAutoRecordStringPtr(stringFromAny(task.Result["insight"]))
 	dietGoal := nonEmptyAutoRecordStringPtr(stringFromAny(task.Payload["diet_goal"], task.Payload["dietGoal"]))
 	activityTiming := nonEmptyAutoRecordStringPtr(stringFromAny(task.Payload["activity_timing"], task.Payload["activityTiming"]))
+	eatingMood := nonEmptyAutoRecordStringPtr(stringFromAny(task.Payload["eating_mood"]))
+	if eatingMood != nil && !validEatingMood(*eatingMood) {
+		eatingMood = nil
+	}
 	pfcComment := nonEmptyAutoRecordStringPtr(stringFromAny(task.Result["pfc_ratio_comment"], task.Result["pfcRatioComment"]))
 	absorptionNotes := nonEmptyAutoRecordStringPtr(stringFromAny(task.Result["absorption_notes"], task.Result["absorptionNotes"]))
 	contextAdvice := nonEmptyAutoRecordStringPtr(stringFromAny(task.Result["context_advice"], task.Result["contextAdvice"]))
@@ -85,6 +89,7 @@ func (s *FoodRecordService) AutoRecordCompletedTask(ctx context.Context, task *a
 		TotalWeightGrams: int(math.Round(totalWeight)),
 		DietGoal:         dietGoal,
 		ActivityTiming:   activityTiming,
+		EatingMood:       eatingMood,
 		PFCRatioComment:  pfcComment,
 		AbsorptionNotes:  absorptionNotes,
 		ContextAdvice:    contextAdvice,

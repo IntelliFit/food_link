@@ -18,6 +18,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTaskRecordTargetDate } from '../../../utils/record-date'
 import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
+import { persistEatingMoodFromPayload } from '../../../utils/eating-mood'
 import { openRecordedMealPoster } from '../../../utils/open-analyze-task'
 import MealDishPrompt from '../../../components/MealDishPrompt'
 import { WaitingPetCompanion, petQuizLine, type PetReaction } from './WaitingPetCompanion'
@@ -1246,6 +1247,7 @@ const persistAnalyzeContextFromPayload = (payload: Record<string, unknown>) => {
   if (typeof payload.activity_timing === 'string' && payload.activity_timing.trim()) {
     Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing)
   }
+  persistEatingMoodFromPayload(payload)
 }
 
 const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => {

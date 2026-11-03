@@ -23,8 +23,6 @@ import {
 } from '../../../utils/membership'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
-import FeedShareSwitch from '../../../components/FeedShareSwitch'
-import { useFeedShareChoice } from '../../../hooks/useFeedShareChoice'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { COMMUNITY_FEED_CHANGED_EVENT, HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
@@ -141,7 +139,6 @@ export default function ExerciseRecordPage() {
   const [records, setRecords] = useState<ExerciseRecord[]>([])
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
   const [submitting, setSubmitting] = useState(false)
-  const { shareToFeed, setShareToFeed, accountPublic } = useFeedShareChoice()
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [expandedTextKeys, setExpandedTextKeys] = useState<Record<string, boolean>>({})
   const [creditSheet, setCreditSheet] = useState<{ visible: boolean; message?: string; status?: MembershipStatus | null }>({
@@ -452,7 +449,6 @@ export default function ExerciseRecordPage() {
         average_heart_rate: precisionEnabled && precisionHeartRate ? averageHeartRate : undefined,
         distance_km: precisionEnabled && precisionDistance ? distanceKm : undefined,
         exercise_breakdown: precisionEnabled ? precisionBreakdown : undefined,
-        share_to_feed: shareToFeed,
       })
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       const createdAt = new Date().toISOString()
@@ -740,7 +736,6 @@ export default function ExerciseRecordPage() {
             )}
           </View>
         </View>
-        <FeedShareSwitch value={shareToFeed} accountPublic={accountPublic} onChange={setShareToFeed} disabled={submitting} />
       </View>
 
       <ScrollView

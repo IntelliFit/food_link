@@ -823,6 +823,7 @@ export interface UserInfo {
   execution_mode?: ExecutionMode | null
   searchable?: boolean
   public_records?: boolean
+  friends_can_view_records?: boolean
   public_favorite_recipes?: boolean
 }
 

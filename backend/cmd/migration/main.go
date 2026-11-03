@@ -38,6 +38,7 @@ func main() {
 	onlyCampusDirectoryPending := flag.Bool("only-campus-directory-pending", false, "only import pending-review campus dining research in one transaction")
 	onlyFoodRecordMood := flag.Bool("only-food-record-mood", false, "only add the optional food-record eating mood column and constraint")
 	onlyFeedPrivacy := flag.Bool("only-feed-privacy", false, "only add consent columns and make public records default to off; existing choices are kept")
+	onlyFeedFriends := flag.Bool("only-feed-friends", false, "only add the switch that lets an account hide its records from friends; defaults to on for everyone")
 	flipFeedPrivacy := flag.Bool("flip-feed-privacy", false, "count accounts that never explicitly agreed to public records; read-only unless -flip-feed-privacy-apply is set")
 	flipFeedPrivacyApply := flag.Bool("flip-feed-privacy-apply", false, "with -flip-feed-privacy, turn those accounts private and ask them once in the mini program")
 	officialAccount := flag.Bool("official-account", false, "count what the no-login official account and its posts would add; read-only unless -official-account-apply is set")
@@ -103,7 +104,7 @@ func main() {
 	if *onlySupplementProduct {
 		selectedOnlyModes++
 	}
-	for _, selected := range []bool{*onlyResearchWeight, *onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyWechatTransfer, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyFeedPrivacy, *flipFeedPrivacy, *officialAccount, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations, *onlyContentConfigs, *onlyExperiments} {
+	for _, selected := range []bool{*onlyResearchWeight, *onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyWechatTransfer, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyFeedPrivacy, *onlyFeedFriends, *flipFeedPrivacy, *officialAccount, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations, *onlyContentConfigs, *onlyExperiments} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -317,6 +318,8 @@ func main() {
 		migrateErr = migration.MigrateFoodRecordMood(ctx, db, cfg.Database.Schema)
 	} else if *onlyFeedPrivacy {
 		migrateErr = migration.MigrateFeedPrivacySchema(ctx, db, cfg.Database.Schema)
+	} else if *onlyFeedFriends {
+		migrateErr = migration.MigrateFeedFriendsSchema(ctx, db, cfg.Database.Schema)
 	} else if *flipFeedPrivacy {
 		flipResult, flipErr := migration.FlipUnconsentedRecordsToPrivate(ctx, db, cfg.Database.Schema, *flipFeedPrivacyApply)
 		migrateErr = flipErr
@@ -397,6 +400,10 @@ func main() {
 	}
 	if *onlyFeedPrivacy {
 		log.Printf("圈子公开设置字段迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
+		return
+	}
+	if *onlyFeedFriends {
+		log.Printf("圈子好友可见开关字段迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
 	if *flipFeedPrivacy || *officialAccount {

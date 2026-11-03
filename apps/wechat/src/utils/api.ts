@@ -549,8 +549,6 @@ export type FoodRecordEntryType =
 
 /** 确认记录请求：餐次 + 识别结果与营养汇总 + 用户状态与专业分析 */
 export interface SaveFoodRecordRequest {
-  /** 这条记录是否同步到圈子；不传时后端按账号的公开设置决定 */
-  share_to_feed?: boolean
   meal_type: MealType
   image_path?: string
   image_paths?: string[]
@@ -1880,6 +1878,7 @@ export interface UserInfo {
   searchable?: boolean
   public_records?: boolean
   public_records_reconfirm_pending?: boolean
+  friends_can_view_records?: boolean
 	public_favorite_recipes?: boolean
 }
 
@@ -2414,6 +2413,7 @@ export interface UpdateUserInfoRequest {
   telephone?: string
   searchable?: boolean
   public_records?: boolean
+  friends_can_view_records?: boolean
 	public_favorite_recipes?: boolean
 }
 
@@ -3420,6 +3420,7 @@ export interface AnalyzeTaskSubmitParams {
   district?: string
   diet_goal?: string
   activity_timing?: string
+  eating_mood?: EatingMood
   user_goal?: string
   remaining_calories?: number
   suggest_ratio_enabled?: boolean
@@ -3683,6 +3684,7 @@ export interface AnalyzeTextTaskSubmitParams {
   district?: string
   diet_goal?: string
   activity_timing?: string
+  eating_mood?: EatingMood
   user_goal?: string
   remaining_calories?: number
   suggest_ratio_enabled?: boolean
@@ -3749,6 +3751,7 @@ export interface ContinuePrecisionSessionParams {
   district?: string
   diet_goal?: string
   activity_timing?: string
+  eating_mood?: EatingMood
   user_goal?: string
   remaining_calories?: number
   suggest_ratio_enabled?: boolean
@@ -9238,13 +9241,9 @@ export async function createExerciseLog(data: {
   average_heart_rate?: number
   distance_km?: number
   exercise_breakdown?: string
-  share_to_feed?: boolean
 }): Promise<{ task_id: string; message: string }> {
   const trimmed = data.exercise_desc.trim()
   const parts: string[] = [`exercise_desc=${encodeURIComponent(trimmed)}`]
-  if (typeof data.share_to_feed === 'boolean') {
-    parts.push(`share_to_feed=${data.share_to_feed}`)
-  }
   if (data.image_url) {
     parts.push(`image_url=${encodeURIComponent(data.image_url)}`)
   }
