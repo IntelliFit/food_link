@@ -1,13 +1,14 @@
 import Taro from '@tarojs/taro'
 
+// 数组顺序就是默认顺序，也是全部打开时的排布：活动 → 今天吃得怎样 → 下一步 → 记录 → 工具 → 回顾。
 export const HOME_MODULES = [
+  { id: 'rewards', label: '活动横幅', description: '积分任务、校园活动等' },
   { id: 'diet', label: '饮食与营养', description: '当日摄入、目标和营养概览' },
-  { id: 'nextMeal', label: '下一餐建议', description: '查看具体菜品与份量，继续调整方案' },
-  { id: 'body', label: '快捷记录', description: '体重、喝水、运动和睡眠集中显示' },
+  { id: 'nextMeal', label: '下一餐推荐', description: '具体吃什么，还能接着聊' },
+  { id: 'body', label: '快速记录', description: '体重、喝水、运动和睡眠' },
   { id: 'supplements', label: '今日补剂', description: '补剂计划和快捷记录' },
-  { id: 'expiry', label: '食物保质期', description: '查看临期食物和保质期' },
-  { id: 'rewards', label: '活动横幅', description: '积分任务、校园活动等首页横幅' },
   { id: 'meals', label: '今日餐食', description: '已记录的餐食和营养明细' },
+  { id: 'expiry', label: '食物保质期', description: '临期时会自动显示' },
   { id: 'recap', label: '上周回顾', description: '回看真实记录，留下一周的小结' },
 ] as const
 
@@ -24,16 +25,22 @@ export type HomeLayoutDensity = 'smart' | 'comfortable' | 'compact'
 export type HomeModuleLayout = { order: HomeModuleId[]; hidden: HomeModuleId[]; quickStats: HomeQuickStatId[]; density: HomeLayoutDensity }
 export type HomeModuleLocks = Partial<Record<HomeModuleId, string>>
 const ids: HomeModuleId[] = HOME_MODULES.map(item => item.id)
-const legacyDefaultOrder: HomeModuleId[] = ['nextMeal', 'diet', 'supplements', 'rewards', 'body', 'meals', 'expiry', 'recap']
+const defaultHidden: HomeModuleId[] = ['supplements', 'expiry']
+const pastDefaultOrders: string[][] = [
+  ['nextMeal', 'diet', 'supplements', 'rewards', 'body', 'meals', 'expiry', 'recap'],
+  ['diet', 'nextMeal', 'body', 'supplements', 'expiry', 'rewards', 'meals', 'recap'],
+]
 const quickStatIds: HomeQuickStatId[] = HOME_QUICK_STATS.map(item => item.id)
 const defaultQuickStats: HomeQuickStatId[] = ['weight', 'exercise', 'sleep']
 const legacyDefaultQuickStats: HomeQuickStatId[] = ['weight', 'water', 'sleep']
-export const HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v4:'
-const PREVIOUS_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v3:'
-const LEGACY_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v2:'
+export const HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v5:'
+const V4_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v4:'
+const V3_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v3:'
+const V2_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v2:'
+const ORGANIZE_HINT_PREFIX = 'home_organize_hint_v1:'
 
 export function defaultHomeModuleLayout(): HomeModuleLayout {
-  return { order: [...ids], hidden: ['supplements'], quickStats: [...defaultQuickStats], density: 'smart' }
+  return { order: [...ids], hidden: [...defaultHidden], quickStats: [...defaultQuickStats], density: 'smart' }
 }
 
 export function normalizeHomeModuleLayout(value: unknown): HomeModuleLayout {
@@ -112,24 +119,29 @@ export function homeLayoutOwner(): string {
   return String(Taro.getStorageSync('user_id') || 'guest')
 }
 
+/** 没动过顺序的老用户换成新默认；动过顺序或关过其他模块的，尊重本人的选择。 */
+function adoptNewDefaults(stored: unknown, layout: HomeModuleLayout): HomeModuleLayout {
+  const storedOrder = stored && typeof stored === 'object' ? (stored as { order?: unknown }).order : undefined
+  const keptPastOrder = Array.isArray(storedOrder)
+    && pastDefaultOrders.some(order => order.length === storedOrder.length && order.every((id, index) => storedOrder[index] === id))
+  if (!keptPastOrder) return layout
+  const hidOthers = layout.hidden.some(id => id !== 'supplements')
+  return { ...layout, order: [...ids], hidden: hidOthers ? layout.hidden : [...layout.hidden, 'expiry'] }
+}
+
 export function readHomeModuleLayout(): HomeModuleLayout {
   try {
     const owner = homeLayoutOwner()
     const current = Taro.getStorageSync(HOME_MODULE_LAYOUT_PREFIX + owner)
     if (current) return normalizeHomeModuleLayout(current)
-    const previous = Taro.getStorageSync(PREVIOUS_HOME_MODULE_LAYOUT_PREFIX + owner)
-    const legacy = previous || Taro.getStorageSync(LEGACY_HOME_MODULE_LAYOUT_PREFIX + owner)
-    const migrated = normalizeHomeModuleLayout(legacy)
-    // Replace the old default once; subsequent custom choices use v4.
-    if (previous && migrated.quickStats.length === legacyDefaultQuickStats.length
+    const v4 = Taro.getStorageSync(V4_HOME_MODULE_LAYOUT_PREFIX + owner)
+    const v3 = v4 ? null : Taro.getStorageSync(V3_HOME_MODULE_LAYOUT_PREFIX + owner)
+    const stored = v4 || v3 || Taro.getStorageSync(V2_HOME_MODULE_LAYOUT_PREFIX + owner)
+    let migrated = stored ? adoptNewDefaults(stored, normalizeHomeModuleLayout(stored)) : defaultHomeModuleLayout()
+    // Replace the old quick-card default once; subsequent custom choices stay.
+    if (v3 && migrated.quickStats.length === legacyDefaultQuickStats.length
       && legacyDefaultQuickStats.every(id => migrated.quickStats.includes(id))) {
-      migrated.quickStats = [...defaultQuickStats]
-    }
-    const legacyOrder = legacy && typeof legacy === 'object' && Array.isArray((legacy as { order?: unknown }).order)
-      ? (legacy as { order: unknown[] }).order
-      : []
-    if (legacyOrder.length === legacyDefaultOrder.length && legacyDefaultOrder.every((id, index) => legacyOrder[index] === id)) {
-      migrated.order = [...ids]
+      migrated = { ...migrated, quickStats: [...defaultQuickStats] }
     }
     Taro.setStorageSync(HOME_MODULE_LAYOUT_PREFIX + owner, migrated)
     return migrated
@@ -141,4 +153,14 @@ export function saveHomeModuleLayout(layout: HomeModuleLayout): HomeModuleLayout
   const normalized = normalizeHomeModuleLayout(layout)
   Taro.setStorageSync(HOME_MODULE_LAYOUT_PREFIX + homeLayoutOwner(), normalized)
   return normalized
+}
+
+export function shouldShowOrganizeHint(): boolean {
+  try { return !Taro.getStorageSync(ORGANIZE_HINT_PREFIX + homeLayoutOwner()) }
+  catch { return false }
+}
+
+export function markOrganizeHintSeen(): void {
+  try { Taro.setStorageSync(ORGANIZE_HINT_PREFIX + homeLayoutOwner(), true) }
+  catch { /* 提示最多多出现一次，不影响使用 */ }
 }

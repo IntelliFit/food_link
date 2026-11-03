@@ -31,4 +31,12 @@ export const HOME_RECORD_ONBOARDING_STEPS: OnboardingGuideStep[] = [
     description: '从食物库中挑选常见食物直接记录，无需拍照或打字。比如你喝了一瓶统一冰红茶，或者吃了一碗标准白米饭。',
     padding: 10,
   },
+  {
+    selector: '#home-layout-edit',
+    title: '首页可以自己排',
+    description: '想看哪些内容、按什么顺序，点这里调整。保质期和补剂默认收起，需要时可以打开。',
+    padding: 8,
+  },
 ]
+
+export const HOME_ORGANIZE_GUIDE_STEP = HOME_RECORD_ONBOARDING_STEPS.length - 1

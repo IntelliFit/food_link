@@ -133,15 +133,16 @@ import { WeeklyRecapEntry } from '../../components/WeeklyRecapEntry'
 import { useSocialInbox } from '../../hooks/useSocialInbox'
 import { socialInboxTotal } from '../../utils/social-inbox'
 import { HomeModule, HomeModuleManager } from './components/HomeModuleManager'
-import { homeLayoutOwner, homeModuleLocks, isHomeQuickStatVisible, readHomeModuleLayout, saveHomeModuleLayout } from './utils/home-module-layout'
+import { homeLayoutOwner, homeModuleLocks, isHomeQuickStatVisible, markOrganizeHintSeen, readHomeModuleLayout, saveHomeModuleLayout, shouldShowOrganizeHint } from './utils/home-module-layout'
 import { PetAvatar } from '../../components/PetAvatar'
 import { isHealthProfileReminderSnoozed, snoozeHealthProfileReminder } from '../../utils/health-profile-reminder'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
   consumeHomeRecordGuideAfterOnboarding,
+  isGuideCompleted,
   shouldOfferOnboardingGuide,
 } from '../../utils/onboarding-guide-storage'
-import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
+import { HOME_ORGANIZE_GUIDE_STEP, HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 import { OnboardingWelcome } from '../../components/OnboardingWelcome'
 import { FirstBriefSheet } from '../../components/FirstBriefSheet'
 import { useExperiment } from '../../hooks/useExperiment'
@@ -828,9 +829,14 @@ function IndexPage() {
   const { scheme } = useAppColorScheme()
   const [moduleLayout, setModuleLayout] = React.useState(readHomeModuleLayout)
   const [showHomeModuleManager, setShowHomeModuleManager] = React.useState(false)
+  const [organizeHintPending, setOrganizeHintPending] = React.useState(shouldShowOrganizeHint)
+  const dismissOrganizeHint = React.useCallback(() => {
+    markOrganizeHintSeen()
+    setOrganizeHintPending(false)
+  }, [])
   const moduleOwner = React.useRef(homeLayoutOwner())
   const socialInbox = useSocialInbox()
-  useDidShow(() => { setModuleLayout(readHomeModuleLayout()); setShowHomeModuleManager(false) })
+  useDidShow(() => { setModuleLayout(readHomeModuleLayout()); setShowHomeModuleManager(false); setOrganizeHintPending(shouldShowOrganizeHint()) })
   useDidHide(() => { setShowHomeModuleManager(false); setShowPlanPicker(false); setPlanUndo(null) })
   const [hiddenMicronutrientKeys, setHiddenMicronutrientKeys] = React.useState<HomeMicronutrientKey[]>(getStoredHiddenMicronutrientKeys)
   const initialSelectedDate = formatDateKey(new Date())
@@ -955,7 +961,13 @@ function IndexPage() {
       setShowRecordMenu(true)
       await new Promise<void>((resolve) => setTimeout(resolve, stepIndex === 0 ? 400 : 220))
     }
-  }, [])
+    if (nextIndex === HOME_ORGANIZE_GUIDE_STEP) {
+      // 这一步要看到首页顶部的「整理首页」，先把记录面板收起来。
+      setShowRecordMenu(false)
+      dismissOrganizeHint()
+      await new Promise<void>((resolve) => setTimeout(resolve, 260))
+    }
+  }, [dismissOrganizeHint])
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
   const dismissHealthProfilePrompt = React.useCallback(() => {
@@ -966,6 +978,8 @@ function IndexPage() {
   const closeHomeOnboardingGuide = React.useCallback(() => {
     setShowHomeOnboardingGuide(false)
     setHomeGuideTransitionPending(false)
+    // 中途跳过教学的人，下次回到首页再提示，不紧接着又弹一个。
+    setOrganizeHintPending(false)
   }, [])
 
   const openHealthProfileFromPrompt = React.useCallback(() => {
@@ -3074,7 +3088,14 @@ function IndexPage() {
 
         <View className='home-layout-toolbar'>
           {!isGuest && socialInboxTotal(socialInbox) > 0 ? <View className='home-social-inbox' role='button' onClick={() => void Taro.switchTab({ url: '/pages/community/index' })}><Text>圈子</Text><Text className='home-social-inbox__badge'>{socialInboxTotal(socialInbox) > 99 ? '99+' : socialInboxTotal(socialInbox)}</Text><Text>条提醒 ›</Text></View> : <View />}
-          <View className='home-layout-toolbar__edit' role='button' onClick={() => { moduleOwner.current = homeLayoutOwner(); setShowHomeModuleManager(true) }}><Text>整理首页</Text></View>
+          <View id='home-layout-edit' className='home-layout-toolbar__edit' role='button' onClick={() => { dismissOrganizeHint(); moduleOwner.current = homeLayoutOwner(); setShowHomeModuleManager(true) }}><Text>整理首页</Text></View>
+          {!isGuest && organizeHintPending && isGuideCompleted(ONBOARDING_HOME_RECORD_GUIDE_KEY) && !isOnboardingFirstDay() && !showHomeOnboardingGuide && !homeGuideTransitionPending && !showOnboardingWelcome && (
+            <View className='home-organize-hint' role='status'>
+              <Text className='home-organize-hint__title'>首页可以自己排</Text>
+              <Text className='home-organize-hint__desc'>想看哪些内容、按什么顺序，点这里调整。保质期默认收起了，需要时可以打开。</Text>
+              <View className='home-organize-hint__ok' role='button' onClick={dismissOrganizeHint}><Text>知道了</Text></View>
+            </View>
+          )}
         </View>
 
         {!getAccessToken() && (
@@ -3514,7 +3535,7 @@ function IndexPage() {
                         >
                           <View className='expiry-media-wrap'>
                             <View className='expiry-icon-wrap' style={{ backgroundColor: bgColor }}>
-                              <Text className={`iconfont ${iconClass}`} style={{ color: iconColor, fontSize: '52rpx' }} />
+                              <Text className={`iconfont ${iconClass}`} style={{ color: iconColor, fontSize: '36rpx' }} />
                             </View>
                           </View>
                           <View className='expiry-content'>
