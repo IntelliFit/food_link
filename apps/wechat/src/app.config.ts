@@ -98,6 +98,8 @@ export default defineAppConfig({
     // packageExtra is close to the 2MB subpackage limit; the promoter center lives on its own.
     { root: 'packagePromoter', name: 'promoter', pages: ['pages/center/index'] },
     { root: 'packageLifespan', name: 'lifespan', pages: ['pages/predictor/index'] },
+    // 拍照识别的 3:4 / 4:3 取景相机；packageExtra 快满了，单独分包。
+    { root: 'packageCamera', name: 'camera', pages: ['pages/shoot/index'] },
     {
       root: 'packageExtra',
       name: 'extra',

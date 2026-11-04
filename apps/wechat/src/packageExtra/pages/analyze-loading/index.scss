@@ -9,17 +9,6 @@
   overflow: hidden;
 }
 
-// 全屏背景：用户刚拍/选的图
-.fullscreen-bg-image {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  z-index: 1;
-}
-
 .fullscreen-bg-fallback {
   position: absolute;
   top: 0;
@@ -110,7 +99,7 @@
   word-break: break-all;
 }
 
-// 底部渐隐，便于白字阅读，不覆盖整屏照片
+// 底部渐隐，便于白字阅读
 .loading-bottom-readability {
   position: absolute;
   left: 0;
@@ -153,6 +142,7 @@
 }
 
 // 与摄影页 `record/index.scss` 中 `.scanner-frame` 同尺寸、同四角圆角与扫描线
+// 有照片时由 index.tsx 按横图 4:3、竖图 3:4 覆盖宽高
 .scanner-frame-v3 {
   width: 640rpx;
   border-radius: 80rpx;

@@ -20,6 +20,7 @@ import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { persistEatingMoodFromPayload } from '../../../utils/eating-mood'
 import { openRecordedMealPoster } from '../../../utils/open-analyze-task'
+import { getPhotoFrameSize } from '@food-link/core'
 import MealDishPrompt from '../../../components/MealDishPrompt'
 import { WaitingPetCompanion, petQuizLine, type PetReaction } from './WaitingPetCompanion'
 import {
@@ -1061,6 +1062,7 @@ const POLL_RETRY_MAX_INTERVAL = 16000
 /** 用户正在选菜时，识别完成后最多再等这么久才跳转。 */
 const MEAL_DISH_HOLD_MS = 8000
 const TIP_ROTATE_INTERVAL = 6000
+const SCANNER_FRAME_LONG_EDGE_RPX = 640
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }> = {
   lite: {
@@ -1328,6 +1330,7 @@ function AnalyzeLoadingPage() {
     Taro.getCurrentInstance().router?.params?.correction === '1'
   )
   const [imagePath, setImagePath] = useState<string>('')
+  const [loadedPhoto, setLoadedPhoto] = useState<{ src: string; ratio: number } | null>(null)
   const [autoRecordEnabled, setAutoRecordEnabled] = useState(() => readAutoRecordPreference().enabled)
   const [autoRecordUpdating, setAutoRecordUpdating] = useState(false)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1895,11 +1898,23 @@ function AnalyzeLoadingPage() {
   const textRecordPreview = textRecordInput || '文字记录，未提供实物照片'
   const interactionCard = WAITING_INTERACTION_CARDS[interactionIndex]
   const showMealDish = !!taskId && taskType === 'food' && !!imagePath && !isCorrectionMode && !isDebugMode
+  const handlePhotoLoad = (event: { detail: { width: number | string; height: number | string } }) => {
+    const width = Number(event.detail.width)
+    const height = Number(event.detail.height)
+    if (width > 0 && height > 0) setLoadedPhoto({ src: imagePath, ratio: width / height })
+  }
+  // 照片加载出来前先用样式里的方框，运动和文字任务一直用方框。
+  const photoFrameSize = loadedPhoto && loadedPhoto.src === imagePath && taskType !== 'exercise' && !isTextFoodTask
+    ? getPhotoFrameSize(loadedPhoto.ratio, SCANNER_FRAME_LONG_EDGE_RPX)
+    : null
+  const photoFrameStyle = photoFrameSize
+    ? { width: `${photoFrameSize.width}rpx`, height: `${photoFrameSize.height}rpx` }
+    : undefined
   const showPrecisionLongWaitNotice = taskType === 'food' && (executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search') && !isCorrectionMode
 
   return (
     <View className='analyze-loading-page-v3'>
-      {/* 全屏背景：拍照分析与结果头图一致；文字分析与结果页「无图占位」同一视觉 */}
+      {/* 背景不放照片，照片只在下方按比例的框内显示；文字分析与结果页「无图占位」同一视觉 */}
       {isTextFoodTask ? (
         <View className='fullscreen-bg-text-record'>
           <View className='fullscreen-text-placeholder'>
@@ -1909,8 +1924,6 @@ function AnalyzeLoadingPage() {
             <Text className='text-record-placeholder-label'>{textRecordPreview}</Text>
           </View>
         </View>
-      ) : imagePath ? (
-        <Image className='fullscreen-bg-image' src={imagePath} mode='aspectFill' />
       ) : (
         <View className='fullscreen-bg-fallback' />
       )}
@@ -1921,7 +1934,7 @@ function AnalyzeLoadingPage() {
       {/* 内容层 */}
       <View className='content-layer'>
         <View className='scanner-frame-container'>
-          <View className='scanner-frame-v3'>
+          <View className='scanner-frame-v3' style={photoFrameStyle}>
             {taskType === 'exercise' ? (
               <View className='frame-placeholder-v3'>
                 <IconExercise size={64} color='#f97316' />
@@ -1934,7 +1947,7 @@ function AnalyzeLoadingPage() {
                 <Text className='frame-text-record-label'>{textRecordPreview}</Text>
               </View>
             ) : imagePath ? (
-              <Image className='frame-image-v3' src={imagePath} mode='aspectFill' />
+              <Image className='frame-image-v3' src={imagePath} mode='aspectFill' onLoad={handlePhotoLoad} />
             ) : (
               <View className='frame-placeholder-v3'>
                 <Text className='iconfont icon-shiwu' style={{ fontSize: '64rpx', color: '#00bc7d' }} />
