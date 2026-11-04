@@ -12,3 +12,7 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
+
+# FOODLINK_HONOR_KEEP
+-keep class com.hihonor.push.** { *; }
+-keep class cn.healthymax.foodlink.notifications.honor.** { *; }

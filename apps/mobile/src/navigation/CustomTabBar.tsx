@@ -4,8 +4,6 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { IconfontText } from '../components/Iconfont'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
-import { getStoredUserId } from '../api'
-import { DEFAULT_HOME_EXPERIENCE_CONFIG, getStoredHomeExperienceConfig, onHomeExperienceModeChanged } from '../utils/homeExperience'
 import { colors, radius, shadow } from '../theme'
 import { requestHomeRecordMenu } from '../utils/home-record-menu'
 import {
@@ -28,7 +26,6 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const bottomInset = Math.max(insets.bottom, 8)
   const { isDark } = useColorScheme()
   const [profileBadgeCount, setProfileBadgeCount] = useState(0)
-  const [homeExperienceMode, setHomeExperienceMode] = useState(DEFAULT_HOME_EXPERIENCE_CONFIG.mode)
   const leftRoutes = state.routes.slice(0, 2)
   const rightRoutes = state.routes.slice(2)
 
@@ -51,24 +48,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     }
   }, [state.index])
 
-  useEffect(() => {
-    let active = true
-    const refreshMode = async () => {
-      const userId = await getStoredUserId().catch(() => '')
-      const config = await getStoredHomeExperienceConfig(userId || '')
-      if (active) setHomeExperienceMode(config.mode)
-    }
-    void refreshMode()
-    const unsubscribe = onHomeExperienceModeChanged((mode) => {
-      if (active) setHomeExperienceMode(mode)
-    })
-    return () => {
-      active = false
-      unsubscribe()
-    }
-  }, [state.index])
-
-  const wellnessActive = homeExperienceMode === 'wellness'
+  const wellnessActive = state.routes[state.index]?.name === 'HomeTab'
   const activeColor = wellnessActive ? '#eed6a2' : TAB_SELECTED_COLOR
   const inactiveColor = wellnessActive ? '#b7c6b8' : isDark ? '#6b7280' : '#9ca3af'
 
@@ -99,7 +79,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           />
           {route.name === 'ProfileTab' && profileBadgeCount > 0 ? <View style={styles.badge} /> : null}
         </View>
-        <Text style={[styles.tabText, { color: focused ? activeColor : inactiveColor }, focused && styles.tabTextActive]} numberOfLines={1}>{meta.label}</Text>
+        <Text style={[styles.tabText, focused && styles.tabTextActive, { color: focused ? activeColor : inactiveColor }]} numberOfLines={1}>{meta.label}</Text>
       </Pressable>
     )
   }
@@ -107,7 +87,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   return (
     <>
       <View style={styles.wrap}>
-        <View style={[styles.bar, { minHeight: 66 + bottomInset, paddingBottom: bottomInset, backgroundColor: wellnessActive ? '#15382a' : isDark ? '#1a2220' : colors.surface }]}>
+        <View style={[styles.bar, { minHeight: 66 + bottomInset, paddingBottom: bottomInset, backgroundColor: wellnessActive ? '#194e3a' : isDark ? '#1a2220' : colors.surface }]}>
           <View style={styles.side}>{leftRoutes.map(renderTab)}</View>
           <Pressable
             accessibilityRole="button"

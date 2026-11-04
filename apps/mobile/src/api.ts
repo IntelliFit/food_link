@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createFoodLinkApiClient, type ApiClientRequestOptions, type RecentRequestTrace, type UploadFileInput } from '@food-link/api-client'
 import { API_BASE_URL, SHARE_BASE_URL } from './config'
+import { clearLocalMeals, syncLocalMealSession } from './native/localMeals'
 
 const ACCESS_TOKEN_KEY = 'food_link_mobile_access_token'
 const REFRESH_TOKEN_KEY = 'food_link_mobile_refresh_token'
@@ -11,6 +12,11 @@ const MOBILE_CLIENT_HEADERS = {
 }
 
 const recentRequestTraces: RecentRequestTrace[] = []
+const foodRecordListeners = new Set<() => void>()
+export function subscribeFoodRecordChanges(listener: () => void) {
+  foodRecordListeners.add(listener)
+  return () => { foodRecordListeners.delete(listener) }
+}
 
 function timeoutSignal(timeoutMs?: number): AbortSignal | undefined {
   if (!timeoutMs || typeof AbortController === 'undefined') return undefined
@@ -148,6 +154,10 @@ export const apiClient = createFoodLinkApiClient({
         const headers = readHeaders(response)
         const data = await parseJsonResponse(response)
         recordRequestTrace({ url, method, startedAt, statusCode: response.status, headers })
+        if (response.ok && (data as { code?: number } | null)?.code === 0 && method !== 'GET' && url.includes('/api/food-record/')) {
+          // A reminder refresh must never turn a successful record write into a failed API call.
+          for (const listener of foodRecordListeners) { try { listener() } catch { /* Retry on app foreground. */ } }
+        }
         return {
           status: response.status,
           data,
@@ -184,6 +194,7 @@ export const apiClient = createFoodLinkApiClient({
         return AsyncStorage.getItem(ACCESS_TOKEN_KEY)
       },
       async setTokens(tokens) {
+        await syncLocalMealSession(tokens.userId)
         await AsyncStorage.multiSet([
           [ACCESS_TOKEN_KEY, tokens.accessToken],
           [REFRESH_TOKEN_KEY, tokens.refreshToken],
@@ -191,6 +202,7 @@ export const apiClient = createFoodLinkApiClient({
         ])
       },
       async clearTokens() {
+        await clearLocalMeals()
         await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY, USER_ID_KEY])
       },
     },
