@@ -11,15 +11,17 @@ type PushPreferencesDO struct {
 func (PushPreferencesDO) TableName() string { return "push_reminder_preferences" }
 
 type PushDeviceDO struct {
-	ID         string    `gorm:"column:id;type:text;primaryKey"`
-	UserID     string    `gorm:"column:user_id;type:uuid;not null;index:idx_push_devices_user_active,priority:1"`
-	Token      string    `gorm:"column:token;type:text;not null;uniqueIndex:idx_push_devices_active_token,where:active = true"`
-	ProjectID  string    `gorm:"column:project_id;type:text;not null"`
-	Platform   string    `gorm:"column:platform;type:text;not null"`
-	Active     bool      `gorm:"column:active;not null;default:false;index:idx_push_devices_user_active,priority:2"`
-	LastSeenAt time.Time `gorm:"column:last_seen_at;type:timestamptz;not null"`
-	CreatedAt  time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
-	UpdatedAt  time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+	ID              string    `gorm:"column:id;type:text;primaryKey"`
+	UserID          string    `gorm:"column:user_id;type:uuid;not null;index:idx_push_devices_user_active,priority:1"`
+	Token           string    `gorm:"column:token;type:text;not null;uniqueIndex:idx_push_devices_active_token,where:active = true"`
+	Provider        string    `gorm:"column:provider;type:text;not null;default:'expo'"`
+	ProjectID       string    `gorm:"column:project_id;type:text;not null"`
+	Platform        string    `gorm:"column:platform;type:text;not null"`
+	ProtocolVersion int       `gorm:"column:protocol_version;not null;default:1"`
+	Active          bool      `gorm:"column:active;not null;default:false;index:idx_push_devices_user_active,priority:2"`
+	LastSeenAt      time.Time `gorm:"column:last_seen_at;type:timestamptz;not null"`
+	CreatedAt       time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt       time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
 
 func (PushDeviceDO) TableName() string { return "push_devices" }
@@ -28,10 +30,12 @@ type PushDeliveryDO struct {
 	ID                 string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID             string     `gorm:"column:user_id;type:uuid;not null;index:idx_push_delivery_user_created,priority:1"`
 	DeviceID           string     `gorm:"column:device_id;type:text;not null"`
+	Provider           string     `gorm:"column:provider;type:text;not null;default:'expo'"`
 	DedupeKey          string     `gorm:"column:dedupe_key;type:text;not null;uniqueIndex:idx_push_delivery_dedupe"`
 	TokenHash          string     `gorm:"column:token_hash;type:text;not null"`
 	PreferencesVersion time.Time  `gorm:"column:preferences_version;type:timestamptz;not null"`
 	Kind               string     `gorm:"column:kind;type:text;not null"`
+	ResourceID         string     `gorm:"column:resource_id;type:text;not null;default:''"`
 	MealType           string     `gorm:"column:meal_type;type:text;not null;default:''"`
 	LocalDate          string     `gorm:"column:local_date;type:text;not null"`
 	Status             string     `gorm:"column:status;type:text;not null;default:'pending';index:idx_push_delivery_due,priority:1"`

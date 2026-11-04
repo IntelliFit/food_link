@@ -1,0 +1,15 @@
+# 荣耀直连补充配置示例，不是完整 config.yaml；合并到原 push 节，不覆盖现有 FCM 配置。
+# 先核对目标库并获授权，在 backend/ 运行：
+# go run ./cmd/migration -config-dir . -only-push-reminders
+# 新增 provider 字段后才能部署新版后端；未执行迁移不能直接上线本次代码。
+# Client Secret 仅配置在后端的受保护配置/Apollo 中，禁止放入 APK、app.json 或仓库。
+push:
+  honor:
+    enabled: false
+    app_id: ""
+    client_id: ""
+    client_secret: ""
+# 对应后端环境变量：PUSH_HONOR_ENABLED / PUSH_HONOR_APP_ID /
+# PUSH_HONOR_CLIENT_ID / PUSH_HONOR_CLIENT_SECRET。
+# Android 编译只设置公开的 FOODLINK_HONOR_APP_ID，或 -Pfoodlink.honorAppId=实际APPID。
+# 应用包名和已发布签名 SHA-256 必须与荣耀平台登记一致，不能重新生成签名替换旧 APK。

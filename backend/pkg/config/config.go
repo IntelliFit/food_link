@@ -50,9 +50,30 @@ type Config struct {
 }
 
 type PushConfig struct {
-	Enabled         bool   `mapstructure:"enabled"`
-	ExpoProjectID   string `mapstructure:"expo_project_id"`
-	ExpoAccessToken string `mapstructure:"expo_access_token"`
+	Enabled         bool            `mapstructure:"enabled"`
+	ExpoProjectID   string          `mapstructure:"expo_project_id"`
+	ExpoAccessToken string          `mapstructure:"expo_access_token"`
+	Honor           HonorPushConfig `mapstructure:"honor"`
+}
+
+type HonorPushConfig struct {
+	Enabled      bool   `mapstructure:"enabled"`
+	AppID        string `mapstructure:"app_id"`
+	ClientID     string `mapstructure:"client_id"`
+	ClientSecret string `mapstructure:"client_secret"`
+}
+
+func (c HonorPushConfig) Ready() bool {
+	appID := strings.TrimSpace(c.AppID)
+	if !c.Enabled || len(appID) == 0 || len(appID) > 64 || strings.TrimSpace(c.ClientID) == "" || strings.TrimSpace(c.ClientSecret) == "" {
+		return false
+	}
+	for _, r := range appID {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 type AppConfig struct {
@@ -413,6 +434,9 @@ func Load(baseDir string) (*Config, error) {
 	trimFeedbackBotConfig(&cfg.FeedbackBot)
 	cfg.Push.ExpoProjectID = strings.TrimSpace(cfg.Push.ExpoProjectID)
 	cfg.Push.ExpoAccessToken = strings.TrimSpace(cfg.Push.ExpoAccessToken)
+	cfg.Push.Honor.AppID = strings.TrimSpace(cfg.Push.Honor.AppID)
+	cfg.Push.Honor.ClientID = strings.TrimSpace(cfg.Push.Honor.ClientID)
+	cfg.Push.Honor.ClientSecret = strings.TrimSpace(cfg.Push.Honor.ClientSecret)
 	if err := applyConfigFileOnlyValues(v, &cfg); err != nil {
 		return nil, err
 	}
@@ -1165,6 +1189,10 @@ var cloudConfigKeyAliases = map[string]string{
 	"PUSH_ENABLED":                             "push.enabled",
 	"PUSH_EXPO_PROJECT_ID":                     "push.expo_project_id",
 	"PUSH_EXPO_ACCESS_TOKEN":                   "push.expo_access_token",
+	"PUSH_HONOR_ENABLED":                       "push.honor.enabled",
+	"PUSH_HONOR_APP_ID":                        "push.honor.app_id",
+	"PUSH_HONOR_CLIENT_ID":                     "push.honor.client_id",
+	"PUSH_HONOR_CLIENT_SECRET":                 "push.honor.client_secret",
 	"PORT":                                     "app.port",
 	"APPID":                                    "external.appid",
 	"SECRET":                                   "external.secret",
@@ -1597,6 +1625,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("push.enabled", false)
 	v.SetDefault("push.expo_project_id", "454db191-c9ba-42f1-a486-f42535774c3b")
 	v.SetDefault("push.expo_access_token", "")
+	v.SetDefault("push.honor.enabled", false)
+	v.SetDefault("push.honor.app_id", "")
+	v.SetDefault("push.honor.client_id", "")
+	v.SetDefault("push.honor.client_secret", "")
 	v.SetDefault("app.name", "food_link-backend")
 	v.SetDefault("app.env", "development")
 	v.SetDefault("app.host", "0.0.0.0")
@@ -1688,6 +1720,10 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("push.enabled", "PUSH_ENABLED")
 	_ = v.BindEnv("push.expo_project_id", "PUSH_EXPO_PROJECT_ID")
 	_ = v.BindEnv("push.expo_access_token", "PUSH_EXPO_ACCESS_TOKEN")
+	_ = v.BindEnv("push.honor.enabled", "PUSH_HONOR_ENABLED")
+	_ = v.BindEnv("push.honor.app_id", "PUSH_HONOR_APP_ID")
+	_ = v.BindEnv("push.honor.client_id", "PUSH_HONOR_CLIENT_ID")
+	_ = v.BindEnv("push.honor.client_secret", "PUSH_HONOR_CLIENT_SECRET")
 	_ = v.BindEnv("app.port", "PORT")
 	_ = v.BindEnv("app.diet_decision_version", "FOODLINK_DIET_DECISION_VERSION")
 	_ = v.BindEnv("external.appid", "APPID")
