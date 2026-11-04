@@ -56,10 +56,10 @@ func TestBalancedVisionPrecisionPrefersOpenLux(t *testing.T) {
 	s := newBalancedRoutingService(t, c)
 	ctx := WithVisionRequest(context.Background(), precisionExecutionMode, "session-1", false)
 
-	outcome, err := s.runBalancedGeminiVision(ctx, "precision", geminiOpenLuxUpstream, relayGemini37FlashModel, "prompt", []string{"image"}, 0, nil)
+	outcome, err := s.runBalancedGeminiVision(ctx, "precision", geminiOpenLuxUpstream, precisionGeminiFlashModel, "prompt", []string{"image"}, 0, nil)
 	require.NoError(t, err)
 	require.Equal(t, geminiOpenLuxUpstream, outcome.upstream)
-	require.Equal(t, relayGemini37FlashModel, outcome.model)
+	require.Equal(t, precisionGeminiFlashModel, outcome.model)
 	require.Zero(t, c.a6.calls.Load())
 	require.Zero(t, c.wanjie35.calls.Load(), "Wanjie is only the last resort")
 }
@@ -145,22 +145,22 @@ func TestBalancedVisionSelectsLeadingChannelForEveryTask(t *testing.T) {
 	s := newBalancedRoutingService(t, c)
 	for _, key := range []string{"task-a", "task-b", "task-c", "task-d"} {
 		require.Equal(t, openLuxGemini3Route, s.SelectFoodImageModel(defaultExecutionMode, key))
-		require.Equal(t, "openlux:"+relayGemini37FlashModel, s.SelectFoodImageModel(precisionExecutionMode, key))
+		require.Equal(t, "openlux:"+precisionGeminiFlashModel, s.SelectFoodImageModel(precisionExecutionMode, key))
 	}
 }
 
 func TestBalancedVisionDemotesChannelThatTurnsSlowWithoutFailing(t *testing.T) {
 	c := balancedChannels{wanjie35: &channelFixture{}, openluxPrecision: &channelFixture{}, a6: &channelFixture{}}
 	s := newBalancedRoutingService(t, c)
-	require.Equal(t, "openlux:"+relayGemini37FlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"), "the production prior leads with OpenLux")
+	require.Equal(t, "openlux:"+precisionGeminiFlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"), "the production prior leads with OpenLux")
 
-	key := channelKey(precisionExecutionMode, geminiOpenLuxUpstream, relayGemini37FlashModel)
+	key := channelKey(precisionExecutionMode, geminiOpenLuxUpstream, precisionGeminiFlashModel)
 	now := time.Now()
 	// OpenLux keeps losing hedges after 35s instead of failing.
 	for i := 0; i < 3; i++ {
 		s.visionChannels.record(key, 35*time.Second, context.Canceled, now)
 	}
-	require.Equal(t, "a6:"+relayGemini37FlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"))
+	require.Equal(t, "a6:"+precisionGeminiFlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"))
 }
 
 func TestBalancedVisionKeepsPriorUntilEnoughSamples(t *testing.T) {
@@ -231,10 +231,10 @@ func TestBalancedVisionOrdinaryModelLeavesTextAndPrecisionAlone(t *testing.T) {
 	require.Equal(t, gemini3FlashModel, (<-c.openlux.args).model, "text analysis keeps Gemini 3 Flash")
 
 	ctx := WithVisionRequest(context.Background(), precisionExecutionMode, "session-1", false)
-	require.Equal(t, "openlux:"+relayGemini37FlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session-1"))
-	outcome, err := s.runBalancedGeminiVision(ctx, "precision", geminiOpenLuxUpstream, relayGemini37FlashModel, "prompt", []string{"image"}, 0, nil)
+	require.Equal(t, "openlux:"+precisionGeminiFlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session-1"))
+	outcome, err := s.runBalancedGeminiVision(ctx, "precision", geminiOpenLuxUpstream, precisionGeminiFlashModel, "prompt", []string{"image"}, 0, nil)
 	require.NoError(t, err)
-	require.Equal(t, relayGemini37FlashModel, outcome.model, "precision keeps its own model, not the ordinary one")
+	require.Equal(t, precisionGeminiFlashModel, outcome.model, "precision runs its own plan family on Gemini 3.6")
 }
 
 func TestBalancedVisionNeverHedgesOntoLastResort(t *testing.T) {
@@ -250,7 +250,7 @@ func TestBalancedVisionNeverHedgesOntoLastResort(t *testing.T) {
 		balancedHedgeDelayPrecision = 80 * time.Millisecond
 		ctx, model := standardVisionCtx(), gemini3FlashModel
 		if precision {
-			ctx, model = WithVisionRequest(context.Background(), precisionExecutionMode, "session-1", false), relayGemini37FlashModel
+			ctx, model = WithVisionRequest(context.Background(), precisionExecutionMode, "session-1", false), precisionGeminiFlashModel
 		}
 
 		outcome, err := s.runBalancedGeminiVision(ctx, "food_image", geminiOpenLuxUpstream, model, "prompt", []string{"image"}, 0, validateNonEmptyFoodAnalysisResult)
@@ -280,7 +280,7 @@ func TestBalancedVisionKeepsLastResortLastWhenOthersLookUnhealthy(t *testing.T) 
 	for _, precision := range []bool{false, true} {
 		mode, model := defaultExecutionMode, gemini3FlashModel
 		if precision {
-			mode, model = precisionExecutionMode, relayGemini37FlashModel
+			mode, model = precisionExecutionMode, precisionGeminiFlashModel
 		}
 		for _, upstream := range []string{geminiOpenLuxUpstream, geminiA6Upstream} {
 			key := channelKey(mode, upstream, model)
