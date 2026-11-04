@@ -134,7 +134,9 @@ func (s *AnalyzeService) balancedVisionPlans(precision bool) []channelPlan {
 	wModel, relayModel := gemini3FlashModel, gemini3FlashModel
 	wClient, luxClient := s.ofoxAIClient, s.openLuxGemini3Client
 	if precision {
-		wModel, relayModel = gemini35FlashModel, relayGemini37FlashModel
+		// 2026-11-04 paired precision eval on A6/OpenLux: Gemini 3.6 median weight
+		// error 16.9% vs 3.5 20.0% vs 3.7 25.7%, all 62/62 completed except 3.7 61/62.
+		wModel, relayModel = gemini35FlashModel, precisionGeminiFlashModel
 		wClient, luxClient = s.gemini35Client, s.openLuxPrecisionGeminiClient
 	}
 	plans := []channelPlan{}
