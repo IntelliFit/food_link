@@ -10,19 +10,23 @@ import (
 const ChannelID = "foodlink-reminders"
 
 type Preferences struct {
-	Enabled       bool   `json:"enabled"`
-	MealEnabled   bool   `json:"meal_enabled"`
-	LogEnabled    bool   `json:"log_enabled"`
-	ExpiryEnabled bool   `json:"expiry_enabled"`
-	BreakfastTime string `json:"breakfast_time"`
-	LunchTime     string `json:"lunch_time"`
-	DinnerTime    string `json:"dinner_time"`
-	LogTime       string `json:"log_time"`
-	ExpiryTime    string `json:"expiry_time"`
-	Timezone      string `json:"timezone"`
-	QuietStart    string `json:"quiet_start"`
-	QuietEnd      string `json:"quiet_end"`
-	// Server-managed routing in the existing preferences JSON, not push credentials.
+	Enabled                  bool  `json:"enabled"`
+	MealEnabled              bool  `json:"meal_enabled"`
+	LogEnabled               bool  `json:"log_enabled"`
+	ExpiryEnabled            bool  `json:"expiry_enabled"`
+	PrivateMessageEnabled    *bool `json:"private_message_enabled,omitempty"`
+	AnalysisCompletedEnabled *bool `json:"analysis_completed_enabled,omitempty"`
+	// Server-managed, preserved across unrelated edits and reset on opt-in.
+	EventSince    map[string]time.Time `json:"event_since,omitempty"`
+	BreakfastTime string               `json:"breakfast_time"`
+	LunchTime     string               `json:"lunch_time"`
+	DinnerTime    string               `json:"dinner_time"`
+	LogTime       string               `json:"log_time"`
+	ExpiryTime    string               `json:"expiry_time"`
+	Timezone      string               `json:"timezone"`
+	QuietStart    string               `json:"quiet_start"`
+	QuietEnd      string               `json:"quiet_end"`
+	// Server-managed installation routing, kept in the existing settings JSON.
 	LocalMealDevices []string `json:"local_meal_devices,omitempty"`
 }
 
