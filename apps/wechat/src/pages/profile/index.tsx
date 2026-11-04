@@ -33,6 +33,9 @@ import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { getPromoterMe } from '../../utils/promoter-api'
 
+// 寿命预测器新版界面做好之前先不放入口（4.6.20 起），分包和页面照常打包。
+const SHOW_LIFESPAN_ENTRY = false
+
 // 一次启动只查一次推广功能是否开放，避免每次切到「我的」都多一个请求。
 let cachedPromoterEntryVisible: boolean | null = null
 
@@ -821,7 +824,7 @@ function ProfilePage() {
       )}
 
       {isLoggedIn && <WeeklyRecapEntry />}
-      <LifespanEntry />
+      {SHOW_LIFESPAN_ENTRY && <LifespanEntry />}
 
       <View className='profile-card profile-shortcuts-card'>
         <Text className='profile-group-title'>日常使用</Text>
