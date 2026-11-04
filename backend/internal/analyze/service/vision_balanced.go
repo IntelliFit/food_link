@@ -18,11 +18,21 @@ const relayGemini37FlashModel = "gemini-3.7-flash"
 // Channel priority follows 14-day production metrics (2026-10-18). Ordinary
 // Gemini 3 Flash: OpenLux failed 3% with p50 9.5s, A6 failed 12% with p50
 // 9.6s, Wanjie failed 10% with p50 24.3s. Precision: Wanjie Gemini 3.5 never
-// failed (p50 17s), OpenLux 3.7 failed 9% (p50 15s), A6 3.7 failed 42%.
+// failed (p50 17s), OpenLux 3.7 failed 9% (p50 15s), A6 3.7 failed 42% (A6
+// was later found unreachable on its retired domain). Wanjie costs the most,
+// so since 2026-11-04 it is the last resort in both families.
 var (
 	balancedOrdinaryPriority  = []string{geminiOpenLuxUpstream, geminiA6Upstream, geminiPrimaryUpstream}
-	balancedPrecisionPriority = []string{geminiPrimaryUpstream, geminiOpenLuxUpstream, geminiA6Upstream}
+	balancedPrecisionPriority = []string{geminiOpenLuxUpstream, geminiA6Upstream, geminiPrimaryUpstream}
 )
+
+// isBalancedLastResort marks the channel that runs only after every other
+// channel has failed: it stays last in the order and never receives a hedge.
+// It keys on the upstream, not the model, so an ordinary photo on the
+// configured ordinary model keeps Wanjie's Gemini 3 Flash as its fallback.
+func isBalancedLastResort(p channelPlan) bool {
+	return p.upstream == geminiPrimaryUpstream
+}
 
 // Hedge delays sit near the leading channel's p75 latency, so roughly one call
 // in four pays for a second channel. Vars so tests can shorten them.
@@ -216,6 +226,9 @@ func (s *AnalyzeService) orderedBalancedPlans(mode string, precision, image bool
 	}
 	sort.SliceStable(plans, func(i, j int) bool {
 		a, b := plans[i].upstream, plans[j].upstream
+		if lastI, lastJ := isBalancedLastResort(plans[i]), isBalancedLastResort(plans[j]); lastI != lastJ {
+			return lastJ
+		}
 		if healthy[a] != healthy[b] {
 			return healthy[a]
 		}
@@ -379,6 +392,10 @@ func (s *AnalyzeService) runBalancedGeminiChannels(ctx context.Context, stage, p
 	launch := func(reason string) bool {
 		for next < len(plans) {
 			p := plans[next]
+			// A channel still in flight may answer: wait for it before paying here.
+			if pending > 0 && isBalancedLastResort(p) {
+				return false
+			}
 			next++
 			key := channelKey(req.mode, p.upstream, p.model)
 			if !r.acquire(key, time.Now()) {
