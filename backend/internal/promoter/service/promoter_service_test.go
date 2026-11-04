@@ -28,13 +28,18 @@ type fixture struct {
 
 func newFixture(t *testing.T, enabled bool) *fixture {
 	t.Helper()
+	return newFixtureWith(t, config.PromoterConfig{Enabled: enabled})
+}
+
+func newFixtureWith(t *testing.T, cfg config.PromoterConfig) *fixture {
+	t.Helper()
 	db := testdb.New(t)
 	ctx := context.Background()
 	require.NoError(t, db.AutoMigrate(&migrationdo.UserDO{}, &migrationdo.MembershipPaymentDO{}))
 	require.NoError(t, migration.MigratePromoterCommission(ctx, db, "public"))
 	require.NoError(t, migration.MigrateWechatTransfer(ctx, db, "public"))
 	f := &fixture{db: db, now: time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)}
-	f.svc = NewPromoterService(repo.NewPromoterRepo(db), RulesFromConfig(config.PromoterConfig{Enabled: enabled}))
+	f.svc = NewPromoterService(repo.NewPromoterRepo(db), RulesFromConfig(cfg))
 	f.svc.now = func() time.Time { return f.now }
 	return f
 }
@@ -55,16 +60,17 @@ VALUES (?, ?, 'light_monthly', ?, ?, ?, 'paid', ?)`, id, userID, "order-"+id, am
 	return id
 }
 
-// activePromoter applies and approves a promoter, returning its id and code.
+// activePromoter applies, which opens the account at once, and marks the
+// real name checked, returning the promoter's id and code.
 func (f *fixture) activePromoter(t *testing.T, userID string) (string, string) {
 	t.Helper()
 	ctx := context.Background()
-	_, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
+	me, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
 	require.NoError(t, err)
+	require.Equal(t, domain.StatusActive, me.Status)
 	row, err := f.svc.repo.GetByUser(ctx, userID)
 	require.NoError(t, err)
-	_, err = f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true, RealNameConfirmed: true})
-	require.NoError(t, err)
+	require.NoError(t, repo.ConfirmRealName(f.db, row.ID))
 	return row.ID, row.PromoCode
 }
 
@@ -75,19 +81,46 @@ func requireStatus(t *testing.T, err error, status int) {
 	require.Equal(t, status, appErr.HTTPStatus)
 }
 
-func TestApplyAndReviewLifecycle(t *testing.T) {
+func TestApplyOpensTheAccountAtOnce(t *testing.T) {
 	ctx := context.Background()
 	disabled := newFixture(t, false)
 	_, err := disabled.svc.Apply(ctx, disabled.user(t, "甲", disabled.now), ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
 	requireStatus(t, err, http.StatusForbidden)
 
 	f := newFixture(t, true)
+	userID := f.user(t, "推广员乙", f.now.Add(-30*24*time.Hour))
+	_, err = f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1"})
+	requireStatus(t, err, http.StatusBadRequest)
+
+	me, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
+	require.NoError(t, err)
+	require.False(t, me.ManualReview)
+	require.Equal(t, domain.StatusActive, me.Status)
+	require.Regexp(t, `^[A-HJ-NP-Z2-9]{8}$`, me.PromoCode)
+	require.NotNil(t, me.Summary)
+
+	again, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
+	require.NoError(t, err)
+	require.Equal(t, me.PromoCode, again.PromoCode, "applying again keeps the code")
+
+	row, err := f.svc.repo.GetByUser(ctx, userID)
+	require.NoError(t, err)
+	require.False(t, row.RealNameConfirmed, "the real name is checked at the first withdrawal")
+	require.NotNil(t, row.AgreementSignedAt)
+	_, err = f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true})
+	requireStatus(t, err, http.StatusConflict)
+}
+
+func TestApplyAndReviewLifecycle(t *testing.T) {
+	ctx := context.Background()
+	f := newFixtureWith(t, config.PromoterConfig{Enabled: true, ManualReview: true})
 	userID := f.user(t, "推广员甲", f.now.Add(-30*24*time.Hour))
-	_, err = f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v0", AgreementAccepted: true})
+	_, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v0", AgreementAccepted: true})
 	requireStatus(t, err, http.StatusBadRequest)
 
 	me, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true, ApplyNote: "校园推广"})
 	require.NoError(t, err)
+	require.True(t, me.ManualReview)
 	require.Equal(t, domain.StatusPendingReview, me.Status)
 	require.Empty(t, me.PromoCode, "code is hidden until approved")
 	require.Nil(t, me.Summary)
@@ -113,12 +146,11 @@ func TestApplyAndReviewLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.StatusPendingReview, me.Status)
 
-	_, err = f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true})
-	requireStatus(t, err, http.StatusBadRequest)
 	rate := 3000
-	approved, err := f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true, RealNameConfirmed: true, RateBps: &rate})
+	approved, err := f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true, RateBps: &rate})
 	require.NoError(t, err)
 	require.Equal(t, domain.StatusActive, approved.Status)
+	require.False(t, approved.RealNameConfirmed, "approving without the real name leaves it for the first withdrawal")
 	_, err = f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true, RealNameConfirmed: true})
 	requireStatus(t, err, http.StatusConflict)
 

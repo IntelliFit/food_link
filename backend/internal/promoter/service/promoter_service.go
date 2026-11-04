@@ -59,6 +59,7 @@ type Rules struct {
 	BindingValidity  time.Duration
 	BindWindow       time.Duration
 	AgreementVersion string
+	ManualReview     bool
 	SyncInterval     time.Duration
 	WithdrawMinCents int64
 	WithdrawMaxCents int64
@@ -73,6 +74,7 @@ func RulesFromConfig(cfg config.PromoterConfig) Rules {
 		BindingValidity:  time.Duration(cfg.BindingValidDays) * 24 * time.Hour,
 		BindWindow:       time.Duration(cfg.BindWindowHours) * time.Hour,
 		AgreementVersion: strings.TrimSpace(cfg.AgreementVersion),
+		ManualReview:     cfg.ManualReview,
 		SyncInterval:     time.Duration(cfg.SyncIntervalSecs) * time.Second,
 		WithdrawMinCents: cfg.WithdrawMinCents,
 		WithdrawMaxCents: cfg.WithdrawMaxCents,
@@ -130,6 +132,7 @@ type Me struct {
 	RateBps          int             `json:"rate_bps"`
 	ReviewNote       string          `json:"review_note,omitempty"`
 	AgreementVersion string          `json:"agreement_version"`
+	ManualReview     bool            `json:"manual_review"`
 	SettleDelayDays  int             `json:"settle_delay_days"`
 	WithdrawMinCents int64           `json:"withdraw_min_cents"`
 	WithdrawMaxCents int64           `json:"withdraw_max_cents"`
@@ -146,6 +149,7 @@ func (s *PromoterService) Me(ctx context.Context, userID string) (*Me, error) {
 		Status:           "none",
 		RateBps:          s.rules.DefaultRateBps,
 		AgreementVersion: s.rules.AgreementVersion,
+		ManualReview:     s.rules.ManualReview,
 		SettleDelayDays:  int((s.rules.SettleDelay + 24*time.Hour - 1) / (24 * time.Hour)),
 		WithdrawMinCents: s.rules.WithdrawMinCents,
 		WithdrawMaxCents: s.rules.WithdrawMaxCents,
@@ -181,8 +185,11 @@ type ApplyInput struct {
 	ApplyNote         string `json:"apply_note"`
 }
 
-// Apply submits or resubmits a promoter application. Applying again while
-// pending or approved is a no-op; a rejected user may apply again.
+// Apply submits or resubmits a promoter application. Without manual review a
+// first application opens the account at once; the real name is checked when
+// the first withdrawal is reviewed. Applying again while pending or approved
+// is a no-op; a rejected user may apply again, and that always goes to an
+// admin, who turned them down before.
 func (s *PromoterService) Apply(ctx context.Context, userID string, input ApplyInput) (*Me, error) {
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
@@ -205,7 +212,11 @@ func (s *PromoterService) Apply(ctx context.Context, userID string, input ApplyI
 	now := s.now()
 	switch {
 	case existing == nil:
-		if err := s.createApplication(ctx, userID, note, now); err != nil {
+		status := domain.StatusActive
+		if s.rules.ManualReview {
+			status = domain.StatusPendingReview
+		}
+		if err := s.createApplication(ctx, userID, note, status, now); err != nil {
 			return nil, err
 		}
 	case existing.Status == domain.StatusRejected:
@@ -226,20 +237,21 @@ func (s *PromoterService) Apply(ctx context.Context, userID string, input ApplyI
 	return s.Me(ctx, userID)
 }
 
-func (s *PromoterService) createApplication(ctx context.Context, userID, note string, now time.Time) error {
+func (s *PromoterService) createApplication(ctx context.Context, userID, note, status string, now time.Time) error {
 	for attempt := 0; attempt < promoCodeAttempts; attempt++ {
 		code, err := newPromoCode()
 		if err != nil {
 			return err
 		}
 		row := &domain.Promoter{
-			ID: uuid.NewString(), UserID: userID, PromoCode: code, Status: domain.StatusPendingReview, ApplyNote: note,
+			ID: uuid.NewString(), UserID: userID, PromoCode: code, Status: status, ApplyNote: note,
 			AgreementVersion: s.rules.AgreementVersion, AgreementSignedAt: &now,
 		}
 		err = s.repo.Create(ctx, row)
 		switch {
 		case err == nil:
-			logger.Info(ctx, "推广员申请已提交", slog.String("user_id", userID), slog.String("promoter_id", row.ID))
+			logger.Info(ctx, "推广员申请已提交",
+				slog.String("user_id", userID), slog.String("promoter_id", row.ID), slog.String("status", status))
 			return nil
 		case errors.Is(err, repo.ErrPromoterExists):
 			// A concurrent request created it first; that row stands.

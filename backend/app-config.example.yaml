@@ -210,6 +210,7 @@ promoter:
   binding_valid_days: 365       # 绑定后计佣期限（365 天）
   bind_window_hours: 24         # 注册多久内可绑定推广码（24 小时）
   agreement_version: "v1"       # 当前推广协议版本，申请时必须一致
+  manual_review: false          # true：申请要后台审核；false：同意协议即开通，首次提现时核实实名
   sync_interval_seconds: 600    # 佣金同步间隔（10 分钟）
   withdraw_min_cents: 1000      # 满 10 元可提现
   withdraw_max_cents: 20000     # 单笔最多 200 元

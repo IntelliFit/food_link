@@ -29,11 +29,13 @@ const availableCentsExpr = `(SELECT COALESCE(SUM(c.commission_cents), 0) FROM pr
 
 // WithdrawalState is what a new withdrawal is checked against, read inside
 // the transaction that inserts it while the promoter row is locked.
+// RealNameConfirmed is only read when a withdrawal is reviewed.
 type WithdrawalState struct {
-	PromoterStatus string
-	AvailableCents int64
-	InFlight       int64
-	CountSince     int64
+	PromoterStatus    string
+	RealNameConfirmed bool
+	AvailableCents    int64
+	InFlight          int64
+	CountSince        int64
 }
 
 // inFlightStatuses are the withdrawal statuses uk_promoter_withdrawals_in_flight
@@ -187,6 +189,9 @@ func (r *PromoterRepo) UpdateWithdrawalLocked(ctx context.Context, id string, st
 		if err := tx.Raw(`SELECT `+availableCentsExpr+` FROM promoters p WHERE p.id = ?`, current[0].PromoterID).Scan(&state.AvailableCents).Error; err != nil {
 			return err
 		}
+		if err := tx.Raw(`SELECT real_name_confirmed FROM promoters WHERE id = ?`, current[0].PromoterID).Scan(&state.RealNameConfirmed).Error; err != nil {
+			return err
+		}
 		if err := check(state); err != nil {
 			return err
 		}
@@ -219,6 +224,12 @@ func (r *PromoterRepo) UpdateWithdrawalLocked(ctx context.Context, id string, st
 	return out, err
 }
 
+// ConfirmRealName records that ops checked the promoter's real name.
+func ConfirmRealName(tx *gorm.DB, promoterID string) error {
+	return tx.Model(&domain.Promoter{}).Where("id = ? AND NOT real_name_confirmed", promoterID).
+		Updates(map[string]any{"real_name_confirmed": true, "updated_at": time.Now()}).Error
+}
+
 // AppendedReviewNote is an update value that adds text to a withdrawal's
 // review_note after anything already there.
 func AppendedReviewNote(text string) any {
@@ -242,7 +253,8 @@ func (r *PromoterRepo) AdminListWithdrawals(ctx context.Context, status string, 
 	}
 	var rows []domain.AdminWithdrawal
 	err := r.db.WithContext(ctx).Raw(`
-SELECT `+withdrawalViewColumns+`, p.promo_code, p.status AS promoter_status, p.user_id, COALESCE(u.nickname, '') AS nickname,
+SELECT `+withdrawalViewColumns+`, p.promo_code, p.status AS promoter_status, p.real_name_confirmed, p.user_id,
+       COALESCE(u.nickname, '') AS nickname,
        `+availableCentsExpr+` AS available_cents
 FROM promoter_withdrawals w0
 JOIN promoters p ON p.id = w0.promoter_id

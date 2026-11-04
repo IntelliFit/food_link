@@ -58,14 +58,14 @@ func (s *PromoterService) ConfigureTransfer(transfer *wechattransfer.Service) {
 // approveForTransfer approves a withdrawal and records its WeChat transfer
 // in the same transaction, then sends it. A failed send leaves the bill for
 // the poller, so the approval stands either way.
-func (s *PromoterService) approveForTransfer(ctx context.Context, withdrawalID string, updates map[string]any) (*domain.Withdrawal, error) {
+func (s *PromoterService) approveForTransfer(ctx context.Context, withdrawalID string, updates map[string]any, realNameConfirmed bool) (*domain.Withdrawal, error) {
 	if s.transfer == nil {
 		return nil, appError(http.StatusConflict, "微信转账未开启，请选择线下打款")
 	}
 	updates["status"] = domain.WithdrawalTransferring
 	updates["payout_method"] = domain.PayoutWechatTransfer
-	updated, err := s.repo.UpdateWithdrawalLocked(ctx, withdrawalID, []string{domain.WithdrawalReviewing}, updates, s.checkApproval,
-		func(tx *gorm.DB, w domain.Withdrawal) (map[string]any, error) {
+	updated, err := s.repo.UpdateWithdrawalLocked(ctx, withdrawalID, []string{domain.WithdrawalReviewing}, updates, s.approvalCheck(realNameConfirmed),
+		confirmingRealName(realNameConfirmed, func(tx *gorm.DB, w domain.Withdrawal) (map[string]any, error) {
 			if w.NetAmountCents >= transferRealNameCents {
 				return nil, appError(http.StatusConflict, "2000 元及以上的微信转账需要实名信息，请选择线下打款")
 			}
@@ -84,7 +84,7 @@ func (s *PromoterService) approveForTransfer(ctx context.Context, withdrawalID s
 				return nil, err
 			}
 			return map[string]any{"transfer_bill_id": bill.ID}, nil
-		})
+		}))
 	if err != nil || updated == nil || updated.TransferBillID == nil {
 		return updated, err
 	}

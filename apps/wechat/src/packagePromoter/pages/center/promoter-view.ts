@@ -26,7 +26,7 @@ export function withdrawAmount(me: Pick<PromoterMe, 'withdraw_min_cents' | 'with
 }
 
 export function withdrawRuleText(me: Pick<PromoterMe, 'withdraw_min_cents' | 'withdraw_max_cents'>): string {
-  return `满 ¥${formatCents(me.withdraw_min_cents)} 可提现，单笔最多 ¥${formatCents(me.withdraw_max_cents)}，每天 1 次。审核通过后转到你的微信零钱，需要时在提现记录里点「收款」确认，到账后会显示「已到账」。`
+  return `满 ¥${formatCents(me.withdraw_min_cents)} 可提现，单笔最多 ¥${formatCents(me.withdraw_max_cents)}，每天 1 次。第一次提现时会核实你的实名信息。审核通过后转到你的微信零钱，需要时在提现记录里点「收款」确认，到账后会显示「已到账」。`
 }
 
 /** 推广规则同时作为 v1 推广协议正文展示，申请时需勾选同意。 */

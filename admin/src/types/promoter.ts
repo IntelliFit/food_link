@@ -45,6 +45,8 @@ export type AdminWithdrawal = {
   created_at?: string
   promo_code: string
   promoter_status: PromoterStatus
+  /** false 表示还没核实过实名，通过这笔提现前要先核实 */
+  real_name_confirmed: boolean
   user_id: string
   nickname: string
   available_cents: number

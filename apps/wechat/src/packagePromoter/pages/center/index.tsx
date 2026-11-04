@@ -104,8 +104,9 @@ function PromoterCenterPage() {
     }
     setApplying(true)
     try {
-      setMe(await applyPromoter(me.agreement_version, applyNote.trim()))
-      Taro.showToast({ title: '申请已提交', icon: 'success' })
+      const next = await applyPromoter(me.agreement_version, applyNote.trim())
+      setMe(next)
+      Taro.showToast({ title: next.status === 'active' ? '已开通' : '申请已提交', icon: 'success' })
     } catch (error) {
       await showUnifiedApiError(error, '提交申请失败')
     } finally {
@@ -155,34 +156,40 @@ function PromoterCenterPage() {
     </View>
   )
 
-  const renderApply = (current: PromoterMe) => (
-    <>
-      <View className='promo-card promo-hero'>
-        <Text className='promo-hero-title'>推荐食探，赚推广佣金</Text>
-        <Text className='promo-hero-body'>
-          好友通过你的推广码开通会员，你可获得实付金额 {formatRate(current.rate_bps)} 的佣金。
-        </Text>
-      </View>
-      {renderRules(current)}
-      <View className='promo-card'>
-        <Text className='promo-title'>申请成为推广员</Text>
-        <Textarea
-          className='promo-textarea'
-          maxlength={APPLY_NOTE_MAX}
-          placeholder='选填：你打算在哪里推广（如校园社团、健身群）'
-          value={applyNote}
-          onInput={event => setApplyNote(event.detail.value)}
-        />
-        <View className='promo-agree' onClick={() => setAgreed(value => !value)}>
-          <View className={`promo-check ${agreed ? 'promo-check--on' : ''}`} />
-          <Text className='promo-agree-text'>我已阅读并同意以上推广规则（{current.agreement_version}）</Text>
+  // 被驳回后重新申请仍要人工审核，只有首次申请可以直接开通。
+  const renderApply = (current: PromoterMe) => {
+    const instant = current.manual_review === false && current.status === 'none'
+    return (
+      <>
+        <View className='promo-card promo-hero'>
+          <Text className='promo-hero-title'>推荐食探，赚推广佣金</Text>
+          <Text className='promo-hero-body'>
+            好友通过你的推广码开通会员，你可获得实付金额 {formatRate(current.rate_bps)} 的佣金。
+          </Text>
         </View>
-        <View className={`promo-primary ${applying ? 'disabled' : ''}`} onClick={() => void apply()}>
-          {applying ? <View className='promo-spinner promo-spinner--light' /> : <Text>提交申请</Text>}
+        {renderRules(current)}
+        <View className='promo-card'>
+          <Text className='promo-title'>{instant ? '开通推广员' : '申请成为推广员'}</Text>
+          {!instant && (
+            <Textarea
+              className='promo-textarea'
+              maxlength={APPLY_NOTE_MAX}
+              placeholder='选填：你打算在哪里推广（如校园社团、健身群）'
+              value={applyNote}
+              onInput={event => setApplyNote(event.detail.value)}
+            />
+          )}
+          <View className='promo-agree' onClick={() => setAgreed(value => !value)}>
+            <View className={`promo-check ${agreed ? 'promo-check--on' : ''}`} />
+            <Text className='promo-agree-text'>我已阅读并同意以上推广规则（{current.agreement_version}）</Text>
+          </View>
+          <View className={`promo-primary ${applying ? 'disabled' : ''}`} onClick={() => void apply()}>
+            {applying ? <View className='promo-spinner promo-spinner--light' /> : <Text>{instant ? '立即开通' : '提交申请'}</Text>}
+          </View>
         </View>
-      </View>
-    </>
-  )
+      </>
+    )
+  }
 
   const receive = async (item: PromoterWithdrawal) => {
     if (!item.receive || receivingId) return

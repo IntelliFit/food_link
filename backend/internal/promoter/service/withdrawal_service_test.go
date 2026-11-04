@@ -129,6 +129,45 @@ func TestWithdrawHoldsBalanceThroughReviewAndPayout(t *testing.T) {
 	require.Equal(t, int64(1000), page.Items[0].AvailableCents)
 }
 
+func TestFirstWithdrawalNeedsTheRealNameChecked(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t, true)
+	promoterUser := f.user(t, "推广员", f.now.Add(-60*24*time.Hour))
+	_, err := f.svc.Apply(ctx, promoterUser, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
+	require.NoError(t, err)
+	row, err := f.svc.repo.GetByUser(ctx, promoterUser)
+	require.NoError(t, err)
+	f.commission(t, row.ID, 5000, domain.CommissionAvailable)
+
+	first, err := f.svc.Withdraw(ctx, promoterUser, WithdrawInput{AmountCents: 1000, RequestKey: "k1"})
+	require.NoError(t, err, "an unchecked promoter may still ask to withdraw")
+	queue, err := f.svc.AdminWithdrawals(ctx, domain.WithdrawalReviewing, 1, 20)
+	require.NoError(t, err)
+	require.Len(t, queue.Items, 1)
+	require.False(t, queue.Items[0].RealNameConfirmed)
+
+	_, err = f.svc.ReviewWithdrawal(ctx, "ops", first.ID, WithdrawalReviewInput{Approve: true})
+	requireStatus(t, err, http.StatusBadRequest)
+	still, err := f.svc.repo.GetWithdrawal(ctx, first.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.WithdrawalReviewing, still.Status)
+
+	approved, err := f.svc.ReviewWithdrawal(ctx, "ops", first.ID, WithdrawalReviewInput{Approve: true, RealNameConfirmed: true})
+	require.NoError(t, err)
+	require.Equal(t, domain.WithdrawalApproved, approved.Status)
+	row, err = f.svc.repo.GetByUser(ctx, promoterUser)
+	require.NoError(t, err)
+	require.True(t, row.RealNameConfirmed, "the confirmation is kept on the promoter")
+	_, err = f.svc.RecordManualPayout(ctx, "ops", first.ID, WithdrawalPayoutInput{Succeeded: true})
+	require.NoError(t, err)
+
+	f.now = f.now.Add(24 * time.Hour)
+	second, err := f.svc.Withdraw(ctx, promoterUser, WithdrawInput{AmountCents: 1000, RequestKey: "k2"})
+	require.NoError(t, err)
+	_, err = f.svc.ReviewWithdrawal(ctx, "ops", second.ID, WithdrawalReviewInput{Approve: true})
+	require.NoError(t, err, "later withdrawals do not ask again")
+}
+
 func TestManualReverseCanLeaveBalanceNegative(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t, true)

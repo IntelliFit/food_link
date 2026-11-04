@@ -70,16 +70,17 @@ type ReceiveInfo struct {
 	Package string `json:"package"`
 }
 
-// AdminWithdrawal is a withdrawal in the review queue, with who asked for it
-// and that promoter's balance right now (which already excludes this
-// withdrawal's amount).
+// AdminWithdrawal is a withdrawal in the review queue, with who asked for it,
+// whether their real name was checked yet, and that promoter's balance right
+// now (which already excludes this withdrawal's amount).
 type AdminWithdrawal struct {
-	WithdrawalView `gorm:"embedded"`
-	PromoCode      string `json:"promo_code"`
-	PromoterStatus string `json:"promoter_status"`
-	UserID         string `json:"user_id"`
-	Nickname       string `json:"nickname"`
-	AvailableCents int64  `json:"available_cents"`
+	WithdrawalView    `gorm:"embedded"`
+	PromoCode         string `json:"promo_code"`
+	PromoterStatus    string `json:"promoter_status"`
+	RealNameConfirmed bool   `json:"real_name_confirmed"`
+	UserID            string `json:"user_id"`
+	Nickname          string `json:"nickname"`
+	AvailableCents    int64  `json:"available_cents"`
 }
 
 // AdminCommission is one commission row with the order it came from, for
