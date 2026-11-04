@@ -56,7 +56,7 @@ func itemizedInput() SubmitInput {
 }
 
 func TestBuildSampleWholeComputesNetFromReadings(t *testing.T) {
-	sample, err := BuildSample("u1", wholeInput(), keyOf, time.Now())
+	sample, err := BuildSample("u1", wholeInput(), keyOf, nil, time.Now())
 	require.NoError(t, err)
 	require.Equal(t, 312.4, sample.TareGrams)
 	require.Equal(t, 905.3, *sample.GrossReadingGrams)
@@ -67,7 +67,7 @@ func TestBuildSampleWholeComputesNetFromReadings(t *testing.T) {
 }
 
 func TestBuildSampleItemizedComputesIncrements(t *testing.T) {
-	sample, err := BuildSample("u1", itemizedInput(), keyOf, time.Now())
+	sample, err := BuildSample("u1", itemizedInput(), keyOf, nil, time.Now())
 	require.NoError(t, err)
 	require.Len(t, sample.Items, 3)
 	require.Equal(t, 250.0, sample.Items[0].Grams)
@@ -80,7 +80,7 @@ func TestBuildSampleItemizedWithZeroedScaleStartsAtZero(t *testing.T) {
 	input := itemizedInput()
 	input.TareMode = domain.TareZeroed
 	input.TareGrams = 300
-	sample, err := BuildSample("u1", input, keyOf, time.Now())
+	sample, err := BuildSample("u1", input, keyOf, nil, time.Now())
 	require.NoError(t, err)
 	require.Equal(t, 0.0, sample.TareGrams)
 	require.Equal(t, 562.4, sample.Items[0].Grams)
@@ -105,7 +105,7 @@ func TestBuildSampleRejectsInvalidSubmissions(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			input := wholeInput()
 			mutate(&input)
-			_, err := BuildSample("u1", input, keyOf, time.Now())
+			_, err := BuildSample("u1", input, keyOf, nil, time.Now())
 			require.Error(t, err)
 		})
 	}
@@ -114,12 +114,12 @@ func TestBuildSampleRejectsInvalidSubmissions(t *testing.T) {
 func TestBuildSampleItemizedRejectsNonIncreasingAndMissingItemPhoto(t *testing.T) {
 	input := itemizedInput()
 	input.Items[1].CumulativeReadingGrams = 500
-	_, err := BuildSample("u1", input, keyOf, time.Now())
+	_, err := BuildSample("u1", input, keyOf, nil, time.Now())
 	require.ErrorContains(t, err, "第2项")
 
 	input = itemizedInput()
 	input.Photos = append(input.Photos[:2], input.Photos[3:]...)
-	_, err = BuildSample("u1", input, keyOf, time.Now())
+	_, err = BuildSample("u1", input, keyOf, nil, time.Now())
 	require.ErrorContains(t, err, "第2项")
 }
 
@@ -128,8 +128,140 @@ func TestBuildSampleAcceptsMatchingReferencePhotos(t *testing.T) {
 	input.ReferenceObject = "chopsticks"
 	input.Photos = append(input.Photos, photo(domain.RoleEvalTopRef, "ref-top.jpg"), photo(domain.RoleEvalAngleRef, "ref-angle.jpg"))
 	input.VideoURL = "https://cdn.test/research-weight/u1/v.mp4"
-	sample, err := BuildSample("u1", input, keyOf, time.Now())
+	sample, err := BuildSample("u1", input, keyOf, nil, time.Now())
 	require.NoError(t, err)
 	require.Len(t, sample.Photos, 6)
 	require.Equal(t, "research-weight/u1/v.mp4", sample.VideoObjectKey)
+}
+
+func containerPhoto(role string, index int, name, at string) PhotoInput {
+	p := photo(role, name)
+	p.ItemIndex = &index
+	p.CapturedAt = at
+	return p
+}
+
+func savedLibrary() Library {
+	return Library{"c1": {ID: "c1", Name: "750ml 圆盒", ContainerType: "box", Grams: 28.5, PhotoObjectKey: "research-weight/u1/photos/lib.jpg"}}
+}
+
+// A three-box takeout: rice weighed empty after eating, a saved box, and soup
+// in a bowl that was put on the scale and zeroed before pouring.
+func multiInput() SubmitInput {
+	return SubmitInput{
+		ClientKey: "sample-key-multi", Scene: "takeout", WeighingMode: domain.ModeMulti, DishName: "宫保鸡丁套餐",
+		ContainerType: "box", TareMode: domain.TarePerContainer, ScalePrecisionGrams: 1, ConsentVersion: domain.ConsentVersion,
+		Items: []ItemInput{
+			{Name: "米饭", GrossReadingGrams: floatPtr(265), TareSource: domain.TareAfterMeal, TareGrams: floatPtr(18)},
+			{Name: "宫保鸡丁", GrossReadingGrams: floatPtr(412.3), TareSource: domain.TareLibrary, ContainerID: "c1"},
+			{Name: "紫菜汤", GrossReadingGrams: floatPtr(330), TareSource: domain.TareZeroed, ContainsSoup: true},
+		},
+		Photos: []PhotoInput{
+			photo(domain.RoleEvalTop, "meal.jpg"),
+			containerPhoto(domain.RoleContainerGross, 0, "g0.jpg", "2026-10-28T04:01:00Z"),
+			containerPhoto(domain.RoleContainerGross, 1, "g1.jpg", "2026-10-28T04:02:00Z"),
+			containerPhoto(domain.RoleContainerGross, 2, "g2.jpg", "2026-10-28T04:03:00Z"),
+			containerPhoto(domain.RoleContainerTare, 0, "t0.jpg", "2026-10-28T04:40:00Z"),
+			containerPhoto(domain.RoleContainerTare, 2, "z2.jpg", "2026-10-28T03:59:00Z"),
+		},
+	}
+}
+
+func TestBuildSampleAcceptsASingleEvalPhoto(t *testing.T) {
+	input := wholeInput()
+	input.Photos = []PhotoInput{photo(domain.RoleTareScale, "t.jpg"), photo(domain.RoleGrossScale, "g.jpg"), photo(domain.RoleEvalAngle, "angle.jpg")}
+	_, err := BuildSample("u1", input, keyOf, nil, time.Now())
+	require.NoError(t, err)
+
+	input.Photos = input.Photos[:2]
+	_, err = BuildSample("u1", input, keyOf, nil, time.Now())
+	require.ErrorContains(t, err, "至少拍一张评测照片")
+
+	input.Photos = append(input.Photos, photo(domain.RoleEvalTop, "a.jpg"), photo(domain.RoleEvalTop, "b.jpg"))
+	_, err = BuildSample("u1", input, keyOf, nil, time.Now())
+	require.ErrorContains(t, err, "只需一张")
+}
+
+func TestBuildSampleMultiWeighsEachContainerWithItsOwnTare(t *testing.T) {
+	sample, err := BuildSample("u1", multiInput(), keyOf, savedLibrary(), time.Now())
+	require.NoError(t, err)
+	require.Len(t, sample.Items, 3)
+	require.Equal(t, []float64{247, 383.8, 330}, []float64{sample.Items[0].Grams, sample.Items[1].Grams, sample.Items[2].Grams})
+	require.Equal(t, 960.8, sample.TotalNetGrams)
+	require.Equal(t, 0.0, sample.TareGrams)
+	require.Equal(t, domain.TareLibrary, sample.Items[1].TareSource)
+	require.Equal(t, "c1", sample.Items[1].ContainerID)
+	require.Equal(t, "box", sample.Items[1].ContainerType)
+	require.Equal(t, 28.5, *sample.Items[1].TareGrams)
+
+	last := sample.Photos[len(sample.Photos)-1]
+	require.Equal(t, domain.RoleContainerTare, last.Role)
+	require.Equal(t, 1, *last.ItemIndex)
+	require.Equal(t, domain.PhotoSourceLibrary, last.Source)
+	require.Equal(t, "research-weight/u1/photos/lib.jpg", last.ObjectKey)
+	require.Empty(t, sampleFlags(sample), "the zeroed bowl may be photographed before the meal photo")
+}
+
+func TestBuildSampleMultiRejectsIncompleteContainers(t *testing.T) {
+	cases := map[string]struct {
+		mutate func(*SubmitInput)
+		want   string
+	}{
+		"gross photo missing":       {func(in *SubmitInput) { in.Photos = append(in.Photos[:3], in.Photos[4:]...) }, "第3盒连盒"},
+		"after-meal tare unweighed": {func(in *SubmitInput) { in.Items[0].TareGrams = nil }, "第1盒空盒的读数"},
+		"after-meal tare no photo":  {func(in *SubmitInput) { in.Photos = in.Photos[:5] }, "第3盒空盒"},
+		"saved box with a photo": {func(in *SubmitInput) {
+			in.Photos = append(in.Photos, containerPhoto(domain.RoleContainerTare, 1, "x.jpg", ""))
+		}, "常用容器"},
+		"unknown saved box":         {func(in *SubmitInput) { in.Items[1].ContainerID = "c9" }, "不存在或已停用"},
+		"box lighter than its tare": {func(in *SubmitInput) { in.Items[0].GrossReadingGrams = floatPtr(15) }, "必须大于空盒"},
+		"no tare source":            {func(in *SubmitInput) { in.Items[2].TareSource = "" }, "皮重来源"},
+		"multi with a sample tare":  {func(in *SubmitInput) { in.TareMode = domain.TareMeasured }, "每盒单独"},
+		"itemized photo in multi":   {func(in *SubmitInput) { in.Photos = append(in.Photos, itemPhoto(0, "i.jpg")) }, "不对应"},
+		"too many containers": {func(in *SubmitInput) {
+			for len(in.Items) < 9 {
+				in.Items = append(in.Items, in.Items[2])
+			}
+		}, "1到8"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			input := multiInput()
+			tc.mutate(&input)
+			_, err := BuildSample("u1", input, keyOf, savedLibrary(), time.Now())
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+func TestBuildSampleItemizedCanUseASavedContainerOrWeighAfterEating(t *testing.T) {
+	input := itemizedInput()
+	input.TareMode = domain.TareLibrary
+	input.ContainerID = "c1"
+	input.Photos = input.Photos[1:]
+	sample, err := BuildSample("u1", input, keyOf, savedLibrary(), time.Now())
+	require.NoError(t, err)
+	require.Equal(t, 28.5, sample.TareGrams)
+	require.Equal(t, 533.9, sample.Items[0].Grams)
+	tare := sample.Photos[len(sample.Photos)-1]
+	require.Equal(t, domain.RoleTareScale, tare.Role)
+	require.Equal(t, domain.PhotoSourceLibrary, tare.Source)
+
+	input.Photos = append(input.Photos, photo(domain.RoleTareScale, "t.jpg"))
+	_, err = BuildSample("u1", input, keyOf, savedLibrary(), time.Now())
+	require.ErrorContains(t, err, "不用再拍空容器")
+
+	afterMeal := itemizedInput()
+	afterMeal.TareMode = domain.TareAfterMeal
+	sample, err = BuildSample("u1", afterMeal, keyOf, nil, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, 312.4, sample.TareGrams)
+}
+
+func TestSampleFlagsCatchAnEmptyBoxPhotographedBeforeTheMeal(t *testing.T) {
+	input := multiInput()
+	input.Photos[4].CapturedAt = "2026-10-28T03:30:00Z"
+	sample, err := BuildSample("u1", input, keyOf, savedLibrary(), time.Now())
+	require.NoError(t, err)
+	require.Equal(t, []string{domain.FlagAfterMealTareEarly}, sampleFlags(sample))
 }

@@ -51,6 +51,8 @@ const extraSubpackagePages = [
   'pages/food-contribution/index',
   'pages/standard-food-contribution/index',
   'pages/research-weight/index',
+  'pages/research-weight-record/index',
+  'pages/research-weight-containers/index',
   'pages/my-vouchers/index',
   'pages/interaction-notifications/index',
   'pages/comment-history/index',

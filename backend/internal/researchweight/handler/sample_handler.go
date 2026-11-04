@@ -120,6 +120,40 @@ func (h *SampleHandler) UploadVideo(c *gin.Context) {
 	response.Success(c, gin.H{"video_url": url})
 }
 
+// GET /api/research-weight-containers
+func (h *SampleHandler) ListContainers(c *gin.Context) {
+	items, err := h.svc.ListContainers(c.Request.Context(), c.GetString(authmw.ContextUserIDKey))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"items": items})
+}
+
+// POST /api/research-weight-containers
+func (h *SampleHandler) CreateContainer(c *gin.Context) {
+	var body service.ContainerInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "容器信息格式不正确", HTTPStatus: 400})
+		return
+	}
+	item, err := h.svc.CreateContainer(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"item": item, "message": "已存为常用容器"})
+}
+
+// POST /api/research-weight-containers/:container_id/archive
+func (h *SampleHandler) ArchiveContainer(c *gin.Context) {
+	if err := h.svc.ArchiveContainer(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("container_id")); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "已停用"})
+}
+
 // GET /api/admin/research-weight-samples
 func (h *SampleHandler) AdminList(c *gin.Context) {
 	page := positiveInt(c.Query("page"), 1)

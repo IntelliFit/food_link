@@ -15,6 +15,10 @@ type SampleItem = {
   grams: number
   contains_bone: boolean
   contains_soup: boolean
+  gross_reading_grams?: number
+  tare_grams?: number
+  tare_source?: string
+  container_id?: string
 }
 
 type SamplePhoto = {
@@ -23,13 +27,14 @@ type SamplePhoto = {
   url: string
   item_index?: number
   captured_at?: string
+  source?: string
 }
 
 type Sample = {
   id: string
   user_id: string
   scene: string
-  weighing_mode: 'whole' | 'itemized'
+  weighing_mode: 'whole' | 'itemized' | 'multi'
   dish_name: string
   venue_name: string
   city: string
@@ -52,15 +57,36 @@ type Sample = {
   rewarded_at?: string
   benchmark_sample_id?: string
   created_at?: string
+  flags?: string[]
 }
 
 type ListResponse = { items: Sample[]; total: number; page: number; limit: number }
 
 const ROLE_LABELS: Record<string, string> = {
-  tare_scale: '皮重读数', gross_scale: '总读数', item_scale: '分项读数',
+  tare_scale: '皮重读数', gross_scale: '总读数', item_scale: '分项读数', container_gross: '连盒读数', container_tare: '空盒读数',
   eval_top: '俯拍', eval_angle: '45°', eval_top_ref: '俯拍+参照物', eval_angle_ref: '45°+参照物',
 }
-const EVIDENCE_ROLES = new Set(['tare_scale', 'gross_scale', 'item_scale'])
+const EVIDENCE_ROLES = new Set(['tare_scale', 'gross_scale', 'item_scale', 'container_gross', 'container_tare'])
+const TARE_LABELS: Record<string, string> = { measured: '先称空的', zeroed: '秤已归零', after_meal: '吃完再称', library: '常用容器', per_container: '每盒单独' }
+const FLAG_LABELS: Record<string, string> = { after_meal_tare_before_photo: '「吃完再称」的空盒照片早于评测照片，请核对是不是先称空盒再装菜，或者手机时间不准。' }
+
+/** 与后端 DefaultRewardCredits 一致：分项 4 分；按盒一盒 2 分，每多一盒 +1，最多 6 分。 */
+function defaultCredits(sample: Sample) {
+  if (sample.weighing_mode === 'itemized') return 4
+  if (sample.weighing_mode === 'multi') return Math.min(2 + Math.max(sample.items.length - 1, 0), 6)
+  return 2
+}
+
+function modeLabel(sample: Sample) {
+  if (sample.weighing_mode === 'multi') return `按盒${sample.items.length}盒`
+  if (sample.weighing_mode === 'itemized') return `分项${sample.items.length}项`
+  return '整份'
+}
+
+function tareLabel(sample: Sample) {
+  const label = TARE_LABELS[sample.tare_mode] || sample.tare_mode
+  return ['measured', 'after_meal', 'library'].includes(sample.tare_mode) ? `${label} ${sample.tare_grams}g` : label
+}
 const SCENE_LABELS: Record<string, string> = { canteen: '食堂', home: '家里', takeout: '外卖', restaurant: '餐馆', other: '其他' }
 
 export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPageProps) {
@@ -86,7 +112,7 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
 
   useEffect(() => {
     setNote(selected?.review_note || '')
-    setCredits(selected ? String(selected.weighing_mode === 'itemized' ? 4 : 2) : '')
+    setCredits(selected ? String(defaultCredits(selected)) : '')
   }, [selected?.id])
 
   function listParams(nextPage: number, pageLimit: number) {
@@ -179,7 +205,7 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
               onKeyDown={(event) => { if (event.key === 'Enter') { setPage(1); void loadList(1) } }} />
           </label>
           <Select label='状态' value={status} onChange={(value) => { setStatus(value); setPage(1) }} options={[['pending', '待审核'], ['approved', '已通过'], ['rejected', '已驳回'], ['all', '全部']]} />
-          <Select label='方式' value={mode} onChange={(value) => { setMode(value); setPage(1) }} options={[['', '全部'], ['whole', '整份'], ['itemized', '分项']]} />
+          <Select label='方式' value={mode} onChange={(value) => { setMode(value); setPage(1) }} options={[['', '全部'], ['multi', '按盒'], ['itemized', '分项'], ['whole', '整份']]} />
           <Select label='场景' value={scene} onChange={(value) => { setScene(value); setPage(1) }} options={[['', '全部'], ...Object.entries(SCENE_LABELS)]} />
           <div className='text-sm text-muted-foreground'>共 {total} 条</div>
         </section>
@@ -194,7 +220,7 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
                   <span className='text-xs text-muted-foreground'>{item.total_net_grams}g</span>
                 </div>
                 <div className='mt-1 text-xs text-muted-foreground'>
-                  {SCENE_LABELS[item.scene] || item.scene} · {item.weighing_mode === 'itemized' ? `分项${item.items.length}项` : '整份'} · {item.status}{item.quality_tier ? ` ${item.quality_tier}` : ''}
+                  {SCENE_LABELS[item.scene] || item.scene} · {modeLabel(item)} · {item.status}{item.flags?.length ? ' · 需核对' : ''}{item.quality_tier ? ` ${item.quality_tier}` : ''}
                 </div>
               </button>
             ))}
@@ -217,7 +243,7 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
                     <InfoRow label='备注' value={selected.notes || '--'} />
                   </InfoCard>
                   <InfoCard title='称重（服务端计算）'>
-                    <InfoRow label='去皮' value={selected.tare_mode === 'zeroed' ? '秤已归零' : `${selected.tare_grams}g`} />
+                    <InfoRow label='去皮' value={tareLabel(selected)} />
                     {selected.gross_reading_grams != null ? <InfoRow label='连容器读数' value={`${selected.gross_reading_grams}g`} /> : null}
                     <InfoRow label='净重' value={`${selected.total_net_grams}g`} />
                     <InfoRow label='秤精度' value={`${selected.scale_precision_grams}g`} />
@@ -226,7 +252,28 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
                   </InfoCard>
                 </section>
 
-                {selected.items.length ? (
+                {selected.flags?.length ? (
+                  <section className='rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200'>
+                    {selected.flags.map((flag) => <p key={flag}>{FLAG_LABELS[flag] || flag}</p>)}
+                  </section>
+                ) : null}
+
+                {selected.weighing_mode === 'multi' ? (
+                  <table className='w-full overflow-hidden rounded-2xl border text-sm'>
+                    <thead className='bg-muted/60 text-left'><tr><th className='px-3 py-2'>#</th><th className='px-3 py-2'>名称</th><th className='px-3 py-2'>连盒读数</th><th className='px-3 py-2'>空盒</th><th className='px-3 py-2'>皮重来源</th><th className='px-3 py-2'>净重</th><th className='px-3 py-2'>标记</th></tr></thead>
+                    <tbody>
+                      {selected.items.map((item, index) => (
+                        <tr key={index} className='border-t'>
+                          <td className='px-3 py-2'>{index + 1}</td><td className='px-3 py-2'>{item.name}</td>
+                          <td className='px-3 py-2'>{item.gross_reading_grams ?? '--'}g</td><td className='px-3 py-2'>{item.tare_grams ?? '--'}g</td>
+                          <td className='px-3 py-2'>{TARE_LABELS[item.tare_source || ''] || item.tare_source || '--'}</td>
+                          <td className='px-3 py-2 font-medium'>{item.grams}g</td>
+                          <td className='px-3 py-2 text-muted-foreground'>{[item.contains_bone && '含骨', item.contains_soup && '含汤'].filter(Boolean).join(' ') || '--'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : selected.items.length ? (
                   <table className='w-full overflow-hidden rounded-2xl border text-sm'>
                     <thead className='bg-muted/60 text-left'><tr><th className='px-3 py-2'>#</th><th className='px-3 py-2'>名称</th><th className='px-3 py-2'>累计读数</th><th className='px-3 py-2'>本项</th><th className='px-3 py-2'>标记</th></tr></thead>
                     <tbody>
@@ -291,11 +338,12 @@ function PhotoGroup({ title, photos, items }: { title: string; photos: SamplePho
       <h2 className='text-sm font-semibold'>{title}</h2>
       <div className='grid grid-cols-2 gap-3 md:grid-cols-4'>
         {photos.map((photo) => (
-          <a key={photo.object_key} href={photo.url} target='_blank' rel='noreferrer' className='overflow-hidden rounded-xl border'>
+          <a key={`${photo.role}-${photo.item_index ?? ''}-${photo.object_key}`} href={photo.url} target='_blank' rel='noreferrer' className='overflow-hidden rounded-xl border'>
             <img src={photo.url} alt={photo.role} className='aspect-square w-full object-cover' />
             <div className='px-2 py-1 text-xs text-muted-foreground'>
               {ROLE_LABELS[photo.role] || photo.role}
-              {photo.item_index != null ? ` · 第${photo.item_index + 1}项 ${items[photo.item_index]?.name || ''} ${items[photo.item_index]?.cumulative_reading_grams ?? ''}g` : ''}
+              {photo.item_index != null ? ` · ${itemPhotoLabel(photo, items[photo.item_index], photo.item_index)}` : ''}
+              {photo.source === 'library' ? ' · 常用容器存档' : ''}
             </div>
           </a>
         ))}
@@ -321,4 +369,10 @@ function InfoCard({ title, children }: { title: string; children: ReactNode }) {
 
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return <div className='flex items-start justify-between gap-4 text-sm'><span className='shrink-0 text-muted-foreground'>{label}</span><span className={`text-right ${mono ? 'font-mono text-xs' : ''}`}>{value}</span></div>
+}
+
+function itemPhotoLabel(photo: SamplePhoto, item: SampleItem | undefined, index: number) {
+  if (photo.role === 'container_gross') return `第${index + 1}盒 ${item?.name || ''} ${item?.gross_reading_grams ?? ''}g`
+  if (photo.role === 'container_tare') return `第${index + 1}盒 ${item?.name || ''} 空盒 ${item?.tare_grams ?? ''}g`
+  return `第${index + 1}项 ${item?.name || ''} ${item?.cumulative_reading_grams ?? ''}g`
 }

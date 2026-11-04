@@ -14,12 +14,20 @@ import (
 
 var clientKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
 
+// ItemInput is one itemized component, or one container in multi mode. Multi
+// containers carry their own gross reading and tare; client gram values are
+// never trusted.
 type ItemInput struct {
-	Name                   string  `json:"name"`
-	CumulativeReadingGrams float64 `json:"cumulative_reading_grams"`
-	ContainsBone           bool    `json:"contains_bone"`
-	ContainsSoup           bool    `json:"contains_soup"`
-	CookingMethod          string  `json:"cooking_method"`
+	Name                   string   `json:"name"`
+	CumulativeReadingGrams float64  `json:"cumulative_reading_grams"`
+	ContainsBone           bool     `json:"contains_bone"`
+	ContainsSoup           bool     `json:"contains_soup"`
+	CookingMethod          string   `json:"cooking_method"`
+	GrossReadingGrams      *float64 `json:"gross_reading_grams"`
+	TareSource             string   `json:"tare_source"`
+	TareGrams              *float64 `json:"tare_grams"`
+	ContainerID            string   `json:"container_id"`
+	ContainerType          string   `json:"container_type"`
 }
 
 type PhotoInput struct {
@@ -40,6 +48,7 @@ type SubmitInput struct {
 	ContainerType       string         `json:"container_type"`
 	TareMode            string         `json:"tare_mode"`
 	TareGrams           float64        `json:"tare_grams"`
+	ContainerID         string         `json:"container_id"`
 	GrossReadingGrams   *float64       `json:"gross_reading_grams"`
 	ScalePrecisionGrams float64        `json:"scale_precision_grams"`
 	Items               []ItemInput    `json:"items"`
@@ -55,9 +64,12 @@ type SubmitInput struct {
 // returning "" when the value does not point at FoodLink storage.
 type KeyResolver func(raw string) string
 
+// Library holds the submitter's active saved containers by ID.
+type Library map[string]domain.Container
+
 // BuildSample validates a submission and computes every gram value from the
 // scale readings; client-side gram values are never trusted.
-func BuildSample(userID string, input SubmitInput, resolve KeyResolver, now time.Time) (*domain.Sample, error) {
+func BuildSample(userID string, input SubmitInput, resolve KeyResolver, library Library, now time.Time) (*domain.Sample, error) {
 	if !clientKeyPattern.MatchString(strings.TrimSpace(input.ClientKey)) {
 		return nil, badRequest("提交标识无效，请重新进入页面")
 	}
@@ -69,7 +81,7 @@ func BuildSample(userID string, input SubmitInput, resolve KeyResolver, now time
 	if !slices.Contains(domain.Scenes, scene) {
 		return nil, badRequest("请选择用餐场景")
 	}
-	if mode != domain.ModeWhole && mode != domain.ModeItemized {
+	if mode != domain.ModeWhole && mode != domain.ModeItemized && mode != domain.ModeMulti {
 		return nil, badRequest("请选择称量方式")
 	}
 	if !slices.Contains(domain.ContainerTypes, container) {
@@ -93,29 +105,41 @@ func BuildSample(userID string, input SubmitInput, resolve KeyResolver, now time
 	if runeLen(venue) > 60 || runeLen(city) > 30 || runeLen(notes) > 300 {
 		return nil, badRequest("地点、城市或备注过长")
 	}
-	tare, err := readTare(tareMode, input.TareGrams)
-	if err != nil {
-		return nil, err
-	}
 	sample := &domain.Sample{
 		UserID: userID, ClientKey: strings.TrimSpace(input.ClientKey), Scene: scene, WeighingMode: mode,
 		DishName: dish, VenueName: venue, City: city, ContainerType: container, TareMode: tareMode,
-		TareGrams: tare, ScalePrecisionGrams: precision, ReferenceObject: reference, Notes: notes,
+		ScalePrecisionGrams: precision, ReferenceObject: reference, Notes: notes,
 		Device: cleanDevice(input.Device), ConsentVersion: domain.ConsentVersion, ConsentedAt: now,
 		Status: domain.StatusPending, Items: []domain.Item{},
 	}
-	if mode == domain.ModeWhole {
-		if err := applyWhole(sample, input); err != nil {
+	var sampleTareContainer *domain.Container
+	if mode == domain.ModeMulti {
+		if tareMode != domain.TarePerContainer {
+			return nil, badRequest("按盒称时每盒单独记皮重")
+		}
+		if err := applyMulti(sample, input.Items, library); err != nil {
 			return nil, err
 		}
-	} else if err := applyItemized(sample, input.Items); err != nil {
-		return nil, err
+	} else {
+		tare, saved, err := readTare(tareMode, input.TareGrams, input.ContainerID, library)
+		if err != nil {
+			return nil, err
+		}
+		sample.TareGrams, sampleTareContainer = tare, saved
+		if mode == domain.ModeWhole {
+			err = applyWhole(sample, input)
+		} else {
+			err = applyItemized(sample, input.Items)
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
-	photos, err := buildPhotos(input.Photos, mode, len(sample.Items), reference, resolve)
+	photos, err := buildPhotos(input.Photos, sample, reference, resolve)
 	if err != nil {
 		return nil, err
 	}
-	sample.Photos = photos
+	sample.Photos = append(photos, libraryPhotos(sample, sampleTareContainer, library)...)
 	if raw := strings.TrimSpace(input.VideoURL); raw != "" {
 		key := resolve(raw)
 		if key == "" {
@@ -126,17 +150,23 @@ func BuildSample(userID string, input SubmitInput, resolve KeyResolver, now time
 	return sample, nil
 }
 
-func readTare(mode string, grams float64) (float64, error) {
+func readTare(mode string, grams float64, containerID string, library Library) (float64, *domain.Container, error) {
 	switch mode {
-	case domain.TareMeasured:
+	case domain.TareMeasured, domain.TareAfterMeal:
 		if grams <= 0 || grams > domain.MaxReadingGrams {
-			return 0, badRequest("请填写空容器的读数")
+			return 0, nil, badRequest("请填写空容器的读数")
 		}
-		return round1(grams), nil
+		return round1(grams), nil, nil
 	case domain.TareZeroed:
-		return 0, nil
+		return 0, nil, nil
+	case domain.TareLibrary:
+		saved, ok := library[strings.TrimSpace(containerID)]
+		if !ok {
+			return 0, nil, badRequest("常用容器不存在或已停用，请重新选择")
+		}
+		return saved.Grams, &saved, nil
 	default:
-		return 0, badRequest("请选择去皮方式")
+		return 0, nil, badRequest("请选择去皮方式")
 	}
 }
 
@@ -191,15 +221,92 @@ func applyItemized(sample *domain.Sample, inputs []ItemInput) error {
 	return nil
 }
 
-// buildPhotos checks that every reading has its scale photo and that both
-// evaluation angles are present. Reference photos are optional but must match
-// the declared reference object.
-func buildPhotos(inputs []PhotoInput, mode string, itemCount int, reference string, resolve KeyResolver) ([]domain.Photo, error) {
-	if len(inputs) > 24 {
+// applyMulti records each container (a takeout box, a bowl) with its own
+// gross reading and tare. The meal total is the sum of the containers.
+func applyMulti(sample *domain.Sample, inputs []ItemInput, library Library) error {
+	if len(inputs) == 0 || len(inputs) > domain.MaxContainers {
+		return badRequest(fmt.Sprintf("按盒称需要1到%d个容器", domain.MaxContainers))
+	}
+	items := make([]domain.Item, 0, len(inputs))
+	total := 0.0
+	for index, input := range inputs {
+		item, err := buildContainer(index, input, library)
+		if err != nil {
+			return err
+		}
+		total += item.Grams
+		items = append(items, item)
+	}
+	total = round1(total)
+	if total > domain.MaxTotalGrams {
+		return badRequest("一顿饭不能超过10000g")
+	}
+	sample.Items = items
+	sample.TotalNetGrams = total
+	return nil
+}
+
+func buildContainer(index int, input ItemInput, library Library) (domain.Item, error) {
+	label := index + 1
+	name := strings.TrimSpace(input.Name)
+	if name == "" || runeLen(name) > 30 {
+		return domain.Item{}, badRequest(fmt.Sprintf("第%d盒请填写不超过30字的名称", label))
+	}
+	if input.GrossReadingGrams == nil || *input.GrossReadingGrams <= 0 || *input.GrossReadingGrams > domain.MaxReadingGrams {
+		return domain.Item{}, badRequest(fmt.Sprintf("请填写第%d盒连盒的读数", label))
+	}
+	gross := round1(*input.GrossReadingGrams)
+	source := strings.TrimSpace(input.TareSource)
+	containerType := strings.TrimSpace(input.ContainerType)
+	containerID := ""
+	var tare float64
+	switch source {
+	case domain.TareMeasured, domain.TareAfterMeal:
+		if input.TareGrams == nil || *input.TareGrams <= 0 {
+			return domain.Item{}, badRequest(fmt.Sprintf("请填写第%d盒空盒的读数", label))
+		}
+		tare = round1(*input.TareGrams)
+	case domain.TareZeroed:
+		tare = 0
+	case domain.TareLibrary:
+		saved, ok := library[strings.TrimSpace(input.ContainerID)]
+		if !ok {
+			return domain.Item{}, badRequest(fmt.Sprintf("第%d盒选的常用容器不存在或已停用", label))
+		}
+		tare, containerID, containerType = saved.Grams, saved.ID, saved.ContainerType
+	default:
+		return domain.Item{}, badRequest(fmt.Sprintf("请选择第%d盒的皮重来源", label))
+	}
+	if containerType != "" && !slices.Contains(domain.ContainerTypes, containerType) {
+		containerType = ""
+	}
+	if gross <= tare {
+		return domain.Item{}, badRequest(fmt.Sprintf("第%d盒的连盒读数必须大于空盒重量", label))
+	}
+	net := round1(gross - tare)
+	if net > domain.MaxNetGrams {
+		return domain.Item{}, badRequest("单盒食物不能超过5000g")
+	}
+	grossValue, tareValue := gross, tare
+	return domain.Item{
+		Name: name, Grams: net, GrossReadingGrams: &grossValue, TareGrams: &tareValue, TareSource: source,
+		ContainerID: containerID, ContainerType: containerType,
+		ContainsBone: input.ContainsBone, ContainsSoup: input.ContainsSoup,
+	}, nil
+}
+
+// buildPhotos checks that every reading has its scale photo and that at least
+// one evaluation photo is present. Saved containers need no empty photo: their
+// photo from when they were saved is attached by libraryPhotos.
+func buildPhotos(inputs []PhotoInput, sample *domain.Sample, reference string, resolve KeyResolver) ([]domain.Photo, error) {
+	if len(inputs) > 40 {
 		return nil, badRequest("照片过多")
 	}
+	mode, itemCount := sample.WeighingMode, len(sample.Items)
 	counts := map[string]int{}
-	itemSeen := make([]bool, itemCount)
+	itemSeen := map[string][]bool{
+		domain.RoleItemScale: make([]bool, itemCount), domain.RoleContainerGross: make([]bool, itemCount), domain.RoleContainerTare: make([]bool, itemCount),
+	}
 	seenKeys := map[string]struct{}{}
 	photos := make([]domain.Photo, 0, len(inputs))
 	for _, input := range inputs {
@@ -216,34 +323,28 @@ func buildPhotos(inputs []PhotoInput, mode string, itemCount int, reference stri
 		}
 		seenKeys[key] = struct{}{}
 		photo := domain.Photo{Role: role, ObjectKey: key, CapturedAt: cleanTimestamp(input.CapturedAt), Source: cleanSource(input.Source)}
-		if role == domain.RoleItemScale {
-			if mode != domain.ModeItemized || input.ItemIndex == nil || *input.ItemIndex < 0 || *input.ItemIndex >= itemCount || itemSeen[*input.ItemIndex] {
-				return nil, badRequest("分项读数照片与分项不对应")
+		if seen, indexed := itemSeen[role]; indexed {
+			if !roleFitsMode(role, mode) || input.ItemIndex == nil || *input.ItemIndex < 0 || *input.ItemIndex >= itemCount || seen[*input.ItemIndex] {
+				return nil, badRequest("读数照片与分项或盒子不对应")
 			}
-			itemSeen[*input.ItemIndex] = true
 			index := *input.ItemIndex
+			if role == domain.RoleContainerTare && sample.Items[index].TareSource == domain.TareLibrary {
+				return nil, badRequest(fmt.Sprintf("第%d盒用了常用容器，不用再拍空盒", index+1))
+			}
+			seen[index] = true
 			photo.ItemIndex = &index
 		}
 		counts[role]++
 		photos = append(photos, photo)
 	}
-	for _, role := range []string{domain.RoleTareScale, domain.RoleEvalTop, domain.RoleEvalAngle} {
-		if counts[role] != 1 {
-			return nil, badRequest(missingPhotoMessage(role))
-		}
+	if counts[domain.RoleEvalTop] > 1 || counts[domain.RoleEvalAngle] > 1 {
+		return nil, badRequest("每个角度的评测照片只需一张")
 	}
-	if mode == domain.ModeWhole && counts[domain.RoleGrossScale] != 1 {
-		return nil, badRequest(missingPhotoMessage(domain.RoleGrossScale))
+	if counts[domain.RoleEvalTop]+counts[domain.RoleEvalAngle] == 0 {
+		return nil, badRequest("请至少拍一张评测照片")
 	}
-	if mode == domain.ModeItemized {
-		if counts[domain.RoleGrossScale] > 0 {
-			return nil, badRequest("分项称量不需要整份读数照片")
-		}
-		for index, seen := range itemSeen {
-			if !seen {
-				return nil, badRequest(fmt.Sprintf("请拍第%d项的秤上读数", index+1))
-			}
-		}
+	if err := checkReadingPhotos(sample, counts, itemSeen); err != nil {
+		return nil, err
 	}
 	refCount := counts[domain.RoleEvalTopRef] + counts[domain.RoleEvalAngleRef]
 	if counts[domain.RoleEvalTopRef] > 1 || counts[domain.RoleEvalAngleRef] > 1 {
@@ -258,9 +359,73 @@ func buildPhotos(inputs []PhotoInput, mode string, itemCount int, reference stri
 	return photos, nil
 }
 
+func checkReadingPhotos(sample *domain.Sample, counts map[string]int, itemSeen map[string][]bool) error {
+	if sample.WeighingMode == domain.ModeMulti {
+		if counts[domain.RoleTareScale] > 0 || counts[domain.RoleGrossScale] > 0 {
+			return badRequest("按盒称不需要整份读数照片")
+		}
+		for index, item := range sample.Items {
+			if !itemSeen[domain.RoleContainerGross][index] {
+				return badRequest(fmt.Sprintf("请拍第%d盒连盒的读数", index+1))
+			}
+			if item.TareSource != domain.TareLibrary && !itemSeen[domain.RoleContainerTare][index] {
+				return badRequest(fmt.Sprintf("请拍第%d盒空盒（或归零）的读数", index+1))
+			}
+		}
+		return nil
+	}
+	needTare := sample.TareMode != domain.TareLibrary
+	if needTare && counts[domain.RoleTareScale] != 1 {
+		return badRequest(missingPhotoMessage(domain.RoleTareScale))
+	}
+	if !needTare && counts[domain.RoleTareScale] > 0 {
+		return badRequest("用了常用容器，不用再拍空容器")
+	}
+	if sample.WeighingMode == domain.ModeWhole {
+		if counts[domain.RoleGrossScale] != 1 {
+			return badRequest(missingPhotoMessage(domain.RoleGrossScale))
+		}
+		return nil
+	}
+	if counts[domain.RoleGrossScale] > 0 {
+		return badRequest("分项称量不需要整份读数照片")
+	}
+	for index, seen := range itemSeen[domain.RoleItemScale] {
+		if !seen {
+			return badRequest(fmt.Sprintf("请拍第%d项的秤上读数", index+1))
+		}
+	}
+	return nil
+}
+
+// libraryPhotos attaches the photo taken when each used container was saved,
+// so every tare in the sample still has scale evidence.
+func libraryPhotos(sample *domain.Sample, sampleTare *domain.Container, library Library) []domain.Photo {
+	photos := []domain.Photo{}
+	if sampleTare != nil {
+		photos = append(photos, domain.Photo{Role: domain.RoleTareScale, ObjectKey: sampleTare.PhotoObjectKey, Source: domain.PhotoSourceLibrary})
+	}
+	for index, item := range sample.Items {
+		if item.TareSource != domain.TareLibrary {
+			continue
+		}
+		saved := library[item.ContainerID]
+		itemIndex := index
+		photos = append(photos, domain.Photo{Role: domain.RoleContainerTare, ObjectKey: saved.PhotoObjectKey, ItemIndex: &itemIndex, Source: domain.PhotoSourceLibrary})
+	}
+	return photos
+}
+
+func roleFitsMode(role, mode string) bool {
+	if role == domain.RoleItemScale {
+		return mode == domain.ModeItemized
+	}
+	return mode == domain.ModeMulti
+}
+
 func validRole(role string) bool {
 	switch role {
-	case domain.RoleTareScale, domain.RoleGrossScale, domain.RoleItemScale,
+	case domain.RoleTareScale, domain.RoleGrossScale, domain.RoleItemScale, domain.RoleContainerGross, domain.RoleContainerTare,
 		domain.RoleEvalTop, domain.RoleEvalAngle, domain.RoleEvalTopRef, domain.RoleEvalAngleRef:
 		return true
 	}
@@ -273,12 +438,50 @@ func missingPhotoMessage(role string) string {
 		return "请拍空容器（或归零）时的秤上读数"
 	case domain.RoleGrossScale:
 		return "请拍连容器的秤上总读数"
-	case domain.RoleEvalTop:
-		return "请拍一张俯拍照片"
-	case domain.RoleEvalAngle:
-		return "请拍一张约45°的照片"
 	}
 	return "照片不完整"
+}
+
+// isTareRole reports the photos that may legitimately repeat across samples:
+// the same empty bowl or saved container is weighed once for many meals.
+func isTareRole(role string) bool {
+	return role == domain.RoleTareScale || role == domain.RoleContainerTare
+}
+
+// sampleFlags marks samples a reviewer should look at: an empty container
+// "weighed after eating" whose photo predates the evaluation photo.
+func sampleFlags(sample *domain.Sample) []string {
+	var latestEval time.Time
+	for _, photo := range sample.Photos {
+		if photo.Role != domain.RoleEvalTop && photo.Role != domain.RoleEvalAngle {
+			continue
+		}
+		if at, err := time.Parse(time.RFC3339, photo.CapturedAt); err == nil && at.After(latestEval) {
+			latestEval = at
+		}
+	}
+	if latestEval.IsZero() {
+		return nil
+	}
+	for _, photo := range sample.Photos {
+		if photo.Source == domain.PhotoSourceLibrary || !afterMealTarePhoto(sample, photo) {
+			continue
+		}
+		if at, err := time.Parse(time.RFC3339, photo.CapturedAt); err == nil && at.Before(latestEval) {
+			return []string{domain.FlagAfterMealTareEarly}
+		}
+	}
+	return nil
+}
+
+func afterMealTarePhoto(sample *domain.Sample, photo domain.Photo) bool {
+	if photo.Role == domain.RoleTareScale {
+		return sample.TareMode == domain.TareAfterMeal
+	}
+	if photo.Role != domain.RoleContainerTare || photo.ItemIndex == nil || *photo.ItemIndex >= len(sample.Items) {
+		return false
+	}
+	return sample.Items[*photo.ItemIndex].TareSource == domain.TareAfterMeal
 }
 
 func cleanDevice(raw map[string]any) map[string]any {
@@ -299,6 +502,8 @@ func cleanTimestamp(raw string) string {
 	return parsed.UTC().Format(time.RFC3339)
 }
 
+// cleanSource keeps only what a client may claim; "library" is set by the
+// server for saved-container photos.
 func cleanSource(raw string) string {
 	if source := strings.TrimSpace(raw); source == "camera" || source == "album" {
 		return source

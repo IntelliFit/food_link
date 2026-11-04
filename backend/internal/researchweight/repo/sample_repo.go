@@ -191,3 +191,35 @@ func (r *SampleRepo) Promote(ctx context.Context, id string, build func(*domain.
 	}
 	return r.Get(ctx, id)
 }
+
+// ListContainers returns the user's active saved containers, newest first.
+func (r *SampleRepo) ListContainers(ctx context.Context, userID string) ([]domain.Container, error) {
+	var containers []domain.Container
+	err := r.db.WithContext(ctx).Where("user_id = ? AND status = ?", userID, domain.ContainerActive).
+		Order("created_at DESC").Find(&containers).Error
+	return containers, err
+}
+
+func (r *SampleRepo) CreateContainer(ctx context.Context, container *domain.Container) error {
+	if strings.TrimSpace(container.ID) == "" {
+		container.ID = uuid.NewString()
+	}
+	return r.db.WithContext(ctx).Create(container).Error
+}
+
+// ArchiveContainer only touches the user's own active container.
+func (r *SampleRepo) ArchiveContainer(ctx context.Context, userID, id string) error {
+	if _, err := uuid.Parse(id); err != nil {
+		return commonerrors.ErrNotFound
+	}
+	result := r.db.WithContext(ctx).Model(&domain.Container{}).
+		Where("id = ? AND user_id = ? AND status = ?", id, userID, domain.ContainerActive).
+		Updates(map[string]any{"status": domain.ContainerArchived, "updated_at": time.Now()})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return commonerrors.ErrNotFound
+	}
+	return nil
+}

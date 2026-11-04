@@ -40,6 +40,9 @@ type Repository interface {
 	Review(ctx context.Context, id string, updates map[string]any) (*domain.Sample, error)
 	MarkRewarded(ctx context.Context, id string) error
 	Promote(ctx context.Context, id string, build func(*domain.Sample) *do.FoodWeightLabeledSampleDO) (*domain.Sample, error)
+	ListContainers(ctx context.Context, userID string) ([]domain.Container, error)
+	CreateContainer(ctx context.Context, container *domain.Container) error
+	ArchiveContainer(ctx context.Context, userID, id string) error
 }
 
 type RewardAwarder interface {
@@ -86,7 +89,11 @@ type ListResult struct {
 }
 
 func (s *SampleService) Submit(ctx context.Context, userID string, input SubmitInput) (*domain.SampleView, error) {
-	sample, err := BuildSample(userID, input, s.keyResolver(userID), s.now())
+	library, err := s.libraryFor(ctx, userID, input)
+	if err != nil {
+		return nil, err
+	}
+	sample, err := BuildSample(userID, input, s.keyResolver(userID), library, s.now())
 	if err != nil {
 		return nil, err
 	}
@@ -135,12 +142,33 @@ func (s *SampleService) Mine(ctx context.Context, userID string) (*MineResult, e
 	return &MineResult{Items: s.toViews(items), Summary: summary}, nil
 }
 
-// rejectReusedPhotos stops one photo from backing two samples. The tare photo
-// is exempt: in a canteen the same empty bowl is weighed once per session.
+// libraryFor loads the user's saved containers only when the submission
+// uses one, so ordinary submissions cost no extra query.
+func (s *SampleService) libraryFor(ctx context.Context, userID string, input SubmitInput) (Library, error) {
+	uses := strings.TrimSpace(input.TareMode) == domain.TareLibrary
+	for _, item := range input.Items {
+		uses = uses || strings.TrimSpace(item.TareSource) == domain.TareLibrary
+	}
+	if !uses {
+		return Library{}, nil
+	}
+	containers, err := s.repo.ListContainers(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	library := make(Library, len(containers))
+	for _, container := range containers {
+		library[container.ID] = container
+	}
+	return library, nil
+}
+
+// rejectReusedPhotos stops one photo from backing two samples. Empty-container
+// photos are exempt: the same bowl or saved box is weighed once for many meals.
 func (s *SampleService) rejectReusedPhotos(ctx context.Context, userID string, photos []domain.Photo) error {
 	keys := make([]string, 0, len(photos))
 	for _, photo := range photos {
-		if photo.Role != domain.RoleTareScale {
+		if !isTareRole(photo.Role) && photo.Source != domain.PhotoSourceLibrary {
 			keys = append(keys, photo.ObjectKey)
 		}
 	}
@@ -234,7 +262,7 @@ func (s *SampleService) Review(ctx context.Context, id, reviewerID string, input
 		if err != nil {
 			return nil, err
 		}
-		updates["reward_credits"] = DefaultRewardCredits(current.WeighingMode)
+		updates["reward_credits"] = DefaultRewardCredits(current)
 	}
 	sample, err := s.repo.Review(ctx, id, updates)
 	if errors.Is(err, researchrepo.ErrNotPending) && updates["status"] == domain.StatusApproved {
@@ -265,11 +293,14 @@ func (s *SampleService) Review(ctx context.Context, id, reviewerID string, input
 	return s.Get(ctx, sample.ID)
 }
 
-// DefaultRewardCredits pays itemized samples more because each component
-// needs its own reading and photo.
-func DefaultRewardCredits(mode string) int {
-	if mode == domain.ModeItemized {
+// DefaultRewardCredits pays for the extra work: itemized samples need a reading
+// per component, and each extra container in a meal adds one credit (up to 6).
+func DefaultRewardCredits(sample *domain.Sample) int {
+	switch sample.WeighingMode {
+	case domain.ModeItemized:
 		return 4
+	case domain.ModeMulti:
+		return min(2+max(len(sample.Items)-1, 0), 6)
 	}
 	return 2
 }
@@ -328,6 +359,9 @@ func (s *SampleService) Promote(ctx context.Context, id string, input PromoteInp
 // is the evaluated image, and the other photos travel in metadata.
 func (s *SampleService) toLabeledSample(sample *domain.Sample, batch string) *do.FoodWeightLabeledSampleDO {
 	topKey := photoKey(sample.Photos, domain.RoleEvalTop)
+	if topKey == "" {
+		topKey = photoKey(sample.Photos, domain.RoleEvalAngle)
+	}
 	labeled := &do.FoodWeightLabeledSampleDO{
 		ID: uuid.NewString(), BatchName: batch, SampleName: fmt.Sprintf("%s-%s", sample.DishName, sample.ID[:8]),
 		OriginalFilename: path.Base(topKey), Status: "labeled", Items: map[string]any{},
@@ -336,6 +370,7 @@ func (s *SampleService) toLabeledSample(sample *domain.Sample, batch string) *do
 			"weighing_mode": sample.WeighingMode, "quality_tier": sample.QualityTier, "container_type": sample.ContainerType,
 			"reference_object": sample.ReferenceObject, "photos": sample.Photos, "video_object_key": sample.VideoObjectKey,
 			"device": sample.Device, "consent_version": sample.ConsentVersion, "promoted_at": s.now().UTC().Format(time.RFC3339),
+			"items": sample.Items, "flags": sampleFlags(sample),
 		},
 	}
 	if topKey != "" {
@@ -347,7 +382,9 @@ func (s *SampleService) toLabeledSample(sample *domain.Sample, batch string) *do
 	}
 	total := sample.TotalNetGrams
 	labeled.TotalWeightGrams = &total
-	if sample.WeighingMode == domain.ModeItemized {
+	// A meal with several containers is labeled per container; one container
+	// (or all boxes weighed together) only has a total.
+	if sample.WeighingMode == domain.ModeItemized || (sample.WeighingMode == domain.ModeMulti && len(sample.Items) > 1) {
 		labeled.LabelType = "items"
 		labeled.Items = itemsByUniqueName(sample.Items)
 	} else {
@@ -431,5 +468,6 @@ func (s *SampleService) toView(sample *domain.Sample) domain.SampleView {
 		Device: sample.Device, Notes: sample.Notes, ConsentVersion: sample.ConsentVersion, Status: sample.Status,
 		QualityTier: sample.QualityTier, ReviewNote: sample.ReviewNote, ReviewedAt: sample.ReviewedAt,
 		RewardCredits: sample.RewardCredits, RewardedAt: sample.RewardedAt, BenchmarkSampleID: sample.BenchmarkSampleID, CreatedAt: sample.CreatedAt,
+		Flags: sampleFlags(sample),
 	}
 }

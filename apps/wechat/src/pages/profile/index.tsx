@@ -59,6 +59,7 @@ const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
   8: { color: '#6e5ab5', backgroundColor: '#f4f0fc', darkColor: '#b39ef4', darkBackgroundColor: 'rgba(179, 158, 244, 0.16)' },
   10: { color: '#0f8f74', backgroundColor: '#eafaf5', darkColor: '#6ee7c8', darkBackgroundColor: 'rgba(110, 231, 200, 0.16)' },
   11: { color: '#d97706', backgroundColor: '#fff7e6', darkColor: '#fbbf24', darkBackgroundColor: 'rgba(251, 191, 36, 0.16)' },
+  16: { color: '#0f8f74', backgroundColor: '#eafaf5', darkColor: '#6ee7c8', darkBackgroundColor: 'rgba(110, 231, 200, 0.16)' },
 }
 
 const SETTING_ICON_TONES: Record<number, ProfileListIconTone> = {
@@ -323,6 +324,13 @@ function ProfilePage() {
       path: extraPkgUrl('/pages/food-contribution/index')
     },
     {
+      id: 16,
+      iconClass: 'icon-paizhao-xianxing',
+      title: '称重科研计划',
+      desc: '用食物秤称一顿饭，共建中餐克重评测集',
+      path: extraPkgUrl('/pages/research-weight/index')
+    },
+    {
       id: 11,
       iconClass: 'icon-duoren',
       title: '邀请好友得会员',
@@ -371,6 +379,7 @@ function ProfilePage() {
     .sort((a, b) => [5, 9, 0, 4].indexOf(a.id) - [5, 9, 0, 4].indexOf(b.id))
   const serviceGroups = [
     { title: '记录与奖励', items: services.filter(service => [2, 6, 12].includes(service.id)) },
+    { title: '科研共建', items: services.filter(service => service.id === 16) },
     {
       title: '帮助与邀请',
       items: services.filter(service => [11, 8, 10].includes(service.id) || (service.id === 13 && promoterEntryVisible))

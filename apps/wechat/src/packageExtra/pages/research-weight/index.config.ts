@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: '称重科研数据' })
+export default definePageConfig({ navigationBarTitleText: '称重科研计划' })
