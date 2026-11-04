@@ -12,6 +12,7 @@ import {
   newItem,
   nextDraftAfterSubmit,
   parseGrams,
+  tareSwitchPatch,
   type DraftContainer,
   type ResearchDraft,
 } from '../../src/packageExtra/pages/research-weight/model'
@@ -153,5 +154,31 @@ describe('research weight draft v2', () => {
   it('rounds readings to 0.1 g like the server', () => {
     expect(parseGrams('100.14')).toBe(100.1)
     expect(parseGrams('abc')).toBeNull()
+  })
+})
+
+describe('research weight review fixes', () => {
+  it('drops an empty-box photo when switching to or from a zeroed scale', () => {
+    expect(tareSwitchPatch('after_meal', 'measured')).toEqual({})
+    expect(tareSwitchPatch('after_meal', 'zeroed')).toEqual({ tare: '', tarePhoto: undefined })
+    expect(tareSwitchPatch('zeroed', 'after_meal')).toEqual({ tare: '', tarePhoto: undefined })
+    expect(tareSwitchPatch('measured', 'library')).toEqual({ tare: '', tarePhoto: undefined })
+    expect(tareSwitchPatch('library', 'library')).toEqual({})
+  })
+
+  it('asks for the missing half once an after-meal box is partly weighed', () => {
+    const photoOnly = takeoutDraft()
+    photoOnly.containers[0] = { ...photoOnly.containers[0], tare: '' }
+    expect(checkDraft(photoOnly, library)).toEqual({ problem: '填第1盒空容器的读数', waitingForMeal: false })
+
+    const numberOnly = takeoutDraft()
+    numberOnly.containers[0] = { ...numberOnly.containers[0], tarePhoto: undefined }
+    expect(checkDraft(numberOnly, library)).toEqual({ problem: '拍第1盒空容器的读数', waitingForMeal: false })
+  })
+
+  it('does not try to save a container heavier than 3000g', () => {
+    const draft = takeoutDraft()
+    draft.containers[0] = { ...draft.containers[0], gross: '3600', tare: '3100', saveToLibrary: true }
+    expect(containersToSave(draft)).toEqual([])
   })
 })

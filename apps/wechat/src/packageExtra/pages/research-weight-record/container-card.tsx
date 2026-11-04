@@ -2,7 +2,7 @@ import { Input, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { PhotoSlot } from '../research-weight/photo-slot'
 import { Check, Chips, formatGrams } from '../research-weight/controls'
-import { TARE_SOURCES, containerNet, type DraftContainer, type Library } from '../research-weight/model'
+import { TARE_SOURCES, containerNet, tareSwitchPatch, type DraftContainer, type Library } from '../research-weight/model'
 import type { ResearchTareSource } from '../../../utils/research-weight-api'
 
 interface ContainerCardProps {
@@ -25,7 +25,11 @@ export function ContainerCard({ index, container, library, removable, uploading,
       Taro.showToast({ title: '还没有常用容器，称空盒时可以顺手存一个', icon: 'none' })
       return
     }
-    onChange({ tareSource, libraryId: tareSource === 'library' ? container.libraryId || saved[0].id : container.libraryId })
+    onChange({
+      ...tareSwitchPatch(container.tareSource, tareSource),
+      tareSource,
+      libraryId: tareSource === 'library' ? container.libraryId || saved[0].id : container.libraryId,
+    })
   }
   const source = container.tareSource
   const weighsEmpty = source === 'measured' || source === 'after_meal'

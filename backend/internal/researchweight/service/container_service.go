@@ -44,11 +44,14 @@ func (s *SampleService) CreateContainer(ctx context.Context, userID string, inpu
 		return nil, badRequest("请选择容器类型")
 	}
 	grams := round1(input.Grams)
-	if grams <= 0 || grams > domain.MaxContainerGrams {
+	if grams <= 0 {
 		return nil, badRequest("请填写空容器的读数")
 	}
+	if grams > domain.MaxContainerGrams {
+		return nil, badRequest(fmt.Sprintf("空容器不能超过%.0fg", domain.MaxContainerGrams))
+	}
 	key := s.keyResolver(userID)(strings.TrimSpace(input.PhotoURL))
-	if key == "" {
+	if key == "" || !strings.HasPrefix(key, researchKeyPrefix(userID)+"photos/") {
 		return nil, badRequest("请拍空容器放在秤上的读数")
 	}
 	existing, err := s.repo.ListContainers(ctx, userID)

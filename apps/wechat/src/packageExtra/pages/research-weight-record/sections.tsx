@@ -11,6 +11,7 @@ import {
   TARE_SOURCES,
   itemIncrements,
   newItem,
+  tareSwitchPatch,
   type DraftItem,
   type EvalRole,
   type Library,
@@ -96,7 +97,11 @@ export function ItemizedSection({ draft, library, update, uploading, pickTarePho
       Taro.showToast({ title: '还没有常用容器', icon: 'none' })
       return
     }
-    update({ tareSource, tareLibraryId: tareSource === 'library' ? draft.tareLibraryId || saved[0].id : draft.tareLibraryId })
+    update({
+      ...tareSwitchPatch(draft.tareSource, tareSource),
+      tareSource,
+      tareLibraryId: tareSource === 'library' ? draft.tareLibraryId || saved[0].id : draft.tareLibraryId,
+    })
   }
   const weighsEmpty = draft.tareSource === 'measured' || draft.tareSource === 'after_meal'
   return (

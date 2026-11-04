@@ -139,7 +139,11 @@ func BuildSample(userID string, input SubmitInput, resolve KeyResolver, library 
 	if err != nil {
 		return nil, err
 	}
-	sample.Photos = append(photos, libraryPhotos(sample, sampleTareContainer, library)...)
+	saved := libraryPhotos(sample, sampleTareContainer, library)
+	if err := rejectSavedPhotoReuse(photos, saved); err != nil {
+		return nil, err
+	}
+	sample.Photos = append(photos, saved...)
 	if raw := strings.TrimSpace(input.VideoURL); raw != "" {
 		key := resolve(raw)
 		if key == "" {
@@ -414,6 +418,21 @@ func libraryPhotos(sample *domain.Sample, sampleTare *domain.Container, library 
 		photos = append(photos, domain.Photo{Role: domain.RoleContainerTare, ObjectKey: saved.PhotoObjectKey, ItemIndex: &itemIndex, Source: domain.PhotoSourceLibrary})
 	}
 	return photos
+}
+
+// rejectSavedPhotoReuse stops a client from submitting a saved container's
+// photo as some other reading or as the meal photo.
+func rejectSavedPhotoReuse(client, saved []domain.Photo) error {
+	keys := make(map[string]struct{}, len(saved))
+	for _, photo := range saved {
+		keys[photo.ObjectKey] = struct{}{}
+	}
+	for _, photo := range client {
+		if _, reused := keys[photo.ObjectKey]; reused {
+			return badRequest("常用容器的照片不能再当作别的读数或评测照片")
+		}
+	}
+	return nil
 }
 
 func roleFitsMode(role, mode string) bool {

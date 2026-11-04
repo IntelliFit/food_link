@@ -265,3 +265,10 @@ func TestSampleFlagsCatchAnEmptyBoxPhotographedBeforeTheMeal(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{domain.FlagAfterMealTareEarly}, sampleFlags(sample))
 }
+
+func TestBuildSampleRejectsASavedContainerPhotoUsedAsAnotherReading(t *testing.T) {
+	input := multiInput()
+	input.Photos[0].URL = "https://cdn.test/research-weight/u1/photos/lib.jpg"
+	_, err := BuildSample("u1", input, keyOf, savedLibrary(), time.Now())
+	require.ErrorContains(t, err, "常用容器的照片")
+}

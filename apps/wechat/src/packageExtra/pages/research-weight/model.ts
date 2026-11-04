@@ -18,6 +18,8 @@ export const MAX_CONTAINERS = 8
 export const MAX_NET_GRAMS = 5000
 export const MAX_READING_GRAMS = 10000
 export const MAX_TOTAL_GRAMS = 10000
+/** 常用容器的重量上限，与后端 MaxContainerGrams 一致。 */
+export const MAX_CONTAINER_GRAMS = 3000
 
 export const SCENES: Array<{ key: ResearchScene; label: string }> = [
   { key: 'takeout', label: '外卖' },
@@ -187,6 +189,15 @@ export function netGrams(draft: ResearchDraft, library: Library): number | null 
 
 const needsTareReading = (source: ResearchTareSource) => source === 'measured' || source === 'after_meal'
 
+/**
+ * 换皮重来源时，旧的空盒照片和读数只在"先称"和"吃完称"之间通用；
+ * 换成归零或常用容器（或反过来）就清掉，免得一张 18g 的照片被当成归零证据。
+ */
+export function tareSwitchPatch(from: ResearchTareSource, to: ResearchTareSource): { tare?: string; tarePhoto?: undefined } {
+  if (from === to || (needsTareReading(from) && needsTareReading(to))) return {}
+  return { tare: '', tarePhoto: undefined }
+}
+
 export interface DraftCheck {
   /** 第一条未完成的提示；全部完成时为空字符串。 */
   problem: string
@@ -201,7 +212,8 @@ function checkTare(label: string, source: ResearchTareSource, tare: string, phot
   if (source === 'zeroed') return photo ? '' : `拍${label}归零时的读数`
   const value = parseGrams(tare)
   if (value !== null && value > 0 && value <= MAX_READING_GRAMS && photo) return ''
-  if (source === 'after_meal') return AFTER_MEAL
+  // 吃完再称：什么都还没填才算"等吃完"；拍了照或填了数，就提示缺的那一项。
+  if (source === 'after_meal' && value === null && !photo) return AFTER_MEAL
   return value === null || value <= 0 ? `填${label}空容器的读数` : `拍${label}空容器的读数`
 }
 
@@ -346,7 +358,7 @@ export function containersToSave(draft: ResearchDraft): ResearchContainerInput[]
   if (draft.mode !== 'multi') return []
   return draft.containers.flatMap((container) => {
     const grams = parseGrams(container.tare)
-    if (!container.saveToLibrary || !needsTareReading(container.tareSource) || !container.tarePhoto || grams === null || grams <= 0) return []
+    if (!container.saveToLibrary || !needsTareReading(container.tareSource) || !container.tarePhoto || grams === null || grams <= 0 || grams > MAX_CONTAINER_GRAMS) return []
     return [{
       name: (container.libraryName.trim() || `${container.name.trim()}的盒子`).slice(0, 20),
       container_type: (draft.scene === 'takeout' ? 'box' : 'bowl') as ResearchContainer,

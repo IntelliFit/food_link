@@ -23,9 +23,10 @@ export async function takeResearchPhoto(onStart?: () => void): Promise<DraftPhot
     const result = await Taro.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['camera', 'album'], sizeType: ['original'], camera: 'back' })
     const path = String(result.tempFiles?.[0]?.tempFilePath || '').trim()
     if (!path) return null
+    const capturedAt = new Date().toISOString()
     onStart?.()
     const url = await uploadResearchImage(path)
-    return { url, capturedAt: new Date().toISOString() }
+    return { url, capturedAt }
   } catch (error) {
     if (!isCancel(error)) await showUnifiedApiError(error, '照片上传失败')
     return null

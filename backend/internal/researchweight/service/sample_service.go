@@ -93,19 +93,24 @@ func (s *SampleService) Submit(ctx context.Context, userID string, input SubmitI
 	if err != nil {
 		return nil, err
 	}
-	sample, err := BuildSample(userID, input, s.keyResolver(userID), library, s.now())
+	existing, err := s.repo.FindByClientKey(ctx, userID, strings.TrimSpace(input.ClientKey))
 	if err != nil {
 		return nil, err
 	}
-	existing, err := s.repo.FindByClientKey(ctx, userID, sample.ClientKey)
+	sample, err := BuildSample(userID, input, s.keyResolver(userID), library, s.now())
 	if err != nil {
+		if existing != nil {
+			// A retry of a saved meal whose container was archived since.
+			view := s.toView(existing)
+			return &view, nil
+		}
 		return nil, err
 	}
 	if existing != nil {
 		// A retried request returns the saved row; an edited draft under an
 		// already-used key must not be silently dropped.
 		if existing.TotalNetGrams != sample.TotalNetGrams || len(existing.Photos) != len(sample.Photos) {
-			return nil, &commonerrors.AppError{Code: 10002, Message: "这一份已经提交过，请点“清空本份”后重新填写", HTTPStatus: 409}
+			return nil, &commonerrors.AppError{Code: 10002, Message: "这一顿已经提交过，请点「清空这一顿」后重新填写", HTTPStatus: 409}
 		}
 		view := s.toView(existing)
 		return &view, nil

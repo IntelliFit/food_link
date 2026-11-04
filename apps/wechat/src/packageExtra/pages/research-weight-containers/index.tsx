@@ -11,7 +11,7 @@ import {
   type ResearchContainer,
   type SavedResearchContainer,
 } from '../../../utils/research-weight-api'
-import { CONTAINERS, parseGrams, type DraftPhoto } from '../research-weight/model'
+import { CONTAINERS, MAX_CONTAINER_GRAMS, parseGrams, type DraftPhoto } from '../research-weight/model'
 import { ensureLoggedIn, takeResearchPhoto } from '../research-weight/media'
 import { Chips, Field } from '../research-weight/controls'
 import { PhotoSlot } from '../research-weight/photo-slot'
@@ -52,7 +52,10 @@ export default function ResearchWeightContainersPage() {
   }
 
   const weight = parseGrams(grams)
-  const problem = !name.trim() ? '给容器起个名字' : weight === null || weight <= 0 ? '填空容器的读数' : !photo ? '拍空容器放在秤上的读数' : ''
+  const problem = !name.trim() ? '给容器起个名字'
+    : weight === null || weight <= 0 ? '填空容器的读数'
+      : weight > MAX_CONTAINER_GRAMS ? '空容器不能超过3000g'
+        : !photo ? '拍空容器放在秤上的读数' : ''
 
   const save = async () => {
     if (saving || uploading) return

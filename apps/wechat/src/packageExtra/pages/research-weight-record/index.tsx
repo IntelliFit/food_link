@@ -56,6 +56,7 @@ export default function ResearchWeightRecordPage() {
   const [submitting, setSubmitting] = useState(false)
   const draftRef = useRef(draft)
   draftRef.current = draft
+  const submittingRef = useRef(false)
 
   useEffect(() => saveDraft(draft), [draft])
 
@@ -127,11 +128,12 @@ export default function ResearchWeightRecordPage() {
   const total = netGrams(draft, library)
 
   const submit = async () => {
-    if (busy || !ready()) return
+    if (busy || submittingRef.current || !ready()) return
     if (check.problem) {
       Taro.showToast({ title: check.problem, icon: 'none' })
       return
     }
+    submittingRef.current = true
     setSubmitting(true)
     try {
       await submitResearchSample(buildPayload(draft, library, deviceInfo()))
@@ -144,6 +146,7 @@ export default function ResearchWeightRecordPage() {
     } catch (error) {
       await showUnifiedApiError(error, '提交失败')
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }

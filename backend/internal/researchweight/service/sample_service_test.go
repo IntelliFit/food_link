@@ -423,3 +423,31 @@ func TestContainerLibraryValidatesInputAndOwnership(t *testing.T) {
 		require.NotEqual(t, created.ID, view.ID)
 	}
 }
+
+func TestSubmitRetryStillReturnsTheMealAfterItsContainerWasArchived(t *testing.T) {
+	svc, repo, _ := newTestService()
+	repo.containers = []domain.Container{savedContainerFor("u1")}
+	first, err := svc.Submit(context.Background(), "u1", multiInput())
+	require.NoError(t, err)
+	repo.containers[0].Status = domain.ContainerArchived
+
+	again, err := svc.Submit(context.Background(), "u1", multiInput())
+	require.NoError(t, err)
+	require.Equal(t, first.ID, again.ID)
+
+	fresh := multiInput()
+	fresh.ClientKey = "sample-key-after-archive"
+	_, err = svc.Submit(context.Background(), "u1", fresh)
+	require.ErrorContains(t, err, "不存在或已停用")
+}
+
+func TestCreateContainerExplainsTheWeightLimitAndNeedsAPhotoUpload(t *testing.T) {
+	svc, _, _ := newTestService()
+	input := ContainerInput{Name: "大汤盆", ContainerType: "bowl", Grams: 3200, PhotoURL: "https://cdn.test/research-weight/u1/photos/pot.jpg"}
+	_, err := svc.CreateContainer(context.Background(), "u1", input)
+	require.ErrorContains(t, err, "不能超过3000g")
+
+	input.Grams, input.PhotoURL = 900, "https://cdn.test/research-weight/u1/videos/pot.mp4"
+	_, err = svc.CreateContainer(context.Background(), "u1", input)
+	require.ErrorContains(t, err, "拍空容器")
+}
