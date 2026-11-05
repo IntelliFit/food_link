@@ -16,6 +16,11 @@ const (
 	smartPackagedNameMatchScore   = 0.6
 	smartPackagedNameMargin       = 0.15
 	smartPackagedFamilyKcalSpread = 0.12
+	// A product whose label energy is this far from the photo estimate is a
+	// different form of the food: dry noodles for a cooked bowl, coffee powder
+	// for the drink, regular cola for the sugar-free can.
+	smartPackagedMaxDensityRatio = 2.5
+	smartPackagedDensityFloor    = 5.0
 )
 
 // smartPackagedHeadNouns are product kinds. A candidate must share the kind
@@ -23,7 +28,7 @@ const (
 var smartPackagedHeadNouns = []string{
 	"薯片", "薯条", "巧克力", "饼干", "曲奇", "威化", "蛋卷", "薄饼", "面包", "吐司", "蛋糕", "蛋黄派", "派",
 	"牛奶", "酸奶", "乳酸菌", "豆奶", "豆浆", "奶茶", "咖啡", "可乐", "雪碧", "汽水", "果汁", "茶", "饮料", "矿泉水", "苏打水",
-	"辣条", "面筋", "魔芋爽", "海带", "方便面", "泡面", "拉面", "粉丝", "米粉", "火腿肠", "香肠", "肠",
+	"辣条", "面筋", "魔芋爽", "海带", "方便面", "泡面", "拉面", "面", "粉丝", "米粉", "火腿肠", "香肠", "肠",
 	"牛肉干", "鸭脖", "鸡爪", "凤爪", "鸭翅", "豆干", "果冻", "糖果", "软糖", "硬糖", "口香糖", "坚果", "瓜子", "花生",
 	"麦片", "燕麦", "谷物", "能量棒", "蛋白棒", "饭团", "三明治", "汉堡", "冰淇淋", "雪糕",
 }
@@ -45,6 +50,9 @@ func (s *AnalyzeService) resolveSmartPackaged(ctx context.Context, item map[stri
 	food, method, reason := s.matchSmartPackaged(ctx, item)
 	if food == nil {
 		return nil, reason
+	}
+	if !smartPackagedDensityPlausible(item, food.KcalPer100g) {
+		return nil, "packaged_density_mismatch"
 	}
 	next := applySmartLibraryNutrition(item, packagedNutritionUnit(food), nutritionWeightFromItem(item))
 	next["type"] = "snack"
@@ -180,6 +188,17 @@ func smartConsistentPackagedChoice(rows []foodrecorddomain.PackagedFood) *foodre
 		}
 	}
 	return &closest
+}
+
+func smartPackagedDensityPlausible(item map[string]any, libraryKcalPer100g float64) bool {
+	weight := nutritionWeightFromItem(item)
+	modelKcal := numberFromAny(mapFromAny(item["nutrients"])["calories"])
+	if weight <= 0 || modelKcal <= 0 {
+		return true
+	}
+	model := modelKcal * 100 / weight
+	high, low := math.Max(model, libraryKcalPer100g), math.Min(model, libraryKcalPer100g)
+	return high/math.Max(low, smartPackagedDensityFloor) <= smartPackagedMaxDensityRatio
 }
 
 // smartPackagedBrandConsistent rejects a resolved row that carries another
