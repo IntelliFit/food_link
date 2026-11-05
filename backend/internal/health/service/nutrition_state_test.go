@@ -306,3 +306,30 @@ func TestVegetableEstimateSkipsFruitAndPowders(t *testing.T) {
 	assert.Equal(t, 100.0, nutritionVegetableGrams(nsItem("清炒油菜", 100, nil)))
 	assert.Equal(t, 48.0, nutritionVegetableGrams(nsItem("芹菜炒肉丝", 120, nil)))
 }
+
+// The user's focus steers the state: someone who cares about blood glucose sees fibre
+// first, their card first, sugar on the next plate, and a headline about fibre.
+func TestNutritionStateFollowsTheUsersFocus(t *testing.T) {
+	in := nsWeekInput()
+	in.Profile.HealthCondition = map[string]any{
+		"focus_keys":            []any{"diabetes", "custom:f1", "custom:gone"},
+		"custom_health_focuses": []any{map[string]any{"id": "f1", "label": "控尿酸", "created_at": "2026-11-01T00:00:00Z"}},
+	}
+	state := buildDailyNutritionState(in)
+
+	require.Len(t, state.Focus, 2, "a custom focus that no longer exists is dropped")
+	assert.Equal(t, domain.NutritionFocusChoice{Key: "diabetes", Title: "血糖稳定友好度"}, state.Focus[0])
+	assert.Equal(t, domain.NutritionFocusChoice{Key: "custom:f1", Title: "控尿酸", Custom: true}, state.Focus[1])
+	require.NotEmpty(t, state.Gaps)
+	assert.Equal(t, "fiber", state.Gaps[0].Key)
+	require.NotEmpty(t, state.Scores.Focus)
+	assert.Equal(t, "diabetes", state.Scores.Focus[0].Key)
+	require.NotNil(t, state.NextMeal)
+	assert.Contains(t, state.NextMeal.Limits, "added_sugar")
+	assert.Contains(t, state.NextMeal.Fills, "whole_grains")
+	assert.Contains(t, state.Headline, "纤维不够")
+
+	plain := buildDailyNutritionState(nsWeekInput())
+	assert.Empty(t, plain.Focus)
+	assert.Contains(t, plain.Headline, "盐还偏多")
+}

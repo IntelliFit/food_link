@@ -59,6 +59,7 @@ func (in nutritionStateInput) isToday() bool {
 
 func buildDailyNutritionState(in nutritionStateInput) *domain.DailyNutritionState {
 	isToday := in.isToday()
+	focus := in.focus()
 	all := buildNutritionDays(in.Profile, in.Records, in.Date.AddDate(0, 0, -13), in.Date, in.Now, in.Goals)
 	lastWeek, week := all[:7], all[7:]
 	today := week[len(week)-1]
@@ -78,9 +79,9 @@ func buildDailyNutritionState(in nutritionStateInput) *domain.DailyNutritionStat
 	weekView, facts := nutritionWeek(week, lastWeek, in.Water, waterGoal, isToday)
 	lastFacts := nutritionFacts(lastWeek, in.Water, waterGoal)
 	trend := nutritionWeightTrend(in.Body, in.Date)
-	overall, focus := nutritionScores(week, facts, in.goal(), trend)
+	overall, cards := nutritionScores(week, facts, in.goal(), trend)
 	lastOverall, _ := nutritionScores(lastWeek, lastFacts, in.goal(), nil)
-	headline, findings := nutritionStory(week, facts, lastFacts, readings, trend, in.goal())
+	headline, findings := nutritionStory(week, facts, lastFacts, readings, trend, in.goal(), focus.Topics)
 
 	state := &domain.DailyNutritionState{
 		Date:        today.Date,
@@ -88,16 +89,17 @@ func buildDailyNutritionState(in nutritionStateInput) *domain.DailyNutritionStat
 		Coverage:    nutritionCoverage(week, today, facts),
 		Plan:        nutritionPlanSummary(in, today),
 		Today:       readings,
-		Gaps:        nutritionTodayGaps(readings),
+		Gaps:        nutritionFocusGaps(nutritionTodayGaps(readings), focus),
 		Week:        weekView,
-		Scores:      domain.NutritionScores{Overall: overall, OverallLastWeek: lastOverall, Focus: focus},
+		Scores:      domain.NutritionScores{Overall: overall, OverallLastWeek: lastOverall, Focus: nutritionFocusCards(cards, focus)},
 		Context:     nutritionContext(in, facts, isToday),
 		Headline:    headline,
 		Findings:    findings,
+		Focus:       focus.Choices,
 	}
 	state.EvidenceGaps = nutritionEvidenceGaps(in, week, facts, isToday)
 	if isToday && in.Now.Hour() < 21 {
-		state.NextMeal = nutritionNextMeal(nutritionUpcomingMeal(in.Now, today), readings, facts, in.medical())
+		state.NextMeal = nutritionNextMeal(nutritionUpcomingMeal(in.Now, today), readings, facts, nutritionPriorities(in.medical(), focus))
 	}
 	return state
 }

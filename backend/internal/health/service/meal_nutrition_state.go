@@ -37,8 +37,9 @@ func mealNutritionFacts(nutrition *domain.DailyNutritionState, forTomorrow bool)
 	}
 	facts := map[string]any{
 		"headline": nutrition.Headline,
+		"focus":    mealNutritionFocusTitles(nutrition.Focus),
 		"week":     week,
-		"note":     "这是饮食引擎算好的营养状态，和分析页、宠物看到的是同一份。选菜时优先补 next_meal.fills、避开 next_meal.limits；说理由时可以引用这些事实，不要编造数字。",
+		"note":     "这是饮食引擎算好的营养状态，和分析页、宠物看到的是同一份。focus 是用户自己选的关注，说理由时优先联系它；选菜时优先补 next_meal.fills、避开 next_meal.limits；说理由时可以引用这些事实，不要编造数字。",
 	}
 	if !forTomorrow {
 		gaps := []string{}
@@ -54,4 +55,12 @@ func mealNutritionFacts(nutrition *domain.DailyNutritionState, forTomorrow bool)
 		}
 	}
 	return facts
+}
+
+func mealNutritionFocusTitles(focus []domain.NutritionFocusChoice) []string {
+	titles := []string{}
+	for _, f := range focus {
+		titles = append(titles, f.Title)
+	}
+	return titles
 }

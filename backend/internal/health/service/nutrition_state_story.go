@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -180,7 +181,7 @@ type nutritionStoryFinding struct {
 
 // nutritionStory picks the grounded facts behind the day and one headline: something
 // that went well and the main thing to change. Numbers come only from the facts.
-func nutritionStory(days []nutritionDay, facts, last nutritionWeekFacts, readings []domain.NutrientReading, trend *domain.NutritionWeightTrend, goal string) (string, []domain.NutritionFinding) {
+func nutritionStory(days []nutritionDay, facts, last nutritionWeekFacts, readings []domain.NutrientReading, trend *domain.NutritionWeightTrend, goal string, focusTopics map[string]bool) (string, []domain.NutritionFinding) {
 	good, issues := []nutritionStoryFinding{}, []nutritionStoryFinding{}
 	add := func(list *[]nutritionStoryFinding, key, kind, short, text, value string) {
 		topic, _, _ := strings.Cut(key, "_")
@@ -216,6 +217,8 @@ func nutritionStory(days []nutritionDay, facts, last nutritionWeekFacts, reading
 	if facts.FishSoyMeals >= 3 {
 		add(&good, "fish_soy_ok", "good", "鱼和豆制品吃够了", fmt.Sprintf("鱼或豆制品这周 %d 次", facts.FishSoyMeals), fmt.Sprintf("%d", facts.FishSoyMeals))
 	}
+	// What the user said they care about comes first.
+	sort.SliceStable(issues, func(i, j int) bool { return focusTopics[issues[i].topic] && !focusTopics[issues[j].topic] })
 	findings := []domain.NutritionFinding{}
 	for _, f := range append(issues, good...) {
 		findings = append(findings, f.finding)

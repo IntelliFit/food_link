@@ -38,7 +38,10 @@ type DailyNutritionState struct {
 	EvidenceGaps []NutritionEvidenceGap `json:"evidence_gaps"`
 	Context      NutritionContext       `json:"context"`
 	Headline     string                 `json:"headline"`
-	Findings     []NutritionFinding     `json:"findings"`
+	// Focus is what the user said they care about (up to three, in their order); gaps,
+	// the next meal, the focus cards and the headline put these first.
+	Focus    []NutritionFocusChoice `json:"focus"`
+	Findings []NutritionFinding     `json:"findings"`
 }
 
 type NutritionCoverage struct {
@@ -122,6 +125,14 @@ type NutritionScores struct {
 	Overall         *int                  `json:"overall"`
 	OverallLastWeek *int                  `json:"overall_last_week"`
 	Focus           []NutritionFocusScore `json:"focus"`
+}
+
+// NutritionFocusChoice is one of the user's chosen focuses: a focus card key, or
+// "custom:<id>" for a custom focus (Custom true).
+type NutritionFocusChoice struct {
+	Key    string `json:"key"`
+	Title  string `json:"title"`
+	Custom bool   `json:"custom"`
 }
 
 // NutritionFocusScore keeps the keys of the analysis page's focus cards

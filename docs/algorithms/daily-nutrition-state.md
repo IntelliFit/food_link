@@ -58,6 +58,14 @@
 | `scores.focus[].key` | 与分析页现有关注卡（health_index.go）一致：`hypertension` `diabetes` `cardio` `weight` `colorectal` `longevity` `micronutrient` |
 | `evidence_gaps[].action` | `record` `weight` `water` `sleep` `none`，前端据此跳到对应记录页 |
 | `headline` / `findings` | 引擎给出的有据可查的一句话和事实列表；宠物或模型可以换说法，但不得编造数字 |
+| `focus` | 用户选的关注（最多 3 项，按用户的顺序）：`[{"key":"diabetes","title":"血糖稳定友好度","custom":false}]`；`gaps`、`next_meal`、`scores.focus` 的顺序和 `headline` 都优先照顾这几项 |
+
+### 关注：`GET` / `PUT /api/health/focus`（需登录）
+
+- 用户的「我在意的」，最多 3 项，存在 `health_condition.focus_keys`（不改表）。值是现有关注卡的 key（`hypertension` `diabetes` `cardio` `weight` `colorectal` `longevity` `micronutrient`），或自定义关注 `custom:<id>`（id 来自 `/api/user/health-focuses`）。
+- `PUT` body `{"keys": ["hypertension", "custom:<id>"]}`，返回 `{"keys": [...]}`；超过 3 项、不认识的 key、不属于自己的自定义关注都返回 400；空数组清空。`GET` 返回 `{"keys": [...]}`。
+- 引擎怎么用（`nutrition_state_focus.go`）：关注相关的缺口排前（血压 → 钠、钾、蔬菜；血糖 → 添加糖、纤维；心血管 → 饱和脂肪、钠、纤维；体重 → 热量、蛋白质；肠道 → 纤维、蔬菜；饮食习惯 → 蔬菜、蛋白质；微量营养 → 钙、钾）；关注了血压或血糖，下一顿就提醒少盐或少糖、主食换粗粮（和病史同样处理）；关注卡按用户顺序排在最前；一句话总结优先讲关注相关的问题。自定义关注只列出来，暂不参与排序（自由文本和营养素没有可靠的对应）。
+- 推荐 Agent 的 `get_meal_context` 里 `nutrition_state.focus` 是这几项的名字。
 
 ### `GET /api/health/nutrition-state/meal-impact?record_id=<id>`（需登录）
 
