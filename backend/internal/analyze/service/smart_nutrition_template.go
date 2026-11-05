@@ -56,7 +56,8 @@ type smartStapleRule struct {
 
 // Staple ranges from the same dishes: fried rice median 79% rice, rice
 // bowls 72%, fried noodles 76%, egg stir-fries 55% egg, meat stir-fries 19%
-// meat. Soup noodles are left alone until the broth rule is decided.
+// meat. Soup noodles have no staple range: the whole bowl counts, broth
+// included, and the user lowers the eaten share on the result page.
 var smartStapleRules = []smartStapleRule{
 	{"fried_rice", regexp.MustCompile(`炒饭`), regexp.MustCompile(`(米饭|大米|白饭|饭)$`), 0.55, 0.90},
 	{"rice_bowl", regexp.MustCompile(`(盖饭|盖浇饭|拌饭|煲仔饭|烩饭)`), regexp.MustCompile(`(米饭|大米|白饭|饭)$`), 0.40, 0.85},

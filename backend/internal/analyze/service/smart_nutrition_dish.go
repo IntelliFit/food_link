@@ -233,7 +233,7 @@ func smartIsSeasoning(name string) bool {
 
 func smartIsWater(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "水", "清水", "饮用水", "开水", "汤水", "冰块":
+	case "水", "清水", "饮用水", "开水", "冰块":
 		return true
 	}
 	return false

@@ -139,6 +139,15 @@ func TestSmartPackagedRejectsCerealForAPieAndMilkForYogurt(t *testing.T) {
 	}
 }
 
+func TestSmartSoupNoodlesCountTheWholeBroth(t *testing.T) {
+	item := smartTemplateDish("牛肉汤面", 600, 520, "visible",
+		[3]any{"面条", 250.0, "熟"}, [3]any{"牛肉", 60.0, "熟"}, [3]any{"汤水", 280.0, "熟"}, [3]any{"植物油", 10.0, "熟"})
+	items := runSmart(t, newSmartLibrary(), item)
+	require.Equal(t, "matched_dish_reference", items[0]["smart_match_status"])
+	// 汤水 is broth, not plain water: all 280 g count at 12.5 kcal per 100 g.
+	require.InDelta(t, 250*1.10+60*1.90+280*0.125+10*8.99, dishCalories(items[0]), 0.5)
+}
+
 func TestSmartSauceWithOilIsNotPureOil(t *testing.T) {
 	require.False(t, smartIsCookingFat("酱汁(含植物油、淀粉、酱油)"))
 	require.False(t, smartIsCookingFat("红油汤汁"))
