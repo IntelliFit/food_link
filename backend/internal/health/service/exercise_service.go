@@ -91,6 +91,18 @@ func exerciseModelForBaseURL(baseURL string) string {
 	return defaultDoubaoExerciseModel
 }
 
+// exerciseQwenReasoningTokens is headroom for qwen3.8-flash thinking. Wanjie
+// kept thinking out of max_tokens; OpenLux (where the Wanjie relay sends these
+// calls) counts it, and a 320-token cap came back as an empty answer.
+const exerciseQwenReasoningTokens = 1500
+
+func exerciseMaxTokens(model string, answerTokens int) int {
+	if model == wanjieExerciseModel {
+		return answerTokens + exerciseQwenReasoningTokens
+	}
+	return answerTokens
+}
+
 func exerciseModelProvider(model string) string {
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "qwen") {
 		return "qwen"
@@ -1117,7 +1129,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 			{"role": "user", "content": userContent},
 		},
 		"temperature":      0.25,
-		"max_tokens":       320,
+		"max_tokens":       exerciseMaxTokens(model, 320),
 		"reasoning_effort": "medium",
 	}
 	if model == wanjieExerciseModel {
@@ -1148,6 +1160,12 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		status = fmt.Sprintf("http_%d", resp.StatusCode)
 		metrics.ObserveLLMCall("exercise", provider, model, status, time.Since(start))
+		logger.Warn(ctx, "运动热量大模型返回异常状态",
+			logger.Stage("llm_call"),
+			logger.ProviderModel(provider, model),
+			slog.Int("http_status", resp.StatusCode),
+			logger.LLMResponseSummary(string(respBytes)),
+		)
 		return ExerciseEstimate{}, fmt.Errorf("运动分析服务返回异常 %d", resp.StatusCode)
 	}
 	var parsed struct {
@@ -1264,7 +1282,7 @@ func (s *ExerciseService) callExerciseJSONLLMOnce(ctx context.Context, llmConfig
 			{"role": "user", "content": userPrompt},
 		},
 		"temperature":      0.2,
-		"max_tokens":       maxTokens,
+		"max_tokens":       exerciseMaxTokens(llmConfig.Model, maxTokens),
 		"reasoning_effort": "medium",
 	}
 	if llmConfig.Provider == "gemini" {
