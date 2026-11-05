@@ -14,6 +14,7 @@ import (
 	"food_link/backend/internal/health/domain"
 	petdomain "food_link/backend/internal/pet/domain"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/llmrelay"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -698,7 +699,7 @@ func TestNewStatsServiceUsesConfiguredDeepSeekBaseURL(t *testing.T) {
 
 func TestNewStatsInsightHTTPClientAllowsSlowTLSHandshake(t *testing.T) {
 	client := newStatsInsightHTTPClient()
-	transport, ok := client.Transport.(*http.Transport)
+	transport, ok := llmrelay.Unwrap(client.Transport).(*http.Transport)
 	require.True(t, ok)
 	assert.Equal(t, 30*time.Second, transport.TLSHandshakeTimeout)
 	assert.Equal(t, 90*time.Second, client.Timeout)

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/llmrelay"
 	"food_link/backend/pkg/logger"
 )
 
@@ -112,7 +113,7 @@ func NewOfoxAIClient(apiKey, model string, baseURLs ...string) *OfoxAIClient {
 		APIKey:  apiKey,
 		Model:   model,
 		BaseURL: baseURL,
-		client:  &http.Client{Timeout: 90 * time.Second, Transport: sharedLLMTransport},
+		client:  &http.Client{Timeout: 90 * time.Second, Transport: llmrelay.Wrap(sharedLLMTransport)},
 		imageClient: &http.Client{
 			Timeout:   30 * time.Second,
 			Transport: sharedLLMTransport,
@@ -675,7 +676,7 @@ func NewDoubaoClient(apiKey, model string, baseURLs ...string) *DoubaoClient {
 		APIKey:  apiKey,
 		Model:   model,
 		BaseURL: baseURL,
-		client:  &http.Client{Timeout: 90 * time.Second},
+		client:  &http.Client{Timeout: 90 * time.Second, Transport: llmrelay.Wrap(nil)},
 	}
 }
 

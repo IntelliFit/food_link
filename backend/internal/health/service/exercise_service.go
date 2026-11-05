@@ -20,6 +20,7 @@ import (
 	membershipdomain "food_link/backend/internal/membership/domain"
 	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/llmrelay"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
@@ -115,7 +116,7 @@ func NewExerciseService(repo ExerciseRepo, cfg ...*config.Config) *ExerciseServi
 	if len(cfg) > 0 {
 		c = cfg[0]
 	}
-	return &ExerciseService{repo: repo, cfg: c, client: &http.Client{Timeout: 45 * time.Second}}
+	return &ExerciseService{repo: repo, cfg: c, client: &http.Client{Timeout: 45 * time.Second, Transport: llmrelay.Wrap(nil)}}
 }
 
 type CreditGuard interface {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
+	"food_link/backend/pkg/llmrelay"
 )
 
 var deepSeekFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
@@ -49,7 +50,7 @@ func NewDeepSeekNutritionEstimator(apiKey, baseURL, model string) *DeepSeekNutri
 		APIKey:  strings.TrimSpace(apiKey),
 		BaseURL: baseURL,
 		Model:   model,
-		client:  &http.Client{Timeout: 25 * time.Second},
+		client:  &http.Client{Timeout: 25 * time.Second, Transport: llmrelay.Wrap(nil)},
 	}
 }
 
