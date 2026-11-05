@@ -195,8 +195,8 @@ func TestExerciseService_EstimateImageUsesQwenOnWanjie(t *testing.T) {
 		assert.Equal(t, "qwen3.8-flash", body["model"])
 		assert.Equal(t, "medium", body["reasoning_effort"])
 		assert.Equal(t, false, body["preserve_thinking"])
-		// thinking tokens count toward max_tokens on OpenLux; 320 alone returned empty content
-		assert.Equal(t, float64(320+exerciseQwenReasoningTokens), body["max_tokens"])
+		// llmrelay adds thinking headroom when it moves this call off Wanjie
+		assert.Equal(t, float64(320), body["max_tokens"])
 		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"跑步机慢跑\",\"reasoning\":\"图片显示跑步机慢跑\",\"calories_kcal\":180}"}}]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,

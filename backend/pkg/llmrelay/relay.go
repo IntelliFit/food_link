@@ -112,12 +112,15 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The relay channels count thinking tokens toward max_tokens; Wanjie does
+	// not, so only the relayed copies get the extra room.
+	relayBody := withThinkingHeadroom(body)
 	var lastErr error
 	for i, target := range cfg.Targets {
 		if req.Context().Err() != nil {
 			break
 		}
-		attempt, cancel, err := relayRequest(req, body, target, len(cfg.Targets)-i+1)
+		attempt, cancel, err := relayRequest(req, relayBody, target, len(cfg.Targets)-i+1)
 		if err != nil {
 			lastErr = err
 			continue
