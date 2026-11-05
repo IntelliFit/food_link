@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"food_link/backend/pkg/llmrelay"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 )
@@ -462,6 +463,10 @@ func (s *AnalyzeService) runBalancedGeminiChannels(ctx context.Context, stage, p
 // records the outcome for circuit breaking, hedge timing and metrics.
 func (s *AnalyzeService) callBalancedVisionChannel(ctx context.Context, req *visionRequest, stage string, p channelPlan, key string, wait time.Duration, prompt string, imageURLs []string, temperature float64, validate, payloadCheck func(map[string]any) error) channelResult {
 	attemptCtx, cancel := context.WithTimeout(ctx, wait)
+	if p.upstream == geminiPrimaryUpstream {
+		// This attempt is Wanjie itself, after OpenLux and A6 were already tried.
+		attemptCtx = llmrelay.WithDirect(attemptCtx)
+	}
 	defer cancel()
 	u := &visionUsage{}
 	attemptCtx = context.WithValue(attemptCtx, visionUsageKey{}, u)

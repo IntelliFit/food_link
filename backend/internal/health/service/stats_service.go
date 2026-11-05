@@ -29,6 +29,7 @@ import (
 	"food_link/backend/internal/taskqueue"
 	userdomain "food_link/backend/internal/user/domain"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/llmrelay"
 	"food_link/backend/pkg/logger"
 
 	"log/slog"
@@ -165,7 +166,7 @@ func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg
 func newStatsInsightHTTPClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSHandshakeTimeout = statsInsightTLSHandshakeTimeout
-	return &http.Client{Transport: transport, Timeout: statsInsightHTTPTimeout}
+	return &http.Client{Transport: llmrelay.Wrap(transport), Timeout: statsInsightHTTPTimeout}
 }
 
 func configuredDeepSeekBaseURL(cfg *config.Config) string {
