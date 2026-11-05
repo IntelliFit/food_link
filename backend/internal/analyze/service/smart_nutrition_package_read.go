@@ -25,10 +25,12 @@ const (
 	smartPackageReadTimeout  = 8 * time.Second
 	smartPackageReadStage    = "package_read"
 	smartPackageReadAttempts = 2
-	// A label weight far from the photo estimate is more likely a misread
-	// (a family pack, a per-serving figure) than a correction.
-	smartPackageWeightMinRatio = 0.2
-	smartPackageWeightMaxRatio = 5.0
+	// A label weight far from the photo estimate is more likely a family
+	// pack the user ate part of, or a misread, than a correction. On 502
+	// replayed snack meals a 5x bound let a sealed 400 g bread bag replace an
+	// 80 g portion; small packs are typically overestimated (25 g as 40-50 g).
+	smartPackageWeightMinRatio = 0.4
+	smartPackageWeightMaxRatio = 2.0
 	smartLabelMaxKcalPer100g   = 900
 )
 
@@ -250,13 +252,23 @@ func applySmartPackageReading(item map[string]any, reading smartPackageReading) 
 		next["specText"] = fmt.Sprintf("%g%s", reading.net, reading.unit)
 	}
 	weight := nutritionWeightFromItem(next)
-	if labelWeight, ok := smartSealedPackageWeight(reading, weight); ok {
+	gross := numberFromAny(next["grossWeightGrams"])
+	if gross < weight {
+		gross = weight
+	}
+	if labelGross, ok := smartSealedPackageWeight(reading, gross); ok {
+		// Net content includes bones and pits (a 132 g duck leg); the photo
+		// estimate already split gross from edible weight, so keep its ratio.
+		edible := labelGross
+		if gross > 0 && weight > 0 {
+			edible = round2(labelGross * weight / gross)
+		}
 		next["model_weight_grams"] = weight
-		next["nutrients"] = scaleNutrition(nutritionUnitFromTotals(mapFromAny(next["nutrients"]), weight), labelWeight)
-		next["estimatedWeightGrams"] = labelWeight
-		next["grossWeightGrams"] = labelWeight
+		next["nutrients"] = scaleNutrition(nutritionUnitFromTotals(mapFromAny(next["nutrients"]), weight), edible)
+		next["estimatedWeightGrams"] = edible
+		next["grossWeightGrams"] = labelGross
 		next["weight_source"] = "package_label"
-		weight = labelWeight
+		weight = edible
 		applied = append(applied, "weight")
 	}
 	if reading.label != nil && weight > 0 {
@@ -271,13 +283,18 @@ func applySmartPackageReading(item map[string]any, reading smartPackageReading) 
 	return next, applied
 }
 
+// smartSealedPackageWeight snaps the photo estimate to whole sealed packages:
+// the photo says roughly how much, the label says exactly how big one unit is.
+// Two 190 ml cartons in the picture with a 195 g estimate count as one.
 func smartSealedPackageWeight(reading smartPackageReading, photoWeight float64) (float64, bool) {
-	if reading.state != "sealed" || reading.net <= 0 || reading.count < 1 || (reading.unit != "g" && reading.unit != "ml") {
+	count := math.Floor(reading.count)
+	if reading.state != "sealed" || reading.net <= 0 || count < 1 || photoWeight <= 0 || (reading.unit != "g" && reading.unit != "ml") {
 		return 0, false
 	}
 	// Drinks are labelled in ml; 1 ml is taken as 1 g, as the label values are.
-	weight := round2(reading.net * math.Floor(reading.count))
-	if photoWeight > 0 && (weight < photoWeight*smartPackageWeightMinRatio || weight > photoWeight*smartPackageWeightMaxRatio) {
+	units := math.Max(1, math.Min(count, math.Round(photoWeight/reading.net)))
+	weight := round2(reading.net * units)
+	if weight < photoWeight*smartPackageWeightMinRatio || weight > photoWeight*smartPackageWeightMaxRatio {
 		return 0, false
 	}
 	return weight, true

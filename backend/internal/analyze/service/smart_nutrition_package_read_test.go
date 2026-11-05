@@ -170,3 +170,30 @@ func TestSmartBrandedPackagedMissFallsBackToGenericRow(t *testing.T) {
 	require.Equal(t, "milk", items[0]["matched_food_id"], "the product name finds the generic row")
 	require.Equal(t, "特仑苏纯牛奶", items[0]["name"])
 }
+
+func TestSmartSealedWeightSnapsToWholePackagesNearThePhoto(t *testing.T) {
+	weight, ok := smartSealedPackageWeight(smartPackageReading{net: 190, unit: "ml", count: 2, state: "sealed"}, 195)
+	require.True(t, ok)
+	require.InDelta(t, 190, weight, 0.01, "two cartons in view, one drunk")
+	_, ok = smartSealedPackageWeight(smartPackageReading{net: 400, unit: "g", count: 1, state: "sealed"}, 80)
+	require.False(t, ok, "a sealed bread bag is not the two slices eaten")
+	weight, ok = smartSealedPackageWeight(smartPackageReading{net: 25, unit: "g", count: 1, state: "sealed"}, 50)
+	require.True(t, ok)
+	require.InDelta(t, 25, weight, 0.01, "a small pack the photo overestimated")
+}
+
+func TestSmartPackageLabelWeightKeepsEdibleRatio(t *testing.T) {
+	item := smartItem("去皮鸭腿", "cooked", 90, 230, map[string]any{"type": "snack", "grossWeightGrams": 120.0})
+	next, applied := applySmartPackageReading(item, smartPackageReading{net: 132, unit: "g", count: 1, state: "sealed"})
+	require.Contains(t, applied, "weight")
+	require.InDelta(t, 132, numberFromAny(next["grossWeightGrams"]), 0.01)
+	require.InDelta(t, 99, numberFromAny(next["estimatedWeightGrams"]), 0.01, "the bone share from the photo is kept")
+}
+
+func TestSmartPackagedFallbackNeverDropsQualifiers(t *testing.T) {
+	library := newSmartLibrary()
+	library.foods["牛奶(全脂)"] = foodrecorddomain.FoodNutrition{ID: "milk", CanonicalName: "牛奶(全脂)", KcalPer100g: 65, IsActive: true, QualityTier: "legacy_curated", Source: "项目内置初始营养数据"}
+	items := runSmart(t, library, smartItem("脱脂纯牛奶", "liquid", 250, 85, map[string]any{"type": "snack", "brand": "三元", "productName": "纯牛奶"}))
+	require.NotEqual(t, "milk", items[0]["matched_food_id"], "skim milk must not become whole milk")
+	require.Equal(t, []string{"特仑苏纯牛奶", "纯牛奶"}, smartPackagedFallbackNames(map[string]any{"name": "特仑苏纯牛奶", "brand": "特仑苏"}))
+}
