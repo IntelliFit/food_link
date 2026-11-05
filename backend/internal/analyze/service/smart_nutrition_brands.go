@@ -97,6 +97,18 @@ func smartDetectBrand(name string, keys []smartBrandKey) (string, string) {
 	return "", ""
 }
 
+// smartDetectBrandedProduct finds a known brand followed by a product kind,
+// so "百事可乐" qualifies and "皇冠梨" does not. Such an item is only treated
+// as packaged once the package reading confirms the brand: "康师傅牛肉面" can
+// be a restaurant bowl.
+func smartDetectBrandedProduct(name string, keys []smartBrandKey) (string, string) {
+	brand, key := smartDetectBrand(name, keys)
+	if brand == "" || smartPackagedHead(strings.Replace(smartTextKey(name), key, "", 1)) == "" {
+		return "", ""
+	}
+	return brand, key
+}
+
 // smartWithDetectedBrands returns copies of packaged items with the brand and
 // product name taken from the item name when the model did not supply them.
 func (s *AnalyzeService) smartWithDetectedBrands(ctx context.Context, items []map[string]any) []map[string]any {

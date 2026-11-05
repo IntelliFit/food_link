@@ -5917,7 +5917,7 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	case analysisEngineDBCandidates:
 		resp = s.applyCandidateGuidedNutrition(ctx, resp, input)
 	case analysisEngineSmart:
-		resp = s.applySmartNutrition(ctx, resp)
+		resp = s.applySmartNutrition(ctx, s.withSmartPackageReading(ctx, resp, input, executionMode))
 	default:
 		resp = s.applyDBFirstNutritionWithOptions(ctx, resp, dbFirstNutritionOptions{
 			additionalContext:            fullNutritionContext(input),

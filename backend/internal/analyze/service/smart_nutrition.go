@@ -142,11 +142,14 @@ func (r *smartRun) resolveItem(ctx context.Context, item map[string]any) smartIt
 	switch kind {
 	case smartKindPackaged:
 		next, status := r.s.resolveSmartPackaged(ctx, item)
-		if next == nil && !smartHasPackagedIdentity(item) {
-			// "薯片" without a brand cannot pick a product; a generic
-			// library row is still better evidence than nothing.
-			if single, singleStatus := r.resolveSingle(ctx, item); single != nil {
-				return smartItemOutcome{item: single, kind: smartKindSingle, status: singleStatus}
+		if next == nil {
+			// "薯片" without a brand, or 完达山纯牛奶 missing from the
+			// packaged library, cannot pick a product; a generic library
+			// row is still better evidence than nothing.
+			for _, name := range smartPackagedFallbackNames(item) {
+				if single, singleStatus := r.resolveSingleAs(ctx, item, name); single != nil {
+					return smartItemOutcome{item: single, kind: smartKindSingle, status: singleStatus}
+				}
 			}
 		}
 		return smartItemOutcome{item: next, kind: kind, status: status}
@@ -160,7 +163,27 @@ func (r *smartRun) resolveItem(ctx context.Context, item map[string]any) smartIt
 }
 
 func (r *smartRun) resolveSingle(ctx context.Context, item map[string]any) (map[string]any, string) {
-	match, reason := r.matchSingleFood(ctx, item, stringFromAny(item["name"]))
+	return r.resolveSingleAs(ctx, item, stringFromAny(item["name"]))
+}
+
+// smartPackagedFallbackNames are the generic names a packaged item can match
+// in the standard library: its own name, then that name without the brand
+// ("特仑苏纯牛奶" -> "纯牛奶"). The product name read from the package is not
+// used: it drops qualifiers the name keeps ("脱脂纯牛奶" read as "纯牛奶"
+// would turn skim milk into whole milk, "即食鸡胸肉" into roast chicken).
+func smartPackagedFallbackNames(item map[string]any) []string {
+	name := strings.TrimSpace(stringFromAny(item["name"]))
+	names := []string{name}
+	if brand := smartPackagedField(item, "brand", "brandName"); brand != "" && strings.Contains(name, brand) {
+		if stripped := strings.TrimSpace(strings.Replace(name, brand, "", 1)); stripped != "" {
+			names = append(names, stripped)
+		}
+	}
+	return names
+}
+
+func (r *smartRun) resolveSingleAs(ctx context.Context, item map[string]any, name string) (map[string]any, string) {
+	match, reason := r.matchSingleFood(ctx, item, name)
 	if match == nil {
 		return nil, reason
 	}
@@ -211,49 +234,50 @@ func (r *smartRun) matchSingleFood(ctx context.Context, item map[string]any, nam
 	return nil, reason
 }
 
-var smartNamePrefixes = []string{"切块的", "切块", "切片的", "切片", "新鲜的", "新鲜", "一整个", "一个", "半个", "一根", "半根", "一碗", "一杯", "一盒", "一份"}
+var smartNamePrefixes = []string{"切块的", "切块", "切片的", "切片", "新鲜的", "新鲜", "一整个", "一个", "半个", "一根", "半根", "一碗", "一杯", "一盒", "一份", "袋装", "盒装", "瓶装", "罐装"}
 
 // smartSingleFoodNameSynonyms maps everyday names to the catalog's spelling.
 // Every entry keeps food identity; preparation differences are still checked
 // by smartFoodCompatibility.
 var smartSingleFoodNameSynonyms = map[string][]string{
-	"水煮蛋":  {"鸡蛋(全蛋)", "鸡蛋"},
-	"煮鸡蛋":  {"鸡蛋(全蛋)", "鸡蛋"},
-	"白煮蛋":  {"鸡蛋(全蛋)", "鸡蛋"},
-	"水煮鸡蛋": {"鸡蛋(全蛋)", "鸡蛋"},
-	"鸡蛋":   {"鸡蛋(全蛋)"},
-	"牛奶":   {"牛奶(全脂)"},
-	"纯牛奶":  {"牛奶(全脂)"},
-	"全脂牛奶": {"牛奶(全脂)"},
-	"脱脂牛奶": {"牛奶(脱脂)"},
-	"小橘子":  {"橘子"},
-	"砂糖橘":  {"橘子"},
-	"黑咖啡":  {"咖啡(美式无糖)"},
-	"美式咖啡": {"咖啡(美式无糖)"},
-	"美式":   {"咖啡(美式无糖)"},
-	"西红柿":  {"番茄"},
-	"米饭":   {"白米饭"},
-	"青菜":   {"上海青"},
-	"绿叶菜":  {"上海青"},
-	"绿叶蔬菜": {"上海青"},
-	"时蔬":   {"上海青"},
-	"熟米饭":  {"白米饭"},
-	"白粥":   {"米粥"},
-	"大米粥":  {"米粥"},
-	"稀饭":   {"米粥"},
-	"甜玉米":  {"玉米(熟)"},
-	"玉米棒":  {"玉米(熟)"},
-	"玉米段":  {"玉米(熟)"},
-	"鸡蛋清":  {"蛋清"},
-	"大米饭":  {"白米饭"},
-	"馒头":   {"白馒头"},
-	"面条":   {"面条(熟)"},
-	"玉米":   {"玉米(熟)"},
-	"煮玉米":  {"玉米(熟)"},
-	"水煮玉米": {"玉米(熟)"},
-	"蒸玉米":  {"玉米(熟)"},
-	"鸡胸肉":  {"鸡胸肉(熟)"},
-	"鸡腿肉":  {"鸡腿肉(熟)"},
+	"水煮蛋":   {"鸡蛋(全蛋)", "鸡蛋"},
+	"煮鸡蛋":   {"鸡蛋(全蛋)", "鸡蛋"},
+	"白煮蛋":   {"鸡蛋(全蛋)", "鸡蛋"},
+	"水煮鸡蛋":  {"鸡蛋(全蛋)", "鸡蛋"},
+	"鸡蛋":    {"鸡蛋(全蛋)"},
+	"牛奶":    {"牛奶(全脂)"},
+	"纯牛奶":   {"牛奶(全脂)"},
+	"全脂牛奶":  {"牛奶(全脂)"},
+	"脱脂牛奶":  {"牛奶(脱脂)"},
+	"脱脂纯牛奶": {"牛奶(脱脂)"},
+	"小橘子":   {"橘子"},
+	"砂糖橘":   {"橘子"},
+	"黑咖啡":   {"咖啡(美式无糖)"},
+	"美式咖啡":  {"咖啡(美式无糖)"},
+	"美式":    {"咖啡(美式无糖)"},
+	"西红柿":   {"番茄"},
+	"米饭":    {"白米饭"},
+	"青菜":    {"上海青"},
+	"绿叶菜":   {"上海青"},
+	"绿叶蔬菜":  {"上海青"},
+	"时蔬":    {"上海青"},
+	"熟米饭":   {"白米饭"},
+	"白粥":    {"米粥"},
+	"大米粥":   {"米粥"},
+	"稀饭":    {"米粥"},
+	"甜玉米":   {"玉米(熟)"},
+	"玉米棒":   {"玉米(熟)"},
+	"玉米段":   {"玉米(熟)"},
+	"鸡蛋清":   {"蛋清"},
+	"大米饭":   {"白米饭"},
+	"馒头":    {"白馒头"},
+	"面条":    {"面条(熟)"},
+	"玉米":    {"玉米(熟)"},
+	"煮玉米":   {"玉米(熟)"},
+	"水煮玉米":  {"玉米(熟)"},
+	"蒸玉米":   {"玉米(熟)"},
+	"鸡胸肉":   {"鸡胸肉(熟)"},
+	"鸡腿肉":   {"鸡腿肉(熟)"},
 }
 
 func smartSingleFoodQueries(item map[string]any, name string) []string {
