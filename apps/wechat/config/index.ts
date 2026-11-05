@@ -312,6 +312,46 @@ export default defineConfig<'vite'>(async (merge) => {
             }
           },
         },
+        // The after-record card is used by three packageExtra record pages only. Its styles are
+        // imported by those pages' scss: Taro only links common chunks' wxss into app.wxss, so a
+        // style imported here would be emitted next to the chunk and never loaded.
+        {
+          name: 'meal-impact-chunk-to-package-extra',
+          configResolved(config) {
+            const ro = config.build.rollupOptions
+            const outs = ro.output
+            const list = Array.isArray(outs) ? outs : outs ? [outs] : []
+            const apply = (o: NonNullable<(typeof list)[number]>) => {
+              if (!o || typeof o !== 'object') return
+              const prevManual = o.manualChunks
+              o.manualChunks = (id: string, ctx: unknown) => {
+                if (/[\\/]src[\\/]components[\\/]MealImpactCard[\\/]/.test(id)) {
+                  return 'meal-impact'
+                }
+                if (typeof prevManual === 'function') {
+                  return (prevManual as (a: string, b: unknown) => string | void).call(o, id, ctx)
+                }
+                return undefined
+              }
+              const prevNames = o.chunkFileNames
+              o.chunkFileNames = (chunkInfo) => {
+                if (chunkInfo.name === 'meal-impact') {
+                  return 'packageExtra/meal-impact.js'
+                }
+                if (typeof prevNames === 'function') return prevNames(chunkInfo)
+                if (typeof prevNames === 'string') return prevNames
+                return '[name]-[hash].js'
+              }
+            }
+            if (list.length === 0) {
+              const o: Record<string, unknown> = {}
+              ro.output = o
+              apply(o)
+            } else {
+              list.forEach(apply)
+            }
+          },
+        },
         {
           name: 'echarts-chunk-to-package-stats-metabolic',
           configResolved(config) {
