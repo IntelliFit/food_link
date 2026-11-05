@@ -9640,3 +9640,55 @@ export async function submitStructuredFeedback(input: SubmitStructuredFeedbackRe
     ...input,
   })
 }
+
+/** 一条记录让当天某项从多少变到多少；未知为 null，不按 0 算（Go domain.MealImpactChange） */
+export interface MealImpactChange {
+  key: string
+  label: string
+  unit: string
+  before: number | null
+  after: number | null
+  delta: number | null
+  target: number
+  /** min（至少达到）/ max（不超过）/ range */
+  kind: string
+  /** ok / short / near_limit / over / unknown */
+  status: string
+}
+
+export interface MealImpact {
+  record_id: string
+  date: string
+  meal_type: string
+  changes: MealImpactChange[]
+  headline: string
+}
+
+/** GET /api/health/nutrition-state/meal-impact：这一餐让今天变了什么，只能查自己的记录 */
+export async function getMealImpact(recordId: string, timeoutMs = 3000): Promise<MealImpact> {
+  const res = await authenticatedRequest(
+    `/api/health/nutrition-state/meal-impact?record_id=${encodeURIComponent(recordId)}`,
+    { method: 'GET', timeout: timeoutMs }
+  )
+  return res.data as MealImpact
+}
+
+/** GET /api/pet/daily（Go pet service.Daily）里记录后弹层用到的几项；缺哪项就不显示哪项 */
+export interface PetDailyBrief {
+  pet?: Partial<PetProfile> | null
+  mood?: { key?: string; label?: string; reason?: string; icon?: string } | null
+  report?: { yesterday?: string; today?: string } | null
+  task?: {
+    key?: string
+    title?: string
+    done?: boolean
+    /** 这次读取刚把任务判完成并发了经验 */
+    just_done?: boolean
+    exp_reward?: number
+  } | null
+}
+
+export async function getPetDailyBrief(timeoutMs = 3000): Promise<PetDailyBrief> {
+  const res = await authenticatedRequest('/api/pet/daily', { method: 'GET', timeout: timeoutMs })
+  return (res.data || {}) as PetDailyBrief
+}

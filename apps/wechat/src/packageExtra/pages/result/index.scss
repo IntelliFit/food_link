@@ -3101,3 +3101,6 @@ transitiontransition
 }
 
 @keyframes food-recalculation-spin { to { transform: rotate(360deg); } }
+
+// 记录后反馈弹层：脚本拆在 packageExtra/meal-impact.js，样式跟着页面走
+@import '../../../components/MealImpactCard/index.scss';

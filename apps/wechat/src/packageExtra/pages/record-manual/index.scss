@@ -1605,3 +1605,6 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
 .selected-drawer-primary.loading {
   opacity: 0.7;
 }
+
+// 记录后反馈弹层：脚本拆在 packageExtra/meal-impact.js，样式跟着页面走
+@import '../../../components/MealImpactCard/index.scss';

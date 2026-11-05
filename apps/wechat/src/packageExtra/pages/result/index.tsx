@@ -54,6 +54,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { applyEnergyEdit } from '../../../utils/nutrition-edit'
 import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
+import { mealSummaryFromSavePayload, useMealImpactSheet } from '../../../components/MealImpactCard'
 import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
 import { useRecordDate } from '../../../hooks/useRecordDate'
 import RecordDateField from '../../../components/RecordDateField'
@@ -597,6 +598,7 @@ function ResultPage() {
   /** 当前识别会话是否已保存为饮食记录（可跳转详情，不再重复写入/发动态） */
   const [committedRecordId, setCommittedRecordId] = useState<string | null>(null)
   const [savedShareRecord, setSavedShareRecord] = useState<FoodRecord | null>(null)
+  const mealImpact = useMealImpactSheet('result')
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [analysisEngine, setAnalysisEngine] = useState(() => normalizeAnalysisEngine(
     Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY),
@@ -2097,7 +2099,8 @@ function ResultPage() {
           setCommittedRecordId(record.id)
           Taro.setStorageSync('analyzeTaskIsRecorded', '1')
           Taro.setStorageSync('analyzeCommittedRecordId', record.id)
-          setSavedShareRecord(record)
+          // 调试预览也走记录后反馈；接口拿不到数据就照旧弹打卡图
+          mealImpact.show(record.id, mealSummaryFromSavePayload(payload), () => setSavedShareRecord(record))
           return
         }
 
@@ -2157,12 +2160,15 @@ function ResultPage() {
             id: saveResult.id,
             record_time: `${recordDate}T${new Date().toTimeString().slice(0, 8)}`,
           }
-        if (previewRecord) {
-          setSavedShareRecord(previewRecord)
-        } else {
-          Taro.showToast({ title: '已记录，可从首页打开分享', icon: 'none' })
-          returnHomeAfterFoodRecord()
-        }
+        // 先告诉用户这一餐让今天变了什么，再照原样弹打卡图
+        mealImpact.show(saveResult.id, mealSummaryFromSavePayload(payload), () => {
+          if (previewRecord) {
+            setSavedShareRecord(previewRecord)
+          } else {
+            Taro.showToast({ title: '已记录，可从首页打开分享', icon: 'none' })
+            returnHomeAfterFoodRecord()
+          }
+        })
       } catch (e: any) {
         await showUnifiedApiError(e, '保存失败')
       } finally {
@@ -3718,6 +3724,7 @@ function ResultPage() {
           returnHomeAfterFoodRecord(0)
         }}
       />
+      {mealImpact.sheet}
     </View>
   )
 }

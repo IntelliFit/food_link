@@ -33,6 +33,7 @@ import {
 } from '../../../utils/infer-default-meal-type'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
+import { useMealImpactSheet } from '../../../components/MealImpactCard'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -557,6 +558,7 @@ function RecordManualPage() {
   const [customSaving, setCustomSaving] = useState(false)
   const customSaveLock = useRef(false)
   const mealSaveLock = useRef(false)
+  const mealImpact = useMealImpactSheet('manual')
   const deletedCustomIds = useRef(new Set<string>())
   const customDraftGeneration = useRef(0)
   const [customItems, setCustomItems] = useState<ManualFoodSearchResult[]>([])
@@ -1384,7 +1386,16 @@ function RecordManualPage() {
       }
 
       Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : '记录成功', icon: saveResult.already_saved ? 'none' : 'success' })
-      returnHomeAfterFoodRecord()
+      const mealSummary = {
+        title: selectedItems.map(i => i.title).join('、'),
+        calories: totalNutrients.calories,
+        protein: totalNutrients.protein,
+        mealType: selectedMeal,
+        date: targetDate,
+      }
+      mealImpact.show(saveResult.id, mealSummary, (shown) => {
+        returnHomeAfterFoodRecord(shown ? 0 : undefined)
+      })
     } catch (e: any) {
       await showUnifiedApiError(e, '保存失败')
     } finally {
@@ -1984,6 +1995,7 @@ function RecordManualPage() {
           </View>
         </View>
       )}
+      {mealImpact.sheet}
     </View>
   )
 }
