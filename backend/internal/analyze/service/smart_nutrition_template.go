@@ -99,7 +99,7 @@ func smartApplyDishTemplate(item map[string]any, components []smartComponent, we
 
 	oilGrams := 0.0
 	for _, component := range out {
-		if smartIsCookingFat(component.name) {
+		if smartComponentIsOil(component.name) {
 			oilGrams += component.grams
 		}
 	}
@@ -157,7 +157,7 @@ func smartApplyDishTemplate(item map[string]any, components []smartComponent, we
 	}
 	for i, component := range out {
 		switch {
-		case smartIsCookingFat(component.name):
+		case smartComponentIsOil(component.name):
 			if oilGrams > 0 {
 				out[i].grams = component.grams * targetOil / oilGrams
 			}

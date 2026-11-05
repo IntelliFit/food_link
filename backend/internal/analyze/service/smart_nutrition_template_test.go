@@ -138,3 +138,11 @@ func TestSmartPackagedRejectsCerealForAPieAndMilkForYogurt(t *testing.T) {
 		require.Nil(t, next, "%s must not match (%s)", item["name"], status)
 	}
 }
+
+func TestSmartSauceWithOilIsNotPureOil(t *testing.T) {
+	require.False(t, smartIsCookingFat("酱汁(含植物油、淀粉、酱油)"))
+	require.False(t, smartIsCookingFat("红油汤汁"))
+	require.True(t, smartComponentIsOil("红油"), "the table maps 红油 to plain oil")
+	require.True(t, smartComponentIsOil("植物油"))
+	require.False(t, smartComponentIsOil("酱汁(含植物油、淀粉、酱油)"))
+}

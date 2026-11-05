@@ -51,7 +51,32 @@ func smartDishComponents(item map[string]any) []smartComponent {
 
 func smartIsCookingFat(name string) bool {
 	name = strings.TrimSpace(name)
+	if smartIsMixedSauce(name) {
+		return false
+	}
 	return containsAnyAnalyzeText(name, smartCookingFatTokens) || name == "油" || strings.HasSuffix(name, "食用油")
+}
+
+// smartComponentIsOil counts every spelling of cooking oil in a split,
+// including 红油 and 辣椒油, which the table maps to plain oil.
+func smartComponentIsOil(name string) bool {
+	if smartIsMixedSauce(name) {
+		return false
+	}
+	if smartIsCookingFat(name) {
+		return true
+	}
+	_, label, ok := smartReferenceIngredient(name)
+	return ok && label == "植物油"
+}
+
+// smartIsMixedSauce spots a sauce that merely contains oil, such as
+// "酱汁(含植物油、淀粉、酱油)": counting it as pure oil would add 9 kcal a gram.
+func smartIsMixedSauce(name string) bool {
+	if strings.ContainsAny(name, "(（") || strings.Contains(name, "含") {
+		return containsAnyAnalyzeText(name, []string{"酱", "汁", "汤", "卤", "料"})
+	}
+	return containsAnyAnalyzeText(name, []string{"酱汁", "汤汁", "卤汁", "料汁", "调味汁"})
 }
 
 // resolveSmartDish recomputes a mixed dish from its ingredients. The model
@@ -103,7 +128,7 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 		} else {
 			unit, label, reason = r.resolveComponent(ctx, component)
 		}
-		if unit != nil && (label == "植物油" || smartIsCookingFat(component.name)) {
+		if unit != nil && smartComponentIsOil(component.name) {
 			oilKcal += numberFromAny(unit["calories"]) * grams / 100
 		}
 		if unit == nil {
