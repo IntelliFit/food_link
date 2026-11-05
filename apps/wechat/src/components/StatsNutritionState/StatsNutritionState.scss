@@ -368,3 +368,196 @@ $ns-over: #c8644a;
     color: var(--stats-muted, #5b6676);
   }
 }
+
+// 我的关注（置顶，最多 3 项）
+.stats-ns-focus {
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+  }
+
+  &__title-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 12rpx;
+  }
+
+  &__manage {
+    min-width: 88rpx;
+    min-height: 88rpx;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    font-size: 28rpx;
+    font-weight: 600;
+    color: var(--stats-accent, #2f7f62);
+  }
+
+  &__empty {
+    display: flex;
+    align-items: center;
+    gap: 24rpx;
+    margin-top: 8rpx;
+  }
+
+  &__empty-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 28rpx;
+    line-height: 42rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__item {
+    padding: 24rpx 0;
+    border-top: 1rpx solid var(--stats-line, #eceee8);
+
+    &:active { background: var(--stats-track, #f1f3ee); }
+  }
+
+  &__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 20rpx;
+  }
+
+  &__icon {
+    width: 72rpx;
+    height: 72rpx;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--stats-soft, #eef3ee);
+    color: var(--stats-accent, #2f6b45);
+    font-size: 36rpx;
+  }
+
+  &__copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+  }
+
+  &__name-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12rpx;
+  }
+
+  &__name {
+    font-size: 30rpx;
+    line-height: 44rpx;
+    font-weight: 700;
+    color: var(--stats-ink, #1e2939);
+  }
+
+  &__badge {
+    font-size: 24rpx;
+    line-height: 34rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__spinner {
+    font-size: 24rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__reason {
+    font-size: 28rpx;
+    line-height: 42rpx;
+    color: var(--stats-ink, #1e2939);
+    word-break: break-word;
+  }
+
+  &__score {
+    flex-shrink: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 4rpx;
+    padding: 6rpx 18rpx;
+    border-radius: 999rpx;
+    background: var(--stats-soft, #e5f3de);
+    color: var(--stats-accent, #2f5f3a);
+
+    &.tone-neutral,
+    &.tone-warning,
+    &.tone-danger {
+      background: var(--stats-attention-surface, #fff0d6);
+      color: var(--stats-attention-ink, #7a3f06);
+    }
+
+    &.tone-pending {
+      background: var(--stats-track, #f1f3ee);
+      color: var(--stats-muted, #5b6676);
+    }
+  }
+
+  &__score-value {
+    font-size: 36rpx;
+    line-height: 48rpx;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__score-unit { font-size: 24rpx; }
+
+  &__evidence {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+    margin: 12rpx 0 0 92rpx;
+  }
+
+  &__evidence-line {
+    display: flex;
+    gap: 10rpx;
+  }
+
+  &__bullet,
+  &__evidence-text {
+    font-size: 26rpx;
+    line-height: 38rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__bullet { color: var(--stats-accent, #2f7f62); }
+
+  &__footnote {
+    display: block;
+    padding-top: 12rpx;
+    font-size: 24rpx;
+    line-height: 36rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+}
+
+// 「其他方面」：没选为关注的卡折叠成一行
+.stats-ns-others-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 96rpx;
+  margin: 0 30rpx 20rpx;
+  padding: 0 28rpx;
+  box-sizing: border-box;
+  border-radius: 24rpx;
+  border: 1rpx solid var(--stats-line, #e1e6dc);
+  background: var(--stats-surface, #fffdf7);
+  font-size: 30rpx;
+  color: var(--stats-ink, #1e2939);
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    font-size: 26rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+}

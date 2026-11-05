@@ -24,15 +24,16 @@ $stats-blue-soft: #7aa9ce;
     #f0f3f6 100%
   );
 
-  padding-top: $tab-page-content-top;
-  padding-bottom: 200rpx;
+  // 二级页：标题在原生导航栏，底部没有 tab 栏
+  padding-top: 32rpx;
+  padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 
   &--guest {
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: $tab-page-content-top 48rpx 200rpx;
+    padding: 48rpx 48rpx calc(48rpx + env(safe-area-inset-bottom));
   }
 }
 
@@ -517,10 +518,6 @@ $stats-blue-soft: #7aa9ce;
   font-size: 36rpx;
   color: $stats-primary;
   line-height: 1;
-}
-
-.analysis-title-icon {
-  color: $stats-macro-protein;
 }
 
 .card-title {
@@ -2352,333 +2349,6 @@ $stats-blue-soft: #7aa9ce;
   font-weight: 700;
 }
 
-// Analysis
-.analysis-card {
-  background: linear-gradient(135deg, rgb(92 158 212 / 10%) 0%, #fff 100%);
-  border-color: rgb(92 158 212 / 14%);
-
-  .card-title {
-    color: #3d6b94;
-  }
-
-  .card-subtitle {
-    color: rgb(61 107 148 / 62%);
-  }
-}
-
-.analysis-action-btn {
-  flex-shrink: 0;
-  padding: 12rpx 22rpx;
-  border-radius: 999rpx;
-  background: rgb(92 158 212 / 14%);
-  border: 1rpx solid rgb(92 158 212 / 22%);
-
-  &.disabled {
-    opacity: 0.65;
-  }
-}
-
-.analysis-action-btn-text {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: #3d6b94;
-  font-weight: 600;
-}
-
-.analysis-status {
-  margin-bottom: 16rpx;
-  padding: 16rpx 18rpx;
-  border-radius: 18rpx;
-  background: rgb(92 158 212 / 12%);
-  border: 1rpx solid rgb(92 158 212 / 10%);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-
-  &.warning {
-    background: rgb(245 196 154 / 35%);
-    border-color: rgb(240 152 92 / 22%);
-  }
-}
-
-.analysis-status-text {
-  font-size: 22rpx;
-  line-height: 34rpx;
-  color: #475569;
-}
-
-.analysis-status-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.analysis-status-subtext {
-  font-size: 20rpx;
-  line-height: 30rpx;
-  color: #64748b;
-}
-
-.analysis-status-action {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 96rpx;
-  padding: 10rpx 22rpx;
-  border-radius: 999rpx;
-  background: #fff;
-  border: 1rpx solid rgb(193 116 60 / 28%);
-  box-shadow: 0 4rpx 10rpx rgb(193 116 60 / 16%);
-
-  &.is-loading {
-    opacity: 0.7;
-  }
-
-  &.is-disabled {
-    opacity: 0.55;
-    box-shadow: none;
-    border-color: rgb(148 163 184 / 24%);
-  }
-}
-
-.analysis-status-action-text {
-  font-size: 22rpx;
-  line-height: 30rpx;
-  color: #b86432;
-  font-weight: 600;
-}
-
-.analysis-status-action-icon {
-  font-size: 28rpx;
-  color: #b86432;
-}
-
-.analysis-content {
-  display: flex;
-  flex-direction: column;
-  gap: 18rpx;
-}
-
-.analysis-md-heading {
-  display: block;
-  margin-top: 4rpx;
-  font-size: 30rpx;
-  line-height: 42rpx;
-  color: #1f3f68;
-  font-weight: 700;
-}
-
-.analysis-md-paragraph {
-  display: block;
-  font-size: 28rpx;
-  color: #334155;
-  line-height: 46rpx;
-  white-space: pre-wrap;
-}
-
-.analysis-md-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-}
-
-.analysis-md-list-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12rpx;
-}
-
-.analysis-md-list-bullet {
-  flex-shrink: 0;
-  font-size: 28rpx;
-  line-height: 44rpx;
-  color: #5cb896;
-}
-
-.analysis-md-list-text {
-  flex: 1;
-  min-width: 0;
-  font-size: 28rpx;
-  color: #334155;
-  line-height: 44rpx;
-}
-
-.analysis-md-strong {
-  font-weight: 700;
-  color: #24364f;
-}
-
-.analysis-md-underline {
-  text-decoration: underline;
-  text-decoration-color: #22b982;
-  text-decoration-thickness: 3rpx;
-  text-underline-offset: 5rpx;
-}
-
-.analysis-md-table-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.analysis-md-table {
-  display: grid;
-  margin: 8rpx 0;
-  border: 1rpx solid #e2e8f0;
-  border-radius: 16rpx;
-  overflow: hidden;
-}
-
-.analysis-md-table-cell {
-  padding: 18rpx 20rpx;
-  font-size: 26rpx;
-  line-height: 38rpx;
-  color: #334155;
-  border-bottom: 1rpx solid #e2e8f0;
-  min-width: 0;
-  word-break: break-word;
-}
-
-.analysis-md-table-header {
-  font-weight: 700;
-  color: #1f2937;
-  background: #f8fafc;
-}
-
-.analysis-loading {
-  padding: 12rpx 4rpx;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-}
-
-.analysis-loading-card {
-  padding: 24rpx 22rpx;
-  border-radius: 22rpx;
-  background: linear-gradient(180deg, rgb(92 158 212 / 8%) 0%, rgb(92 158 212 / 3%) 100%);
-  border: 1rpx solid rgb(92 158 212 / 14%);
-}
-
-.analysis-loading-card-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 16rpx;
-}
-
-.analysis-loading-card-icon {
-  margin-top: 2rpx;
-  font-size: 30rpx;
-  color: $stats-macro-protein;
-}
-
-.analysis-loading-card-copy {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6rpx;
-}
-
-.analysis-loading-card-title {
-  font-size: 28rpx;
-  line-height: 38rpx;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.analysis-loading-card-text {
-  font-size: 22rpx;
-  line-height: 34rpx;
-  color: #64748b;
-}
-
-.analysis-skeleton-group {
-  margin-top: 22rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 14rpx;
-}
-
-.analysis-skeleton-line {
-  height: 20rpx;
-  border-radius: 999rpx;
-  background: linear-gradient(90deg, rgb(92 158 212 / 10%) 0%, rgb(92 158 212 / 22%) 45%, rgb(92 158 212 / 10%) 100%);
-  background-size: 200% 100%;
-  animation: analysis-skeleton-shimmer 1.2s ease-in-out infinite;
-
-  &.w-100 { width: 100%; }
-  &.w-96 { width: 96%; }
-  &.w-92 { width: 92%; }
-  &.w-86 { width: 86%; }
-  &.w-70 { width: 70%; }
-}
-
-@keyframes analysis-skeleton-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
-}
-
-.analysis-loading-icon {
-  font-size: 28rpx;
-  color: $stats-macro-protein;
-}
-
-.analysis-loading-text {
-  font-size: 24rpx;
-  color: #1e293b;
-}
-
-.analysis-empty {
-  padding: 12rpx 4rpx 4rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-  align-items: flex-start;
-}
-
-.analysis-empty--gate {
-  padding: 22rpx 20rpx;
-  border-radius: 20rpx;
-  background: rgb(92 158 212 / 8%);
-  border: 1rpx solid rgb(92 158 212 / 14%);
-}
-
-.analysis-empty-title {
-  display: block;
-  font-size: 28rpx;
-  line-height: 40rpx;
-  font-weight: 700;
-  color: #1e2939;
-}
-
-.analysis-empty-text {
-  font-size: 24rpx;
-  line-height: 38rpx;
-  color: #475569;
-}
-
-.analysis-empty-action {
-  padding: 18rpx 28rpx;
-  border-radius: 999rpx;
-  background: linear-gradient(135deg, $stats-blue-soft 0%, $stats-macro-protein 100%);
-  box-shadow: 0 10rpx 24rpx rgb(92 158 212 / 22%);
-
-  &.is-disabled {
-    opacity: 0.55;
-    box-shadow: none;
-  }
-}
-
-.analysis-empty-action-text {
-  font-size: 24rpx;
-  line-height: 32rpx;
-  color: #fff;
-  font-weight: 600;
-}
-
 .analysis-error {
   margin-bottom: 16rpx;
   padding: 16rpx 18rpx;
@@ -3316,8 +2986,8 @@ $stats-blue-soft: #7aa9ce;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding-top: 168rpx;
-  padding-bottom: calc(148rpx + env(safe-area-inset-bottom));
+  padding-top: 8rpx;
+  padding-bottom: env(safe-area-inset-bottom);
   background: var(--stats-page-surface);
   color: var(--stats-ink);
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -3336,23 +3006,11 @@ $stats-blue-soft: #7aa9ce;
     --stats-attention-ink: #e5c087;
   }
 
-  .stats-page-title {
-    position: fixed;
-    top: 100rpx;
-    left: 38%;
-    right: 38%;
-    height: 56rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 36rpx;
-    font-weight: 700;
-    color: var(--stats-ink);
-  }
-
+  // 二级页：周期下拉放在分页签同一行，跟着文档流走
   .stats-range-dropdown {
+    position: static;
+    flex-shrink: 0;
     height: 64rpx;
-    top: 96rpx;
     min-width: 0;
     padding: 0 18rpx;
     background: var(--stats-surface);
@@ -3364,9 +3022,11 @@ $stats-blue-soft: #7aa9ce;
   .stats-range-dropdown__label { font-size: 26rpx; color: var(--stats-ink); }
   .stats-range-dropdown__arrow { color: var(--stats-muted); }
 
-  .analysis-tabs-container { margin: 0; padding: 0 24rpx 16rpx; flex-shrink: 0; }
+  .analysis-tabs-container { display: flex; align-items: center; gap: 16rpx; margin: 0; padding: 0 24rpx 16rpx; flex-shrink: 0; }
   .analysis-panel-control.segmented-control {
     position: relative;
+    flex: 1;
+    min-width: 0;
     display: flex;
     padding: 0;
     margin: 0;
@@ -3510,32 +3170,11 @@ $stats-blue-soft: #7aa9ce;
   .stats-issue-title { display: block; color: var(--stats-ink); font-size: 30rpx; line-height: 46rpx; font-weight: 600; }
   .stats-issue-detail { display: block; color: var(--stats-muted); font-size: 28rpx; line-height: 44rpx; }
 
-  .ai-insight-card-body { margin-top: 16rpx; }
-  .analysis-status { background: transparent; border: none; padding: 0; gap: 16rpx; margin: 0; align-items: center; }
-  .analysis-status-copy { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 16rpx; row-gap: 4rpx; min-width: 0; }
-  .analysis-status-text, .analysis-status-new, .analysis-quota { color: var(--stats-muted); font-size: 26rpx; line-height: 40rpx; }
-  .analysis-status-new { color: var(--stats-accent); }
-  .analysis-quota { display: block; margin: 20rpx 0 28rpx; padding: 12rpx 16rpx; background: var(--stats-track); border-radius: 10rpx; }
-  .analysis-status-action { min-height: 88rpx; padding: 0 16rpx; border: 1rpx solid var(--stats-accent); border-radius: 16rpx; background: transparent; flex-shrink: 0; box-shadow: none; &:active { box-shadow: none; } }
-  .analysis-status-action-text { color: var(--stats-accent); font-size: 26rpx; line-height: 40rpx; }
-  .analysis-status-action.is-disabled { border-color: var(--stats-line); opacity: 0.75; }
-  .analysis-status-action.is-disabled .analysis-status-action-text { color: var(--stats-muted); }
-  .analysis-report { overflow: hidden; }
-  .analysis-report.is-collapsed { max-height: 720rpx; }
-  .analysis-content { gap: 24rpx; }
-  .analysis-md-heading { color: var(--stats-ink); font-size: 34rpx; line-height: 50rpx; margin-top: 16rpx; }
-  .analysis-md-paragraph, .analysis-md-list-text { color: var(--stats-ink); font-size: 32rpx; line-height: 52rpx; }
-  .analysis-md-strong { color: var(--stats-ink); }
-  .analysis-md-list-bullet { color: var(--stats-accent); font-size: 30rpx; line-height: 52rpx; }
-  .analysis-md-table { border-color: var(--stats-line); }
-  .analysis-md-table-cell { color: var(--stats-ink); font-size: 28rpx; line-height: 44rpx; border-color: var(--stats-line); }
-  .analysis-md-table-header { background: var(--stats-track); color: var(--stats-ink); }
   .analysis-empty-title, .health-index-gate-title { color: var(--stats-ink); font-size: 32rpx; line-height: 48rpx; }
   .analysis-empty-text, .health-index-gate-desc { color: var(--stats-muted); font-size: 28rpx; line-height: 46rpx; }
   .analysis-empty-action, .risk-detail-close-btn, .risk-focus-modal-close { min-height: 88rpx; border-radius: 16rpx; background: var(--stats-accent); padding: 16rpx 24rpx; box-sizing: border-box; }
   .analysis-empty-action-text, .risk-detail-close-text, .risk-focus-modal-close-text { font-size: 30rpx; line-height: 44rpx; color: var(--stats-surface); }
   .analysis-error { margin: 12rpx 24rpx 20rpx; font-size: 28rpx; line-height: 44rpx; }
-  .analysis-loading-card { margin-top: 24rpx; padding: 20rpx 0; box-shadow: none; background: transparent; border: none; }
 
   .stats-unit { color: var(--stats-muted); font-size: 26rpx; font-weight: 400; }
   .chart-switch-wrap { min-height: 72rpx; gap: 12rpx; }
@@ -3671,12 +3310,11 @@ $stats-blue-soft: #7aa9ce;
 }
 .nutrition-plan-chart-target { position: absolute; z-index: 2; left: 8%; right: 8%; height: 3rpx; border-radius: 2rpx; background: #4e9673; }
 
-// 引擎营养状态：综合分卡右栏的「比上周」和关注卡下的说明
+// 引擎营养状态：综合分卡右栏的「比上周」
 .stats-page.stats-page--editorial {
   .risk-overview-delta { display: block; color: #a7e0c4; font-size: 36rpx; line-height: 48rpx; font-weight: 700; font-variant-numeric: tabular-nums; }
   .risk-overview-delta.is-down { color: #fde7c2; }
   .risk-overview-delta.is-flat { color: #e3ede7; }
-  .stats-focus-source-note { display: block; margin: -8rpx 46rpx 24rpx; color: var(--stats-muted); font-size: 24rpx; line-height: 36rpx; }
 }
 
 // 组件不自己引样式：组件样式进 common.wxss 会被每个页面加载，这里只给分析页

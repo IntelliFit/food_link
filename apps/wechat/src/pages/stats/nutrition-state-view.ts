@@ -163,6 +163,14 @@ export function normalizeNutritionState(raw: unknown): DailyNutritionState | nul
       text: text(item.text),
       value: text(item.value) || undefined,
     })).filter(item => item.text),
+    // 没有这个字段（旧后端）保持 undefined，和“服务器上还没选”的空数组区分开
+    focus: Array.isArray(src.focus)
+      ? list<Record<string, unknown>>(src.focus).map(item => ({
+        key: text(item.key),
+        title: text(item.title),
+        custom: item.custom === true,
+      })).filter(item => item.key)
+      : undefined,
   }
 }
 

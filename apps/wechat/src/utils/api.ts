@@ -9775,6 +9775,34 @@ export interface DailyNutritionState {
   context: NutritionContext
   headline: string
   findings: NutritionFinding[]
+  /** 用户选的关注（最多 3 项，存在服务器）；旧后端没有这个字段 */
+  focus?: NutritionFocusChoice[]
+}
+
+/** 一项关注：现有关注卡的 key（hypertension…）或 custom:<id> */
+export interface NutritionFocusChoice {
+  key: string
+  title: string
+  custom: boolean
+}
+
+/**
+ * PUT /api/health/focus：整体替换用户的关注，返回服务器存下的 keys。
+ * 超过 3 项、不认识的 key、不属于自己的自定义关注返回 400；空数组清空。
+ */
+export async function saveHealthFocusKeys(keys: string[]): Promise<string[] | null> {
+  const res = await authenticatedRequest('/api/health/focus', {
+    method: 'PUT',
+    data: { keys },
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    const err = new Error(parseFastApiDetail(res.data) || '保存关注失败') as ErrorLike
+    err.statusCode = res.statusCode
+    throw err
+  }
+  const saved = (res.data as { keys?: unknown } | null)?.keys
+  return Array.isArray(saved) ? saved.map(item => String(item || '')).filter(Boolean) : null
 }
 
 /** GET /api/health/nutrition-state：引擎给的当天营养状态；date 省略为今天（北京时间） */

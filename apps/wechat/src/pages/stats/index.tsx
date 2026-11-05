@@ -2,11 +2,9 @@ import { View, Text, ScrollView, Input, Switch, Checkbox, Image } from '@tarojs/
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
-import { restoreRiskFocusKeys } from './risk-focus-preference'
 import { showDietDecisionEvidence } from '../../utils/diet-decision-evidence'
 import {
   getStatsSummary,
-  generateStatsInsight,
   getBodyMetricsSummary,
   addHealthFocus,
   removeHealthFocus,
@@ -14,6 +12,7 @@ import {
   getAnalyzeTask,
   getNutritionState,
   getPetSummary,
+  saveHealthFocusKeys,
   showUnifiedApiError,
   type StatsSummary,
   type BodyMetricWeightEntry,
@@ -44,7 +43,24 @@ import {
   weekHabitRows,
   type EvidenceGapView,
 } from './nutrition-state-view'
-import { EvidenceGapsCard, PetObservationStrip, TodayGapsCard, WeekHabitsCard } from '../../components/StatsNutritionState'
+import {
+  addFocusKeyIfRoom,
+  localFocusKeys,
+  MAX_HEALTH_FOCUS,
+  resolveFocusKeys,
+  sameKeys,
+  splitFocusCards,
+  toggleFocusKey,
+} from './focus-selection'
+import {
+  EvidenceGapsCard,
+  FocusSpotlightCard,
+  PetObservationStrip,
+  TodayGapsCard,
+  WeekHabitsCard,
+  type FocusSpotlightItem,
+} from '../../components/StatsNutritionState'
+import { applyThemeNavigationBar } from '../../utils/theme-navigation-bar'
 import { experiments } from '../../utils/experiments'
 import { openPetChat } from '../../utils/pet-navigation'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
@@ -78,214 +94,6 @@ function formatLocalDate(date: Date = new Date()): string {
   return `${year}-${month}-${day}`
 }
 
-function normalizeInsightText(raw: string): string {
-  if (!raw) return ''
-
-  return raw
-    .replace(/\r\n/g, '\n')
-    .replace(/```+/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-type InsightInlinePart = {
-  text: string
-  underline?: boolean
-  strong?: boolean
-}
-
-type InsightMarkdownBlock = {
-  type: 'heading' | 'paragraph' | 'list' | 'table'
-  text?: string
-  items?: string[]
-  headers?: string[]
-  rows?: string[][]
-}
-
-function parseInsightInline(text: string): InsightInlinePart[] {
-  const parts: InsightInlinePart[] = []
-  const pattern = /<u>(.*?)<\/u>|__(.*?)__|\*\*(.*?)\*\*/g
-  let cursor = 0
-  let match: RegExpExecArray | null
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > cursor) {
-      parts.push({ text: text.slice(cursor, match.index) })
-    }
-    if (match[1] != null) {
-      parts.push({ text: match[1], underline: true })
-    } else if (match[2] != null) {
-      parts.push({ text: match[2], underline: true })
-    } else if (match[3] != null) {
-      parts.push({ text: match[3], strong: true })
-    }
-    cursor = pattern.lastIndex
-  }
-  if (cursor < text.length) {
-    parts.push({ text: text.slice(cursor) })
-  }
-  return parts.filter(part => part.text)
-}
-
-function stripInsightMarkdownPrefix(line: string): string {
-  return line
-    .replace(/^\s{0,3}#{1,6}\s*/, '')
-    .replace(/^\s*[-*+]\s+/, '')
-    .replace(/^\s*\d+[.)]\s+/, '')
-    .trim()
-}
-
-function parseMarkdownTableLine(line: string): string[] {
-  const cells = line.split('|').map(cell => cell.trim())
-  if (cells[0] === '') cells.shift()
-  if (cells[cells.length - 1] === '') cells.pop()
-  return cells
-}
-
-function isMarkdownTableDelimiter(line: string): boolean {
-  const trimmed = line.trim()
-  if (!trimmed.includes('|')) return false
-  const cells = parseMarkdownTableLine(trimmed)
-  return cells.length > 0 && cells.every(cell => /^:?-{2,}:?$/.test(cell))
-}
-
-function parseInsightMarkdown(text: string): InsightMarkdownBlock[] {
-  const blocks: InsightMarkdownBlock[] = []
-  const lines = normalizeInsightText(text).split('\n')
-  let paragraph: string[] = []
-  let listItems: string[] = []
-
-  const flushParagraph = () => {
-    if (paragraph.length) {
-      blocks.push({ type: 'paragraph', text: paragraph.join('\n').trim() })
-      paragraph = []
-    }
-  }
-  const flushList = () => {
-    if (listItems.length) {
-      blocks.push({ type: 'list', items: listItems })
-      listItems = []
-    }
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i]
-    const line = rawLine.trim()
-
-    if (!line) {
-      flushParagraph()
-      flushList()
-      continue
-    }
-
-    if (line.includes('|')) {
-      const nextLine = lines[i + 1]
-      if (nextLine !== undefined && isMarkdownTableDelimiter(nextLine)) {
-        flushParagraph()
-        flushList()
-        const headers = parseMarkdownTableLine(rawLine)
-        i++ // skip delimiter line
-        const rows: string[][] = []
-        i++ // start from first body row
-        while (i < lines.length && lines[i].trim().includes('|')) {
-          rows.push(parseMarkdownTableLine(lines[i]))
-          i++
-        }
-        blocks.push({ type: 'table', headers, rows })
-        i-- // let outer loop process the first non-table line
-        continue
-      }
-    }
-
-    if (/^\s{0,3}#{1,6}\s+/.test(rawLine)) {
-      flushParagraph()
-      flushList()
-      blocks.push({ type: 'heading', text: stripInsightMarkdownPrefix(rawLine) })
-      continue
-    }
-
-    if (/^\s*([-*+]|\d+[.)])\s+/.test(rawLine)) {
-      flushParagraph()
-      listItems.push(stripInsightMarkdownPrefix(rawLine))
-      continue
-    }
-
-    flushList()
-    paragraph.push(line)
-  }
-  flushParagraph()
-  flushList()
-  return blocks
-}
-
-function renderInsightInline(text: string) {
-  return parseInsightInline(text).map((part, index) => (
-    <Text
-      key={`${part.text}-${index}`}
-      className={`${part.underline ? 'analysis-md-underline' : ''}${part.strong ? ' analysis-md-strong' : ''}`}
-    >
-      {part.text}
-    </Text>
-  ))
-}
-
-function renderInsightMarkdown(text: string) {
-  return parseInsightMarkdown(text).map((block, index) => {
-    if (block.type === 'heading') {
-      return (
-        <Text key={`heading-${index}`} className='analysis-md-heading'>
-          {renderInsightInline(block.text || '')}
-        </Text>
-      )
-    }
-    if (block.type === 'list') {
-      return (
-        <View key={`list-${index}`} className='analysis-md-list'>
-          {(block.items || []).map((item, itemIndex) => (
-            <View key={`${item}-${itemIndex}`} className='analysis-md-list-item'>
-              <Text className='analysis-md-list-bullet'>•</Text>
-              <Text className='analysis-md-list-text'>{renderInsightInline(item)}</Text>
-            </View>
-          ))}
-        </View>
-      )
-    }
-    if (block.type === 'table') {
-      const headers = block.headers || []
-      const rows = block.rows || []
-      const colCount = Math.max(1, headers.length)
-      return (
-        <View key={`table-${index}`} className='analysis-md-table-wrapper'>
-          <View
-            className='analysis-md-table'
-            style={{ gridTemplateColumns: `repeat(${colCount}, minmax(140rpx, 1fr))` }}
-          >
-            {headers.map((header, headerIndex) => (
-              <View
-                key={`th-${headerIndex}`}
-                className='analysis-md-table-cell analysis-md-table-header'
-              >
-                {renderInsightInline(header)}
-              </View>
-            ))}
-            {rows.map((row, rowIndex) =>
-              row.map((cell, cellIndex) => (
-                <View key={`td-${rowIndex}-${cellIndex}`} className='analysis-md-table-cell'>
-                  {renderInsightInline(cell)}
-                </View>
-              ))
-            )}
-          </View>
-        </View>
-      )
-    }
-    return (
-      <Text key={`paragraph-${index}`} className='analysis-md-paragraph'>
-        {renderInsightInline(block.text || '')}
-      </Text>
-    )
-  })
-}
-
 type HeatmapCell = {
   date: string
   calories: number
@@ -294,16 +102,50 @@ type HeatmapCell = {
   state: 'none' | 'surplus' | 'deficit'
 }
 
-type AnalysisPanelKey = 'health' | 'nutrition' | 'structure'
+// 「饮食解读」（AI 风险解读）已去掉，由宠物每天那句话和宠物聊天替代
+type AnalysisPanelKey = 'health' | 'structure'
 
 const ANALYSIS_PANEL_TABS: Array<{ key: AnalysisPanelKey; label: string }> = [
   { key: 'health', label: '健康关注' },
-  { key: 'nutrition', label: '饮食解读' },
   { key: 'structure', label: '趋势' },
 ]
 
-const DEFAULT_RISK_KEYS = ['hypertension', 'diabetes', 'cardio', 'weight', 'micronutrient']
+/** 关注以服务器为准；这两个本地键只做离线兜底和“还没传上去”的标记 */
 const RISK_PREF_STORAGE_KEY = 'stats_risk_focus_keys'
+const RISK_PREF_PENDING_KEY = 'stats_risk_focus_pending'
+
+function readStoredFocus(): unknown {
+  try {
+    return Taro.getStorageSync(RISK_PREF_STORAGE_KEY)
+  } catch {
+    return undefined
+  }
+}
+
+function writeStoredFocus(keys: string[]): void {
+  try {
+    Taro.setStorageSync(RISK_PREF_STORAGE_KEY, keys)
+  } catch {
+    // ignore
+  }
+}
+
+function readFocusPending(): boolean {
+  try {
+    return Taro.getStorageSync(RISK_PREF_PENDING_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeFocusPending(pending: boolean): void {
+  try {
+    if (pending) Taro.setStorageSync(RISK_PREF_PENDING_KEY, '1')
+    else Taro.removeStorageSync(RISK_PREF_PENDING_KEY)
+  } catch {
+    // ignore
+  }
+}
 
 function isCustomRiskKey(key: string): boolean {
   return String(key || '').startsWith('custom:')
@@ -494,15 +336,22 @@ function hasAuthToken(): boolean {
 /** 开发版专用：接口上线前在 DevTools 里写这个 storage（对象或 JSON 字符串）就用它代替接口 */
 const DEV_NUTRITION_STATE_MOCK_KEY = 'dev_stats_nutrition_state_mock'
 
-async function loadNutritionState(): Promise<DailyNutritionState | null> {
-  if (__ENABLE_DEV_DEBUG_UI__) {
-    try {
-      const mock = Taro.getStorageSync(DEV_NUTRITION_STATE_MOCK_KEY)
-      if (mock) return normalizeNutritionState(typeof mock === 'string' ? JSON.parse(mock) : mock)
-    } catch {
-      // 坏的 mock 当没有
-    }
+/** 开发版 mock 生效时关注也不写服务器，免得在模拟器里改到线上账号 */
+function devNutritionMock(): unknown {
+  if (!__ENABLE_DEV_DEBUG_UI__) return null
+  try {
+    const mock = Taro.getStorageSync(DEV_NUTRITION_STATE_MOCK_KEY)
+    if (!mock) return null
+    return typeof mock === 'string' ? JSON.parse(mock) : mock
+  } catch {
+    // 坏的 mock 当没有
+    return null
   }
+}
+
+async function loadNutritionState(): Promise<DailyNutritionState | null> {
+  const mock = devNutritionMock()
+  if (mock) return normalizeNutritionState(mock)
   return normalizeNutritionState(await getNutritionState())
 }
 
@@ -518,9 +367,16 @@ function StatsPage() {
   const [actionsExpanded, setActionsExpanded] = useState(false)
   const [issuesExpanded, setIssuesExpanded] = useState(false)
   const [customFocusFormVisible, setCustomFocusFormVisible] = useState(false)
-  const [insightExpanded, setInsightExpanded] = useState(false)
-  const [insightCanExpand, setInsightCanExpand] = useState(false)
+  const [othersExpanded, setOthersExpanded] = useState(false)
   const [mealValuesInCalories, setMealValuesInCalories] = useState(false)
+
+  // 二级页用原生导航栏（带返回），颜色跟着深浅色
+  useEffect(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f8f6e9', darkBackground: '#161f1b' })
+  }, [scheme])
+  useDidShow(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f8f6e9', darkBackground: '#161f1b' })
+  })
 
   // 自定义 tabBar 显隐同步：弹窗打开时隐藏底栏
   useEffect(() => {
@@ -541,14 +397,10 @@ function StatsPage() {
       }
     }
   }, [riskDetailModal.visible, riskPickerVisible])
-  const [selectedRiskKeys, setSelectedRiskKeys] = useState<string[]>(() => {
-    try {
-      return restoreRiskFocusKeys(Taro.getStorageSync(RISK_PREF_STORAGE_KEY), DEFAULT_RISK_KEYS)
-    } catch {
-      // ignore
-    }
-    return DEFAULT_RISK_KEYS
-  })
+  // 服务器的关注到之前先用本机存的（最多 3 项）；没存过就是还没选
+  const [selectedRiskKeys, setSelectedRiskKeys] = useState<string[]>(() => localFocusKeys(readStoredFocus()) ?? [])
+  const selectedRiskKeysRef = useRef(selectedRiskKeys)
+  selectedRiskKeysRef.current = selectedRiskKeys
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     heatmap: true,
     calories: true,
@@ -570,8 +422,6 @@ function StatsPage() {
   const [error, setError] = useState<string | null>(null)
   /** 未登录：可进入分析 Tab 浏览引导，不拉取需登录接口 */
   const [guestBrowse, setGuestBrowse] = useState(() => !hasAuthToken())
-  const [insightActionLoading, setInsightActionLoading] = useState(false)
-  const [insightError, setInsightError] = useState<string | null>(null)
   const [showCalories, setShowCalories] = useState(false)
   const [customFocusInput, setCustomFocusInput] = useState('')
   const [customFocusAdding, setCustomFocusAdding] = useState(false)
@@ -588,10 +438,57 @@ function StatsPage() {
   const nutritionShownOnceRef = useRef(false)
   const [statsShowCount, setStatsShowCount] = useState(0)
 
+  const focusSaveRef = useRef<{ saving: boolean; queued: string[] | null }>({ saving: false, queued: null })
+  const focusEditSeqRef = useRef(0)
+
   useDidShow(() => {
     statsPageVisibleRef.current = true
     setStatsShowCount(count => count + 1)
   })
+
+  /** 把关注整体写到服务器；正在写时只记下最新的一份，写完再补一次。失败就留在本机，下次打开补传 */
+  const pushFocusToServer = useCallback(async (keys: string[]) => {
+    const box = focusSaveRef.current
+    if (box.saving) {
+      box.queued = keys
+      return
+    }
+    box.saving = true
+    let next: string[] | null = keys
+    while (next) {
+      const sending: string[] = next
+      box.queued = null
+      try {
+        await saveHealthFocusKeys(sending)
+        writeFocusPending(false)
+      } catch (e: unknown) {
+        const status = (e as { statusCode?: number })?.statusCode
+        console.warn('[stats] save focus failed:', e)
+        if (status === 400) {
+          // 服务器明确拒绝（不认识的 key、别人的自定义关注…）：不再补传，下次打开以服务器为准
+          writeFocusPending(false)
+          if (!box.queued) Taro.showToast({ title: (e as Error).message || '保存关注失败', icon: 'none' })
+        } else {
+          // 网络错误、旧后端 404、5xx：留在本机，下次打开补传，不打扰
+          writeFocusPending(true)
+        }
+      }
+      next = box.queued
+    }
+    box.saving = false
+  }, [])
+
+  /** 用户改了关注：界面和本机马上变，再写服务器 */
+  const commitFocusKeys = useCallback((next: string[]) => {
+    focusEditSeqRef.current += 1
+    selectedRiskKeysRef.current = next
+    setSelectedRiskKeys(next)
+    writeStoredFocus(next)
+    experiments.track('stats_focus_save', { count: next.length })
+    if (devNutritionMock()) return
+    writeFocusPending(true)
+    void pushFocusToServer(next)
+  }, [pushFocusToServer])
 
   /** 引擎的当天营养状态和宠物；和统计接口互不影响，失败（含旧后端 404）时新模块整块不显示 */
   const refreshNutritionState = useCallback(async () => {
@@ -600,6 +497,7 @@ function StatsPage() {
       return
     }
     const seq = ++nutritionSeqRef.current
+    const editSeqAtStart = focusEditSeqRef.current
     const [state, pet] = await Promise.all([
       loadNutritionState().catch((e: unknown) => {
         console.warn('[stats] nutrition state unavailable:', e)
@@ -610,7 +508,20 @@ function StatsPage() {
     if (seq !== nutritionSeqRef.current) return
     setNutritionState(state)
     if (pet) setPetSummary(pet)
-  }, [])
+    // 拉取期间用户改过关注，以用户刚改的为准
+    if (focusEditSeqRef.current !== editSeqAtStart) return
+    const resolution = resolveFocusKeys({
+      serverFocus: state?.focus,
+      localStored: readStoredFocus(),
+      pendingLocal: readFocusPending(),
+    })
+    if (!sameKeys(resolution.keys, selectedRiskKeysRef.current)) {
+      selectedRiskKeysRef.current = resolution.keys
+      setSelectedRiskKeys(resolution.keys)
+    }
+    if (state?.focus) writeStoredFocus(resolution.keys)
+    if (resolution.pushToServer && !devNutritionMock()) void pushFocusToServer(resolution.keys)
+  }, [pushFocusToServer])
 
   useEffect(() => {
     void refreshNutritionState()
@@ -801,47 +712,6 @@ function StatsPage() {
     void refreshFromNetwork(rangeRef.current, true)
   })
 
-  const handleGenerateInsight = useCallback(async () => {
-    if (!data || insightActionLoading) return
-    if (Math.max(0, toSafeNumber(data.recorded_days, 0)) <= 0) {
-      setInsightError('还没有饮食记录，先记录至少一餐后再生成 AI 风险解读。')
-      return
-    }
-
-    setInsightActionLoading(true)
-    setInsightError(null)
-    try {
-      const res = await generateStatsInsight(range)
-      const full = normalizeInsightText((res.analysis_summary || '').trim())
-      if (!full) throw new Error('AI 洞察生成失败')
-
-      setData(prev => {
-        if (!prev) return prev
-        const next: StatsSummary = {
-          ...prev,
-          analysis_summary: full,
-          analysis_summary_generated_date: res.analysis_summary_generated_date || formatLocalDate(),
-          analysis_summary_needs_refresh: Boolean(res.analysis_summary_needs_refresh),
-          analysis_summary_daily_limit: res.analysis_summary_daily_limit ?? prev.analysis_summary_daily_limit,
-          analysis_summary_used_today: res.analysis_summary_used_today ?? ((prev.analysis_summary_used_today || 0) + 1),
-        }
-        writeStatsPageCache(range, next)
-        return next
-      })
-
-      Taro.showToast({
-        title: '洞察已更新',
-        icon: 'success'
-      })
-    } catch (e: unknown) {
-      const message = (e as Error).message || 'AI 洞察生成失败，请稍后重试'
-      setInsightError(message)
-      await showUnifiedApiError(e, 'AI 洞察生成失败')
-    } finally {
-      setInsightActionLoading(false)
-    }
-  }, [data, insightActionLoading, range])
-
   const mergeCustomFocusCard = useCallback((card: RiskCard) => {
     setData(prev => {
       if (!prev?.health_index) return prev
@@ -958,16 +828,10 @@ function StatsPage() {
       focusSaved = true
       setCustomFocusInput('')
       const customKey = `custom:${focusId}`
+      // 关注没满就直接设为关注；满了它留在「其他方面」，用户可在管理里替换
       const showCustomFocus = () => {
-        setSelectedRiskKeys(prev => {
-          const next = prev.includes(customKey) ? prev : [...prev, customKey]
-          try {
-            Taro.setStorageSync(RISK_PREF_STORAGE_KEY, next)
-          } catch {
-            // ignore
-          }
-          return next
-        })
+        const result = addFocusKeyIfRoom(selectedRiskKeysRef.current, customKey)
+        if (!result.rejected && !sameKeys(result.keys, selectedRiskKeysRef.current)) commitFocusKeys(result.keys)
       }
       if (addRes.already_exists) {
         showCustomFocus()
@@ -1005,7 +869,7 @@ function StatsPage() {
     } finally {
       setCustomFocusAdding(false)
     }
-  }, [customFocusAdding, customFocusInput, data, mergeCustomFocusCard, mergeCustomFocusOptions, pollCustomFocusTask, range])
+  }, [commitFocusKeys, customFocusAdding, customFocusInput, data, mergeCustomFocusCard, mergeCustomFocusOptions, pollCustomFocusTask, range])
 
   const handleRemoveCustomFocus = useCallback(async (focusId: string) => {
     if (!focusId) return
@@ -1015,15 +879,9 @@ function StatsPage() {
         .filter(task => task.focusId === focusId)
         .forEach(task => removePendingCustomFocusTask(task.taskId))
       const customKey = `custom:${focusId}`
-      setSelectedRiskKeys(prev => {
-        const next = prev.filter(key => key !== customKey)
-        try {
-          Taro.setStorageSync(RISK_PREF_STORAGE_KEY, next)
-        } catch {
-          // ignore
-        }
-        return next
-      })
+      if (selectedRiskKeysRef.current.includes(customKey)) {
+        commitFocusKeys(selectedRiskKeysRef.current.filter(key => key !== customKey))
+      }
       setData(prev => {
         if (!prev?.health_index) return prev
         const next: StatsSummary = {
@@ -1045,7 +903,7 @@ function StatsPage() {
     } catch (e: unknown) {
       await showUnifiedApiError(e, '移除关注失败')
     }
-  }, [range])
+  }, [commitFocusKeys, range])
 
   const confirmRemoveCustomFocus = useCallback((focusId: string, title: string) => {
     Taro.showModal({
@@ -1098,27 +956,6 @@ function StatsPage() {
     setRiskDetailModal({ visible: false, card: null })
   }, [range])
 
-  useEffect(() => {
-    setInsightExpanded(false)
-    setInsightCanExpand(false)
-  }, [range, data?.analysis_summary])
-
-  // 测量完整原文；仅折叠过长报告，不裁剪/重新总结内容。
-  useEffect(() => {
-    if (analysisPanel !== 'nutrition' || !data?.analysis_summary) return
-    let cancelled = false
-    Taro.nextTick(() => {
-      if (cancelled) return
-      const foldHeight = Taro.getWindowInfo().windowWidth * 720 / 750
-      Taro.createSelectorQuery().select('.analysis-content').boundingClientRect((rect) => {
-        if (!cancelled && rect && !Array.isArray(rect)) {
-          setInsightCanExpand(rect.height > foldHeight + 1)
-        }
-      }).exec()
-    })
-    return () => { cancelled = true }
-  }, [analysisPanel, data?.analysis_summary, range, loading])
-
   if (guestBrowse) {
     return (
       <View className={`stats-page stats-page--guest ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
@@ -1164,19 +1001,8 @@ function StatsPage() {
   const totalProtein = toSafeNumber(d.total_protein)
   const totalCarbs = toSafeNumber(d.total_carbs)
   const totalFat = toSafeNumber(d.total_fat)
-  const insightGeneratedDate = d.analysis_summary_generated_date || ''
-  const insightNeedsRefresh = Boolean(d.analysis_summary_needs_refresh)
-  const insightDailyLimit = Math.max(1, toSafeNumber(d.analysis_summary_daily_limit, 3))
-  const insightUsedToday = Math.max(0, toSafeNumber(d.analysis_summary_used_today, 0))
-  const insightRemainingToday = Math.max(0, insightDailyLimit - insightUsedToday)
   const recordedDays = Math.max(0, toSafeNumber(d.recorded_days, 0))
   const hasAnyDietData = recordedDays > 0
-  const canUseStatsInsight = hasAnyDietData
-  const canGenerateInsight = canUseStatsInsight && insightRemainingToday > 0
-  const normalizedInsightText = normalizeInsightText(d.analysis_summary || '')
-  const displayInsightText = canUseStatsInsight
-    ? normalizedInsightText
-    : ''
   const bodyMetrics = d.body_metrics
   const macroPercent = {
     protein: toSafeNumber(d.macro_percent?.protein),
@@ -1329,17 +1155,27 @@ function StatsPage() {
     ...selectedRiskItems,
     ...allRiskOptions.filter(item => !selectedRiskKeys.includes(item.key)),
   ]
-  const visibleRiskCards = selectedRiskKeys
-    .map(key => {
-      const card = allDisplayRiskCards.find(item => item.key === key)
-      if (card) return card
-      const option = allRiskOptions.find(item => item.key === key)
-      return option?.is_custom ? pendingCustomRiskCardFromOption(option) : null
-    })
-    .filter((card): card is RiskCard => Boolean(card))
+  // 选了但还没生成卡片的自定义关注，先放一张待生成的卡
+  const pendingFocusCards = selectedRiskKeys
+    .filter(key => isCustomRiskKey(key) && !allDisplayRiskCards.some(card => card.key === key))
+    .map(key => allRiskOptions.find(item => item.key === key))
+    .filter((option): option is RiskOption => Boolean(option?.is_custom))
+    .map(pendingCustomRiskCardFromOption)
+  const { focusCards, otherCards } = splitFocusCards([...allDisplayRiskCards, ...pendingFocusCards], selectedRiskKeys)
   const isPendingRiskCard = (card: RiskCard) => Boolean(card.is_custom && !customRiskCards.some(item => item.key === card.key))
   const hasRiskScore = (card: RiskCard) => !isPendingRiskCard(card) && card.score_available !== false
-  const hasVisibleCustomFocus = visibleRiskCards.some(card => card.is_custom)
+  const hasVisibleCustomFocus = focusCards.some(card => card.is_custom)
+  const focusItems: FocusSpotlightItem[] = focusCards.map(card => ({
+    key: card.key,
+    title: card.title,
+    iconClass: `icon-${riskCardIcon(card.key)}`,
+    scoreText: hasRiskScore(card) ? String(card.score) : '—',
+    tone: hasRiskScore(card) ? scoreToTone(card.score) : 'pending',
+    reason: card.brief,
+    evidence: card.evidence ?? [],
+    badge: card.is_custom ? (card.score_available === false ? '支持建议' : '支持参考') : '',
+    refreshing: customFocusRefreshingKey === card.key,
+  }))
   const focusOverallScore = overallRiskScore
   const focusProjectedScore = projectedOverallScore
   const focusOverviewCopy = scoreToFocusOverview(focusOverallScore, hasVisibleCustomFocus)
@@ -1373,32 +1209,29 @@ function StatsPage() {
   }
 
   const toggleRiskPreference = (riskKey: string) => {
-    setSelectedRiskKeys(prev => {
-      const exists = prev.includes(riskKey)
-      const next = exists ? prev.filter(item => item !== riskKey) : [...prev, riskKey]
-      try {
-        Taro.setStorageSync(RISK_PREF_STORAGE_KEY, next)
-      } catch {
-        // ignore
-      }
-      if (riskDetailModal.card?.key === riskKey && exists) {
-        setRiskDetailModal(prev => ({ ...prev, card: null }))
-      }
-      return next
-    })
+    const result = toggleFocusKey(selectedRiskKeys, riskKey)
+    if (result.rejected) {
+      Taro.showToast({ title: `最多关注 ${MAX_HEALTH_FOCUS} 项，先取消一项`, icon: 'none' })
+      return
+    }
+    commitFocusKeys(result.keys)
+  }
+  const openFocusItem = (key: string) => {
+    const card = focusCards.find(item => item.key === key)
+    if (card) openRiskDetail(card)
   }
 
   return (
     <View className={`stats-page stats-page--editorial ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
-      <View className='stats-page-title'><Text>分析</Text></View>
-      <View
-        className={`stats-range-dropdown ${loading ? 'is-loading' : ''}`}
-        onClick={openRangeSelector}
-      >
-        <Text className='stats-range-dropdown__label'>{range === 'week' ? '近一周' : '近一个月'}</Text>
-        <Text className='iconfont icon-right-arrow stats-range-dropdown__arrow' />
-      </View>
+      {/* 标题在原生导航栏里；周期选择和分页签放同一行 */}
       <View className='analysis-tabs-container'>
+        <View
+          className={`stats-range-dropdown ${loading ? 'is-loading' : ''}`}
+          onClick={openRangeSelector}
+        >
+          <Text className='stats-range-dropdown__label'>{range === 'week' ? '近一周' : '近一个月'}</Text>
+          <Text className='iconfont icon-right-arrow stats-range-dropdown__arrow' />
+        </View>
         <View className={`segmented-control analysis-panel-control ${loading ? 'is-loading' : ''}`}>
           {ANALYSIS_PANEL_TABS.map(item => (
             <View
@@ -1416,6 +1249,66 @@ function StatsPage() {
       </View>
       <ScrollView className='scroll-wrap' scrollY={!riskPickerVisible && !riskDetailModal.visible} enhanced showScrollbar={false}>
         {error && data ? <View className='analysis-error'><Text>{error}</Text></View> : null}
+        {analysisPanel === 'health' && hasEnoughHealthIndexData ? (
+          <>
+            <FocusSpotlightCard
+              items={focusItems}
+              maxCount={MAX_HEALTH_FOCUS}
+              footnote={engineFocus.length > 0 ? '分数按钠、糖、纤维等营养素和你的目标算，点开能看到全部依据。' : ''}
+              onOpen={openFocusItem}
+              onManage={() => setRiskPickerVisible(true)}
+            />
+            {otherCards.length > 0 ? (
+              <View
+                className='stats-ns-others-toggle'
+                aria-role='button'
+                aria-label={othersExpanded ? '收起其他方面' : '展开其他方面'}
+                onClick={() => setOthersExpanded(value => !value)}
+              >
+                <Text>其他方面</Text>
+                <View className='stats-ns-others-toggle__meta'>
+                  <Text>{otherCards.length} 项</Text>
+                  {othersExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}
+                </View>
+              </View>
+            ) : null}
+            {othersExpanded && otherCards.length > 0 ? (
+              <View className='risk-card-grid'>
+                {otherCards.map((card) => (
+                  <View
+                    key={card.key}
+                    className='stats-card risk-card'
+                    aria-role='button'
+                    aria-label={`查看${card.title}的饮食参考依据`}
+                    onClick={() => openRiskDetail(card)}
+                  >
+                    <View className='risk-card-icon-circle'><Text className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`} /></View>
+                    <View className='risk-card-copy'>
+                    <Text className='risk-card-title'>{card.title}</Text>
+                    {card.is_custom ? (
+                      <View className='risk-card-ai-badge-row'>
+                        <Text className='risk-card-ai-badge'>{card.score_available === false ? '支持建议' : '支持参考'}</Text>
+                        <Text className='risk-card-ai-confidence'>{customFocusConfidenceLabel(card.confidence)}</Text>
+                        {customFocusRefreshingKey === card.key ? (
+                          <Text className='iconfont icon-jiazaixiao risk-card-ai-refresh-spinner' />
+                        ) : card.needs_refresh ? (
+                          <Text className='risk-card-ai-refresh-hint'>待更新</Text>
+                        ) : null}
+                      </View>
+                    ) : null}
+                    <Text className='risk-card-summary'>{card.brief}</Text>
+                    </View>
+                    <View className={`risk-card-score-wrap tone-${hasRiskScore(card) ? scoreToTone(card.score) : 'pending'}`}>
+                      <Text className='risk-card-score'>{hasRiskScore(card) ? card.score : '—'}</Text>
+                      {hasRiskScore(card) ? <Text className='risk-card-score-unit'>分</Text> : null}
+                    </View>
+                    <Text className='iconfont icon-right-arrow risk-card-chevron' />
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </>
+        ) : null}
         {analysisPanel === 'health' && ns && observation ? (
           <PetObservationStrip
             pet={petSummary?.pet}
@@ -1544,58 +1437,6 @@ function StatsPage() {
             otherDeltas={weekDeltas.rest}
           />
         ) : null}
-        <View className='risk-section-header'>
-          <Text className='risk-section-title'>我的关注</Text>
-          <View
-            className='risk-focus-edit-btn'
-            onClick={(e) => {
-              e.stopPropagation()
-              setRiskPickerVisible(true)
-            }}
-          >
-            <Text className='risk-focus-edit-text'>管理</Text>
-          </View>
-        </View>
-
-        <View className='risk-card-grid'>
-          {visibleRiskCards.map((card) => (
-            <View
-              key={card.key}
-              className='stats-card risk-card'
-              aria-role='button'
-              aria-label={`查看${card.title}的饮食参考依据`}
-              onClick={() => openRiskDetail(card)}
-            >
-              <View className='risk-card-icon-circle'><Text className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`} /></View>
-              <View className='risk-card-copy'>
-              <Text className='risk-card-title'>{card.title}</Text>
-              {card.is_custom ? (
-                <View className='risk-card-ai-badge-row'>
-                  <Text className='risk-card-ai-badge'>{card.score_available === false ? '支持建议' : '支持参考'}</Text>
-                  <Text className='risk-card-ai-confidence'>{customFocusConfidenceLabel(card.confidence)}</Text>
-                  {customFocusRefreshingKey === card.key ? (
-                    <Text className='iconfont icon-jiazaixiao risk-card-ai-refresh-spinner' />
-                  ) : card.needs_refresh ? (
-                    <Text className='risk-card-ai-refresh-hint'>待更新</Text>
-                  ) : null}
-                </View>
-              ) : null}
-              <Text className='risk-card-summary'>{card.brief}</Text>
-              </View>
-              <View className={`risk-card-score-wrap tone-${hasRiskScore(card) ? scoreToTone(card.score) : 'pending'}`}>
-                <Text className='risk-card-score'>{hasRiskScore(card) ? card.score : '—'}</Text>
-                {hasRiskScore(card) ? <Text className='risk-card-score-unit'>分</Text> : null}
-              </View>
-              <Text className='iconfont icon-right-arrow risk-card-chevron' />
-            </View>
-          ))}
-        </View>
-        {visibleRiskCards.length === 0 ? (
-          <View className='risk-focus-empty' onClick={() => setRiskPickerVisible(true)}><Text>选择你想关注的方向</Text><Text className='iconfont icon-right-arrow' /></View>
-        ) : engineFocus.length > 0 ? (
-          <Text className='stats-focus-source-note'>分数按钠、糖、纤维等营养素和你的目标算，点开能看到每一项依据。</Text>
-        ) : null}
-
         {riskPickerVisible ? (
           <View
             className='risk-focus-modal'
@@ -1610,10 +1451,10 @@ function StatsPage() {
               <View className='risk-focus-modal-header'>
                 <View className='risk-focus-modal-title-wrap'>
                   <Text className='risk-focus-modal-title'>我的关注</Text>
-                  <Text className='risk-focus-modal-subtitle'>选择你想优先看的健康方向</Text>
+                  <Text className='risk-focus-modal-subtitle'>最多选 {MAX_HEALTH_FOCUS} 项，分析和推荐都会先看它们</Text>
                 </View>
                 <View className='risk-focus-modal-count'>
-                  <Text className='risk-focus-modal-count-text'>显示 {selectedRiskItems.length} 项</Text>
+                  <Text className='risk-focus-modal-count-text'>已选 {selectedRiskItems.length}/{MAX_HEALTH_FOCUS}</Text>
                 </View>
               </View>
               <ScrollView className='risk-focus-options-scroll' scrollY showScrollbar={false}>
@@ -1801,94 +1642,6 @@ function StatsPage() {
 
         {analysisPanel === 'health' && evidenceGaps.length > 0 ? (
           <EvidenceGapsCard gaps={evidenceGaps} onAction={openEvidenceGap} />
-        ) : null}
-
-        {analysisPanel === 'nutrition' ? (
-          <>
-        <View className='stats-card ai-insight-card'>
-          <View className='ai-insight-card-top'>
-            <View className='ai-insight-card-title-wrap'>
-              <Text className='ai-insight-card-title'>本{range === 'week' ? '周' : '月'}饮食解读</Text>
-            </View>
-          </View>
-          <View className='ai-insight-card-body'>
-            {canUseStatsInsight && insightGeneratedDate ? (
-              <View className={`analysis-status${insightNeedsRefresh ? ' warning' : ''}`}>
-                <View className='analysis-status-copy'>
-                  <Text className='analysis-status-text'>
-                    更新于 {insightGeneratedDate}
-                  </Text>
-                  {insightNeedsRefresh ? <Text className='analysis-status-new'>有新记录</Text> : null}
-                </View>
-                {canGenerateInsight ? (
-                  <View
-                    className={`analysis-status-action${insightActionLoading ? ' is-loading' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (!insightActionLoading) handleGenerateInsight()
-                    }}
-                  >
-                    {insightActionLoading ? (
-                      <Text className='iconfont icon-jiazaixiao analysis-status-action-icon' />
-                    ) : (
-                      <Text className='analysis-status-action-text'>更新 · 1积分</Text>
-                    )}
-                  </View>
-                ) : (
-                  <View className='analysis-status-action is-disabled'>
-                    <Text className='analysis-status-action-text'>今日已用完</Text>
-                  </View>
-                )}
-              </View>
-            ) : null}
-            {canUseStatsInsight ? <Text className='analysis-quota'>今日剩余 {insightRemainingToday}/{insightDailyLimit} 次</Text> : null}
-            {insightError ? (
-              <View className='analysis-error'>
-                <Text className='analysis-error-text'>{insightError}</Text>
-              </View>
-            ) : null}
-            {!canUseStatsInsight ? (
-              <View className='analysis-empty analysis-empty--gate'>
-                <Text className='analysis-empty-title'>记录一餐，开始了解自己的饮食</Text>
-                <Text className='analysis-empty-text'>本周期还没有饮食记录，暂时无法生成解读。</Text>
-              </View>
-            ) : displayInsightText ? (
-              <>
-                <View className={`analysis-report ${insightCanExpand && !insightExpanded ? 'is-collapsed' : ''}`}>
-                  <View className='analysis-content'>{renderInsightMarkdown(displayInsightText)}</View>
-                </View>
-                {insightCanExpand ? <View className='stats-text-action analysis-report-toggle' aria-role='button' aria-label={insightExpanded ? '收起完整解读' : '展开完整解读'} onClick={() => setInsightExpanded(value => !value)}><Text>{insightExpanded ? '收起' : '展开全文'}</Text>{insightExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}</View> : null}
-              </>
-            ) : !insightActionLoading ? (
-              <View className='analysis-empty'>
-                <Text className='analysis-empty-title'>还没有本{range === 'week' ? '周' : '月'}解读</Text>
-                <Text className='analysis-empty-text'>需要时手动生成，之后可随时查看。</Text>
-                <View
-                  className={`analysis-empty-action${!canGenerateInsight ? ' is-disabled' : ''}`}
-                  onClick={() => { if (canGenerateInsight) handleGenerateInsight() }}
-                >
-                  <Text className='analysis-empty-action-text'>{canGenerateInsight ? '生成解读 · 1积分' : '今日生成次数已用完'}</Text>
-                </View>
-              </View>
-            ) : null}
-            {insightActionLoading ? (
-              <View className='analysis-loading-card'>
-                <View className='analysis-loading-card-header'>
-                  <Text className='iconfont icon-jiazaixiao analysis-loading-card-icon' />
-                </View>
-                <View className='analysis-skeleton-group'>
-                  <View className='analysis-skeleton-line w-92' />
-                  <View className='analysis-skeleton-line w-100' />
-                  <View className='analysis-skeleton-line w-86' />
-                  <View className='analysis-skeleton-line w-96' />
-                  <View className='analysis-skeleton-line w-70' />
-                </View>
-              </View>
-            ) : null}
-          </View>
-        </View>
-
-          </>
         ) : null}
 
         {analysisPanel === 'structure' ? (
