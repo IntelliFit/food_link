@@ -3670,3 +3670,14 @@ $stats-blue-soft: #7aa9ce;
   gap: 24rpx;
 }
 .nutrition-plan-chart-target { position: absolute; z-index: 2; left: 8%; right: 8%; height: 3rpx; border-radius: 2rpx; background: #4e9673; }
+
+// 引擎营养状态：综合分卡右栏的「比上周」和关注卡下的说明
+.stats-page.stats-page--editorial {
+  .risk-overview-delta { display: block; color: #a7e0c4; font-size: 36rpx; line-height: 48rpx; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .risk-overview-delta.is-down { color: #fde7c2; }
+  .risk-overview-delta.is-flat { color: #e3ede7; }
+  .stats-focus-source-note { display: block; margin: -8rpx 46rpx 24rpx; color: var(--stats-muted); font-size: 24rpx; line-height: 36rpx; }
+}
+
+// 组件不自己引样式：组件样式进 common.wxss 会被每个页面加载，这里只给分析页
+@import '../../components/StatsNutritionState/StatsNutritionState.scss';

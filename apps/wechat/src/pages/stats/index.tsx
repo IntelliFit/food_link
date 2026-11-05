@@ -12,15 +12,42 @@ import {
   removeHealthFocus,
   generateCustomFocusCard,
   getAnalyzeTask,
+  getNutritionState,
+  getPetSummary,
   showUnifiedApiError,
   type StatsSummary,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
-  type HealthIndex,
+  type DailyNutritionState,
+  type PetSummary,
   type RiskCard,
   type RiskOption,
-  type RiskTone,
 } from '../../utils/api'
+import {
+  applyEngineFocus,
+  coverageLines,
+  evidenceGapViews,
+  evidenceRoute,
+  nextMealView,
+  normalizeNutritionState,
+  observationHeadline,
+  observationMetaText,
+  overallDelta,
+  petChatStarter,
+  planLineText,
+  scoreToTone,
+  splitWeekDeltas,
+  todayMetaText,
+  todayRowView,
+  weekCountText,
+  weekDayLabels,
+  weekHabitRows,
+  type EvidenceGapView,
+} from './nutrition-state-view'
+import { EvidenceGapsCard, PetObservationStrip, TodayGapsCard, WeekHabitsCard } from '../../components/StatsNutritionState'
+import { experiments } from '../../utils/experiments'
+import { openPetChat } from '../../utils/pet-navigation'
+import { extraPkgUrl } from '../../utils/subpackage-extra'
 import {
   customFocusCardFromTask,
   readPendingCustomFocusTasks,
@@ -291,13 +318,6 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value))
 }
 
-function scoreToTone(score: number): RiskTone {
-  if (score >= 78) return 'positive'
-  if (score >= 60) return 'neutral'
-  if (score >= 42) return 'warning'
-  return 'danger'
-}
-
 function scoreToLabel(score: number): string {
   if (score >= 78) return '偏保护'
   if (score >= 60) return '基本中性'
@@ -471,6 +491,21 @@ function hasAuthToken(): boolean {
   }
 }
 
+/** 开发版专用：接口上线前在 DevTools 里写这个 storage（对象或 JSON 字符串）就用它代替接口 */
+const DEV_NUTRITION_STATE_MOCK_KEY = 'dev_stats_nutrition_state_mock'
+
+async function loadNutritionState(): Promise<DailyNutritionState | null> {
+  if (__ENABLE_DEV_DEBUG_UI__) {
+    try {
+      const mock = Taro.getStorageSync(DEV_NUTRITION_STATE_MOCK_KEY)
+      if (mock) return normalizeNutritionState(typeof mock === 'string' ? JSON.parse(mock) : mock)
+    } catch {
+      // 坏的 mock 当没有
+    }
+  }
+  return normalizeNutritionState(await getNutritionState())
+}
+
 function StatsPage() {
   const { scheme } = useAppColorScheme()
   const [range, setRange] = useState<'week' | 'month'>('week')
@@ -547,10 +582,50 @@ function StatsPage() {
   const statsFirstShowRef = useRef(true)
   const statsPageVisibleRef = useRef(true)
   const customFocusPollingTaskIdsRef = useRef<Set<string>>(new Set())
+  const [nutritionState, setNutritionState] = useState<DailyNutritionState | null>(null)
+  const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
+  const nutritionSeqRef = useRef(0)
+  const nutritionShownOnceRef = useRef(false)
+  const [statsShowCount, setStatsShowCount] = useState(0)
 
   useDidShow(() => {
     statsPageVisibleRef.current = true
+    setStatsShowCount(count => count + 1)
   })
+
+  /** 引擎的当天营养状态和宠物；和统计接口互不影响，失败（含旧后端 404）时新模块整块不显示 */
+  const refreshNutritionState = useCallback(async () => {
+    if (!hasAuthToken()) {
+      setNutritionState(null)
+      return
+    }
+    const seq = ++nutritionSeqRef.current
+    const [state, pet] = await Promise.all([
+      loadNutritionState().catch((e: unknown) => {
+        console.warn('[stats] nutrition state unavailable:', e)
+        return null
+      }),
+      getPetSummary().catch(() => null),
+    ])
+    if (seq !== nutritionSeqRef.current) return
+    setNutritionState(state)
+    if (pet) setPetSummary(pet)
+  }, [])
+
+  useEffect(() => {
+    void refreshNutritionState()
+  }, [refreshNutritionState])
+
+  useDidShow(() => {
+    // 第一次显示由上面的挂载加载负责；之后回到本页（比如刚记完一餐）再刷新
+    if (nutritionShownOnceRef.current) void refreshNutritionState()
+    nutritionShownOnceRef.current = true
+  })
+
+  useEffect(() => {
+    if (statsShowCount === 0 || guestBrowse) return
+    experiments.track('stats_view', { tab: analysisPanel })
+  }, [analysisPanel, guestBrowse, statsShowCount])
   useDidHide(() => {
     statsPageVisibleRef.current = false
   })
@@ -1167,10 +1242,64 @@ function StatsPage() {
   })
   const healthIndex = d.health_index
   const hasEnoughHealthIndexData = healthIndex?.has_enough_data ?? false
-  const overallRiskScore = healthIndex?.overall_score ?? 0
+  const ns = nutritionState
+  // 引擎的分数按本周算，只在「近一周」替换综合分和关注分；「近一个月」仍用 health_index
+  const engineWeek = ns && range === 'week' ? ns : null
+  const engineOverallScore = engineWeek?.scores.overall ?? null
+  const engineOverallDelta = engineWeek && engineOverallScore !== null ? overallDelta(engineWeek.scores) : null
+  const engineCoverageLines = engineWeek ? coverageLines(engineWeek.coverage) : []
+  const overallRiskScore = engineOverallScore ?? healthIndex?.overall_score ?? 0
   const projectedOverallScore = healthIndex?.projected_score ?? 0
   const signalChips = healthIndex?.signal_chips ?? []
-  const riskCards = healthIndex?.risk_cards ?? []
+  const engineFocus = engineWeek?.scores.focus ?? []
+  const riskCards = applyEngineFocus(healthIndex?.risk_cards ?? [], engineFocus)
+  const petName = String(petSummary?.pet?.name || '').trim() || '伙伴'
+  const petMood = petSummary?.status?.mood
+  const petState = petSummary?.status?.state || petMood
+  const observation = ns ? observationHeadline(ns) : ''
+  const todayRows = ns ? ns.today.map(todayRowView) : []
+  const nextMeal = ns ? nextMealView(ns.next_meal) : null
+  const weekRows = ns ? weekHabitRows(ns.week) : []
+  const weekCounts = ns ? ns.week.counts.map(weekCountText) : []
+  const weekDeltas = ns ? splitWeekDeltas(ns.week.vs_last_week) : { headline: null, rest: [] }
+  const showWeekCard = weekRows.length > 0 || weekCounts.length > 0 || weekDeltas.headline !== null
+  const evidenceGaps = ns ? evidenceGapViews(ns.evidence_gaps) : []
+
+  const askPetFromObservation = () => {
+    experiments.track('stats_pet_ask')
+    openPetChat(petChatStarter(observation))
+  }
+  const openNextMealWithPet = () => {
+    if (!ns || !nextMeal) return
+    experiments.track('stats_next_meal_click', { target: 'pet' })
+    if (nextMeal.petMealType) {
+      openPetChat({
+        source: 'home_next_meal',
+        date: ns.date,
+        mealType: nextMeal.petMealType,
+        mealLabel: nextMeal.mealLabel,
+        basicAdvice: nextMeal.advice,
+        starterQuestion: '',
+      })
+      return
+    }
+    openPetChat(`${nextMeal.title}：${nextMeal.advice}。帮我挑一份`)
+  }
+  const openNextMealOnHome = () => {
+    experiments.track('stats_next_meal_click', { target: 'home' })
+    void Taro.switchTab({ url: '/pages/index/index' })
+  }
+  const openEvidenceGap = (gap: EvidenceGapView) => {
+    experiments.track('stats_evidence_click', { action: gap.action })
+    const route = evidenceRoute(gap.action, ns?.date || formatLocalDate())
+    if (!route) return
+    if (route.kind === 'tab') void Taro.switchTab({ url: route.url })
+    else void Taro.navigateTo({ url: extraPkgUrl(route.url) })
+  }
+  const openRiskDetail = (card: RiskCard) => {
+    experiments.track('stats_focus_open', { key: card.is_custom ? 'custom' : card.key })
+    setRiskDetailModal({ visible: true, card })
+  }
   const customRiskCards = healthIndex?.custom_risk_cards ?? []
   const allDisplayRiskCards = [...riskCards, ...customRiskCards]
   const customFocusMeta = healthIndex?.custom_focus_meta
@@ -1287,6 +1416,17 @@ function StatsPage() {
       </View>
       <ScrollView className='scroll-wrap' scrollY={!riskPickerVisible && !riskDetailModal.visible} enhanced showScrollbar={false}>
         {error && data ? <View className='analysis-error'><Text>{error}</Text></View> : null}
+        {analysisPanel === 'health' && ns && observation ? (
+          <PetObservationStrip
+            pet={petSummary?.pet}
+            mood={petMood}
+            state={petState}
+            petName={petName}
+            metaText={observationMetaText(petName, ns.generated_at)}
+            headline={observation}
+            onAsk={askPetFromObservation}
+          />
+        ) : null}
         {analysisPanel === 'health' && !hasEnoughHealthIndexData ? (
           <View className='stats-card health-index-gate-card'>
             <View className='health-index-gate-icon'>
@@ -1333,8 +1473,13 @@ function StatsPage() {
                   </View>
                 </View>
                 <View className='risk-overview-records'>
-                  <Text className='risk-overview-record-days'>已记录 {recordedDays} 天</Text>
-                  <Text className='risk-overview-record-caption'>基于可评分的记录</Text>
+                  {engineOverallDelta ? <Text className={`risk-overview-delta is-${engineOverallDelta.direction}`}>{engineOverallDelta.text}</Text> : null}
+                  {engineCoverageLines.length > 0 ? engineCoverageLines.map(line => (
+                    <Text key={line} className='risk-overview-record-caption'>{line}</Text>
+                  )) : <>
+                    <Text className='risk-overview-record-days'>已记录 {recordedDays} 天</Text>
+                    <Text className='risk-overview-record-caption'>基于可评分的记录</Text>
+                  </>}
                 </View>
               </View>
               {overviewExpanded ? <View className='risk-overview-expanded'>
@@ -1348,10 +1493,23 @@ function StatsPage() {
                   </View>
                 ))}
                 </View>
-                <Text className='risk-overview-estimate'>改善后的综合分估计：{focusOverallScore} → {focusProjectedScore}，不代表实际健康变化。</Text>
+                {/* 预估分是 health_index 按它自己的分数算的，换成引擎分数后不再对得上 */}
+                {engineOverallScore === null ? <Text className='risk-overview-estimate'>改善后的综合分估计：{focusOverallScore} → {focusProjectedScore}，不代表实际健康变化。</Text> : null}
               </View> : null}
             </View>
           </>
+        ) : null}
+
+        {analysisPanel === 'health' && ns && (todayRows.length > 0 || nextMeal) ? (
+          <TodayGapsCard
+            metaText={todayMetaText(ns)}
+            planText={planLineText(ns.plan)}
+            rows={todayRows}
+            nextMeal={nextMeal}
+            petName={petName}
+            onAskPet={openNextMealWithPet}
+            onOpenNextMeal={openNextMealOnHome}
+          />
         ) : null}
 
         {analysisPanel === 'health' && hasEnoughHealthIndexData ? (
@@ -1377,6 +1535,15 @@ function StatsPage() {
             <View className='stats-text-action' onClick={() => void Taro.switchTab({ url: '/pages/index/index' })}><Text>看看下一餐</Text><Text className='iconfont icon-right-arrow' /></View>
           </View> : null}
         </View>
+        {ns && showWeekCard ? (
+          <WeekHabitsCard
+            dayLabels={weekDayLabels(ns.week.days, ns.date)}
+            rows={weekRows}
+            countTexts={weekCounts}
+            headlineDelta={weekDeltas.headline}
+            otherDeltas={weekDeltas.rest}
+          />
+        ) : null}
         <View className='risk-section-header'>
           <Text className='risk-section-title'>我的关注</Text>
           <View
@@ -1397,7 +1564,7 @@ function StatsPage() {
               className='stats-card risk-card'
               aria-role='button'
               aria-label={`查看${card.title}的饮食参考依据`}
-              onClick={() => setRiskDetailModal({ visible: true, card })}
+              onClick={() => openRiskDetail(card)}
             >
               <View className='risk-card-icon-circle'><Text className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`} /></View>
               <View className='risk-card-copy'>
@@ -1425,6 +1592,8 @@ function StatsPage() {
         </View>
         {visibleRiskCards.length === 0 ? (
           <View className='risk-focus-empty' onClick={() => setRiskPickerVisible(true)}><Text>选择你想关注的方向</Text><Text className='iconfont icon-right-arrow' /></View>
+        ) : engineFocus.length > 0 ? (
+          <Text className='stats-focus-source-note'>分数按钠、糖、纤维等营养素和你的目标算，点开能看到每一项依据。</Text>
         ) : null}
 
         {riskPickerVisible ? (
@@ -1569,7 +1738,13 @@ function StatsPage() {
                 <Text className='risk-detail-section-label'>判断依据</Text>
                 <Text className='risk-detail-section-text'>{riskDetailModal.card.basis}</Text>
                 </> : null}
-                {riskDetailModal.card.is_custom && (riskDetailModal.card.evidence?.length || 0) > 0 ? (
+                {!riskDetailModal.card.is_custom && (riskDetailModal.card.evidence?.length || 0) > 0 ? (
+                  <>
+                    <View className='risk-detail-divider' />
+                    <Text className='risk-detail-section-label'>每一项依据</Text>
+                  </>
+                ) : null}
+                {(riskDetailModal.card.evidence?.length || 0) > 0 ? (
                   <View className='risk-detail-evidence-list'>
                     {riskDetailModal.card.evidence!.map(item => (
                       <View key={item} className='risk-detail-evidence-item'>
@@ -1622,6 +1797,10 @@ function StatsPage() {
         </View> : null}
 
           </>
+        ) : null}
+
+        {analysisPanel === 'health' && evidenceGaps.length > 0 ? (
+          <EvidenceGapsCard gaps={evidenceGaps} onAction={openEvidenceGap} />
         ) : null}
 
         {analysisPanel === 'nutrition' ? (

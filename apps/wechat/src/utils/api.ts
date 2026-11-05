@@ -9641,6 +9641,156 @@ export async function submitStructuredFeedback(input: SubmitStructuredFeedbackRe
   })
 }
 
+// ---------- 每日营养状态（docs/algorithms/daily-nutrition-state.md，字段以 Go domain.DailyNutritionState 为准） ----------
+
+/** 缺数据一律是 unknown（value 为 null），不按 0 算 */
+export type NutrientStatus = 'ok' | 'short' | 'near_limit' | 'over' | 'unknown'
+export type NutrientKind = 'min' | 'max' | 'range'
+export type NutritionHabitMark = 'hit' | 'miss' | 'today' | 'none'
+export type NutritionEvidenceAction = 'record' | 'weight' | 'water' | 'sleep' | 'none'
+
+export interface NutritionCoverage {
+  recorded_days: number
+  meals: number
+  today_meals: number
+  /** 0~1 */
+  nutrient_completeness: number
+  enough_data: boolean
+}
+
+export interface NutritionPlanSummary {
+  goal: string
+  goal_label: string
+  energy_kcal: number
+  protein_g: number
+  source: string
+}
+
+export interface NutrientReading {
+  key: string
+  label: string
+  unit: string
+  value: number | null
+  target: number
+  kind: NutrientKind | string
+  status: NutrientStatus | string
+  gap: number
+  unknown_meals: number
+}
+
+export interface NutritionGap {
+  key: string
+  label: string
+  text: string
+  severity: number
+}
+
+export interface NutritionNextMeal {
+  meal_type: string
+  label: string
+  advice: string
+  fills: string[]
+  limits: string[]
+}
+
+export interface NutritionHabit {
+  key: string
+  label: string
+  marks: Array<NutritionHabitMark | string>
+  hit: number
+  of: number
+}
+
+export interface NutritionCount {
+  key: string
+  label: string
+  value: number
+  target: number
+  unit: string
+}
+
+export interface NutritionWeekDelta {
+  key: string
+  label: string
+  last: number
+  this: number
+  unit: string
+  better: boolean
+}
+
+export interface NutritionWeek {
+  days: string[]
+  habits: NutritionHabit[]
+  counts: NutritionCount[]
+  vs_last_week: NutritionWeekDelta[]
+}
+
+export interface NutritionFocusScore {
+  key: string
+  title: string
+  score: number | null
+  reason: string
+  evidence: string[]
+}
+
+export interface NutritionScores {
+  overall: number | null
+  overall_last_week: number | null
+  focus: NutritionFocusScore[]
+}
+
+export interface NutritionEvidenceGap {
+  key: string
+  text: string
+  hint: string
+  action: NutritionEvidenceAction | string
+}
+
+export interface NutritionContext {
+  weight_trend: { kg_change: number; days: number } | null
+  training_today: boolean
+  water_ml_today: number | null
+  sleep_hours: number | null
+  notes: string[]
+}
+
+export interface NutritionFinding {
+  key: string
+  kind: string
+  text: string
+  value?: string
+}
+
+export interface DailyNutritionState {
+  date: string
+  generated_at: string
+  coverage: NutritionCoverage
+  plan: NutritionPlanSummary
+  today: NutrientReading[]
+  gaps: NutritionGap[]
+  next_meal: NutritionNextMeal | null
+  week: NutritionWeek
+  scores: NutritionScores
+  evidence_gaps: NutritionEvidenceGap[]
+  context: NutritionContext
+  headline: string
+  findings: NutritionFinding[]
+}
+
+/** GET /api/health/nutrition-state：引擎给的当天营养状态；date 省略为今天（北京时间） */
+export async function getNutritionState(date?: string): Promise<DailyNutritionState> {
+  const apiDate = mapCalendarDateToApi(date)
+  const query = apiDate ? `?date=${encodeURIComponent(apiDate)}` : ''
+  const res = await authenticatedRequest(`/api/health/nutrition-state${query}`, { method: 'GET', timeout: 15000 })
+  if (res.statusCode !== 200) {
+    // 旧后端没有这个接口（404）时页面只是不显示新模块，不走诊断日志
+    const err = new Error(parseFastApiDetail(res.data) || '获取营养状态失败') as ErrorLike
+    err.statusCode = res.statusCode
+    throw err
+  }
+  return res.data as DailyNutritionState
+}
+
 /** 一条记录让当天某项从多少变到多少；未知为 null，不按 0 算（Go domain.MealImpactChange） */
 export interface MealImpactChange {
   key: string
