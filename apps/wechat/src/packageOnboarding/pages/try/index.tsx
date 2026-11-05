@@ -149,12 +149,13 @@ export default function OnboardingTryPage() {
     setSheet(mode)
   }
 
-  const saveRecord = async () => {
-    if (!result) return
+  /** 返回新记录的 id，建档页用它取「这一顿让今天变了什么」 */
+  const saveRecord = async (): Promise<string> => {
+    if (!result) return ''
     const { imageUrl } = await uploadAnalyzeImage(base64Ref.current)
     const sum = (key: 'calories' | 'protein' | 'carbs' | 'fat') =>
       Math.round(result.items.reduce((s, it) => s + (Number(it.nutrients?.[key]) || 0), 0) * 10) / 10
-    await saveFoodRecord({
+    const saved = await saveFoodRecord({
       date: localDateKey(),
       meal_type: inferDefaultMealTypeFromLocalTime(),
       image_path: imageUrl,
@@ -168,6 +169,7 @@ export default function OnboardingTryPage() {
       total_weight_grams: result.items.reduce((s, it) => s + gramsOf(it), 0),
       entry_type: 'food_image',
     })
+    return String(saved?.id || '')
   }
 
   const onPhone = async (e: { detail?: { code?: string } }) => {
@@ -182,9 +184,10 @@ export default function OnboardingTryPage() {
       const { onboardingCompleted } = await onboardingPhoneLogin(phoneCode)
       experiments.track('onboarding_login_success', { returning: onboardingCompleted })
       let saved = false
+      let recordId = ''
       if (sheet === 'save' && result) {
         try {
-          await saveRecord()
+          recordId = await saveRecord()
           saved = true
           experiments.track('onboarding_record_saved')
         } catch (error) {
@@ -196,7 +199,8 @@ export default function OnboardingTryPage() {
         Taro.switchTab({ url: '/pages/index/index' })
         return
       }
-      Taro.redirectTo({ url: `/packageOnboarding/pages/profile/index?kcal=${saved ? total : 0}` })
+      const recordQuery = recordId ? `&record=${encodeURIComponent(recordId)}` : ''
+      Taro.redirectTo({ url: `/packageOnboarding/pages/profile/index?kcal=${saved ? total : 0}${recordQuery}` })
     } catch (error) {
       console.error('[onboarding] login failed', error)
       Taro.showToast({ title: error instanceof Error && error.message ? error.message : '登录失败，请重试', icon: 'none' })

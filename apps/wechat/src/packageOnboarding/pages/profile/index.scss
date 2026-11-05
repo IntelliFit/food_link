@@ -277,3 +277,54 @@
     color: #4c5c53;
   }
 }
+
+// ② 关注：多选最多 3 项 + 自己写
+.obp-focus {
+  &__custom {
+    border-style: dashed;
+
+    &.ob-chip--on { border-style: solid; }
+  }
+
+  &__custom-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__input { margin-bottom: 16rpx; }
+
+  &__done {
+    margin-top: 8rpx;
+    height: 84rpx;
+    line-height: 84rpx;
+    font-size: 30rpx;
+    font-weight: 700;
+
+    &[disabled] {
+      background: #c9d6cc;
+      color: #fff;
+    }
+  }
+}
+
+// 第一餐后：今天的第一个任务
+.obp-task {
+  margin-top: 16rpx;
+  padding: 18rpx 22rpx;
+  border-radius: 20rpx;
+  background: #e7efe3;
+
+  &__k {
+    display: block;
+    font-size: 22rpx;
+    color: $ob-muted;
+  }
+
+  &__v {
+    display: block;
+    margin: 4rpx 0;
+    font-size: 30rpx;
+    font-weight: 700;
+    color: $ob-deep;
+  }
+}

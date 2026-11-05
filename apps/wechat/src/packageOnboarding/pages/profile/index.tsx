@@ -1,8 +1,10 @@
 import { View, Text, Image, Input, Button, ScrollView } from '@tarojs/components'
 import Taro, { useRouter } from '@tarojs/taro'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getHomeDashboard, updateHealthProfile } from '../../../utils/api'
 import { experiments } from '../../../utils/experiments'
+import { loadFirstMealLines, withDeadline, type FirstMealLines } from '../../first-meal'
+import { FocusPicker, type FocusChoice } from './FocusPicker'
 import {
   BODY_LIMITS,
   BRIEF_PENDING_KEY,
@@ -41,10 +43,17 @@ const MOVES: Array<{ id: MoveLevel; label: string }> = [
 
 type Payoff = { target: number; eaten: number }
 
+/** 目标 → 关注 → 身体情况 → 在哪吃、动得多不多 */
+const STEPS = 4
+
 export default function OnboardingProfilePage() {
   const router = useRouter()
   const savedKcal = Math.max(0, Math.round(Number(router.params?.kcal) || 0))
+  const recordId = String(router.params?.record || '').trim()
   const [goal, setGoal] = useState<OnboardingGoal | 'skip' | null>(null)
+  const [focus, setFocus] = useState<FocusChoice | null>(null)
+  const focusSaveRef = useRef<Promise<boolean> | null>(null)
+  const [firstMeal, setFirstMeal] = useState<FirstMealLines | null>(null)
   const [facts, setFacts] = useState<BodyFacts>({})
   const [bodyText, setBodyText] = useState('')
   const [bodyState, setBodyState] = useState<'asking' | 'confirming' | 'done' | 'skipped'>('asking')
@@ -59,12 +68,19 @@ export default function OnboardingProfilePage() {
 
   const goalInfo = GOALS.find((g) => g.id === goal)
   const missing = missingBodyFields(facts)
-  const step = !goal ? 1 : bodyState === 'asking' || bodyState === 'confirming' ? 2 : 3
+  const step = !goal ? 1 : !focus ? 2 : bodyState === 'asking' || bodyState === 'confirming' ? 3 : 4
   const lifeDone = Boolean(eat && move)
 
   const pickGoal = (id: OnboardingGoal | 'skip') => {
     setGoal(id)
     experiments.track('onboarding_profile_goal', { skipped: id === 'skip' })
+  }
+
+  const pickFocus = (choice: FocusChoice) => {
+    setFocus(choice)
+    experiments.track('onboarding_profile_focus', { count: choice.count, custom: choice.custom, skipped: choice.skipped })
+    // 关注已在后台保存；建档保存前会等它（两处都整体改 health_condition，不能同时写）
+    focusSaveRef.current = choice.saved
   }
 
   const sendBody = () => {
@@ -106,6 +122,7 @@ export default function OnboardingProfilePage() {
     const bodyOk = bodyState === 'done' && missingBodyFields(facts).length === 0
     const activity = MOVE_TO_ACTIVITY[move]
     try {
+      if (focusSaveRef.current) await withDeadline(focusSaveRef.current).catch(() => false)
       await updateHealthProfile({
         ...(bodyOk ? {
           gender: facts.gender,
@@ -120,10 +137,16 @@ export default function OnboardingProfilePage() {
         is_student: eat === 'campus' ? true : undefined,
       })
       experiments.track('onboarding_profile_saved', { body: bodyOk })
-      const dashboard = await getHomeDashboard().catch(() => null)
+      // 第一餐那两句要在档案和关注都存好后取（任务按这个人定）；和首页数据一起等、一起出，
+      // 只滚动一次（两段内容前后脚追加时，第二次 scroll-into-view 会被正在进行的滚动吞掉）
+      const [dashboard, lines] = await Promise.all([
+        getHomeDashboard().catch(() => null),
+        loadFirstMealLines(recordId).catch(() => null),
+      ])
       const target = Math.round(Number(dashboard?.intakeData?.target) || 0)
       const eaten = Math.round(Number(dashboard?.intakeData?.current) || savedKcal)
       setPayoff(target > 0 ? { target, eaten } : null)
+      setFirstMeal(lines)
       try {
         Taro.setStorageSync(FIRST_DAY_KEY, localDateKey())
         Taro.setStorageSync(BRIEF_PENDING_KEY, '1')
@@ -150,26 +173,27 @@ export default function OnboardingProfilePage() {
     </View>
   )
   const mine = (text: string) => <View className='obp-mine ob-fade'><Text>{text}</Text></View>
+  const endId = `obp-end-${step}-${bodyState}-${said.length}-${lifeDone}-${saving}-${Boolean(payoff)}-${Boolean(firstMeal)}`
 
   return (
     <View className='obp'>
       <Image className='obp__bg' src={HOME_BOTANICAL_BG_URL} mode='aspectFill' />
       <View className='obp__head'>
         <Text className='obp__title'>认识一下你</Text>
-        <Text className='obp__step'>3 句话，第 {step} 句</Text>
+        <Text className='obp__step'>{STEPS} 句话，第 {step} 句</Text>
         <View className='obp__dots'>
-          {[1, 2, 3].map((n) => <View key={n} className={`obp__dot ${n < step || (n === 3 && payoff) ? 'obp__dot--done' : n === step ? 'obp__dot--now' : ''}`} />)}
+          {Array.from({ length: STEPS }, (_, i) => i + 1).map((n) => <View key={n} className={`obp__dot ${n < step || (n === STEPS && payoff) ? 'obp__dot--done' : n === step ? 'obp__dot--now' : ''}`} />)}
         </View>
       </View>
 
-      <ScrollView className='obp__scroll' scrollY scrollIntoView={`obp-end-${step}-${bodyState}-${said.length}-${lifeDone}-${saving}-${Boolean(payoff)}`} scrollWithAnimation>
+      <ScrollView className='obp__scroll' scrollY scrollIntoView={endId} scrollWithAnimation>
         <View className='obp__intro'>
           <Image className='obp__mascot ob-pop' src={XIAOMAI} mode='aspectFit' />
-          <Text className='obp__big'>3 句话，30 秒</Text>
-          <Text className='obp__sub'>答完我就知道你每天该吃多少</Text>
+          <Text className='obp__big'>{STEPS} 句话，30 秒</Text>
+          <Text className='obp__sub'>答完我就知道你每天该吃多少、该帮你盯什么</Text>
         </View>
 
-        {bubble(savedKcal > 0 ? `存好啦！这一顿 ${savedKcal} kcal 已经在你的档案里。再回答我 3 句，我就能算出你每天该吃多少。` : '登录好啦！回答我 3 句，我就能算出你每天该吃多少。')}
+        {bubble(savedKcal > 0 ? `存好啦！这一顿 ${savedKcal} kcal 已经在你的档案里。再回答我 ${STEPS} 句，我就能算出你每天该吃多少。` : `登录好啦！回答我 ${STEPS} 句，我就能算出你每天该吃多少。`)}
         {bubble('① 你现在最想要哪个？', true)}
         {!goal && (
           <View className='obp-pad ob-fade'>
@@ -183,7 +207,15 @@ export default function OnboardingProfilePage() {
         {goal && (
           <>
             {mine(goalInfo ? goalInfo.label : '先跳过')}
-            {bubble(`${goalInfo ? goalInfo.reply : '没关系，先按保持体重算。'}\n② 说一句你的身体情况就行，比如「女，22 岁，163，52 公斤」。`)}
+            {bubble(`${goalInfo ? goalInfo.reply : '没关系，先按保持体重算。'}\n② 你最想改善哪方面？最多选 3 个，也可以自己写。`)}
+            {!focus && <FocusPicker onDone={pickFocus} />}
+          </>
+        )}
+
+        {focus && (
+          <>
+            {mine(focus.said)}
+            {bubble(`${focus.reply}\n③ 说一句你的身体情况就行，比如「女，22 岁，163，52 公斤」。`)}
             {said.map((s, i) => <View key={i}>{mine(s)}</View>)}
             {bodyState === 'asking' && said.length > 0 && missing.length > 0 && bubble(`还差${missing.join('、')}，补一句就行。`)}
             {bodyState === 'asking' && (
@@ -220,7 +252,7 @@ export default function OnboardingProfilePage() {
 
         {(bodyState === 'done' || bodyState === 'skipped') && (
           <>
-            {bubble('③ 最后一句：平时在哪吃饭？平时动得多吗？', true)}
+            {bubble('④ 最后一句：平时在哪吃饭？平时动得多吗？', true)}
             {!lifeDone && (
               <View className='obp-pad ob-fade'>
                 <View className='obp-grid obp-grid--2'>
@@ -253,6 +285,21 @@ export default function OnboardingProfilePage() {
                 </View>
               </View>
             )}
+            {lifeDone && !saving && !saveFailed && firstMeal && (firstMeal.seen || firstMeal.task) && (
+              <View className='obp-row ob-fade'>
+                <Image className='obp-avatar' src={XIAOMAI} mode='aspectFit' />
+                <View className='obp-bubble obp-card'>
+                  {firstMeal.seen && <Text>从你这一顿我看到：{firstMeal.seen}</Text>}
+                  {firstMeal.task && (
+                    <View className='obp-task'>
+                      <Text className='obp-task__k'>今天的第一个任务</Text>
+                      <Text className='obp-task__v'>{firstMeal.task}</Text>
+                      {firstMeal.taskReason && <Text className='obp-card__hint'>{firstMeal.taskReason}</Text>}
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
             {lifeDone && !saving && !saveFailed && (
               <View className='obp-pad ob-fade'>
                 <Button className='ob-btn ob-btn--primary' onClick={goHome}>去看我的今天</Button>
@@ -260,7 +307,7 @@ export default function OnboardingProfilePage() {
             )}
           </>
         )}
-        <View id={`obp-end-${step}-${bodyState}-${said.length}-${lifeDone}-${saving}-${Boolean(payoff)}`} className='obp__end' />
+        <View id={endId} className='obp__end' />
       </ScrollView>
     </View>
   )
