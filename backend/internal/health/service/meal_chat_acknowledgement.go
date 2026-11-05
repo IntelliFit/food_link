@@ -130,6 +130,12 @@ func (s *StatsService) petChatAcknowledgementReply(ctx context.Context, userID s
 }
 
 func (s *StatsService) streamPetChatAcknowledgement(ctx context.Context, userID string, input PetChatInput, reply string) (<-chan PetChatStreamChunk, error) {
+	return s.streamPetChatFreeReply(ctx, userID, input, reply, true)
+}
+
+// streamPetChatFreeReply stores and streams a reply that costs nothing; reword lets the model
+// say an acknowledgement in context, a factual reply (opening hours) is sent as written.
+func (s *StatsService) streamPetChatFreeReply(ctx context.Context, userID string, input PetChatInput, reply string, reword bool) (<-chan PetChatStreamChunk, error) {
 	question := normalizePetChatQuestion(input.Question)
 	comp, err := s.buildStatsComputation(ctx, userID, input.Range, 2000, 0)
 	if err != nil {
@@ -139,7 +145,7 @@ func (s *StatsService) streamPetChatAcknowledgement(ctx context.Context, userID 
 	if err != nil {
 		return nil, err
 	}
-	if history, err := s.repo.GetPetChatSessionMessages(ctx, userID, session.ID, 16); err == nil {
+	if history, err := s.repo.GetPetChatSessionMessages(ctx, userID, session.ID, 16); err == nil && reword {
 		if active, _ := activeCampusDietRecommendation(history); active != nil {
 			reply = s.mealAcknowledgementWords(ctx, userID, question, active, reply)
 		}

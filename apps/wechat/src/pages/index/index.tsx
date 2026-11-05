@@ -1,7 +1,7 @@
 import SleepCard from './components/SleepCard'
 import NutritionPlans from '../../components/NutritionPlans'
 import { changeNutritionDay, NUTRITION_PLANS_CHANGED, type DayChange } from '../../utils/nutrition-plans'
-import NextMealRecommendations from './components/NextMealRecommendations'
+import NextMealRecommendations, { type NextMealCardMeal } from './components/NextMealRecommendations'
 import { Success } from '@taroify/icons'
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, ScrollView } from '@tarojs/components'
 import {
@@ -2548,12 +2548,12 @@ function IndexPage() {
   )
   const nextMealName = nextMealLabel(nextMealType)
   const showNextMealGuidance = !isGuest && isTodayRecordDate(selectedDate)
-  const openNextMealGuidance = React.useCallback((option?: DietRecommendationOption) => {
+  const openNextMealGuidance = React.useCallback((option?: DietRecommendationOption, meal?: NextMealCardMeal) => {
     openPetChat({
       source: 'home_next_meal',
-      date: selectedDate,
-      mealType: nextMealType,
-      mealLabel: nextMealName,
+      date: meal?.meal_date || selectedDate,
+      mealType: meal?.meal_type || nextMealType,
+      mealLabel: meal?.meal_label || nextMealName,
       basicAdvice: option?.title || '',
       selectedSourceID: option?.source_id,
       starterQuestion: '',

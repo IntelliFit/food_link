@@ -240,6 +240,10 @@ type DietRecommendationScope struct {
 	ExcludeSourceIDs []string
 }
 
+// CatalogScanMaxPage is the largest page of a catalog scan; ordinary searches stop at 100.
+// Every page is a round trip with its own count, and a dense area holds thousands of dishes.
+const CatalogScanMaxPage = 500
+
 type CampusDietSearchFilter struct {
 	// Internal keyset scan: exhaust a bounded place scope without an offset cap.
 	ScanCatalog           bool
@@ -282,6 +286,8 @@ type DietRecommendationCandidate struct {
 	AvailabilityNote        string                       `json:"availability_note,omitempty"`
 	MealPeriods             []string                     `json:"meal_periods,omitempty"`
 	AvailabilityStatus      string                       `json:"availability_status,omitempty"`
+	OpeningHours            string                       `json:"opening_hours,omitempty"` // the canteen's collected hours text
+	ServiceNote             string                       `json:"service_note,omitempty"`  // what the hours mean for this meal, set per request
 	PriceType               string                       `json:"price_type,omitempty"`
 	PriceText               string                       `json:"price_text,omitempty"`
 	RecordedMealType        string                       `json:"recorded_meal_type,omitempty"`

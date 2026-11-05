@@ -207,19 +207,37 @@ func TestSearchMealCombosHonourBudgetCaloriesAndAvoidedFoods(t *testing.T) {
 	}
 }
 
-func TestSearchMealCombosOnlyUsePricedServings(t *testing.T) {
+// A price by weight is never one serving. A dish without a collected price joins a meal only
+// when there is no budget to check, and the meal then has no price.
+func TestSearchMealCombosOnlyUsePricedServingsUnderABudget(t *testing.T) {
 	pool := comboZijingPool()
 	byWeight := comboDish("duck", "烤鸭", 250, 26, 4, 15, 9, "家常菜")
 	byWeight.PriceUnit = "元/两"
 	unpriced := comboDish("ribs", "糖醋排骨", 300, 20, 18, 16, 0, "家常菜")
 	pool = append(pool, byWeight, unpriced)
-	report := searchMealCombos(newComboTestState(), pool, 12)
+	budget := 40.0
+	state := newComboTestState()
+	state.Constraints.MaxPrice = &budget
+	report := searchMealCombos(state, pool, 12)
 	require.NotEmpty(t, report.Combos)
 	for _, combo := range report.Combos {
 		for _, c := range combo.Components {
 			assert.NotContains(t, []string{"duck", "ribs"}, c.SourceID)
 		}
 	}
+	usedRibs := false
+	for _, combo := range searchMealCombos(newComboTestState(), pool, 12).Combos {
+		for _, c := range combo.Components {
+			assert.NotEqual(t, "duck", c.SourceID)
+			if c.SourceID == "ribs" {
+				usedRibs = true
+				assert.Zero(t, combo.Plan.Price)
+				assert.Empty(t, combo.Plan.PriceUnit)
+				assert.Contains(t, combo.Plan.Description, "价格未收录")
+			}
+		}
+	}
+	assert.True(t, usedRibs, "without a budget an unpriced dish can be part of a meal")
 }
 
 func TestSearchMealCombosDoNotRepeatTheSameDishAcrossOptions(t *testing.T) {
@@ -393,9 +411,62 @@ func TestSearchMealCombosExplainWhyNothingCouldBeComposed(t *testing.T) {
 	for i := range unpriced {
 		unpriced[i].Price = 0
 	}
-	report = searchMealCombos(newComboTestState(), unpriced, 3)
+	budget := 30.0
+	state := newComboTestState()
+	state.Constraints.MaxPrice = &budget
+	report = searchMealCombos(state, unpriced, 3)
 	assert.Empty(t, report.Combos)
 	assert.Contains(t, report.Reason, "价格")
+}
+
+func restaurantDish(id, title, merchant string, kcal, protein, carbs, fat float64) DietRecommendationCandidate {
+	c := campusDietAgentTestCandidate(id, title, kcal, protein)
+	c.Carbs, c.Fat, c.Price, c.PriceUnit = carbs, fat, 0, ""
+	c.IsCampusFood, c.SchoolID, c.SchoolName, c.CanteenName, c.WindowName, c.Floor = false, "", "", "", "", ""
+	c.MerchantName, c.Address, c.AvailabilityStatus = merchant, "海淀区成府路"+merchant, "unknown"
+	distance := 0.7
+	c.DistanceKM = &distance
+	return c
+}
+
+// Collected restaurant menus rarely include rice (2026-11-05: 21 of 171 merchants around
+// AI原点社区 had any staple). A stir-fry becomes a meal with a bowl ordered beside it.
+func TestRestaurantDishBecomesAMealWithRiceOrderedBeside(t *testing.T) {
+	state := newComboTestState()
+	state.Constraints.Scene = ""
+	pool := []DietRecommendationCandidate{
+		restaurantDish("yuxiang", "鱼香肉丝", "胖胖家常菜（五道口店）", 380, 22, 18, 22),
+		restaurantDish("qingcai", "清炒时蔬", "胖胖家常菜（五道口店）", 120, 3, 10, 7),
+	}
+	report := searchMealCombos(state, pool, 3)
+	require.NotEmpty(t, report.Combos, report.Reason)
+	combo := report.Combos[0]
+	require.True(t, mealIsAddedStaple(combo.Components[0]), comboTitles(report))
+	assert.Equal(t, "米饭（店内另点，一碗）", combo.Components[0].Title)
+	assert.Equal(t, "胖胖家常菜（五道口店）", combo.Components[0].MerchantName)
+	assert.Contains(t, combo.Plan.Description, "米饭为店内另点")
+	assert.Zero(t, combo.Plan.Price)
+	assert.True(t, mealHasStructure(combo.Plan))
+	issues, penalty := mealEvidenceIssues(combo.Components[0], "lunch")
+	assert.Contains(t, issues[0], "店内是否单卖米饭")
+	assert.Equal(t, 1.0, penalty)
+	// A follow-up re-reads the catalog rows only; the rice stays from the stored meal.
+	registerBuiltMealPlan(state, combo.Plan, combo.Components)
+	for _, id := range mealPhysicalIDs(state, []string{combo.Plan.SourceID}) {
+		assert.NotEqual(t, combo.Components[0].SourceID, id)
+	}
+
+	// Barbecue, braised-duck and noodle shops do not sell rice by the bowl; a budget cannot be checked against it.
+	for _, merchant := range []string{"柳叶刀烧烤（北沙滩店）", "李华泽热卤鸭头（苏州街店）", "老北京炸酱面馆", "萨莉亚意式餐厅(南京环亚广场店)", "潮汕深夜豆浆（客村店）"} {
+		other := []DietRecommendationCandidate{restaurantDish("a", "烤羊肉", merchant, 380, 25, 5, 22)}
+		assert.Empty(t, searchMealCombos(state, other, 3).Combos, merchant)
+	}
+	// A dish that is itself the starch is not eaten with a bowl of rice.
+	noodles := []DietRecommendationCandidate{restaurantDish("fen", "鸡蛋牛肉鲜虾炒粉签", "天成川菜馆", 760, 33, 90, 28)}
+	assert.Empty(t, searchMealCombos(state, noodles, 3).Combos)
+	budget := 40.0
+	state.Constraints.MaxPrice = &budget
+	assert.Empty(t, searchMealCombos(state, pool, 3).Combos)
 }
 
 func TestBuildMealPlanAllowsOneCanteenAcrossWindowsButNotAcrossCanteens(t *testing.T) {

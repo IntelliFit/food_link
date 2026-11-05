@@ -68,6 +68,9 @@ func mealEvidenceIssues(c DietRecommendationCandidate, mealType string) ([]strin
 	if c.Source == "food_record" {
 		return []string{"历史记录不是当前可购买证明"}, 0
 	}
+	if mealIsAddedStaple(c) {
+		return []string{"米饭按一碗约200克的标准营养估算，店内是否单卖米饭请确认"}, 1
+	}
 	if c.NutritionSourceCategory == "llm_generated" || c.NutritionSourceCategory == "ai_estimate" {
 		issues, penalty = append(issues, "营养值由模型估算，非食堂实测"), penalty+2
 	} else {
@@ -93,8 +96,18 @@ func mealEvidenceIssues(c DietRecommendationCandidate, mealType string) ([]strin
 	if c.Price > 0 && c.Price < 2 && mealHasEvidenceStructure(c) && c.PortionDescription == "" {
 		issues, penalty = append(issues, "主餐低价且份量缺失，需核实是否按重量或小份计价"), penalty+3
 	}
-	if c.AvailabilityStatus != "available" {
+	switch {
+	case c.AvailabilityStatus == "unknown":
+		// Collected from menus, reviews or maps; nobody has confirmed it is still sold.
+		issues, penalty = append(issues, "是否在售待核实，去之前先确认"), penalty+2
+	case c.AvailabilityStatus != "available":
 		issues = append(issues, "当日供应待确认")
+	}
+	if mealUnconfirmedVenue.MatchString(c.CanteenName) {
+		issues, penalty = append(issues, "具体食堂待核实"), penalty+2
+	}
+	if c.ServiceNote != "" {
+		issues, penalty = append(issues, c.ServiceNote), penalty+1
 	}
 	return issues, math.Min(8, penalty)
 }

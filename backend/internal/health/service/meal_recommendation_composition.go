@@ -129,7 +129,7 @@ func validateMealComponents(state *campusDietAgentRunState, components []DietRec
 				return fmt.Errorf("不要把两份完整主餐叠加为一餐；请选择一份主餐搭配配菜")
 			}
 		}
-		if c.Source == "meal_plan" || !mealKnownServing(c) {
+		if c.Source == "meal_plan" || !mealKnownServing(c) && !mealUnpricedPartAllowed(state, c) {
 			return fmt.Errorf("组合只接受份价已知的原始条目，不能将按两单价当作整份")
 		}
 		if !mealSamePlace(components[0], c) {
@@ -197,6 +197,17 @@ func composeMealPlan(state *campusDietAgentRunState, components []DietRecommenda
 	combined.Source, combined.SourceID = "meal_plan", fmt.Sprintf("meal:%x", digest[:12])
 	combined.PriceUnit = "元/餐"
 	combined.Description = "按各1个库内记录份量合计；实际份量、供应及配料需向窗口确认"
+	for _, c := range components {
+		if !mealKnownServing(c) {
+			// One part without a collected price leaves the whole meal's price unknown.
+			combined.Price, combined.PriceUnit = 0, ""
+			combined.Description = "按各1个库内记录份量合计；部分菜品价格未收录，实际价格、份量和供应以店内为准"
+			break
+		}
+	}
+	if mealHasAddedStaple(components) {
+		combined.Description += "；米饭为店内另点，按一碗约200克估算"
+	}
 	combined.NutritionBasis = "library_estimate"
 	// The first part's portion text and supply periods do not describe the assembled
 	// meal. Say only what holds for every part.
@@ -308,7 +319,7 @@ func mealCommonPeriods(components []DietRecommendationCandidate) []string {
 		common = current
 	}
 	out := []string{}
-	for _, period := range []string{"breakfast", "lunch", "dinner"} {
+	for _, period := range []string{"breakfast", "lunch", "dinner", "evening_snack"} {
 		if common[period] {
 			out = append(out, period)
 		}
@@ -360,7 +371,9 @@ func mealPhysicalIDs(state *campusDietAgentRunState, ids []string) []string {
 	for _, id := range ids {
 		if components := mealStoredComponents(state, id); len(components) > 0 {
 			for _, c := range components {
-				out = append(out, c.SourceID)
+				if !mealIsAddedStaple(c) { // not a catalog row; kept from the stored meal
+					out = append(out, c.SourceID)
+				}
 			}
 		} else {
 			out = append(out, id)
@@ -388,7 +401,8 @@ const mealComboSearchLimit = 12
 
 // Build bounded, purchasable combinations before ranking whole meals. Ranking
 // sides as if each were lunch otherwise rewards a low-calorie mushroom dish.
-// Only real portion-priced rows participate; no invented rice, price or menu.
+// Parts are real catalog rows, priced or (without a budget) unpriced; the only addition is the
+// bowl of rice ordered beside a dish at a Chinese restaurant (meal_combo_staple.go).
 // The assembly itself (roles, same canteen and floor, nutrition, variety) lives in
 // searchMealOptions; this keeps the signature the search tools call.
 func mealBuildCombinations(state *campusDietAgentRunState, candidates []DietRecommendationCandidate) []DietRecommendationCandidate {

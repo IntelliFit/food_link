@@ -70,12 +70,11 @@ func runWholeMealChatTurn(t *testing.T, repo StatsRepo, pool []DietRecommendatio
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		call++
+		// The server has already read the context; the model re-reads it once with updates.
 		switch call {
 		case 1:
-			writeCampusDietAgentTestToolCall(t, w, "ctx", "get_meal_context", `{}`)
-		case 2:
 			writeCampusDietAgentTestToolCall(t, w, "ctx-again", "get_meal_context", `{"updates":[]}`)
-		case 3:
+		case 2:
 			writeCampusDietAgentTestToolCall(t, w, "search", "search_campus_foods", `{}`)
 		default:
 			writeCampusDietAgentTestFinal(t, w, map[string]any{

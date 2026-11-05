@@ -23,7 +23,7 @@ export type PetChatHomeMealEntry = {
   selectedSourceID?: string
   source: 'home_next_meal'
   date: string
-  mealType: 'breakfast' | 'lunch' | 'dinner'
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'evening_snack'
   mealLabel: string
   basicAdvice: string
   starterQuestion: string

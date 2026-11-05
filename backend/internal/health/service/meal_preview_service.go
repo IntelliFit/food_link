@@ -78,7 +78,16 @@ func (s *StatsService) PreviewMeals(ctx context.Context, userID string, input Me
 	if err := s.resolvePreviewSchools(ctx, state, input.SchoolNames); err != nil {
 		return nil, err
 	}
-	return s.hybridMealRecommendation(ctx, state)
+	note, err := s.choosePreviewMealTime(ctx, state)
+	if err != nil {
+		return nil, err
+	}
+	result, err := s.hybridMealRecommendation(ctx, state)
+	if err != nil {
+		return nil, err
+	}
+	labelPreviewMeal(state, result, note)
+	return result, nil
 }
 
 var mealHistoryQuestionPattern = regexp.MustCompile(`历史.*(?:餐|吃|饮食|记录)|过去.*(?:吃|餐|记录)|吃过|记录过的餐|本人.*餐|记录(?:里|中)|核对.{0,6}日期`)
@@ -258,6 +267,17 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 			}
 		}
 		result.DataNotes = append(result.DataNotes, "已按本次指定学校查询公开食堂菜单；不是实时定位，未核实步行距离、入校条件、营业时段或当前供应。")
+	}
+	// Dishes that are not a meal on their own can be one together: a canteen dish with the
+	// canteen's rice, or a restaurant's dish with a bowl of rice ordered beside it.
+	catalog := []DietRecommendationCandidate{}
+	for _, meal := range pool {
+		if meal.candidate.Source != "food_record" {
+			catalog = append(catalog, meal.candidate)
+		}
+	}
+	for _, plan := range mealBuildCombinations(state, catalog) {
+		pool = append(pool, groundedMeal{candidate: plan})
 	}
 	result.CatalogCoverage = state.CatalogCoverage
 	if state.IsHomePreview && state.EngineVersion == dietDecisionEngineVersion {
@@ -570,26 +590,40 @@ func groundedMealAllowed(state *campusDietAgentRunState, c DietRecommendationCan
 
 func groundedMealExclusion(state *campusDietAgentRunState, c DietRecommendationCandidate) string {
 	choosingMeal := state.IsHomePreview || campusDietAgentIsSearchIntent(state.Intent)
-	if choosingMeal && !mealWeekdayAllowed(mealDecisionNow(state), c) {
+	mealType := state.Constraints.MealType
+	if mealType == "" && state.IsHomePreview {
+		mealType = state.MealContext.MealType
+	}
+	if choosingMeal && !mealWeekdayAllowed(mealMealDay(state, mealType), c) {
 		return "weekday_unavailable"
 	}
 	if choosingMeal && (c.AvailabilityStatus == "temporarily_unavailable" || c.AvailabilityStatus == "discontinued") {
 		return "not_available"
-	}
-	mealType := state.Constraints.MealType
-	if mealType == "" && state.IsHomePreview {
-		mealType = state.MealContext.MealType
 	}
 	// Do not turn an inferred clock-based meal into a new hard constraint on
 	// an unspecific chat or a follow-up asking about an existing dish.
 	if choosingMeal && !mealHistoryQuestion(state.Question) && !mealDaypartAllowed(mealType, c) {
 		return "meal_period_mismatch_or_unconfirmed"
 	}
+	// One item asked for ("来个小菜", "想喝点什么") is that kind of item, never a whole meal.
+	if choosingMeal && !mealItemKindMatches(state.Constraints.ItemKind, c) {
+		return "item_kind_mismatch"
+	}
+	// Opening hours do apply to the clock-based meal: a closed canteen cannot be eaten at.
+	// A canteen the user named stays, with a note that it is not serving now.
+	if choosingMeal && !mealHistoryQuestion(state.Question) && state.Constraints.CanteenName == "" && mealVenueClosedAtMealTime(state, mealType, c) {
+		return "venue_closed_at_meal_time"
+	}
 	// Explicit daypart labels are catalog evidence; do not silently turn a
 	// breakfast-only listing into an available lunch/dinner offer.
-	if c.Source != "food_record" {
-		for mealType, label := range map[string]string{"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐"} {
-			if strings.Contains(c.Title, label) && state.Constraints.MealType != "" && state.Constraints.MealType != mealType {
+	// The meal comes from the request, or from the clock when choosing ("芥兰炒饭（早餐）" at 15:00).
+	if asked := state.Constraints.MealType; c.Source != "food_record" {
+		if asked == "" && choosingMeal && !mealHistoryQuestion(state.Question) {
+			asked = state.MealContext.MealType
+		}
+		for labelled, label := range map[string]string{"breakfast": "早餐", "lunch": "午餐", "dinner": "晚餐"} {
+			late := labelled == "dinner" && asked == "evening_snack"
+			if strings.Contains(c.Title, label) && asked != "" && asked != labelled && !late {
 				return "meal_period_mismatch_or_unconfirmed"
 			}
 		}

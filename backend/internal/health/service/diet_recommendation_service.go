@@ -94,6 +94,10 @@ type DietRecommendationResult struct {
 	AssistantMessageID     string                               `json:"assistant_message_id,omitempty"`
 	AgentConstraints       *CampusDietRecommendationConstraints `json:"agent_constraints,omitempty"`
 	DecisionEngineVersion  string                               `json:"decision_engine_version,omitempty"`
+	// The meal a home card is for, which may differ from the one asked for (late at night).
+	MealType  string `json:"meal_type,omitempty"`
+	MealDate  string `json:"meal_date,omitempty"`
+	MealLabel string `json:"meal_label,omitempty"`
 }
 
 type CampusDietRecommendationConstraints struct {
@@ -107,6 +111,7 @@ type CampusDietRecommendationConstraints struct {
 	PendingSchool      *domain.DietRecommendationSchool `json:"-"`
 	CampusAccessDenied bool                             `json:"-"`
 	CompleteMeal       bool                             `json:"complete_meal,omitempty"`
+	ItemKind           string                           `json:"item_kind,omitempty"` // dish/side/drink/snack: one item, not a whole meal
 	MealType           string                           `json:"meal_type,omitempty"`
 	AvoidFoods         []string                         `json:"avoid_foods,omitempty"`
 	PreferFoods        []string                         `json:"prefer_foods,omitempty"`
@@ -136,6 +141,7 @@ type DietRecommendationOption struct {
 	Latitude                         *float64                      `json:"latitude,omitempty"`
 	Longitude                        *float64                      `json:"longitude,omitempty"`
 	MerchantName                     string                        `json:"merchant_name,omitempty"`
+	OpeningHours                     string                        `json:"opening_hours,omitempty"` // the canteen's collected hours, for "还开着吗"
 	Address                          string                        `json:"address,omitempty"`
 	Title                            string                        `json:"title"`
 	Reason                           string                        `json:"reason"`
@@ -876,7 +882,7 @@ func campusDietRecommendationOption(candidate DietRecommendationCandidate, reaso
 		Price: candidate.Price, PriceUnit: candidate.PriceUnit, ImagePath: candidate.ImagePath,
 		NutritionBasis: candidate.NutritionBasis, NutritionSourceCategory: candidate.NutritionSourceCategory,
 		WeightMethod: candidate.WeightMethod, WeightConfidence: candidate.WeightConfidence,
-		UncertaintyLevel: candidate.UncertaintyLevel,
+		UncertaintyLevel: candidate.UncertaintyLevel, OpeningHours: candidate.OpeningHours,
 	}
 }
 

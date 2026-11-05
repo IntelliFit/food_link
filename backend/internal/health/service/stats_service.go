@@ -1010,6 +1010,9 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 	if reply, ok := s.petChatAcknowledgementReply(ctx, userID, input); ok {
 		return s.streamPetChatAcknowledgement(ctx, userID, input, reply)
 	}
+	if reply, ok := s.petChatHoursReply(ctx, userID, input); ok {
+		return s.streamPetChatFreeReply(ctx, userID, input, reply, false)
+	}
 	if s.shouldUseCampusDietAgent(ctx, userID, input) && !s.petChatHasHistoricalImageQuestion(ctx, userID, input) {
 		return s.GenerateCampusDietAgentStream(ctx, userID, input)
 	}

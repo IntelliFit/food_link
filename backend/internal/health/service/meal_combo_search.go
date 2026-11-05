@@ -124,7 +124,7 @@ func mealComboPlaces(state *campusDietAgentRunState, pool []DietRecommendationCa
 			continue
 		}
 		stats.considered++
-		if !mealKnownServing(c) {
+		if !mealKnownServing(c) && !mealUnpricedPartAllowed(state, c) {
 			stats.unpriced++
 			continue
 		}
@@ -169,6 +169,10 @@ func mealComboPlaces(state *campusDietAgentRunState, pool []DietRecommendationCa
 	places := []*mealComboPlace{}
 	for _, key := range keys {
 		place := byKey[key]
+		// Rice ordered beside a dish has no collected price, so it cannot be checked against a budget.
+		if state.Constraints.MaxPrice == nil {
+			mealAddRiceToRestaurant(place)
+		}
 		place.restrictBases(state.Constraints.RequiredStaple)
 		place.cap()
 		if (len(place.staples) > 0 && len(place.proteins) > 0) || len(place.fulls) > 0 {
@@ -335,6 +339,13 @@ func (p *mealComboPlace) enumerate(ctx dietDecisionContext, limits mealComboLimi
 	considered := 0
 	consider := func(n int, a, b, c, d *mealComboPart) {
 		draft := mealComboDraft{parts: [4]*mealComboPart{a, b, c, d}, n: n}
+		if mealIsAddedStaple(a.c) {
+			for _, part := range draft.parts[1:n] {
+				if part.role != mealRoleVegetable && part.role != mealRoleSoup && !mealGoesWithRice(part.c) {
+					return
+				}
+			}
+		}
 		var kcal, protein, carbs, fat float64
 		for i := 0; i < n; i++ {
 			item := draft.parts[i].c

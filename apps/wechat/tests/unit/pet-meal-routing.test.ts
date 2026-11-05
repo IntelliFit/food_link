@@ -1,4 +1,4 @@
-import { answerAsksQuestion, isFreeMealAcknowledgement, mealAcknowledgementKind, releasesVenueLimit, requestsOtherVenue } from '../../src/packageExtra/pages/pet-chat/meal-routing'
+import { answerAsksQuestion, asksOpeningHours, isFreeMealAcknowledgement, mealAcknowledgementKind, releasesVenueLimit, requestsOtherVenue } from '../../src/packageExtra/pages/pet-chat/meal-routing'
 import { activeDietRecommendationContext, classifyDietRecommendationIntent } from '../../src/packageExtra/pages/pet-chat/index'
 
 // These sentences mirror backend/internal/health/service/meal_chat_acknowledgement_test.go.
@@ -132,5 +132,18 @@ describe('a card from the server always counts', () => {
     const context = activeDietRecommendationContext(messages)
     expect(context.latest).toBe(recommendation)
     expect(context.lastAnswer).toBe('换成清淡的')
+  })
+})
+
+// Mirrors TestOpeningHoursQuestionIsAnsweredFromTheCard: answered from the card's hours, free.
+describe('opening-hours question mirror', () => {
+  it('treats a short question about hours as a free reply, not a request for other food', () => {
+    for (const question of ['这家现在还开着吗', '几点关门', '还在营业吗', '现在还能去吗', '关门了吗']) {
+      expect([question, asksOpeningHours(question)]).toEqual([question, true])
+      expect(isFreeMealAcknowledgement(question, true)).toBe(true)
+    }
+    for (const question of ['关门了的话推荐别的', '推荐点吃的', '换家店']) {
+      expect([question, asksOpeningHours(question)]).toEqual([question, false])
+    }
   })
 })

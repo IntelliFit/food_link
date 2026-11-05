@@ -12,11 +12,14 @@ import { rememberRecommendedDish } from '../../../utils/meal-dish-recommended'
 import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
 import './NextMealRecommendations.scss'
 
+/** The meal the server chose for the card, which late at night differs from the one asked for. */
+export type NextMealCardMeal = Pick<DietRecommendationResult, 'meal_type' | 'meal_date' | 'meal_label'>
+
 type Props = {
   mealType: 'breakfast' | 'lunch' | 'dinner'
   mealName: string
   refreshKey: string
-  onAdjust: (option?: DietRecommendationOption) => void
+  onAdjust: (option?: DietRecommendationOption, meal?: NextMealCardMeal) => void
 }
 
 export default function NextMealRecommendations({ mealType, mealName, refreshKey, onAdjust }: Props) {
@@ -151,7 +154,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
   const adjust = (item: DietRecommendationOption) => {
     rememberRecommendedDish(item.source, item.source_id, 'chatted')
     if (result?.recommendation_id && item.option_key) void recordMealRecommendationFeedback({ run_id: result.recommendation_id, option_keys: [item.option_key], action: 'selected' }).catch(() => {})
-    onAdjust(item)
+    onAdjust(item, result)
   }
 
   const navigate = async (item: DietRecommendationOption) => {
@@ -189,7 +192,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
     <View id='next-meal-recommendations' className='meal-picks'>
       <View className='meal-picks__head'>
         <View className='meal-picks__heading-copy'>
-          <Text className='meal-picks__kicker'>{mealName}吃这个</Text>
+          <Text className='meal-picks__kicker'>{result?.meal_label || mealName}吃这个</Text>
         </View>
         <View className='meal-picks__dots'>
           {busy && !locating && <View className='meal-picks__spinner' aria-label='正在获取餐食推荐' />}

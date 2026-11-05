@@ -1429,6 +1429,10 @@ export interface DietRecommendationResult {
   candidate_count?: number
   ai_rerank_count?: number
   decision_engine_version?: string
+  /** The meal a home card is for; late at night it can be tomorrow's breakfast or a late snack. */
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'evening_snack'
+  meal_date?: string
+  meal_label?: string
   resolved_school?: {
     id: string
     name: string
@@ -1629,7 +1633,7 @@ export interface PetChatEntryContext {
   selected_source_id?: string
   source: 'home_next_meal'
   date: string
-  meal_type: 'breakfast' | 'lunch' | 'dinner'
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'evening_snack'
   meal_label?: string
   basic_advice?: string
 }

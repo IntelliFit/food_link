@@ -157,3 +157,12 @@ func TestOrdinaryChatIsToldNotToDescribeTheMealCatalogue(t *testing.T) {
 	assert.Contains(t, prompt, "不要声称“只能看到校园食堂的数据”")
 	assert.Contains(t, prompt, "推荐附近的外卖")
 }
+
+// Replay 2026-11-05: "点个外卖吧" was not a meal question, so the ordinary chat answered with
+// advice and a question instead of choosing a meal.
+func TestOrderingTakeoutIsAMealQuestion(t *testing.T) {
+	for _, question := range []string{"我在家不想出门，点个外卖吧", "叫个外卖", "帮我订份外卖", "点外卖"} {
+		assert.True(t, campusDietAgentFoodQuestion(question), question)
+	}
+	assert.False(t, campusDietAgentFoodQuestion("外卖员今天来得很慢"))
+}

@@ -24,7 +24,7 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 	if radius > 10 {
 		radius = 10
 	}
-	if f.Limit <= 0 || f.Limit > 100 {
+	if f.Limit <= 0 || f.Limit > 100 && !f.ScanCatalog || f.Limit > domain.CatalogScanMaxPage {
 		f.Limit = 20
 	}
 	if f.Offset < 0 {
@@ -45,7 +45,8 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 		Joins(`LEFT JOIN schools s ON s.status = 'active' AND s.location_type = 'university' AND
 			(s.id = COALESCE(ca.school_id, c.school_id, p.school_id) OR
 			(COALESCE(ca.school_id, c.school_id, p.school_id) IS NULL AND s.name = p.school_name))`).
-		Where("p.status = ? AND COALESCE(p.availability_status, '') <> 'unknown'", "published")
+		// A collected dish whose supply is still unverified is offered once its nutrition is known.
+		Where("p.status = ? AND (COALESCE(p.availability_status, '') <> 'unknown' OR p.total_calories > 0)", "published")
 	if !f.AllowUnknownNutrition {
 		base = base.Where("p.total_calories > 0")
 	}

@@ -98,7 +98,7 @@ function questionRange(question: string, fallback: RangeMode): RangeMode {
 
 export function isDietRecommendationQuestion(question: string): boolean {
   const normalized = question.replace(/\s+/g, '')
-  return /吃(?:点)?什么|吃啥|点什么|想吃|想点|(?:推荐|找|选|搭配|安排|换)[^，。？！!?；;]{0,20}(?:餐|饭|菜|食物|吃的|外卖)|(?:早|午|晚)(?:餐|饭)[^，。？！!?；;]{0,20}(?:推荐|选|搭配)|(?:附近|周边)[^，。？！!?；;]{0,20}(?:吃|餐|饭|菜|食堂|外卖)|(?:食堂|外卖)[^，。？！!?；;]{0,12}(?:吃|推荐|选|有什么|有哪些)|(?:这顿|这餐|这一餐)[^，。？！!?；;]{0,15}(?:吃什么|吃啥|选|推荐|搭配)/.test(normalized)
+  return /吃(?:点)?什么|吃啥|点什么|想吃|想点|(?:点|叫|订)(?:个|份|一份|一下|些|点)?外卖|喝(?:点|些)?什么|想喝|(?:推荐|来|点|买|整|要|加)(?:个|杯|瓶|份|点|些|一个|一杯|一份)?[^，。？！!?；;]{0,6}(?:饮料|饮品|奶茶|咖啡|果汁|零食|小吃|甜点|配菜|小菜|凉菜|单盘菜)|单点|单盘|加(?:个|一个|一份|道)菜|再来(?:个|一个|一份|道)菜|(?:推荐|找|选|搭配|安排|换)[^，。？！!?；;]{0,20}(?:餐|饭|菜|食物|吃的|外卖)|(?:早|午|晚)(?:餐|饭)[^，。？！!?；;]{0,20}(?:推荐|选|搭配)|(?:附近|周边)[^，。？！!?；;]{0,20}(?:吃|餐|饭|菜|食堂|外卖)|(?:食堂|外卖)[^，。？！!?；;]{0,12}(?:吃|推荐|选|有什么|有哪些)|(?:这顿|这餐|这一餐)[^，。？！!?；;]{0,15}(?:吃什么|吃啥|选|推荐|搭配)/.test(normalized)
 }
 
 export type DietRecommendationIntent = 'initial' | 'refine' | 'more' | 'location' | 'compare' | 'context'
@@ -131,6 +131,8 @@ function isMealFollowUpQuestion(question: string): boolean {
     || isMealFeedbackOnRecommendation(question)
     || (isCompoundMealFollowUp(question) && !leavesMealConversation(question))
     || releasesVenueLimit(question)
+    // Mirrors mealRequestedItemKind: one drink, snack, side or dish asked for in a meal conversation.
+    || (/喝(?:点|些)?什么|想喝|喝的|来(?:一)?杯|饮料|饮品|奶茶|咖啡|果汁|豆浆|酸奶|茶饮|零食|小吃|加餐|甜点|甜品|点心|水果|下午茶|配菜|小菜|凉菜|单盘|单点|一个菜|一道菜/.test(question) && !/(?:不要|不用|不想|别|不需要|不喝|不吃)/.test(question))
     || /这道菜|这份(?:饭|餐)|这些菜|这(?:几|[一二两三四五六七八九十0-9０-９]+)个(?:菜|餐|选项)|你推荐(?:的(?:菜|餐|饭|饮食)|这些)|这个(?:套餐|组合)|这(?:餐|顿)|那(?:餐|顿)|(?:其他|别的|更多)(?:的)?选择|刚才那几个[^，。？！!?；;]{0,10}(?:哪个|更适合|减脂)|(?:这些|它们)[^，。？！!?；;]{0,12}(?:太贵|价格|热量|蛋白|碳水|脂肪|营养)/.test(question)
     || /^(?:那|再|请|麻烦|帮我)?(?:换(?:一份|一餐|一道|一个|一批|几个|几份|几道|两份|三种)(?:选择|推荐)?|再来(?:一批|一份|几个|一组)|还有(?:什么|别的|其他)?(?:选择|推荐)?(?:吗)?|更多(?:选择|推荐)?|其他的?|别的)(?:吧|吗|呢|呀|啊)?[?？。!！]*$/.test(question)
     || /^(?:这些|这几个|这几道|这份|它|各自|分别)?(?:在哪(?:里|个食堂)?|哪里|位置(?:在哪)?|几楼|楼层|窗口|档口|怎么去|多少钱|价格(?:是多少)?|热量(?:是多少)?|多少卡|蛋白(?:质)?(?:多少)?|碳水(?:多少)?|脂肪(?:多少)?|营养(?:怎么样)?|份量|分量|来源|核对来源|为什么(?:这么推荐|推荐这些|适合我)?)(?:呢|吗|啊)?[?？。!！]*$/.test(question)
@@ -392,12 +394,12 @@ function PetChatPage() {
     const starter = decodeRouteValue(options?.starter)
     if (options?.entry === 'home_next_meal') {
       const mealType = decodeRouteValue(options?.meal_type)
-      if (mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner') {
+      if (mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner' || mealType === 'evening_snack') {
         const context: HomeMealChatContext = {
           source: 'home_next_meal',
           date: decodeRouteValue(options?.date),
           meal_type: mealType,
-          meal_label: decodeRouteValue(options?.meal_label) || (mealType === 'breakfast' ? '早餐' : mealType === 'lunch' ? '午餐' : '晚餐'),
+          meal_label: decodeRouteValue(options?.meal_label) || { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', evening_snack: '夜宵' }[mealType],
           basic_advice: decodeRouteValue(options?.advice),
           selected_source_id: decodeRouteValue(options?.meal_id),
         }

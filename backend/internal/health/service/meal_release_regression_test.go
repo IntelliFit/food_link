@@ -124,6 +124,9 @@ func TestMealReleaseFullCatalogSearchesOtherWindows(t *testing.T) {
 	budget := 25.0
 	state.Constraints = CampusDietRecommendationConstraints{Scene: "campus", CompleteMeal: true, MaxPrice: &budget, AvoidFoods: []string{"火锅", "花生"}, CanteenName: "紫荆园"}
 	svc := NewStatsService(repo, nil)
+	page := mealCatalogScanPage
+	mealCatalogScanPage = 100 // two pages of this 180-dish menu
+	t.Cleanup(func() { mealCatalogScanPage = page })
 	result, err := svc.executeCampusDietSearchTool(context.Background(), state, `{"sort_by":"lowest_price"}`, "search_campus_foods")
 	require.NoError(t, err)
 	require.Len(t, repo.filters, 2)
