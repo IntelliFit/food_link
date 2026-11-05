@@ -506,6 +506,7 @@ func New(cfg *config.Config) (*App, error) {
 	petSvc := petservice.NewService(petRepo)
 	petSvc.ConfigureStorage(storageClient)
 	petSvc.ConfigureFoodWaterProvider(frSvc)
+	petSvc.ConfigureNutritionStateReader(statsSvc)
 	pixelAvatarAPIKey := resolvePixelAvatarAPIKey(cfg.External)
 	if strings.TrimSpace(cfg.External.PixelAvatarAPIKey) == "" && pixelAvatarAPIKey != "" {
 		logger.Info(context.Background(), "像素分身复用万界大模型凭证")
@@ -924,6 +925,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
+	engine.GET("/api/pet/daily", authmw.RequireJWT(jwtSvc), petHandler.Daily)
 	engine.PUT("/api/pet/name", authmw.RequireJWT(jwtSvc), petHandler.UpdateName)
 	engine.POST("/api/pet/pixel-avatar", authmw.RequireJWT(jwtSvc), petHandler.CustomizePixelAvatar)
 	engine.GET("/api/pet/chat/latest", authmw.RequireJWT(jwtSvc), petHandler.LatestChat)

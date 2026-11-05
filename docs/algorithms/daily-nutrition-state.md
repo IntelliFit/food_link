@@ -73,15 +73,20 @@
 
 ### 宠物每日接口
 
-`GET /api/pet/daily?date=YYYY-MM-DD`（需登录，`date` 省略为今天）。小程序底部「宠物」Tab（`pages/pet/index`）读它。代码：`backend/internal/pet/service/pet_daily.go`、`pet_daily_task.go`。
+`GET /api/pet/daily?date=YYYY-MM-DD`（需登录，`date` 省略为今天）。小程序底栏「小麦」（`pages/pet/index`）读它。底栏是 首页 · 小麦 · 拍照 · 圈子 · 我的：小麦替换了原来的「分析」格，完整分析 `pages/stats/index` 不再是 Tab，从小麦页「完整分析」`navigateTo` 进入。小麦页一屏五块：宠物 + `headline` + 心情；今天还差（`gaps`）+「让小麦挑一份」；今天的任务；本周分数（`week`）+「完整分析」；问小麦输入框。顶部「我在意的」改关注（`PUT /api/health/focus`）。`report`、`memories` 目前页面不展示（`report.reward` 只用来提示经验到账）。代码：`backend/internal/pet/service/pet_daily.go`、`pet_daily_task.go`。
 
 每次读取同时取今天和昨天两份营养状态；任一份取失败只当它缺失，不让接口失败（`state_ready=false`，退回宠物原来的习惯分）。
 
 | 字段 | 说明 |
 |---|---|
 | `pet` / `status` | 宠物档案和形象动作，和 `/api/pet/summary` 一样 |
+| `headline` | 小麦那一句话：今天状态的 `headline`，没有就用 `report` 的句子 |
+| `gaps` | 「今天还差」最多 3 行 `{key, label, text, status, percent, warn}`，按引擎 `gaps` 的顺序（关注的在前），不够 3 行时补上快到上限 / 超标的项；`text` 如“差 43 克”“快到上限”“超了 600 毫克”，`percent` = 今天的值 / 目标，`warn` 为限量项（画成橙色） |
+| `meals_today` | 今天记了几餐 |
+| `week` | `{score, last_week, delta, enough_data, habits}`：`scores.overall` / `overall_last_week` 和前两条 `week.habits`（“蔬菜够量 5/6 天”） |
+| `focus` | 营养状态的 `focus` 原样（`[{key, title, custom}]`），给「我在意的」 |
 | `mood` | `{key, label, reason, icon}`。顺序：2 天以上没记录 → `sleepy`；今天有超标（`status=over`，钠/添加糖/饱和脂肪/能量，取超得最多的）→ `salty` `sweet` `greasy` `full`；昨天超标同上；昨天喝水/蔬菜/纤维/蛋白质不足 → `thirsty` `craving_greens` `craving_protein`；否则 `happy` / `hungry`。`reason` 只引用状态里的数字，如“昨天钠 2600 毫克，超过 2000 毫克” |
-| `report` | `{yesterday, today, facts, source, reward}`。`yesterday` = 昨天状态的 `headline`（空则用前两条 `findings`，没记录则说没记录；没有状态时用原来的离线小复盘文案）；`today` = 最大 `gap` 的 `text` + `next_meal.advice`；`facts` = 昨天和今天 `findings[].text` 去重前 4 条。目前不经模型改写，全是引擎原句 |
+| `report` | `{yesterday, today, facts, source, reward}`。`yesterday` = 昨天状态的 `headline`（空则用前两条 `findings`，没记录则说没记录；没有状态时用原来的离线小复盘文案）；`today` = 第一个 `gap` 的 `text` + `next_meal.advice`；`facts` = 昨天和今天 `findings[].text` 去重前 4 条。目前不经模型改写，全是引擎原句 |
 | `report.reward` | 昨天离线小复盘（`user_pet_events.offline_review`）的经验和积分。读这个接口时自动领取（复用原领取事务，幂等），`claimed_now=true` 表示这次刚领到 |
 | `task` | 今日任务，见下 |
 | `water` | `{ml, goal_ml, cups, goal_cups, cup_ml: 250, known, is_task_goal}`，目标取 `today` 里 `water` 的 `target`，没有按 1500 毫升 |
@@ -91,7 +96,7 @@
 
 今日任务（`task`）：
 
-- 当天第一次读取时选定，存在 `user_pet_daily_scores.score_details.daily_task`（不加表、不加字段），当天不再换。`gaps` 按 `severity` 从大到小，取第一个有对应任务的：
+- 当天第一次读取时选定，存在 `user_pet_daily_scores.score_details.daily_task`（不加表、不加字段），当天不再换。按引擎 `gaps` 的顺序（引擎已把用户关注的排在前面，所以任务对准关注里最该改的一项），取第一个有对应任务的：
   - 补充类 `fill`（`vegetables` 1 份、`fiber` 6g、`protein` 20g、`potassium` 600mg、`calcium` 250mg，缺口更小时取缺口）：今天的值比选定时多出这么多，或状态变成 `ok`，即完成；
   - 喝水 `water`：当天喝水达到目标；
   - 清淡一餐 `light`（`sodium` `added_sugar` `sat_fat` 和超标的 `energy`）：选定后新记的、有该项数据的餐，平均每餐增加不超过 800mg / 5g / 6g / 600kcal；
@@ -106,7 +111,7 @@
 用现成的 `experiments.track(name, props)`（`apps/wechat/src/utils/experiments.ts`，上报到 `POST /api/app-events`，表 `app_events`）。事件名 `^[a-z][a-z0-9_.]{1,63}$`，按 `<界面>_<动作>`：
 
 - 分析页：`stats_view`（props: `tab`）、`stats_focus_open`（`key`）、`stats_next_meal_click`、`stats_evidence_click`（`action`）
-- 宠物：`pet_tab_view`、`pet_task_done`（`key`）、`pet_tool_click`（`tool`）、`pet_note_open`
+- 小麦页：`pet_tab_view`（`logged_in`）、`pet_task_done`（`key`）、`pet_tool_click`（`tool`：`pick_meal` `ask` `stats` `dress` `water_cup` `task_<key>`）、`pet_note_open`（打开「我在意的」）、`pet_focus_save`（`count`）
 - 记录结果页：`meal_impact_view`、`meal_impact_click`（`target`）
 
 ## 计算口径（引擎会话补充）

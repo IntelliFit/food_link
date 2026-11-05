@@ -23,7 +23,10 @@ export type MealImpactSource = 'result' | 'result_text' | 'manual'
 const IMPACT_DEADLINE_MS = 3000
 /** 营养变化到了之后，宠物那句话最多再等这么久，免得弹层出来后又长高一截 */
 const PET_GRACE_MS = 600
-const STATS_TAB_URL = '/pages/stats/index'
+/** 小麦 Tab：今天还差什么，刚记的这餐会在那里完成今天的任务 */
+const PET_TAB_URL = '/pages/pet/index'
+/** 完整分析是二级页，看过去某天时去这里 */
+const STATS_DETAIL_URL = '/pages/stats/index'
 
 interface LoadedImpact {
   impact: MealImpact
@@ -138,7 +141,10 @@ function MealImpactSheet({ source, recordId, meal, onFinish, onLeave }: MealImpa
   const goStats = () => {
     experiments.track('meal_impact_click', { source, target: 'stats' })
     onLeave()
-    void Taro.switchTab({ url: STATS_TAB_URL }).catch(() => onFinish(true))
+    const open = day === '今天'
+      ? Taro.switchTab({ url: PET_TAB_URL })
+      : Taro.navigateTo({ url: STATS_DETAIL_URL })
+    void open.catch(() => onFinish(true))
   }
 
   return (

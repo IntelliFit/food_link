@@ -705,7 +705,7 @@ export function MetabolicDynamicsReport({ reportDate, layout = 'page' }: Metabol
 
   const handlePageBack = useCallback((): void => {
     void Taro.navigateBack().catch(() => {
-      void Taro.switchTab({ url: '/pages/stats/index' })
+      void Taro.redirectTo({ url: '/pages/stats/index' })
     })
   }, [])
 

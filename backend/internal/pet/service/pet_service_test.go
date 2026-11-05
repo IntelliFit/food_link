@@ -30,6 +30,7 @@ type fakePetRepo struct {
 	balance              int
 	nextID               int
 	profileUpgradeCalls  int
+	startTaskCalls       int
 	beforeProfileUpgrade func(*fakePetRepo)
 }
 
@@ -239,11 +240,54 @@ func (f *fakePetRepo) UpdateDailyScore(ctx context.Context, id string, updates m
 				row.HabitScore = v
 			}
 			if v, ok := updates["score_details"].(map[string]any); ok {
-				row.ScoreDetails = v
+				next := cloneMeta(v)
+				if task, ok := row.ScoreDetails[repo.DailyTaskDetailsKey]; ok {
+					next[repo.DailyTaskDetailsKey] = task
+				}
+				row.ScoreDetails = next
 			}
 		}
 	}
 	return nil
+}
+
+func (f *fakePetRepo) StartDailyTask(ctx context.Context, userID, date string, task map[string]any) (bool, error) {
+	f.startTaskCalls++
+	row := f.dailyScores[date]
+	if row == nil || row.UserID != userID {
+		return false, nil
+	}
+	if _, ok := row.ScoreDetails[repo.DailyTaskDetailsKey]; ok {
+		return false, nil
+	}
+	next := cloneMeta(row.ScoreDetails)
+	next[repo.DailyTaskDetailsKey] = cloneMeta(task)
+	row.ScoreDetails = next
+	return true, nil
+}
+
+func (f *fakePetRepo) CompleteDailyTask(ctx context.Context, userID, petID, date string, patch map[string]any, expReward int) (*petdomain.UserPet, bool, error) {
+	row := f.dailyScores[date]
+	var task map[string]any
+	if row != nil {
+		task, _ = row.ScoreDetails[repo.DailyTaskDetailsKey].(map[string]any)
+	}
+	if task == nil || task["done"] == true {
+		copy := *f.pet
+		return &copy, false, nil
+	}
+	nextTask := cloneMeta(task)
+	for key, value := range patch {
+		nextTask[key] = value
+	}
+	next := cloneMeta(row.ScoreDetails)
+	next[repo.DailyTaskDetailsKey] = nextTask
+	row.ScoreDetails = next
+	row.ExpGained += expReward
+	f.pet.Experience += expReward
+	f.pet.Level = repo.LevelForExperience(f.pet.Experience)
+	copy := *f.pet
+	return &copy, true, nil
 }
 
 func (f *fakePetRepo) GetEventByUserDateType(ctx context.Context, userID, date, eventType string) (*petdomain.UserPetEvent, error) {

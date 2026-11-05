@@ -92,3 +92,69 @@ func TestPetRepo_ProfileUpgradeDoesNotOverwriteConcurrentAvatar(t *testing.T) {
 		assert.False(t, applied, "an already upgraded snapshot is stale")
 	}
 }
+
+func TestPetRepo_DailyTaskAwardsOnceAndSurvivesScoreRecalculation(t *testing.T) {
+	db := testdb.New(t)
+	require.NoError(t, db.Exec(`CREATE TABLE user_pets (
+		id text PRIMARY KEY, user_id text NOT NULL, name text NOT NULL DEFAULT '',
+		level integer NOT NULL DEFAULT 1, experience integer NOT NULL DEFAULT 0,
+		meta jsonb, updated_at timestamptz
+	)`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE user_pet_daily_scores (
+		id text PRIMARY KEY, user_id text NOT NULL, score_date date NOT NULL,
+		habit_score integer NOT NULL DEFAULT 0, exp_gained integer NOT NULL DEFAULT 0,
+		score_details jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamptz, updated_at timestamptz,
+		UNIQUE (user_id, score_date)
+	)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO user_pets (id, user_id, name, level, experience) VALUES ('pet-1', 'user-1', '小麦', 1, 90)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO user_pet_daily_scores (id, user_id, score_date, habit_score, exp_gained, score_details)
+		VALUES ('score-1', 'user-1', DATE '2026-11-04', 1, 10, '{"recorded_meal": true}')`).Error)
+	repository := NewPetRepo(db)
+	ctx := context.Background()
+
+	stored, err := repository.StartDailyTask(ctx, "user-1", "2026-11-04", map[string]any{"key": "fiber", "goal": 6})
+	require.NoError(t, err)
+	assert.True(t, stored)
+	stored, err = repository.StartDailyTask(ctx, "user-1", "2026-11-04", map[string]any{"key": "protein", "goal": 20})
+	require.NoError(t, err)
+	assert.False(t, stored, "the first task of the day stays")
+
+	// Recalculated habit details replace the old ones but keep the task.
+	require.NoError(t, repository.UpdateDailyScore(ctx, "score-1", map[string]any{
+		"habit_score":   2,
+		"score_details": map[string]any{"record_count": 2},
+	}))
+	row, err := repository.GetDailyScore(ctx, "user-1", "2026-11-04")
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	assert.Equal(t, 2, row.HabitScore)
+	assert.Nil(t, row.ScoreDetails["recorded_meal"])
+	assert.EqualValues(t, 2, row.ScoreDetails["record_count"])
+	task, ok := row.ScoreDetails[DailyTaskDetailsKey].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "fiber", task["key"])
+
+	pet, awarded, err := repository.CompleteDailyTask(ctx, "user-1", "pet-1", "2026-11-04", map[string]any{"done": true, "exp_awarded": 20}, 20)
+	require.NoError(t, err)
+	assert.True(t, awarded)
+	assert.Equal(t, 110, pet.Experience)
+	assert.Equal(t, 2, pet.Level)
+
+	pet, awarded, err = repository.CompleteDailyTask(ctx, "user-1", "pet-1", "2026-11-04", map[string]any{"done": true, "exp_awarded": 20}, 20)
+	require.NoError(t, err)
+	assert.False(t, awarded)
+	assert.Equal(t, 110, pet.Experience)
+
+	row, err = repository.GetDailyScore(ctx, "user-1", "2026-11-04")
+	require.NoError(t, err)
+	assert.Equal(t, 30, row.ExpGained)
+	task = row.ScoreDetails[DailyTaskDetailsKey].(map[string]any)
+	assert.Equal(t, true, task["done"])
+	assert.Equal(t, "fiber", task["key"])
+
+	// A score row without a task awards nothing.
+	require.NoError(t, db.Exec(`INSERT INTO user_pet_daily_scores (id, user_id, score_date) VALUES ('score-2', 'user-1', DATE '2026-11-05')`).Error)
+	_, awarded, err = repository.CompleteDailyTask(ctx, "user-1", "pet-1", "2026-11-05", map[string]any{"done": true}, 20)
+	require.NoError(t, err)
+	assert.False(t, awarded)
+}

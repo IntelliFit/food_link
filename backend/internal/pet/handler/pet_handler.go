@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
@@ -22,6 +23,7 @@ import (
 
 type PetService interface {
 	Summary(ctx context.Context, userID, date string) (*service.Summary, error)
+	Daily(ctx context.Context, userID, date string) (*service.Daily, error)
 	ClaimEvent(ctx context.Context, userID, eventID string) (*service.ClaimResult, error)
 	RerollAppearance(ctx context.Context, userID string) (*service.AppearanceRerollResult, error)
 	SelectAppearance(ctx context.Context, userID, candidateID string) (*service.AppearanceSelectResult, error)
@@ -70,6 +72,39 @@ func (h *PetHandler) Summary(c *gin.Context) {
 		return
 	}
 	logger.Info(c.Request.Context(), "获取宠物状态完成", slog.String("user_id", userID))
+	response.Success(c, data)
+}
+
+// Daily is the pet tab: mood, daily note, the day's task and what the pet remembers,
+// all read from the daily nutrition state.
+func (h *PetHandler) Daily(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	date := strings.TrimSpace(c.Query("date"))
+	if date != "" {
+		if _, err := time.Parse("2006-01-02", date); err != nil {
+			response.Error(c, &commonerrors.AppError{Code: 10002, Message: "date 格式应为 YYYY-MM-DD", HTTPStatus: http.StatusBadRequest})
+			return
+		}
+	}
+	data, err := h.svc.Daily(c.Request.Context(), userID, date)
+	if err != nil {
+		logger.Error(c.Request.Context(), "获取宠物日报失败", err,
+			slog.String("user_id", userID),
+			slog.String("date", date),
+		)
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "获取宠物日报失败", HTTPStatus: http.StatusInternalServerError})
+		return
+	}
+	logger.Info(c.Request.Context(), "获取宠物日报完成",
+		slog.String("user_id", userID),
+		slog.String("date", data.Date),
+		slog.Bool("state_ready", data.StateReady),
+		slog.Bool("task_just_done", data.Task != nil && data.Task.JustDone),
+	)
 	response.Success(c, data)
 }
 

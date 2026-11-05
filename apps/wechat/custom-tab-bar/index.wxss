@@ -202,6 +202,32 @@
   }
 }
 
+/* 小麦 Tab：iconfont 里没有宠物图标，用画板里的宠物脸线稿，按底栏配色出几种颜色 */
+.tab-icon-pet {
+  width: 44rpx;
+  height: 44rpx;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23b0b0b0%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2713%27%20r%3D%277%27%2F%3E%3Cpath%20d%3D%27M8%207l-2-3M16%207l2-3%27%2F%3E%3Cpath%20d%3D%27M9.5%2013h.01M14.5%2013h.01%27%2F%3E%3C%2Fsvg%3E");
+  transition: all 0.2s ease;
+}
+
+.tab-item.selected .tab-icon-pet {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%235cb896%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2713%27%20r%3D%277%27%2F%3E%3Cpath%20d%3D%27M8%207l-2-3M16%207l2-3%27%2F%3E%3Cpath%20d%3D%27M9.5%2013h.01M14.5%2013h.01%27%2F%3E%3C%2Fsvg%3E");
+}
+
+.custom-tab-bar--dark .tab-icon-pet {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%236b7280%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2713%27%20r%3D%277%27%2F%3E%3Cpath%20d%3D%27M8%207l-2-3M16%207l2-3%27%2F%3E%3Cpath%20d%3D%27M9.5%2013h.01M14.5%2013h.01%27%2F%3E%3C%2Fsvg%3E");
+}
+
+.custom-tab-bar--dark .tab-item.selected .tab-icon-pet {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%237dd3b0%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2713%27%20r%3D%277%27%2F%3E%3Cpath%20d%3D%27M8%207l-2-3M16%207l2-3%27%2F%3E%3Cpath%20d%3D%27M9.5%2013h.01M14.5%2013h.01%27%2F%3E%3C%2Fsvg%3E");
+}
+
+.custom-tab-bar--wellness .tab-icon-pet {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23b7c6b8%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2713%27%20r%3D%277%27%2F%3E%3Cpath%20d%3D%27M8%207l-2-3M16%207l2-3%27%2F%3E%3Cpath%20d%3D%27M9.5%2013h.01M14.5%2013h.01%27%2F%3E%3C%2Fsvg%3E");
+}
+
 /* 我的按钮上的红点提醒 */
 .profile-icon-wrapper {
   position: relative;

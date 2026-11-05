@@ -1,7 +1,11 @@
-/** 主包仅保留 TabBar 五页，其余页面在 packageExtra 分包以降低主包体积（微信 2MB 限制） */
+/**
+ * 主包只放 TabBar 四页和完整分析页，其余页面在 packageExtra 分包以降低主包体积（微信 2MB 限制）。
+ * 小麦（pages/pet/index）替换了原来的「分析」格；pages/stats/index 不再是 Tab，从小麦页 navigateTo 进去。
+ */
 const mainPages = [
   'pages/index/index',
   'pages/stats/index',
+  'pages/pet/index',
   'pages/community/index',
   'pages/profile/index',
 ]
@@ -150,8 +154,8 @@ export default defineAppConfig({
         text: '首页',
       },
       {
-        pagePath: 'pages/stats/index',
-        text: '分析',
+        pagePath: 'pages/pet/index',
+        text: '小麦',
       },
       {
         pagePath: 'pages/community/index',

@@ -61,6 +61,8 @@ type PetRepo interface {
 	GetEventByID(ctx context.Context, userID, eventID string) (*petdomain.UserPetEvent, error)
 	ClaimEvent(ctx context.Context, userID, eventID string, expReward, creditReward int, relatedDate string, meta map[string]any) (*petdomain.UserPetEvent, *petdomain.UserPet, *membershipdomain.UserEarnedCreditLedger, bool, error)
 	RerollAppearance(ctx context.Context, userID, petID string, updates map[string]any, cost int, meta map[string]any) (*petdomain.UserPet, *membershipdomain.UserEarnedCreditLedger, error)
+	StartDailyTask(ctx context.Context, userID, date string, task map[string]any) (bool, error)
+	CompleteDailyTask(ctx context.Context, userID, petID, date string, patch map[string]any, expReward int) (*petdomain.UserPet, bool, error)
 }
 
 type Service struct {
@@ -68,6 +70,7 @@ type Service struct {
 	storage              PetAvatarStorage
 	pixelAvatarGenerator PixelAvatarGenerator
 	foodWaterProvider    FoodWaterProvider
+	nutritionState       NutritionStateReader
 	now                  func() time.Time
 }
 
@@ -218,40 +221,10 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 	if err != nil {
 		return nil, err
 	}
-	profile, err := s.repo.GetUserProfile(ctx, userID)
+	pet, todayScore, err := s.preparePetDay(ctx, userID, date)
 	if err != nil {
 		return nil, err
 	}
-	pet, err := s.ensurePet(ctx, userID, profile)
-	if err != nil {
-		return nil, err
-	}
-	pet, err = s.ensureProfileMatch(ctx, userID, pet, profile)
-	if err != nil {
-		return nil, err
-	}
-	todayScore, createdToday, err := s.ensureDailyScore(ctx, userID, pet, date)
-	if err != nil {
-		return nil, err
-	}
-	if createdToday && todayScore.ExpGained > 0 {
-		pet, err = s.repo.AddPetExperience(ctx, pet.ID, todayScore.ExpGained)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if err := s.ensureOfflineEvent(ctx, userID, pet, date); err != nil {
-		return nil, err
-	}
-	if err := s.repo.UpdatePet(ctx, pet.ID, map[string]any{
-		"last_summary_at": time.Now(),
-		"today_status":    moodForScore(todayScore.HabitScore),
-	}); err != nil {
-		return nil, err
-	}
-	pet.TodayStatus = moodForScore(todayScore.HabitScore)
-	now := time.Now()
-	pet.LastSummaryAt = &now
 	eventDate := day.AddDate(0, 0, -1).Format("2006-01-02")
 	event, err := s.repo.GetEventByUserDateType(ctx, userID, eventDate, petdomain.EventTypeOfflineReview)
 	if err != nil {
@@ -277,6 +250,46 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 		MealPrompt: mealPrompt,
 		Rewards:    RewardPolicy{DailyCreditCap: maxOfflineCreditDaily},
 	}, nil
+}
+
+// preparePetDay makes sure the pet, the day's habit score and yesterday's review exist,
+// the same way for the summary and the pet tab.
+func (s *Service) preparePetDay(ctx context.Context, userID, date string) (*petdomain.UserPet, *petdomain.UserPetDailyScore, error) {
+	profile, err := s.repo.GetUserProfile(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	pet, err := s.ensurePet(ctx, userID, profile)
+	if err != nil {
+		return nil, nil, err
+	}
+	pet, err = s.ensureProfileMatch(ctx, userID, pet, profile)
+	if err != nil {
+		return nil, nil, err
+	}
+	todayScore, createdToday, err := s.ensureDailyScore(ctx, userID, pet, date)
+	if err != nil {
+		return nil, nil, err
+	}
+	if createdToday && todayScore.ExpGained > 0 {
+		pet, err = s.repo.AddPetExperience(ctx, pet.ID, todayScore.ExpGained)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if err := s.ensureOfflineEvent(ctx, userID, pet, date); err != nil {
+		return nil, nil, err
+	}
+	if err := s.repo.UpdatePet(ctx, pet.ID, map[string]any{
+		"last_summary_at": time.Now(),
+		"today_status":    moodForScore(todayScore.HabitScore),
+	}); err != nil {
+		return nil, nil, err
+	}
+	pet.TodayStatus = moodForScore(todayScore.HabitScore)
+	now := time.Now()
+	pet.LastSummaryAt = &now
+	return pet, todayScore, nil
 }
 
 type mealPromptRule struct {
@@ -721,7 +734,13 @@ func (s *Service) ensureDailyScore(ctx context.Context, userID string, pet *petd
 			return nil, false, err
 		}
 		existing.HabitScore = score.HabitScore
-		existing.ScoreDetails = score.Details
+		// The repo keeps the day's pet task when it replaces the details; mirror that here.
+		details := score.Details
+		if task, ok := existing.ScoreDetails[repo.DailyTaskDetailsKey]; ok {
+			details = cloneMeta(score.Details)
+			details[repo.DailyTaskDetailsKey] = task
+		}
+		existing.ScoreDetails = details
 		return existing, false, nil
 	}
 	row := &petdomain.UserPetDailyScore{

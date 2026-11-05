@@ -26,9 +26,14 @@ const KNOWN_EXTRA_PACKAGE_ROOTS = [
 /** TabBar 主包页面（与 `getCurrentPageRoute()` 一致，形如 /pages/xxx/index） */
 export const MAIN_TAB_ROUTES: ReadonlySet<string> = new Set([
   '/pages/index/index',
-  '/pages/stats/index',
+  '/pages/pet/index',
   '/pages/community/index',
   '/pages/profile/index',
+])
+
+/** 在主包但不是 Tab 的页面：用 navigateTo/redirectTo 打开，也不加分包前缀。 */
+export const MAIN_PAGE_ROUTES: ReadonlySet<string> = new Set([
+  '/pages/stats/index',
 ])
 
 /**
@@ -78,7 +83,7 @@ export function normalizeRedirectUrlForSubpackage(fullUrl: string): string {
       break
     }
   }
-  if (clean.startsWith('/pages/') && !MAIN_TAB_ROUTES.has(clean)) {
+  if (clean.startsWith('/pages/') && !MAIN_TAB_ROUTES.has(clean) && !MAIN_PAGE_ROUTES.has(clean)) {
     return extraPkgUrl(`${clean}${query}`)
   }
   return t
