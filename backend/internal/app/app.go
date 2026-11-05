@@ -453,7 +453,8 @@ func New(cfg *config.Config) (*App, error) {
 	if nutritionPlansReady {
 		statsRepo.ConfigureNutritionPlans(nutritionPlanSvc)
 	}
-	sleepHandler := healthhandler.NewSleepHandler(healthservice.NewSleepService(healthrepo.NewSleepRepo(db)))
+	sleepSvc := healthservice.NewSleepService(healthrepo.NewSleepRepo(db))
+	sleepHandler := healthhandler.NewSleepHandler(sleepSvc)
 	bodyMetricsSvc := healthservice.NewBodyMetricsService(bodyMetricsRepo)
 	bodyMetricsSvc.ConfigureFoodWaterProvider(frSvc)
 	exerciseSvc := healthservice.NewExerciseService(exerciseRepo, cfg)
@@ -465,9 +466,11 @@ func New(cfg *config.Config) (*App, error) {
 		statsSvc.ConfigureNutritionPlans(nutritionPlanSvc)
 	}
 	statsSvc.ConfigureCustomFocusTasks(analyzeTaskRepo, taskQueue)
+	statsSvc.ConfigureSleep(sleepSvc)
 	communitySvc.ConfigureHealthScoreProvider(statsSvc)
 	openPlatformSvc.ConfigureUserData(frSvc, statsSvc)
 	healthHandler := healthhandler.NewHealthHandler(bodyMetricsSvc, exerciseSvc, statsSvc)
+	nutritionStateHandler := healthhandler.NewNutritionStateHandler(statsSvc)
 
 	// Membership module DI
 	membershipRepo := membershiprepo.NewMembershipRepo(db)
@@ -867,6 +870,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/body-metrics/weight/:record_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteBodyWeightRecord)
 	engine.GET("/api/stats/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetStatsSummary)
 	engine.GET("/api/stats/calendar", authmw.RequireJWT(jwtSvc), healthHandler.GetStatsCalendar)
+	engine.GET("/api/health/nutrition-state", authmw.RequireJWT(jwtSvc), nutritionStateHandler.Get)
+	engine.GET("/api/health/nutrition-state/meal-impact", authmw.RequireJWT(jwtSvc), nutritionStateHandler.MealImpact)
 	engine.POST("/api/stats/custom-focus/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateCustomFocusCard)
 	engine.POST("/api/stats/custom-focus/tasks", authmw.RequireJWT(jwtSvc), healthHandler.StartCustomFocusCardGeneration)
 	engine.POST("/api/stats/insight/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateStatsInsight)

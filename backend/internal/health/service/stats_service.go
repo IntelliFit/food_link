@@ -86,6 +86,7 @@ type StatsService struct {
 	nutritionPlans interface {
 		ResolveRange(context.Context, string, string, string) (map[string]userdomain.NutritionDay, error)
 	}
+	sleep SleepReader
 }
 
 func (s *StatsService) ConfigureNutritionPlans(provider interface {

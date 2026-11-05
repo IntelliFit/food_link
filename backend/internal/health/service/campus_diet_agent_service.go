@@ -93,6 +93,8 @@ type campusDietAgentMealContext struct {
 }
 
 type campusDietAgentRunState struct {
+	// NutritionFacts is the daily nutrition state as the Agent reads it (meal_nutrition_state.go).
+	NutritionFacts    map[string]any
 	PlanningCatalog   map[string][]DietRecommendationCandidate
 	CatalogCoverage   []MealCatalogCoverage
 	AllowReplayJudge  bool
@@ -1103,6 +1105,14 @@ func (s *StatsService) executeCampusDietAgentTool(ctx context.Context, state *ca
 				}
 			}
 			output = map[string]any{"meal_context": state.MealContext, "personal_context": state.PersonalContext, "entry_context": state.EntryContext, "location_available": state.Location != nil, "search_scope": mealHarnessScope(state), "constraints": state.Constraints, "data_notes": mealHarnessNotes(state)}
+			if err == nil {
+				if state.NutritionFacts == nil {
+					state.NutritionFacts = s.mealNutritionStateFacts(ctx, state)
+				}
+				if state.NutritionFacts != nil {
+					output["nutrition_state"] = state.NutritionFacts
+				}
+			}
 		case "set_meal_preferences":
 			output, err = mealHarnessPreferences(state, call.Function.Arguments)
 		case "compose_meal":

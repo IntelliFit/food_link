@@ -73,7 +73,7 @@ func Observe(items []map[string]any, applyIntake bool) Vector {
 				}
 			}
 			if !ok || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) ||
-				factor < 0 || factor > 1 || math.IsNaN(factor) || math.IsInf(factor, 0) {
+				factor < 0 || factor > 1 || math.IsNaN(factor) || math.IsInf(factor, 0) || exceedsServing(item, def.Unit, value) {
 				continue
 			}
 			a.Value += value * factor
@@ -95,6 +95,29 @@ func Observe(items []map[string]any, applyIntake bool) Vector {
 		out[def.Key] = a
 	}
 	return out
+}
+
+// exceedsServing is true when a nutrient weighs more than the serving it is in, which
+// only happens when a per-100g value was stored as the serving's (a 16 g fibre drink
+// recorded with 184 g of fibre). Such a value is invalid, not a big intake.
+func exceedsServing(item map[string]any, unit string, value float64) bool {
+	weight, ok := numberFromAny(item["weight"])
+	if !ok || weight <= 0 {
+		return false
+	}
+	grams := value
+	switch unit {
+	case "g":
+	case "mg":
+		grams = value / 1000
+	case "mcg", "mcg RAE", "mcg DFE":
+		grams = value / 1e6
+	case "mg alpha-TE":
+		grams = value / 1000
+	default:
+		return false
+	}
+	return grams > weight
 }
 
 // Combine propagates missing components instead of calling their values zero.
