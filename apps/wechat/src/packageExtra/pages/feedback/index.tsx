@@ -1,8 +1,6 @@
-import { Image, Text, Textarea, View } from '@tarojs/components'
+import { Image, Switch, Text, Textarea, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { Button, Switch } from '@taroify/core'
-import '@taroify/core/button/style'
-import '@taroify/core/switch/style'
+import { AppButton } from '../../../components/AppButton'
 import { useMemo, useState } from 'react'
 
 import {
@@ -211,13 +209,13 @@ function FeedbackPage() {
         </View>
         <Switch
           checked={attachRecentRequests}
-          onChange={setAttachRecentRequests}
-          style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
+          color='#00bc7d'
+          onChange={(e) => setAttachRecentRequests(e.detail.value)}
         />
       </View>
 
       <View className='feedback-submit-bar'>
-        <Button
+        <AppButton
           className='feedback-submit'
           color='primary'
           block
@@ -226,7 +224,7 @@ function FeedbackPage() {
           onClick={handleSubmit}
         >
           提交反馈
-        </Button>
+        </AppButton>
       </View>
     </View>
     </FlPageThemeRoot>

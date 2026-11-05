@@ -1,8 +1,7 @@
 import { View, Text, Image, Input, Button } from '@tarojs/components'
 import Taro, { useRouter } from '@tarojs/taro'
 import * as React from 'react'
-import { Button as TaroifyButton } from '@taroify/core'
-import '@taroify/core/button/style'
+import { AppButton } from '../../../components/AppButton'
 import {
     login,
     LoginResponse,
@@ -761,21 +760,21 @@ export default function LoginPage() {
                 >
                     手机号快捷登录
                 </Button>
-                <TaroifyButton
+                <AppButton
                   className='skip-login-btn'
                   variant='text'
                   onClick={handleSkip}
                 >
                     暂不登录，随便看看
-                </TaroifyButton>
+                </AppButton>
                 {isDev && (
-                    <TaroifyButton
+                    <AppButton
                       className='debug-login-btn'
                       variant='text'
                       onClick={() => setShowDebugLoginPanel(true)}
                     >
                         调试代登录
-                    </TaroifyButton>
+                    </AppButton>
                 )}
             </View>
 
@@ -868,7 +867,7 @@ export default function LoginPage() {
                             />
                         </View>
                         <View className='phone-bind-actions'>
-                            <TaroifyButton
+                            <AppButton
                               className='save-btn'
                               block
                               shape='round'
@@ -876,14 +875,14 @@ export default function LoginPage() {
                               loading={loading}
                             >
                                 进入该用户
-                            </TaroifyButton>
-                            <TaroifyButton
+                            </AppButton>
+                            <AppButton
                               className='skip-phone-btn'
                               variant='text'
                               onClick={() => setShowDebugLoginPanel(false)}
                             >
                                 取消
-                            </TaroifyButton>
+                            </AppButton>
                         </View>
                     </View>
                 </View>
@@ -916,7 +915,7 @@ export default function LoginPage() {
                             />
                         </View>
                         <View className='phone-bind-actions'>
-                            <TaroifyButton
+                            <AppButton
                               className='save-btn'
                               block
                               shape='round'
@@ -924,14 +923,14 @@ export default function LoginPage() {
                               loading={loading}
                             >
                                 注册并登录
-                            </TaroifyButton>
-                            <TaroifyButton
+                            </AppButton>
+                            <AppButton
                               className='skip-phone-btn'
                               variant='text'
                               onClick={() => setShowDebugRegisterModal(false)}
                             >
                                 取消
-                            </TaroifyButton>
+                            </AppButton>
                         </View>
                     </View>
                 </View>

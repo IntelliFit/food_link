@@ -3652,8 +3652,7 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-d .profile-settings-page .form-label,
 .fl-d .health-profile-view-page .value,
 .fl-d .health-profile-view-page .btn-secondary .btn-text,
-.fl-d .privacy-settings-page .setting-group .taroify-cell__title,
-.fl-d .privacy-settings-page .setting-group .taroify-cell__right-icon,
+.fl-d .privacy-settings-page .setting-group .setting-row__title,
 .fl-d .login-page .agreement-link,
 .fl-d .profile-form-title,
 .fl-d .phone-bind-title,
@@ -3666,7 +3665,8 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 .fl-d .about-page .app-version,
 .fl-d .about-page .cell-value,
 .fl-d .privacy-settings-page .loading-container,
-.fl-d .privacy-settings-page .setting-group .taroify-cell__brief,
+.fl-d .privacy-settings-page .setting-group .setting-row__brief,
+.fl-d .privacy-settings-page .setting-group .setting-group__title,
 .fl-d .login-page .skip-login-btn,
 .fl-d .login-page .wx-phone-auth-btn,
 .fl-d .profile-form-desc,
@@ -3700,7 +3700,7 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-d .profile-settings-page .nickname-input,
-.fl-d .privacy-settings-page .setting-group .taroify-cell {
+.fl-d .privacy-settings-page .setting-group .setting-row {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
@@ -3724,7 +3724,7 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-d .health-profile-view-page .row,
-.fl-d .privacy-settings-page .setting-group .taroify-cell::after {
+.fl-d .privacy-settings-page .setting-group .setting-row::after {
   border-color: $fl-dark-border !important;
 }
 

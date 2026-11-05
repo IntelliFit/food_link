@@ -1,7 +1,6 @@
 import { Image, Input, Text, Textarea, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { Button } from '@taroify/core'
-import '@taroify/core/button/style'
+import { AppButton } from '../../../components/AppButton'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
@@ -428,20 +427,20 @@ function CirclePostEditPage() {
         </View>
 
         <View className='circle-post-edit-footer'>
-          <Button
+          <AppButton
             className='circle-post-edit-draft-btn'
             onClick={() => void handleSaveDraft()}
           >
             存草稿
-          </Button>
-          <Button
+          </AppButton>
+          <AppButton
             className='circle-post-edit-submit'
             loading={submitting}
             disabled={!canSubmit}
             onClick={() => void handleSubmit()}
           >
             {postId ? '保存' : '发布动态'}
-          </Button>
+          </AppButton>
         </View>
       </View>
     </FlPageThemeRoot>

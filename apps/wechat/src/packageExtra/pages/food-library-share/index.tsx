@@ -11,10 +11,6 @@ import {
 import { useState, useEffect } from "react";
 import Taro from "@tarojs/taro";
 import { useAppColorScheme } from "../../../components/AppColorSchemeContext";
-import { Popup, AreaPicker } from "@taroify/core";
-import "@taroify/core/popup/style";
-import "@taroify/core/picker/style";
-import { areaList } from "@vant/area-data";
 import {
   getFoodRecordList,
   getFoodRecordById,
@@ -134,8 +130,21 @@ function FoodLibrarySharePage() {
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
 
-  // 城市选择器
-  const [showCityPicker, setShowCityPicker] = useState(false);
+  // 城市选择器：原生省市区选择器直接给名称。直辖市：省名=市名=直辖市名，区名在第三级。
+  const applyRegion = (names: string[]) => {
+    const [p = "", c = "", d = ""] = names;
+    if (["北京", "上海", "天津", "重庆"].some((name) => p.includes(name))) {
+      setProvince(p);
+      setCity("");
+      setDistrict(d || c);
+    } else {
+      setProvince(p);
+      setCity(c);
+      setDistrict(d);
+    }
+  };
+  const regionValue = province ? [province, city || province, district] : [];
+
   const [membershipStatus, setMembershipStatus] =
     useState<MembershipStatus | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(false);
@@ -1367,7 +1376,12 @@ function FoodLibrarySharePage() {
             </View>
           )}
         </View>
-        <View className='form-item' onClick={() => setShowCityPicker(true)}>
+        <Picker
+          mode='region'
+          value={regionValue}
+          onChange={(e) => applyRegion(e.detail.value as string[])}
+        >
+        <View className='form-item'>
           <Text className='form-label'>
             {isHomemade ? "省市（可选）" : "城市/区域（可选）"}
           </Text>
@@ -1385,6 +1399,7 @@ function FoodLibrarySharePage() {
             </Text>
           </View>
         </View>
+        </Picker>
         {isHomemade ? (
           <Text className='location-helper'>
             自制餐食不需要填写商家信息；所在地区可按需补充。
@@ -1432,46 +1447,6 @@ function FoodLibrarySharePage() {
         </View>
       </View>
 
-      {/* 城市选择弹窗 */}
-      <Popup
-        open={showCityPicker}
-        placement='bottom'
-        onClose={() => setShowCityPicker(false)}
-      >
-        <AreaPicker
-          title='选择城市/区域'
-          areaList={areaList}
-          onConfirm={(values: any[]) => {
-            // values 是 code 数组，如 ["110000", "110100", "110101"]
-            // 需要从 areaList 中查找对应的名称
-            const provinceCode = values[0] || "";
-            const cityCode = values[1] || "";
-            const districtCode = values[2] || "";
-
-            const p = areaList.province_list?.[provinceCode] || "";
-            const c = areaList.city_list?.[cityCode] || "";
-            const d = areaList.county_list?.[districtCode] || "";
-
-            // 直辖市处理：省名=市名=直辖市名，区名在第三级
-            if (
-              p.includes("北京") ||
-              p.includes("上海") ||
-              p.includes("天津") ||
-              p.includes("重庆")
-            ) {
-              setProvince(p);
-              setCity("");
-              setDistrict(d || c);
-            } else {
-              setProvince(p);
-              setCity(c);
-              setDistrict(d);
-            }
-            setShowCityPicker(false);
-          }}
-          onCancel={() => setShowCityPicker(false)}
-        />
-      </Popup>
 
       {/* 从记录选择弹窗 */}
       {showRecordModal && (
