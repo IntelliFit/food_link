@@ -197,3 +197,14 @@ func TestSmartPackagedFallbackNeverDropsQualifiers(t *testing.T) {
 	require.NotEqual(t, "milk", items[0]["matched_food_id"], "skim milk must not become whole milk")
 	require.Equal(t, []string{"特仑苏纯牛奶", "纯牛奶"}, smartPackagedFallbackNames(map[string]any{"name": "特仑苏纯牛奶", "brand": "特仑苏"}))
 }
+
+func TestSmartPackagedRejectsQualifierMismatch(t *testing.T) {
+	skim := &foodrecorddomain.PackagedFood{Brand: "伊利", ProductName: "脱脂纯牛奶", DisplayName: "伊利 脱脂纯牛奶"}
+	require.False(t, smartPackagedQualifiersAgree(map[string]any{"name": "纯牛奶", "brand": "伊利"}, skim))
+	require.True(t, smartPackagedQualifiersAgree(map[string]any{"name": "伊利脱脂奶", "productName": "脱脂纯牛奶"}, skim))
+	zero := &foodrecorddomain.PackagedFood{Brand: "可口可乐", ProductName: "零度可口可乐"}
+	require.False(t, smartPackagedQualifiersAgree(map[string]any{"name": "可口可乐"}, zero))
+	require.True(t, smartPackagedQualifiersAgree(map[string]any{"name": "无糖可乐"}, &foodrecorddomain.PackagedFood{ProductName: "可乐", FlavorText: strPtr("零糖")}))
+}
+
+func strPtr(value string) *string { return &value }

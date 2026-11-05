@@ -54,6 +54,9 @@ func (s *AnalyzeService) resolveSmartPackaged(ctx context.Context, item map[stri
 	if !smartPackagedDensityPlausible(item, food.KcalPer100g) {
 		return nil, "packaged_density_mismatch"
 	}
+	if !smartPackagedQualifiersAgree(item, food) {
+		return nil, "packaged_qualifier_mismatch"
+	}
 	next := applySmartLibraryNutrition(item, packagedNutritionUnit(food), nutritionWeightFromItem(item))
 	next["type"] = "snack"
 	next["matched_food_id"] = food.ID
@@ -188,6 +191,22 @@ func smartConsistentPackagedChoice(rows []foodrecorddomain.PackagedFood) *foodre
 		}
 	}
 	return &closest
+}
+
+// smartPackagedQualifiers change the nutrition of the same product line.
+var smartPackagedQualifiers = [][]string{{"脱脂"}, {"低脂"}, {"无糖", "零糖", "0糖", "零度", "zero"}, {"低糖", "减糖"}}
+
+// smartPackagedQualifiersAgree rejects 纯牛奶 resolving to 脱脂纯牛奶 (or the
+// reverse) through a shared alias: one side names a qualifier the other lacks.
+func smartPackagedQualifiersAgree(item map[string]any, food *foodrecorddomain.PackagedFood) bool {
+	itemText := strings.ToLower(stringFromAny(item["name"]) + smartPackagedField(item, "productName", "product_name") + smartPackagedField(item, "flavorText", "flavor_text"))
+	foodText := strings.ToLower(food.ProductName + food.DisplayName + derefString(food.FlavorText))
+	for _, group := range smartPackagedQualifiers {
+		if containsAnyAnalyzeText(itemText, group) != containsAnyAnalyzeText(foodText, group) {
+			return false
+		}
+	}
+	return true
 }
 
 func smartPackagedDensityPlausible(item map[string]any, libraryKcalPer100g float64) bool {
