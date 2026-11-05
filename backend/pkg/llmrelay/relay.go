@@ -28,6 +28,11 @@ const WanjieHost = "maas-openapi.wanjiedata.com"
 // deadline, so a hanging channel still leaves time for the next one.
 const defaultAttemptBudget = 45 * time.Second
 
+// minAttemptBudget is the least time a relay attempt gets. A short caller
+// budget (the 8s meal judge) is not split: one real try beats three that
+// all time out. Later channels still run after a fast failure such as a 429.
+var minAttemptBudget = 15 * time.Second
+
 // Target is one cheaper channel tried before Wanjie.
 type Target struct {
 	Name    string // used in logs: "openlux", "a6"
@@ -216,10 +221,17 @@ func attemptContext(parent context.Context, attemptsLeft int) (context.Context, 
 		return context.WithTimeout(parent, defaultAttemptBudget)
 	}
 	remaining := time.Until(deadline)
-	if attemptsLeft <= 1 || remaining <= 0 {
+	share := remaining * 3 / (2 * time.Duration(attemptsLeft))
+	if attemptsLeft <= 1 || remaining <= 0 || share >= remaining {
 		return context.WithCancel(parent)
 	}
-	return context.WithTimeout(parent, remaining*3/(2*time.Duration(attemptsLeft)))
+	if share < minAttemptBudget {
+		share = min(minAttemptBudget, remaining)
+		if share == remaining {
+			return context.WithCancel(parent)
+		}
+	}
+	return context.WithTimeout(parent, share)
 }
 
 func (c *Config) matches(u *url.URL) bool {
