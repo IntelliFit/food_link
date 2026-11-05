@@ -131,6 +131,7 @@ import (
 	workerpkg "food_link/backend/internal/worker"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
+	"food_link/backend/pkg/llmrelay"
 	"food_link/backend/pkg/location"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
@@ -281,6 +282,8 @@ func New(cfg *config.Config) (*App, error) {
 	messageHandler := messagehandler.NewMessageHandler(messageSvc)
 
 	userHandler := userhandler.NewUserHandler(userSvc, bindPhoneSvc, uploadSvc, ocrSvc, analysisTaskSvc, followSvc)
+
+	configureWanjieRelay(cfg.External)
 
 	// Analyze module DI
 	analyzeTaskRepo := analyzerepo.NewTaskRepo(db)

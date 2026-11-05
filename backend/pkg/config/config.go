@@ -129,6 +129,7 @@ type ExternalConfig struct {
 	OpenLuxPrecisionGeminiPercent int                 `mapstructure:"openlux_precision_gemini_traffic_percent"`
 	A6APIKey                      string              `mapstructure:"a6_api_key"`
 	A6BaseURL                     string              `mapstructure:"a6_base_url"`
+	WanjieRelayEnabled            bool                `mapstructure:"wanjie_relay_enabled"`
 	VisionRouting                 VisionRoutingConfig `mapstructure:"vision_routing"`
 	LLMProvider                   string              `mapstructure:"llm_provider"`
 	DeepSeekAPIKey                string              `mapstructure:"deepseek_api_key"`
@@ -664,6 +665,9 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	if fileV.IsSet("external.a6_base_url") {
 		v.Set("external.a6_base_url", fileCfg.External.A6BaseURL)
 	}
+	if fileV.IsSet("external.wanjie_relay_enabled") {
+		v.Set("external.wanjie_relay_enabled", fileCfg.External.WanjieRelayEnabled)
+	}
 	for _, key := range fileV.AllKeys() {
 		if strings.HasPrefix(key, "external.vision_routing.") {
 			v.Set(key, fileV.Get(key))
@@ -1198,6 +1202,7 @@ var cloudConfigKeyAliases = map[string]string{
 	"OPENLUX_BASE_URL":                         "external.openlux_base_url",
 	"A6_API_KEY":                               "external.a6_api_key",
 	"A6_BASE_URL":                              "external.a6_base_url",
+	"WANJIE_RELAY_ENABLED":                     "external.wanjie_relay_enabled",
 	"OPENLUX_ORDINARY_GEMINI_TRAFFIC_PERCENT":  "external.openlux_ordinary_gemini_traffic_percent",
 	"OPENLUX_PRECISION_GEMINI_TRAFFIC_PERCENT": "external.openlux_precision_gemini_traffic_percent",
 	"LLM_PROVIDER":                             "external.llm_provider",
@@ -1643,6 +1648,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.qwen38_precision_traffic_percent", 20)
 	v.SetDefault("external.openlux_base_url", "https://api.openlux.ai/v1")
 	v.SetDefault("external.a6_base_url", DefaultA6BaseURL)
+	v.SetDefault("external.wanjie_relay_enabled", true)
 	v.SetDefault("external.vision_routing.balanced_routing_enabled", true)
 	v.SetDefault("external.vision_routing.response_wait_seconds", 45)
 	v.SetDefault("external.vision_routing.a6_shadow_percent", 10)
