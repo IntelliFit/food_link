@@ -1025,6 +1025,26 @@ func (r *FoodNutritionRepo) PatchPackagedFood(ctx context.Context, foodID string
 	return &updated, nil
 }
 
+// SearchPackagedFoodByBrand returns active packaged rows of one brand, exact
+// brand rows first. Photo matching filters them by product kind and name.
+func (r *FoodNutritionRepo) SearchPackagedFoodByBrand(ctx context.Context, brand string, limit int) ([]domain.PackagedFood, error) {
+	brand = strings.ToLower(strings.TrimSpace(brand))
+	if runeCount(brand) < 2 {
+		return []domain.PackagedFood{}, nil
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	pattern := "%" + brand + "%"
+	var foods []domain.PackagedFood
+	err := activePackagedFoodScope(r.db.WithContext(ctx)).
+		Where("is_active = ? AND (LOWER(COALESCE(brand, '')) LIKE ? OR LOWER(COALESCE(display_name, '')) LIKE ? OR LOWER(product_name) LIKE ?)", true, pattern, pattern, pattern).
+		Order(gorm.Expr("CASE WHEN LOWER(COALESCE(brand, '')) = ? THEN 0 ELSE 1 END, updated_at DESC", brand)).
+		Limit(limit).
+		Find(&foods).Error
+	return foods, err
+}
+
 func (r *FoodNutritionRepo) SearchPackagedFood(ctx context.Context, query string, limit int) ([]domain.PackagedFood, error) {
 	if limit <= 0 {
 		limit = 5

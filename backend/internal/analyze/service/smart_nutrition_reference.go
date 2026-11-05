@@ -65,6 +65,60 @@ var smartReferenceIngredients = map[string]smartReferenceUnit{
 	"平菇":  {24, 1.9, 4.6, 0.3},
 	"大蒜":  {128, 4.5, 27.6, 0.2},
 	"植物油": {899, 0, 0, 99.9},
+
+	// Meat, eggs, soy and staples, per 100 g raw (Chinese food composition
+	// table; generic pork uses a lean-and-fat composite, not the fatty 肥瘦
+	// row, because dishes mostly use sliced meat).
+	"猪肉":  {210, 19.0, 0, 15.0},
+	"猪瘦肉": {143, 20.3, 1.5, 6.2},
+	"五花肉": {518, 9.3, 0, 53.0},
+	"排骨":  {278, 16.7, 0.7, 23.1},
+	"猪肉末": {263, 16.9, 0, 21.2},
+	"鸡肉":  {167, 19.3, 1.3, 9.4},
+	"鸡胸肉": {133, 19.4, 2.5, 5.0},
+	"鸡腿肉": {181, 16.0, 0, 13.0},
+	"牛肉":  {125, 19.9, 2.0, 4.2},
+	"羊肉":  {203, 19.0, 0, 14.1},
+	"鱼肉":  {113, 16.6, 0, 5.2},
+	"虾仁":  {87, 16.4, 0, 2.4},
+	"鸡蛋":  {144, 13.3, 2.8, 8.8},
+	"豆腐":  {82, 8.1, 4.2, 3.7},
+	"豆腐干": {140, 16.2, 11.5, 3.6},
+	"大米":  {346, 7.4, 77.9, 0.8},
+	"米饭":  {116, 2.6, 25.9, 0.3},
+	"面条":  {284, 8.3, 61.9, 0.7},
+	"米粉":  {346, 8.0, 78.2, 0.1},
+	"面粉":  {362, 11.2, 73.6, 1.5},
+	"白砂糖": {400, 0, 99.9, 0},
+	"花生":  {574, 24.8, 21.7, 44.3},
+	"玉米粒": {112, 4.0, 22.8, 1.2},
+}
+
+// smartReferenceCooked holds the cooked row where cooking changes the value
+// per gram (meat loses water, rice and noodles absorb it). Each state is its
+// own row: a cooked ingredient never borrows the raw value. Vegetables keep
+// the raw row, since their own water loss is small and the oil is listed
+// separately. Cooked meat values follow cooked composition data (roasted or
+// braised lean, no added oil).
+var smartReferenceCooked = map[string]smartReferenceUnit{
+	"猪肉":  {270, 27.0, 0, 17.5},
+	"猪瘦肉": {200, 28.0, 1.5, 9.0},
+	"五花肉": {450, 13.0, 0, 44.0},
+	"排骨":  {300, 24.0, 0, 22.5},
+	"猪肉末": {297, 25.7, 0, 20.8},
+	"鸡肉":  {215, 26.0, 0, 12.0},
+	"鸡胸肉": {165, 31.0, 0, 3.6},
+	"鸡腿肉": {210, 26.0, 0, 11.0},
+	"牛肉":  {190, 30.0, 0, 7.5},
+	"羊肉":  {260, 26.0, 0, 17.0},
+	"鱼肉":  {130, 20.0, 0, 5.5},
+	"虾仁":  {99, 21.0, 0, 1.1},
+	"鸡蛋":  {150, 13.5, 1.5, 9.5},
+	"大米":  {116, 2.6, 25.9, 0.3},
+	"面条":  {110, 3.6, 23.0, 0.5},
+	"米粉":  {110, 1.8, 25.0, 0.2},
+	"面粉":  {223, 7.0, 47.0, 1.1},
+	"花生":  {581, 21.7, 23.0, 48.0},
 }
 
 // smartReferenceAliases maps everyday spellings to a table entry.
@@ -78,6 +132,14 @@ var smartReferenceAliases = map[string]string{
 	"食用油": "植物油", "烹调油": "植物油", "花生油": "植物油", "大豆油": "植物油", "菜籽油": "植物油", "玉米油": "植物油",
 	"调和油": "植物油", "橄榄油": "植物油", "芝麻油": "植物油", "香油": "植物油", "辣椒油": "植物油", "红油": "植物油",
 	"葵花籽油": "植物油", "猪油": "植物油",
+	"肉": "猪肉", "肉片": "猪瘦肉", "肉丝": "猪瘦肉", "瘦肉": "猪瘦肉", "猪里脊": "猪瘦肉", "里脊": "猪瘦肉", "里脊肉": "猪瘦肉",
+	"猪五花肉": "五花肉", "五花": "五花肉", "肋条肉": "五花肉", "猪排骨": "排骨", "肉末": "猪肉末", "猪肉馅": "猪肉末", "肉馅": "猪肉末", "肉沫": "猪肉末",
+	"鸡腿": "鸡腿肉", "去骨鸡腿肉": "鸡腿肉", "鸡块": "鸡肉", "鸡丁": "鸡肉", "鸡胸": "鸡胸肉",
+	"牛肉片": "牛肉", "牛肉丝": "牛肉", "牛腩": "牛肉", "瘦牛肉": "牛肉", "羊肉片": "羊肉", "鱼": "鱼肉", "鱼片": "鱼肉", "虾": "虾仁",
+	"蛋": "鸡蛋", "全蛋": "鸡蛋", "蛋液": "鸡蛋", "鸡蛋液": "鸡蛋", "炒鸡蛋": "鸡蛋", "北豆腐": "豆腐", "嫩豆腐": "豆腐", "豆干": "豆腐干", "香干": "豆腐干",
+	"白米饭": "米饭", "白饭": "米饭", "饭": "米饭", "米": "大米", "白米": "大米", "粳米": "大米",
+	"面": "面条", "小麦面条": "面条", "挂面": "面条", "米线": "米粉", "小麦粉": "面粉", "小麦面粉": "面粉",
+	"白糖": "白砂糖", "糖": "白砂糖", "冰糖": "白砂糖", "花生仁": "花生", "花生米": "花生", "玉米": "玉米粒",
 }
 
 var smartReferenceCutSuffix = regexp.MustCompile(`(丝|片|块|段|丁|条|碎|末)$`)
@@ -85,6 +147,30 @@ var smartReferenceCutSuffix = regexp.MustCompile(`(丝|片|块|段|丁|条|碎|�
 // smartReferenceIngredient looks a component up by its own name, then without
 // a cut suffix ("土豆丝" -> "土豆"). It returns the per-100 g unit and the
 // table name.
+// smartReferenceIngredientState picks the row for the component's state: a
+// cooked component uses the cooked row when one exists ("大米" cooked is rice,
+// "面粉" cooked is the steamed dough of a bun).
+func smartReferenceIngredientState(name, state string) (map[string]any, string, bool) {
+	unit, label, ok := smartReferenceIngredient(name)
+	if !ok || !smartComponentCooked(state) {
+		return unit, label, ok
+	}
+	if cooked, found := smartReferenceCooked[label]; found {
+		return map[string]any{"calories": cooked.kcal, "protein": cooked.protein, "carbs": cooked.carbs, "fat": cooked.fat}, label + "(熟)", true
+	}
+	return unit, label, ok
+}
+
+// smartComponentCooked treats an unstated state as cooked: dish components
+// are what is on the plate.
+func smartComponentCooked(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "生", "raw", "生的", "未煮":
+		return false
+	}
+	return true
+}
+
 func smartReferenceIngredient(name string) (map[string]any, string, bool) {
 	name = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(name, "新鲜"), "鲜"))
 	for _, candidate := range []string{name, smartReferenceCutSuffix.ReplaceAllString(name, "")} {
@@ -98,9 +184,9 @@ func smartReferenceIngredient(name string) (map[string]any, string, bool) {
 	return nil, "", false
 }
 
-// smartReferenceDish reports a dish made only of table vegetables, cooking
-// oil, water and seasonings, with at least one vegetable. Dishes with meat,
-// eggs or tofu keep the library path.
+// smartReferenceDish reports a dish made only of table ingredients (vegetables,
+// meat, eggs, soy, staples), cooking oil, water and seasonings, with at least
+// one food besides the oil. Such a dish never reads the library.
 func smartReferenceDish(components []smartComponent) bool {
 	vegetable := false
 	for _, component := range components {

@@ -270,6 +270,8 @@ export interface FoodItem {
   resolve_score?: number
   nutrition_source?: string | null
   nutritionSource?: string | null
+  ask_package_label?: boolean
+  askPackageLabel?: boolean
   nutrition_source_category?: string | null
   nutritionSourceCategory?: string | null
   packaged_food_id?: string

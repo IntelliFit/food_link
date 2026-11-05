@@ -159,8 +159,9 @@ func TestSmartNutritionRecomputesDishFromIngredients(t *testing.T) {
 	items := runSmart(t, newSmartLibrary(), dish)
 	got := items[0]
 	require.Equal(t, "component_library", got["nutrition_source"])
-	// 150g tomato 27 kcal + 90g egg 129.6 kcal + 10g oil 88.4 kcal
-	require.InDelta(t, 245, numberFromAny(mapFromAny(got["nutrients"])["calories"]), 0.5)
+	// Every ingredient is in the standard table: 150 g tomato 27 kcal + 90 g
+	// cooked egg 135 kcal + 10 g oil 89.9 kcal.
+	require.InDelta(t, 251.9, numberFromAny(mapFromAny(got["nutrients"])["calories"]), 0.5)
 	require.InDelta(t, 1.0, numberFromAny(got["component_coverage"]), 0.001)
 	require.Len(t, got["component_nutrition"], 3)
 }
@@ -296,7 +297,7 @@ func TestSmartPromptPutsComponentsAfterWeightAndNutrients(t *testing.T) {
 	nutrients := strings.Index(prompt, `"nutrients":{`)
 	components := strings.Index(prompt, `"components":[]`)
 	require.True(t, weight >= 0 && nutrients > weight && components > nutrients, "the split must not lead the weight estimate")
-	require.Contains(t, prompt, `"components":[]}]`)
+	require.Contains(t, prompt, `"components":[],"oilVisibility":""}]`)
 }
 
 func TestSmartDetectsBrandInsideItemName(t *testing.T) {

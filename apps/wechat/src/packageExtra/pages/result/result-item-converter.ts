@@ -40,6 +40,8 @@ export interface NutritionItem {
   itemType?: string
   category?: string
   nutritionSource?: string | null
+  /** The backend found no library row or label for this package and asks for its nutrition panel. */
+  askPackageLabel?: boolean
   nutritionSourceCategory?: string | null
   isUnresolved?: boolean
   unitNutritionPer100g?: Nutrients
@@ -182,6 +184,7 @@ export const convertApiFoodItemsToNutritionItems = (items: FoodItem[]): Nutritio
       itemType: item.type || item.food_type,
       category: item.category,
       nutritionSource: item.nutrition_source ?? item.nutritionSource,
+      askPackageLabel: Boolean(item.ask_package_label ?? item.askPackageLabel),
       nutritionSourceCategory: item.nutrition_source_category ?? item.nutritionSourceCategory,
       isUnresolved: Boolean(item.is_unresolved),
       unitNutritionPer100g: item.unit_nutrition_per_100g,

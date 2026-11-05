@@ -36,10 +36,17 @@ func TestSmartVegetableDishKeepsWaterAndSeasoningOutOfCoverage(t *testing.T) {
 	require.Equal(t, "matched_dish_reference", items[0]["smart_match_status"])
 }
 
-func TestSmartDishWithMeatKeepsTheLibraryPath(t *testing.T) {
+func TestSmartMeatDishUsesTheCookedTableRow(t *testing.T) {
 	items := runSmart(t, newSmartLibrary(), smartDishItem("青椒炒肉", 160, 260,
 		[2]any{"青椒", 100.0}, [2]any{"猪肉", 50.0}, [2]any{"植物油", 10.0}))
-	require.Equal(t, "dish_low_coverage", items[0]["smart_match_status"], "猪肉 is not in the test library and the table has no meat")
+	require.Equal(t, "matched_dish_reference", items[0]["smart_match_status"], "猪肉 is a cooked table row now")
+	require.InDelta(t, 100*0.22+50*2.70+10*8.99, numberFromAny(mapFromAny(items[0]["nutrients"])["calories"]), 0.5)
+}
+
+func TestSmartDishWithAnUnknownIngredientKeepsTheLibraryPath(t *testing.T) {
+	items := runSmart(t, newSmartLibrary(), smartDishItem("毛血旺", 300, 420,
+		[2]any{"鸭血", 150.0}, [2]any{"毛肚", 100.0}, [2]any{"植物油", 50.0}))
+	require.Equal(t, "dish_low_coverage", items[0]["smart_match_status"], "鸭血 and 毛肚 are in neither the table nor the test library")
 }
 
 func TestSmartVegetableDishStillRejectsAnImplausibleSplit(t *testing.T) {
@@ -55,7 +62,7 @@ func TestSmartReferenceIngredientNames(t *testing.T) {
 		require.True(t, ok, name)
 		require.Equal(t, want, label, name)
 	}
-	_, _, ok := smartReferenceIngredient("猪肉")
+	_, _, ok := smartReferenceIngredient("鸭血")
 	require.False(t, ok)
 	require.False(t, smartReferenceDish([]smartComponent{{name: "植物油", grams: 10}, {name: "盐", grams: 2}}), "oil alone is not a vegetable dish")
 }

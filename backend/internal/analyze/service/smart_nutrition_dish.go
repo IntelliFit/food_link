@@ -70,14 +70,19 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 	if weight <= 0 || total <= 0 || math.Abs(total-weight)/weight > smartDishWeightTolerance {
 		return nil, "dish_components_weight_mismatch"
 	}
-	scale := weight / total
-	reference := smartReferenceDish(components)
+	scaled := make([]smartComponent, len(components))
+	for i, component := range components {
+		scaled[i] = component
+		scaled[i].grams = component.grams * weight / total
+	}
+	scaled, template := smartApplyDishTemplate(item, scaled, weight)
+	reference := smartReferenceDish(scaled)
 	sum := map[string]float64{}
 	oilKcal := 0.0
-	breakdown := make([]map[string]any, 0, len(components))
+	breakdown := make([]map[string]any, 0, len(scaled))
 	matchedGrams, seasoningGrams := 0.0, 0.0
-	for _, component := range components {
-		grams := component.grams * scale
+	for _, component := range scaled {
+		grams := component.grams
 		entry := map[string]any{"name": component.name, "grams": round2(grams)}
 		if smartIsSeasoning(component.name) {
 			// Sauces and salt are a few grams; they keep the model's share
@@ -91,13 +96,15 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 		var label, reason string
 		if reference && smartIsWater(component.name) {
 			unit, label = map[string]any{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}, "水"
-		} else if reference {
-			unit, label, _ = smartReferenceIngredient(component.name)
-			if label == "植物油" {
-				oilKcal += numberFromAny(unit["calories"]) * grams / 100
-			}
+		} else if tableUnit, tableLabel, ok := smartReferenceIngredientState(component.name, component.state); ok {
+			// Common ingredients use the standard table for their state; the
+			// library aliases raw vegetables to stir-fried rows.
+			unit, label = tableUnit, tableLabel
 		} else {
 			unit, label, reason = r.resolveComponent(ctx, component)
+		}
+		if unit != nil && (label == "植物油" || smartIsCookingFat(component.name)) {
+			oilKcal += numberFromAny(unit["calories"]) * grams / 100
 		}
 		if unit == nil {
 			entry["status"] = reason
@@ -135,6 +142,9 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 	next["is_unresolved"] = false
 	next["nutrition_source"] = "component_library"
 	next["smart_match_method"] = "dish_components"
+	if template != nil {
+		next["dish_template"] = template
+	}
 	if reference {
 		next["smart_match_method"] = "dish_components_reference"
 		return next, "matched_dish_reference"
@@ -143,10 +153,10 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 }
 
 // smartDishSumDisagrees keeps the estimate when the recomputed sum is far from
-// the model's own figure. Excess explained by the oil the model listed itself
-// is allowed: for stir-fried vegetables the model's calories leave out most of
-// that oil (122 g cabbage + 8 g oil reported as 48 kcal), which is the error
-// the recompute fixes. oilKcal is only counted for reference vegetable dishes.
+// the model's own figure. Excess explained by the oil in the split is allowed:
+// for stir-fried vegetables the model's calories leave out most of the oil it
+// listed itself (122 g cabbage + 8 g oil reported as 48 kcal), which is the
+// error the recompute fixes.
 func smartDishSumDisagrees(sumKcal, oilKcal, modelKcal float64) bool {
 	if sumKcal < modelKcal/smartDishMaxKcalRatio {
 		return true
