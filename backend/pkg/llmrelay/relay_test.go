@@ -134,10 +134,18 @@ func TestRelayKeepsBadRequestButSkipsMissingModel(t *testing.T) {
 	}
 }
 
+func withMinAttemptBudget(t *testing.T, d time.Duration) {
+	t.Helper()
+	old := minAttemptBudget
+	minAttemptBudget = d
+	t.Cleanup(func() { minAttemptBudget = old })
+}
+
 func TestRelayLeavesTimeForLaterChannels(t *testing.T) {
 	wanjie, openlux, a6 := newUpstream(t, 200, "wanjie"), newUpstream(t, 200, "late"), newUpstream(t, 200, "a6")
 	openlux.delay = 2 * time.Second
 	c := setup(t, wanjie, openlux, a6)
+	withMinAttemptBudget(t, 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 
@@ -163,5 +171,50 @@ func TestRelayPassesOtherHostsAndDirectRequestsThrough(t *testing.T) {
 	Configure(Config{Enabled: false, Targets: []Target{{Name: "openlux", BaseURL: openlux.srv.URL, APIKey: "k"}}})
 	if _, body := post(t, c, context.Background(), wanjie.srv.URL+"/api/v1/chat/completions", "{}"); body != "wanjie" {
 		t.Fatalf("disabled relay got %q", body)
+	}
+}
+
+func TestRelayGivesShortBudgetToOneChannel(t *testing.T) {
+	wanjie, openlux, a6 := newUpstream(t, 200, "wanjie"), newUpstream(t, 200, "openlux"), newUpstream(t, 200, "a6")
+	openlux.delay = time.Second
+	c := setup(t, wanjie, openlux, a6)
+	// The budget is below the minimum attempt, like the 8s meal judge in
+	// production: splitting it would time out every channel.
+	withMinAttemptBudget(t, 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+
+	_, body := post(t, c, ctx, wanjie.srv.URL+"/api/v1/chat/completions", "{}")
+	if body != "openlux" || a6.calls.Load() != 0 {
+		t.Fatalf("got %q a6=%d, want OpenLux to keep the whole short budget", body, a6.calls.Load())
+	}
+}
+
+func TestRelayAttemptBudget(t *testing.T) {
+	withMinAttemptBudget(t, 15*time.Second)
+	for _, tc := range []struct {
+		budget       time.Duration
+		attemptsLeft int
+		want         time.Duration // 0 = whole remaining budget
+	}{
+		{8 * time.Second, 3, 0},
+		{25 * time.Second, 3, 15 * time.Second},
+		{45 * time.Second, 3, 22500 * time.Millisecond},
+		{90 * time.Second, 2, 67500 * time.Millisecond},
+		{30 * time.Second, 1, 0},
+	} {
+		parent, cancel := context.WithTimeout(context.Background(), tc.budget)
+		ctx, done := attemptContext(parent, tc.attemptsLeft)
+		pd, _ := parent.Deadline()
+		d, _ := ctx.Deadline()
+		got := time.Duration(0)
+		if !d.Equal(pd) {
+			got = tc.budget - pd.Sub(d)
+		}
+		if diff := got - tc.want; diff < -50*time.Millisecond || diff > 50*time.Millisecond {
+			t.Errorf("budget %v, %d left: attempt %v, want %v", tc.budget, tc.attemptsLeft, got, tc.want)
+		}
+		done()
+		cancel()
 	}
 }
