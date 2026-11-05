@@ -71,7 +71,9 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 		return nil, "dish_components_weight_mismatch"
 	}
 	scale := weight / total
+	reference := smartReferenceDish(components)
 	sum := map[string]float64{}
+	oilKcal := 0.0
 	breakdown := make([]map[string]any, 0, len(components))
 	matchedGrams, seasoningGrams := 0.0, 0.0
 	for _, component := range components {
@@ -85,7 +87,18 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 			breakdown = append(breakdown, entry)
 			continue
 		}
-		unit, label, reason := r.resolveComponent(ctx, component)
+		var unit map[string]any
+		var label, reason string
+		if reference && smartIsWater(component.name) {
+			unit, label = map[string]any{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}, "水"
+		} else if reference {
+			unit, label, _ = smartReferenceIngredient(component.name)
+			if label == "植物油" {
+				oilKcal += numberFromAny(unit["calories"]) * grams / 100
+			}
+		} else {
+			unit, label, reason = r.resolveComponent(ctx, component)
+		}
 		if unit == nil {
 			entry["status"] = reason
 			breakdown = append(breakdown, entry)
@@ -108,7 +121,7 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 		sum[key] += numberFromAny(value) * unmatchedShare
 	}
 	modelKcal := numberFromAny(modelNutrients["calories"])
-	if modelKcal > 0 && (sum["calories"] > modelKcal*smartDishMaxKcalRatio || sum["calories"] < modelKcal/smartDishMaxKcalRatio) {
+	if modelKcal > 0 && smartDishSumDisagrees(sum["calories"], oilKcal, modelKcal) {
 		return nil, "dish_sum_disagrees_with_model"
 	}
 	unit := map[string]any{}
@@ -122,7 +135,23 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 	next["is_unresolved"] = false
 	next["nutrition_source"] = "component_library"
 	next["smart_match_method"] = "dish_components"
+	if reference {
+		next["smart_match_method"] = "dish_components_reference"
+		return next, "matched_dish_reference"
+	}
 	return next, "matched_dish_components"
+}
+
+// smartDishSumDisagrees keeps the estimate when the recomputed sum is far from
+// the model's own figure. Excess explained by the oil the model listed itself
+// is allowed: for stir-fried vegetables the model's calories leave out most of
+// that oil (122 g cabbage + 8 g oil reported as 48 kcal), which is the error
+// the recompute fixes. oilKcal is only counted for reference vegetable dishes.
+func smartDishSumDisagrees(sumKcal, oilKcal, modelKcal float64) bool {
+	if sumKcal < modelKcal/smartDishMaxKcalRatio {
+		return true
+	}
+	return sumKcal > modelKcal*smartDishMaxKcalRatio && sumKcal-oilKcal > modelKcal*smartDishMaxKcalRatio
 }
 
 func (r *smartRun) resolveComponent(ctx context.Context, component smartComponent) (map[string]any, string, string) {
