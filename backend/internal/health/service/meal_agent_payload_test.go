@@ -76,3 +76,17 @@ func TestModelDownStillSearchesAndOffersRuleChosenMeals(t *testing.T) {
 	assert.Equal(t, "model_request_failed", result.FallbackReason)
 	assert.Contains(t, result.Recommendation.Recommendations[0].SelectionReason+result.Answer, "AI 解读")
 }
+
+// Replay 2026-11-06: "金枪鱼拌饭" and "金枪鱼拌饭 + 辣白菜" were two of three options.
+func TestOptionsDoNotRepeatAMainDish(t *testing.T) {
+	bowl := groundedMeal{candidate: DietRecommendationCandidate{SourceID: "bowl", Title: "金枪鱼拌饭", Items: []DietRecommendationFoodItem{{Name: "金枪鱼拌饭"}}}}
+	plus := DietRecommendationCandidate{SourceID: "meal:1", Source: "meal_plan", Title: "金枪鱼拌饭 + 辣白菜", Items: []DietRecommendationFoodItem{{Name: "金枪鱼拌饭"}, {Name: "辣白菜"}}}
+	assert.True(t, mealSharesMainDish(plus, []groundedMeal{bowl}))
+	// Rice ordered beside two different dishes is not a repeat.
+	a := groundedMeal{candidate: DietRecommendationCandidate{Title: "米饭（店内另点，一碗） + 鱼香肉丝", Items: []DietRecommendationFoodItem{{Name: "米饭（店内另点，一碗）"}, {Name: "鱼香肉丝"}}}}
+	b := DietRecommendationCandidate{Title: "米饭（店内另点，一碗） + 麻婆豆腐", Items: []DietRecommendationFoodItem{{Name: "米饭（店内另点，一碗）"}, {Name: "麻婆豆腐"}}}
+	assert.False(t, mealSharesMainDish(b, []groundedMeal{a}))
+	kept := fillModelPicks([]groundedMeal{bowl}, []groundedMeal{{candidate: plus}, {candidate: b}}, 2)
+	require.Len(t, kept, 2)
+	assert.Equal(t, b.Title, kept[1].candidate.Title)
+}

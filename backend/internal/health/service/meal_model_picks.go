@@ -2,6 +2,7 @@ package service
 
 import (
 	"math"
+	"regexp"
 	"strings"
 )
 
@@ -48,7 +49,7 @@ func acceptNearBestPicks(pool []groundedMeal, ids []string, limit int) (kept []g
 			reason = "营养上明显不如其他可选的"
 		case m.recentRepeat && freshInBand:
 			reason = "最近刚推荐过，有新的同样合适的选择"
-		case seen[mealFingerprint(m.candidate)]:
+		case seen[mealFingerprint(m.candidate)] || mealSharesMainDish(m.candidate, kept):
 			reason = "和已选的是同一道菜"
 		case perKind[kind] >= 2 && len(kinds) > 1:
 			reason = "同一类主食已经选了两份"
@@ -63,6 +64,40 @@ func acceptNearBestPicks(pool []groundedMeal, ids []string, limit int) (kept []g
 		kept = append(kept, m)
 	}
 	return kept, rejected, why
+}
+
+// mealMainDishes names the dishes of an option other than its staple: "金枪鱼拌饭 + 辣白菜"
+// is 金枪鱼拌饭 and 辣白菜, "米饭 + 鱼香肉丝" is 鱼香肉丝.
+func mealMainDishes(c DietRecommendationCandidate) map[string]bool {
+	names := []string{}
+	for _, item := range c.Items {
+		names = append(names, item.Name)
+	}
+	if len(names) == 0 {
+		names = []string{c.Title}
+	}
+	dishes := map[string]bool{}
+	for _, name := range names {
+		if key := normalizeDietDecisionToken(name); key != "" && !mealPlainStaplePattern.MatchString(strings.TrimSpace(name)) {
+			dishes[key] = true
+		}
+	}
+	return dishes
+}
+
+// A plain staple (米饭, 馒头) goes with anything; a rice bowl such as 金枪鱼拌饭 is a dish.
+var mealPlainStaplePattern = regexp.MustCompile(`^(?:白|杂粮|糙|二米|香)?米饭|^馒头|^花卷|^主食`)
+
+// mealSharesMainDish is true when an option repeats a main dish of one already chosen
+// ("金枪鱼拌饭" and "金枪鱼拌饭 + 辣白菜" are one choice shown twice).
+func mealSharesMainDish(c DietRecommendationCandidate, chosen []groundedMeal) bool {
+	dishes := mealMainDishes(c)
+	for _, have := range chosen {
+		if mealComboSharedDishes(dishes, mealMainDishes(have.candidate)) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // mealStapleKind is the kind of meal (noodles, rice, dumplings …) without its protein.
@@ -81,7 +116,7 @@ func fillModelPicks(kept, engine []groundedMeal, limit int) []groundedMeal {
 		if len(out) >= limit {
 			break
 		}
-		duplicate := false
+		duplicate := mealSharesMainDish(m.candidate, out)
 		for _, have := range out {
 			duplicate = duplicate || have.candidate.SourceID == m.candidate.SourceID || mealFingerprint(have.candidate) == mealFingerprint(m.candidate) ||
 				have.candidate.Source == "food_record" && m.candidate.Source == "food_record" // at most one past meal
