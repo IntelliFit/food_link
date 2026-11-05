@@ -72,7 +72,11 @@ func smartPrefetchQueries(items []map[string]any) []string {
 		}
 	}
 	for _, item := range items {
-		if smartItemKindOf(item) != smartKindPackaged || !smartHasPackagedIdentity(item) {
+		if smartItemKindOf(item) == smartKindPackaged {
+			for _, name := range smartPackagedFallbackNames(item) {
+				add(smartSingleFoodQueries(item, name)...)
+			}
+		} else {
 			add(smartSingleFoodQueries(item, stringFromAny(item["name"]))...)
 		}
 		for _, component := range smartDishComponents(item) {

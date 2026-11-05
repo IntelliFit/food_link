@@ -153,3 +153,20 @@ func TestSmartPackagedRejectsDryNoodlesForCookedBowl(t *testing.T) {
 	require.Equal(t, "packaged_density_mismatch", items[0]["smart_match_status"])
 	require.InDelta(t, 540, numberFromAny(mapFromAny(items[0]["nutrients"])["calories"]), 0.01)
 }
+
+func TestSmartLibraryBrandUsesNameWhenPackageSpellingDiffers(t *testing.T) {
+	keys := smartBuildBrandKeys([]string{"可口可乐", "特仑苏"})
+	require.Equal(t, "可口可乐", smartLibraryBrand(smartPackageReading{brand: "Coke"}, "可口可乐", keys))
+	require.Equal(t, "特仑苏", smartLibraryBrand(smartPackageReading{brand: "特仑苏", product: "纯牛奶"}, "牛奶", keys))
+	require.Equal(t, "完达山", smartLibraryBrand(smartPackageReading{brand: "完达山"}, "纯牛奶", keys), "an unknown brand is kept as read")
+	require.Empty(t, smartLibraryBrand(smartPackageReading{}, "可口可乐", keys), "the name alone never makes a brand")
+}
+
+func TestSmartBrandedPackagedMissFallsBackToGenericRow(t *testing.T) {
+	library := newSmartLibrary()
+	library.foods["牛奶(全脂)"] = foodrecorddomain.FoodNutrition{ID: "milk", CanonicalName: "牛奶(全脂)", KcalPer100g: 65, ProteinPer100g: 3.2, CarbsPer100g: 4.8, FatPer100g: 3.6, IsActive: true, QualityTier: "legacy_curated", Source: "项目内置初始营养数据"}
+	items := runSmart(t, library, smartItem("特仑苏纯牛奶", "liquid", 250, 180, map[string]any{"type": "snack", "brand": "特仑苏", "productName": "纯牛奶"}))
+	require.Equal(t, string(smartKindSingle), items[0]["smart_match_kind"])
+	require.Equal(t, "milk", items[0]["matched_food_id"], "the product name finds the generic row")
+	require.Equal(t, "特仑苏纯牛奶", items[0]["name"])
+}

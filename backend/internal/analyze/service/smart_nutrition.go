@@ -142,11 +142,14 @@ func (r *smartRun) resolveItem(ctx context.Context, item map[string]any) smartIt
 	switch kind {
 	case smartKindPackaged:
 		next, status := r.s.resolveSmartPackaged(ctx, item)
-		if next == nil && !smartHasPackagedIdentity(item) {
-			// "薯片" without a brand cannot pick a product; a generic
-			// library row is still better evidence than nothing.
-			if single, singleStatus := r.resolveSingle(ctx, item); single != nil {
-				return smartItemOutcome{item: single, kind: smartKindSingle, status: singleStatus}
+		if next == nil {
+			// "薯片" without a brand, or 完达山纯牛奶 missing from the
+			// packaged library, cannot pick a product; a generic library
+			// row is still better evidence than nothing.
+			for _, name := range smartPackagedFallbackNames(item) {
+				if single, singleStatus := r.resolveSingleAs(ctx, item, name); single != nil {
+					return smartItemOutcome{item: single, kind: smartKindSingle, status: singleStatus}
+				}
 			}
 		}
 		return smartItemOutcome{item: next, kind: kind, status: status}
@@ -160,7 +163,23 @@ func (r *smartRun) resolveItem(ctx context.Context, item map[string]any) smartIt
 }
 
 func (r *smartRun) resolveSingle(ctx context.Context, item map[string]any) (map[string]any, string) {
-	match, reason := r.matchSingleFood(ctx, item, stringFromAny(item["name"]))
+	return r.resolveSingleAs(ctx, item, stringFromAny(item["name"]))
+}
+
+// smartPackagedFallbackNames are the generic names a packaged item can match
+// in the standard library: its own name, then the product name read from the
+// package ("特仑苏纯牛奶" -> "纯牛奶").
+func smartPackagedFallbackNames(item map[string]any) []string {
+	name := strings.TrimSpace(stringFromAny(item["name"]))
+	names := []string{name}
+	if product := smartPackagedField(item, "productName", "product_name"); product != "" && product != name {
+		names = append(names, product)
+	}
+	return names
+}
+
+func (r *smartRun) resolveSingleAs(ctx context.Context, item map[string]any, name string) (map[string]any, string) {
+	match, reason := r.matchSingleFood(ctx, item, name)
 	if match == nil {
 		return nil, reason
 	}

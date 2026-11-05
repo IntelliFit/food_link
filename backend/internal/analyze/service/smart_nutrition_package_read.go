@@ -16,8 +16,13 @@ import (
 // it report whole-package weights. Meals that contain packaged food instead get
 // one separate call that only reads the packages, and its result feeds the
 // smart engine's packaged-library match and the item weight.
+//
+// Reading printed text needs no deep reasoning: Gemini 3 Flash with low
+// thinking read as many brands, net contents and panels as Gemini 3.6 on 42
+// snack photos, at 2.4s p50 / 5.6s p90 instead of 7.3s / 12.9s.
 const (
-	smartPackageReadTimeout  = 15 * time.Second
+	smartPackageReadModel    = gemini3FlashModel
+	smartPackageReadTimeout  = 8 * time.Second
 	smartPackageReadStage    = "package_read"
 	smartPackageReadAttempts = 2
 	// A label weight far from the photo estimate is more likely a misread
@@ -80,6 +85,7 @@ func (s *AnalyzeService) withSmartPackageReading(ctx context.Context, resp map[s
 	copy(out, items)
 	counts := map[string]int{}
 	for index, reading := range readings {
+		reading.brand = smartLibraryBrand(reading, stringFromAny(out[index]["name"]), keys)
 		next, applied := applySmartPackageReading(out[index], reading)
 		out[index] = next
 		for _, what := range applied {
@@ -104,12 +110,39 @@ func smartPackageReadCandidate(item map[string]any, keys []smartBrandKey) bool {
 	return brand != ""
 }
 
+// smartLibraryBrand spells a brand read from the package the way the library
+// does, falling back to the item name when the package shows another spelling
+// ("Coke" on the can, 可口可乐 in the name). An unread brand stays unread.
+func smartLibraryBrand(reading smartPackageReading, name string, keys []smartBrandKey) string {
+	if reading.brand == "" {
+		return ""
+	}
+	for _, text := range []string{reading.brand + reading.product, name, reading.product} {
+		if brand, _ := smartDetectBrand(text, keys); brand != "" {
+			return brand
+		}
+		// A name that is just the brand ("可口可乐") is not a branded product
+		// for detection, but here the package already proved the brand.
+		textKey := smartTextKey(text)
+		for _, key := range keys {
+			if key.key == textKey {
+				return key.brand
+			}
+		}
+	}
+	return reading.brand
+}
+
 func buildSmartPackageReadPrompt(items []map[string]any, indexes []int) string {
 	lines := make([]string, 0, len(indexes))
 	for _, index := range indexes {
 		lines = append(lines, fmt.Sprintf("[%d] %s，照片估计 %.0f 克", index, stringFromAny(items[index]["name"]), nutritionWeightFromItem(items[index])))
 	}
 	return fmt.Sprintf(smartPackageReadPromptTemplate, strings.Join(lines, "\n"))
+}
+
+type lowThinkingImageAnalyzer interface {
+	AnalyzeWithImagesLowThinkingModel(ctx context.Context, prompt string, imageURLs []string, modelName string) (map[string]any, error)
 }
 
 // callSmartPackageRead tries the leading ordinary photo channels in order. It
@@ -127,13 +160,19 @@ func (s *AnalyzeService) callSmartPackageRead(ctx context.Context, prompt string
 		u := &visionUsage{}
 		attemptCtx := context.WithValue(callCtx, visionUsageKey{}, u)
 		started := time.Now()
-		parsed, err := newAnalyzeWithImagesTemperatureModelCall(p.client, prompt, images, 0, p.model)(attemptCtx)
+		var parsed map[string]any
+		var err error
+		if reader, ok := p.client.(lowThinkingImageAnalyzer); ok {
+			parsed, err = reader.AnalyzeWithImagesLowThinkingModel(attemptCtx, prompt, images, smartPackageReadModel)
+		} else {
+			parsed, err = newAnalyzeWithImagesTemperatureModelCall(p.client, prompt, images, 0, smartPackageReadModel)(attemptCtx)
+		}
 		if err == nil {
 			if _, ok := parsed["packages"].([]any); !ok {
 				err = fmt.Errorf("包装读取结果缺少 packages")
 			}
 		}
-		metrics.ObserveVisionChannel(ctx, executionMode, smartPackageReadStage, p.upstream, p.model, visionChannelStatus(err), false, time.Since(started), u.input, u.output)
+		metrics.ObserveVisionChannel(ctx, executionMode, smartPackageReadStage, p.upstream, smartPackageReadModel, visionChannelStatus(err), false, time.Since(started), u.input, u.output)
 		if err == nil {
 			return parsed, p.upstream, nil
 		}
