@@ -50,3 +50,25 @@ func (s *MembershipService) GrantCaptureMembership(ctx context.Context, userID, 
 	})
 	return err
 }
+
+// GrantCampusCampaignMembership gives a campus campaign's core member
+// membership for the rest of the campaign. The source key (one per member
+// and campaign) makes a repeated grant a no-op.
+func (s *MembershipService) GrantCampusCampaignMembership(ctx context.Context, userID, sourceKey, planCode string, days int, meta map[string]any) error {
+	plan, err := s.repo.GetPlanByCode(ctx, planCode)
+	if err != nil {
+		return err
+	}
+	if plan == nil {
+		return fmt.Errorf("membership plan %s not found", planCode)
+	}
+	dailyCredits := plan.DailyCredits
+	if dailyCredits <= 0 {
+		dailyCredits = trialDailyCredits
+	}
+	_, _, _, err = s.repo.GrantMembership(ctx, domain.MembershipGrantInput{
+		UserID: userID, SourceType: "campus_campaign_core", SourceKey: sourceKey,
+		PlanCode: planCode, DailyCredits: dailyCredits, GrantDays: days, Meta: meta,
+	})
+	return err
+}

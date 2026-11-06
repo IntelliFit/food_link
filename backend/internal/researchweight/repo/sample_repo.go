@@ -121,6 +121,21 @@ func (r *SampleRepo) List(ctx context.Context, filter domain.ListFilter) (*domai
 	if scene := strings.TrimSpace(filter.Scene); scene != "" {
 		query = query.Where("scene = ?", scene)
 	}
+	if campaign := strings.TrimSpace(filter.CampaignID); campaign != "" {
+		if _, err := uuid.Parse(campaign); err != nil {
+			return &domain.ListResult{Items: []domain.Sample{}}, nil
+		}
+		query = query.Where("campaign_id = ?", campaign)
+	}
+	if channel := strings.TrimSpace(filter.CollectionChannel); channel != "" {
+		query = query.Where("collection_channel = ?", channel)
+	}
+	if mode := strings.TrimSpace(filter.ReviewMode); mode != "" {
+		query = query.Where("review_mode = ?", mode)
+	}
+	if tier := strings.TrimSpace(filter.QualityTier); tier != "" {
+		query = query.Where("quality_tier = ?", tier)
+	}
 	if keyword := strings.TrimSpace(filter.Query); keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where("dish_name ILIKE ? OR venue_name ILIKE ? OR notes ILIKE ?", like, like, like)

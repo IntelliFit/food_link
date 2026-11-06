@@ -195,6 +195,8 @@ func (h *SampleHandler) AdminList(c *gin.Context) {
 	result, err := h.svc.List(c.Request.Context(), domain.ListFilter{
 		Status: c.DefaultQuery("status", domain.StatusPending), WeighingMode: c.Query("weighing_mode"),
 		Scene: c.Query("scene"), Query: c.Query("q"), Limit: limit, Offset: (page - 1) * limit,
+		CampaignID: c.Query("campaign_id"), CollectionChannel: c.Query("collection_channel"),
+		ReviewMode: c.Query("review_mode"), QualityTier: c.Query("quality_tier"),
 	})
 	if err != nil {
 		response.Error(c, err)

@@ -52,6 +52,22 @@ type Repository interface {
 	PendingForAutoReview(ctx context.Context, before time.Time, limit int) ([]domain.Sample, error)
 }
 
+// SampleAttribution is the campus campaign a new sample belongs to.
+type SampleAttribution struct {
+	CampaignID         string
+	Channel            string
+	StationSessionID   *string
+	CanteenID          *string
+	CatalogItemID      *string
+	PairedFoodRecordID *string
+}
+
+// CampaignAttributor decides a new sample's campus campaign; nil means the
+// personal channel.
+type CampaignAttributor interface {
+	AttributeSample(ctx context.Context, userID string, input SubmitInput) (*SampleAttribution, error)
+}
+
 type RewardAwarder interface {
 	AwardResearchWeightSample(ctx context.Context, userID, sampleID string, credits int, meta map[string]any) (map[string]any, error)
 }
@@ -64,11 +80,12 @@ type ObjectStore interface {
 }
 
 type SampleService struct {
-	repo    Repository
-	rewards RewardAwarder
-	store   ObjectStore
-	reader  *ScaleReader
-	now     func() time.Time
+	repo      Repository
+	rewards   RewardAwarder
+	store     ObjectStore
+	reader    *ScaleReader
+	campaigns CampaignAttributor
+	now       func() time.Time
 	// async runs background work; nil means a goroutine. Tests make it
 	// synchronous.
 	async func(func())
@@ -129,6 +146,9 @@ func (s *SampleService) Submit(ctx context.Context, userID string, input SubmitI
 	if err := s.rejectReusedPhotos(ctx, userID, sample.Photos); err != nil {
 		return nil, err
 	}
+	if err := s.attribute(ctx, userID, input, sample); err != nil {
+		return nil, err
+	}
 	count, err := s.repo.CountSince(ctx, userID, s.now().Add(-24*time.Hour))
 	if err != nil {
 		return nil, err
@@ -147,6 +167,27 @@ func (s *SampleService) Submit(ctx context.Context, userID string, input SubmitI
 		s.reviewSoon(ctx, saved.ID)
 	}
 	return &view, nil
+}
+
+// ConfigureCampaigns lets submissions carry the contributor's campus campaign.
+func (s *SampleService) ConfigureCampaigns(campaigns CampaignAttributor) { s.campaigns = campaigns }
+
+// attribute stamps a new sample with the campus campaign the server finds for
+// the contributor; the channel is fixed at submission and never changed.
+func (s *SampleService) attribute(ctx context.Context, userID string, input SubmitInput, sample *domain.Sample) error {
+	sample.CollectionChannel = "personal"
+	if s.campaigns == nil {
+		return nil
+	}
+	attribution, err := s.campaigns.AttributeSample(ctx, userID, input)
+	if err != nil || attribution == nil {
+		return err
+	}
+	campaignID := attribution.CampaignID
+	sample.CampaignID, sample.CollectionChannel = &campaignID, attribution.Channel
+	sample.StationSessionID, sample.CanteenID = attribution.StationSessionID, attribution.CanteenID
+	sample.CatalogItemID, sample.PairedFoodRecordID = attribution.CatalogItemID, attribution.PairedFoodRecordID
+	return nil
 }
 
 func (s *SampleService) Mine(ctx context.Context, userID string) (*MineResult, error) {

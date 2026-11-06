@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -329,4 +330,45 @@ func TestAutoReviewIsOffWithoutAReader(t *testing.T) {
 	require.ErrorContains(t, err, "未开启")
 	_, err = svc.ReadScale(context.Background(), "u1", "https://cdn.test/research-weight/u1/g.jpg", 1)
 	require.ErrorContains(t, err, "手动填写")
+}
+
+type fakeAttributor struct {
+	result *SampleAttribution
+	err    error
+	inputs []SubmitInput
+}
+
+func (f *fakeAttributor) AttributeSample(_ context.Context, _ string, input SubmitInput) (*SampleAttribution, error) {
+	f.inputs = append(f.inputs, input)
+	return f.result, f.err
+}
+
+func TestSubmitCarriesTheContributorsCampaign(t *testing.T) {
+	svc, repo, _ := newTestService()
+	station, dish := "33333333-0000-0000-0000-000000000001", "44444444-0000-0000-0000-000000000001"
+	attributor := &fakeAttributor{result: &SampleAttribution{CampaignID: "c-1", Channel: "campus_station", StationSessionID: &station, CatalogItemID: &dish}}
+	svc.ConfigureCampaigns(attributor)
+	input := wholeInput()
+	input.StationSessionID = station
+	view, err := svc.Submit(context.Background(), "u1", input)
+	require.NoError(t, err)
+	saved := repo.samples[view.ID]
+	require.Equal(t, "c-1", *saved.CampaignID)
+	require.Equal(t, "campus_station", saved.CollectionChannel)
+	require.Equal(t, dish, *saved.CatalogItemID)
+	require.Equal(t, station, attributor.inputs[0].StationSessionID)
+
+	attributor.result = nil
+	input.ClientKey = "sample-key-0002"
+	input.Photos = []PhotoInput{photo(domain.RoleTareScale, "t2.jpg"), photo(domain.RoleGrossScale, "g2.jpg"), photo(domain.RoleEvalTop, "top2.jpg")}
+	view, err = svc.Submit(context.Background(), "u1", input)
+	require.NoError(t, err)
+	require.Equal(t, "personal", repo.samples[view.ID].CollectionChannel)
+	require.Nil(t, repo.samples[view.ID].CampaignID)
+
+	attributor.err = errors.New("称重日不属于你参加的活动")
+	input.ClientKey = "sample-key-0003"
+	input.Photos = []PhotoInput{photo(domain.RoleTareScale, "t3.jpg"), photo(domain.RoleGrossScale, "g3.jpg"), photo(domain.RoleEvalTop, "top3.jpg")}
+	_, err = svc.Submit(context.Background(), "u1", input)
+	require.ErrorContains(t, err, "称重日")
 }

@@ -58,6 +58,11 @@ type SubmitInput struct {
 	Device              map[string]any `json:"device"`
 	Notes               string         `json:"notes"`
 	ConsentVersion      string         `json:"consent_version"`
+	// Campus channel context; the server checks each against the
+	// contributor's active campaign and ignores them otherwise.
+	StationSessionID   string `json:"station_session_id"`
+	CatalogItemID      string `json:"catalog_item_id"`
+	PairedFoodRecordID string `json:"paired_food_record_id"`
 }
 
 // KeyResolver turns an uploaded image or video URL into a storage object key,

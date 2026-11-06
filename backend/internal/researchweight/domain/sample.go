@@ -143,12 +143,16 @@ type MineSummary struct {
 }
 
 type ListFilter struct {
-	Status       string
-	WeighingMode string
-	Scene        string
-	Query        string
-	Limit        int
-	Offset       int
+	Status            string
+	WeighingMode      string
+	Scene             string
+	CampaignID        string
+	CollectionChannel string
+	ReviewMode        string
+	QualityTier       string
+	Query             string
+	Limit             int
+	Offset            int
 }
 
 type ListResult struct {

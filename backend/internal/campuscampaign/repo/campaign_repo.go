@@ -1,0 +1,287 @@
+package repo
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"food_link/backend/internal/campuscampaign/domain"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+)
+
+type CampaignRepo struct{ db *gorm.DB }
+
+func NewCampaignRepo(db *gorm.DB) *CampaignRepo { return &CampaignRepo{db: db} }
+
+// --- clubs and campaigns ----------------------------------------------------
+
+func (r *CampaignRepo) CreateOrg(ctx context.Context, org *domain.Org) error {
+	return r.db.WithContext(ctx).Create(org).Error
+}
+
+func (r *CampaignRepo) GetOrg(ctx context.Context, id string) (*domain.Org, error) {
+	var org domain.Org
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&org).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &org, err
+}
+
+func (r *CampaignRepo) ListOrgs(ctx context.Context) ([]domain.Org, error) {
+	var orgs []domain.Org
+	err := r.db.WithContext(ctx).Order("created_at DESC").Limit(500).Find(&orgs).Error
+	return orgs, err
+}
+
+func (r *CampaignRepo) CreateCampaign(ctx context.Context, campaign *domain.Campaign) error {
+	return r.db.WithContext(ctx).Create(campaign).Error
+}
+
+func (r *CampaignRepo) UpdateCampaign(ctx context.Context, id string, updates map[string]any) error {
+	updates["updated_at"] = time.Now()
+	result := r.db.WithContext(ctx).Model(&domain.Campaign{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func (r *CampaignRepo) GetCampaign(ctx context.Context, id string) (*domain.Campaign, error) {
+	return r.firstCampaign(ctx, "id = ?", id)
+}
+
+func (r *CampaignRepo) GetCampaignByCode(ctx context.Context, code string) (*domain.Campaign, error) {
+	return r.firstCampaign(ctx, "join_code = ?", code)
+}
+
+func (r *CampaignRepo) firstCampaign(ctx context.Context, where string, arg any) (*domain.Campaign, error) {
+	var campaign domain.Campaign
+	err := r.db.WithContext(ctx).Where(where, arg).First(&campaign).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &campaign, err
+}
+
+func (r *CampaignRepo) ListCampaigns(ctx context.Context, status string) ([]domain.Campaign, error) {
+	query := r.db.WithContext(ctx).Order("starts_at DESC").Limit(500)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	var campaigns []domain.Campaign
+	err := query.Find(&campaigns).Error
+	return campaigns, err
+}
+
+// SchoolName returns the directory name of a school, or "" when unknown.
+func (r *CampaignRepo) SchoolName(ctx context.Context, schoolID string) (string, error) {
+	var names []string
+	err := r.db.WithContext(ctx).Raw(`SELECT name FROM schools WHERE id::text = ?`, schoolID).Scan(&names).Error
+	if err != nil || len(names) == 0 {
+		return "", err
+	}
+	return names[0], nil
+}
+
+// --- members ------------------------------------------------------------------
+
+// ActiveMembership returns the user's membership in a campaign that is
+// active and inside its window at now, or nil.
+func (r *CampaignRepo) ActiveMembership(ctx context.Context, userID string, now time.Time) (*domain.Member, *domain.Campaign, error) {
+	var members []domain.Member
+	err := r.db.WithContext(ctx).Table("campus_campaign_members AS m").Select("m.*").
+		Joins("JOIN campus_campaigns AS c ON c.id = m.campaign_id").
+		Where("m.user_id = ? AND m.status = ? AND c.status = ? AND c.starts_at <= ? AND c.ends_at > ?", userID, domain.MemberActive, domain.CampaignActive, now, now).
+		Order("m.joined_at DESC").Limit(1).Find(&members).Error
+	if err != nil || len(members) == 0 {
+		return nil, nil, err
+	}
+	campaign, err := r.GetCampaign(ctx, members[0].CampaignID)
+	return &members[0], campaign, err
+}
+
+func (r *CampaignRepo) GetMember(ctx context.Context, campaignID, userID string) (*domain.Member, error) {
+	var member domain.Member
+	err := r.db.WithContext(ctx).Where("campaign_id = ? AND user_id = ?", campaignID, userID).First(&member).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &member, err
+}
+
+// UpsertMember adds a member, or reactivates one who left; the role a leader
+// gave stays.
+func (r *CampaignRepo) UpsertMember(ctx context.Context, member *domain.Member) (*domain.Member, error) {
+	now := time.Now()
+	member.UpdatedAt = &now
+	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "campaign_id"}, {Name: "user_id"}},
+		DoUpdates: clause.Assignments(map[string]any{"status": domain.MemberActive, "has_scale": member.HasScale, "scale_precision_grams": member.ScalePrecisionGrams, "updated_at": now}),
+	}).Create(member).Error
+	if err != nil {
+		return nil, err
+	}
+	return r.GetMember(ctx, member.CampaignID, member.UserID)
+}
+
+// SetRole changes a member's role inside the campaign.
+func (r *CampaignRepo) SetRole(ctx context.Context, campaignID, userID, role string, markedBy *string, at *time.Time) error {
+	result := r.db.WithContext(ctx).Model(&domain.Member{}).
+		Where("campaign_id = ? AND user_id = ? AND status = ?", campaignID, userID, domain.MemberActive).
+		Updates(map[string]any{"role": role, "core_marked_by": markedBy, "core_marked_at": at, "updated_at": time.Now()})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func (r *CampaignRepo) MarkMembershipGranted(ctx context.Context, campaignID, userID string, days int, at time.Time) error {
+	return r.db.WithContext(ctx).Model(&domain.Member{}).Where("campaign_id = ? AND user_id = ?", campaignID, userID).
+		Updates(map[string]any{"membership_granted_at": at, "membership_grant_days": days, "updated_at": time.Now()}).Error
+}
+
+// CountRole counts active members holding a role.
+func (r *CampaignRepo) CountRole(ctx context.Context, campaignID, role string) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.Member{}).
+		Where("campaign_id = ? AND role = ? AND status = ?", campaignID, role, domain.MemberActive).Count(&count).Error
+	return count, err
+}
+
+// MemberCounts returns active members and approved weighed samples of each
+// campaign, by campaign ID.
+func (r *CampaignRepo) MemberCounts(ctx context.Context, campaignIDs []string) (map[string][2]int64, error) {
+	result := map[string][2]int64{}
+	if len(campaignIDs) == 0 {
+		return result, nil
+	}
+	var rows []struct {
+		CampaignID string
+		Members    int64
+		Approved   int64
+	}
+	err := r.db.WithContext(ctx).Raw(`SELECT c.id AS campaign_id,
+  (SELECT count(*) FROM campus_campaign_members m WHERE m.campaign_id = c.id AND m.status = 'active') AS members,
+  (SELECT count(*) FROM research_weight_samples s WHERE s.campaign_id = c.id AND s.status = 'approved') AS approved
+FROM campus_campaigns c WHERE c.id IN ?`, campaignIDs).Scan(&rows).Error
+	for _, row := range rows {
+		result[row.CampaignID] = [2]int64{row.Members, row.Approved}
+	}
+	return result, err
+}
+
+// MemberStats lists active members with their contributions, most approved
+// samples first.
+func (r *CampaignRepo) MemberStats(ctx context.Context, campaignID string) ([]domain.MemberStats, error) {
+	var rows []domain.MemberStats
+	err := r.db.WithContext(ctx).Raw(`SELECT m.user_id, coalesce(u.nickname, '') AS nickname, m.role, m.has_scale,
+  coalesce(s.submitted, 0) AS submitted, coalesce(s.approved, 0) AS approved, coalesce(rec.photo_records, 0) AS photo_records,
+  (m.membership_granted_at IS NOT NULL) AS membership_set
+FROM campus_campaign_members m
+LEFT JOIN weapp_user u ON u.id = m.user_id
+LEFT JOIN (SELECT user_id, count(*) AS submitted, count(*) FILTER (WHERE status = 'approved') AS approved
+           FROM research_weight_samples WHERE campaign_id = ? GROUP BY user_id) s ON s.user_id = m.user_id
+LEFT JOIN (SELECT user_id, count(*) AS photo_records FROM campus_campaign_records WHERE campaign_id = ? GROUP BY user_id) rec ON rec.user_id = m.user_id
+WHERE m.campaign_id = ? AND m.status = 'active'
+ORDER BY approved DESC, submitted DESC, m.joined_at ASC
+LIMIT 500`, campaignID, campaignID, campaignID).Scan(&rows).Error
+	return rows, err
+}
+
+// CampaignsBoard ranks the active campaigns by approved weighed samples and
+// the number of distinct dishes they weighed.
+func (r *CampaignRepo) CampaignsBoard(ctx context.Context, now time.Time) ([]domain.BoardEntry, error) {
+	var rows []domain.BoardEntry
+	err := r.db.WithContext(ctx).Raw(`SELECT o.name AS name, coalesce(sc.name, '') AS school_name,
+  (SELECT count(*) FROM research_weight_samples s WHERE s.campaign_id = c.id AND s.status = 'approved') AS approved,
+  (SELECT count(*) FROM campus_campaign_members m WHERE m.campaign_id = c.id AND m.status = 'active') AS members,
+  (SELECT count(DISTINCT s.catalog_item_id) FROM research_weight_samples s WHERE s.campaign_id = c.id AND s.status = 'approved' AND s.catalog_item_id IS NOT NULL) AS dishes
+FROM campus_campaigns c
+JOIN campus_orgs o ON o.id = c.org_id
+LEFT JOIN schools sc ON sc.id::text = c.school_id::text
+WHERE c.status = 'active' AND c.starts_at <= ?
+ORDER BY approved DESC, dishes DESC
+LIMIT 100`, now).Scan(&rows).Error
+	return rows, err
+}
+
+// --- weighing days --------------------------------------------------------------
+
+func (r *CampaignRepo) CreateStation(ctx context.Context, station *domain.Station) error {
+	return r.db.WithContext(ctx).Create(station).Error
+}
+
+func (r *CampaignRepo) GetStation(ctx context.Context, id string) (*domain.Station, error) {
+	var station domain.Station
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&station).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &station, err
+}
+
+// ListStations returns the campaign's weighing days from a date on.
+func (r *CampaignRepo) ListStations(ctx context.Context, campaignID, fromDate string) ([]domain.Station, error) {
+	var stations []domain.Station
+	err := r.db.WithContext(ctx).Where("campaign_id = ? AND session_date >= ?", campaignID, fromDate).
+		Order("session_date ASC, created_at ASC").Limit(100).Find(&stations).Error
+	return stations, err
+}
+
+// --- photo-estimated meals --------------------------------------------------------
+
+// CreateRecord links a food record once; a repeated link is a no-op.
+func (r *CampaignRepo) CreateRecord(ctx context.Context, record *domain.Record) (bool, error) {
+	result := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(record)
+	return result.RowsAffected > 0, result.Error
+}
+
+// FoodRecordRef is what a campaign link needs from a saved food record.
+type FoodRecordRef struct {
+	SourceTaskID     *string
+	TotalWeightGrams int
+	ExecutionMode    string
+	RecordTime       *time.Time
+}
+
+// FoodRecordForUser returns the user's own food record with its analysis
+// mode, or nil when the record is not theirs.
+func (r *CampaignRepo) FoodRecordForUser(ctx context.Context, recordID, userID string) (*FoodRecordRef, error) {
+	var rows []FoodRecordRef
+	err := r.db.WithContext(ctx).Raw(`SELECT f.source_task_id, f.total_weight_grams, f.record_time,
+  coalesce(t.payload->>'execution_mode', '') AS execution_mode
+FROM user_food_records f
+LEFT JOIN analysis_tasks t ON t.id::text = f.source_task_id::text
+WHERE f.id::text = ? AND f.user_id::text = ?`, recordID, userID).Scan(&rows).Error
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return &rows[0], nil
+}
+
+// CatalogItemRef is the location of a canteen dish in the directory.
+type CatalogItemRef struct {
+	SchoolID  *string
+	CanteenID *string
+	WindowID  *string
+	Name      string
+}
+
+func (r *CampaignRepo) CatalogItem(ctx context.Context, id string) (*CatalogItemRef, error) {
+	var rows []CatalogItemRef
+	err := r.db.WithContext(ctx).Raw(`SELECT school_id::text AS school_id, canteen_id::text AS canteen_id, window_id::text AS window_id, name
+FROM campus_food_catalog_items WHERE id::text = ?`, id).Scan(&rows).Error
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return &rows[0], nil
+}
