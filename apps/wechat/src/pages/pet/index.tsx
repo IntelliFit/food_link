@@ -36,7 +36,7 @@ function openTarget(target: PetActionTarget) {
 
 /**
  * 底栏「小麦」：替换了原来的「分析」格，一屏看完今天——宠物和一句话、今天还差（按关注排）、
- * 今天一个任务（记录后自动完成）、本周分数、问小麦。完整分析是 pages/stats/index 二级页。
+ * 今天一个任务（记录后自动完成）、本周分数、问小麦。完整分析是 packageStats/pages/stats/index 二级页。
  */
 function PetTabPage() {
   const { scheme } = useAppColorScheme()

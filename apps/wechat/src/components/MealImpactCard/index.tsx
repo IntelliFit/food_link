@@ -27,7 +27,7 @@ const PET_GRACE_MS = 600
 /** 小麦 Tab：今天还差什么，刚记的这餐会在那里完成今天的任务 */
 const PET_TAB_URL = '/pages/pet/index'
 /** 完整分析是二级页，看过去某天时去这里 */
-const STATS_DETAIL_URL = '/pages/stats/index'
+const STATS_DETAIL_URL = '/packageStats/pages/stats/index'
 
 interface LoadedImpact {
   impact: MealImpact

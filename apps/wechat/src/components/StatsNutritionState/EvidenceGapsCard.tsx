@@ -1,5 +1,5 @@
 import { Text, View } from '@tarojs/components'
-import type { EvidenceGapView } from '../../pages/stats/nutrition-state-view'
+import type { EvidenceGapView } from '../../packageStats/pages/stats/nutrition-state-view'
 
 /** 「这些还看不准」：缺什么数据、补哪一项 */
 export function EvidenceGapsCard({ gaps, onAction }: {

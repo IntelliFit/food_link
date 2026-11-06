@@ -3,7 +3,7 @@ import type { PetChatHomeMealEntry } from '../../utils/pet-navigation'
 /** 小麦页上的跳转：都去现有页面，小麦页本身只放一屏摘要。 */
 export type PetActionId = 'pick_meal' | 'ask' | 'stats' | 'dress'
 
-export const STATS_DETAIL_URL = '/pages/stats/index'
+export const STATS_DETAIL_URL = '/packageStats/pages/stats/index'
 
 const CHAT_MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'evening_snack'] as const
 

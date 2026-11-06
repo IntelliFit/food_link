@@ -6,8 +6,8 @@ import {
   sameKeys,
   splitFocusCards,
   toggleFocusKey,
-} from '../../src/pages/stats/focus-selection'
-import { normalizeNutritionState } from '../../src/pages/stats/nutrition-state-view'
+} from '../../src/packageStats/pages/stats/focus-selection'
+import { normalizeNutritionState } from '../../src/packageStats/pages/stats/nutrition-state-view'
 import type { RiskCard } from '../../src/utils/api'
 
 function card(key: string, overrides: Partial<RiskCard> = {}): RiskCard {

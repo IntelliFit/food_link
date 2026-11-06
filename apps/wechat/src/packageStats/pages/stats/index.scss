@@ -1,5 +1,5 @@
-@import '../../styles/tab-page-layout.scss';
-@import '../../styles/meal-orbit-tokens.scss';
+@import '../../../styles/tab-page-layout.scss';
+@import '../../../styles/meal-orbit-tokens.scss';
 
 /* 与首页 `index.scss` 同源：时间轴绿 #5cb896、警示红 #e57373、页面渐变与三大营养素低饱和色 */
 $stats-primary: #5cb896;
@@ -3318,4 +3318,4 @@ $stats-blue-soft: #7aa9ce;
 }
 
 // 组件不自己引样式：组件样式进 common.wxss 会被每个页面加载，这里只给分析页
-@import '../../components/StatsNutritionState/StatsNutritionState.scss';
+@import '../../../components/StatsNutritionState/StatsNutritionState.scss';

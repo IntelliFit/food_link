@@ -16,7 +16,7 @@ const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8')
 
 describe('小麦 page actions', () => {
   it('opens the full analysis as a sub-page and dressing in pet settings', () => {
-    expect(petActionTarget('stats')).toEqual({ kind: 'navigateTo', url: '/pages/stats/index' })
+    expect(petActionTarget('stats')).toEqual({ kind: 'navigateTo', url: '/packageStats/pages/stats/index' })
     expect(petActionTarget('dress')).toEqual({ kind: 'petSettings' })
   })
 
@@ -96,22 +96,25 @@ describe('小麦 replaces the 分析 slot', () => {
     expect(read('custom-tab-bar/index.wxml')).toContain("item.id === 'pet'")
   })
 
-  it('lists the pet page as the tab and keeps the full analysis in the main package', () => {
+  it('lists the pet page as the tab and keeps the full analysis in its own subpackage', () => {
     const appConfig = read('src/app.config.ts')
     const start = appConfig.indexOf('const mainPages')
     const mainPages = appConfig.slice(start, appConfig.indexOf(']', start))
     expect(mainPages).toContain("'pages/pet/index'")
-    expect(mainPages).toContain("'pages/stats/index'")
+    expect(mainPages).not.toContain("'pages/stats/index'")
+    expect(appConfig).toContain("{ root: 'packageStats', name: 'stats', pages: ['pages/stats/index'] }")
+    expect(appConfig).toContain("'pages/pet/index': { network: 'all', packages: ['stats'] }")
     const tabList = appConfig.slice(appConfig.indexOf('tabBar:'))
     expect(tabList).toContain("pagePath: 'pages/pet/index'")
     expect(tabList).not.toContain("pagePath: 'pages/stats/index'")
   })
 
-  it('routes login redirects to the analysis sub-page without a subpackage prefix', () => {
+  it('routes old analysis redirects into the stats subpackage', () => {
     expect(MAIN_TAB_ROUTES.has('/pages/pet/index')).toBe(true)
     expect(MAIN_TAB_ROUTES.has('/pages/stats/index')).toBe(false)
-    expect(MAIN_PAGE_ROUTES.has('/pages/stats/index')).toBe(true)
-    expect(normalizeRedirectUrlForSubpackage('/pages/stats/index?tab=focus')).toBe('/pages/stats/index?tab=focus')
+    expect(MAIN_PAGE_ROUTES.has('/pages/stats/index')).toBe(false)
+    expect(normalizeRedirectUrlForSubpackage('/pages/stats/index?tab=focus')).toBe('/packageStats/pages/stats/index?tab=focus')
+    expect(normalizeRedirectUrlForSubpackage('/packageStats/pages/stats/index')).toBe('/packageStats/pages/stats/index')
     expect(normalizeRedirectUrlForSubpackage('/pages/pet/index')).toBe('/pages/pet/index')
   })
 

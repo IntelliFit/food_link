@@ -6,12 +6,15 @@ export const SUBPACKAGE_ABOUT_ROOT = '/packageAbout' as const
 export const SUBPACKAGE_USER_GROUP_ROOT = '/packageUserGroup' as const
 export const SUBPACKAGE_STATS_METABOLIC_ROOT = '/packageStatsMetabolic' as const
 export const SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT = '/packageFoodLibraryShare' as const
+export const SUBPACKAGE_STATS_ROOT = '/packageStats' as const
 
 const EXTRA_PACKAGE_ROOT_BY_PAGE: Readonly<Record<string, string>> = {
   '/pages/about/index': SUBPACKAGE_ABOUT_ROOT,
   '/pages/user-group/index': SUBPACKAGE_USER_GROUP_ROOT,
   '/pages/stats-metabolic/index': SUBPACKAGE_STATS_METABOLIC_ROOT,
   '/pages/food-library-share/index': SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT,
+  // 完整分析在 4.6.20 是主包 Tab 页，本地保存的旧回跳地址 /pages/stats/index 也会映射到这里。
+  '/pages/stats/index': SUBPACKAGE_STATS_ROOT,
 }
 
 const KNOWN_EXTRA_PACKAGE_ROOTS = [
@@ -21,6 +24,7 @@ const KNOWN_EXTRA_PACKAGE_ROOTS = [
   SUBPACKAGE_USER_GROUP_ROOT,
   SUBPACKAGE_STATS_METABOLIC_ROOT,
   SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT,
+  SUBPACKAGE_STATS_ROOT,
 ] as const
 
 /** TabBar 主包页面（与 `getCurrentPageRoute()` 一致，形如 /pages/xxx/index） */
@@ -31,10 +35,8 @@ export const MAIN_TAB_ROUTES: ReadonlySet<string> = new Set([
   '/pages/profile/index',
 ])
 
-/** 在主包但不是 Tab 的页面：用 navigateTo/redirectTo 打开，也不加分包前缀。 */
-export const MAIN_PAGE_ROUTES: ReadonlySet<string> = new Set([
-  '/pages/stats/index',
-])
+/** 在主包但不是 Tab 的页面：用 navigateTo/redirectTo 打开，也不加分包前缀。完整分析已挪到 packageStats，目前没有。 */
+export const MAIN_PAGE_ROUTES: ReadonlySet<string> = new Set<string>([])
 
 /**
  * 非 Tab 的页面均在 `packageExtra` 分包，navigateTo/redirectTo 须使用完整路径。

@@ -16,7 +16,7 @@ import {
   weekCountText,
   weekDayLabels,
   weekHabitRows,
-} from '../../src/pages/stats/nutrition-state-view'
+} from '../../src/packageStats/pages/stats/nutrition-state-view'
 import type { NutrientReading, RiskCard } from '../../src/utils/api'
 
 /** docs/algorithms/daily-nutrition-state.md 里的示例 */

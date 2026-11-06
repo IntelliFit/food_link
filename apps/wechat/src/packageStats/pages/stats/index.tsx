@@ -1,8 +1,8 @@
 import { View, Text, ScrollView, Input, Switch, Checkbox, Image } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
-import { readStatsPageCache, writeStatsPageCache } from '../../utils/stats-page-cache'
-import { showDietDecisionEvidence } from '../../utils/diet-decision-evidence'
+import { readStatsPageCache, writeStatsPageCache } from '../../../utils/stats-page-cache'
+import { showDietDecisionEvidence } from '../../../utils/diet-decision-evidence'
 import {
   getStatsSummary,
   getBodyMetricsSummary,
@@ -21,7 +21,7 @@ import {
   type PetSummary,
   type RiskCard,
   type RiskOption,
-} from '../../utils/api'
+} from '../../../utils/api'
 import {
   applyEngineFocus,
   coverageLines,
@@ -59,23 +59,23 @@ import {
   TodayGapsCard,
   WeekHabitsCard,
   type FocusSpotlightItem,
-} from '../../components/StatsNutritionState'
-import { applyThemeNavigationBar } from '../../utils/theme-navigation-bar'
-import { experiments } from '../../utils/experiments'
-import { openPetChat } from '../../utils/pet-navigation'
-import { extraPkgUrl } from '../../utils/subpackage-extra'
+} from '../../../components/StatsNutritionState'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { experiments } from '../../../utils/experiments'
+import { openPetChat } from '../../../utils/pet-navigation'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   customFocusCardFromTask,
   readPendingCustomFocusTasks,
   removePendingCustomFocusTask,
   savePendingCustomFocusTask,
   type PendingCustomFocusTask,
-} from '../../utils/custom-focus-task'
-import { IconExpand, IconCollapse } from '../../components/iconfont'
-import healthScoreForest from '../../assets/stats/health-score-forest.webp'
+} from '../../../utils/custom-focus-task'
+import { IconExpand, IconCollapse } from '../../../components/iconfont'
+import healthScoreForest from '../../../assets/stats/health-score-forest.webp'
 import './index.scss'
-import { withAuth, redirectToLogin } from '../../utils/withAuth'
-import { useAppColorScheme } from '../../components/AppColorSchemeContext'
+import { withAuth, redirectToLogin } from '../../../utils/withAuth'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',

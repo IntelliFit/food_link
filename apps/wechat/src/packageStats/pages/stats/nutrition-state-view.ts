@@ -12,7 +12,7 @@ import type {
   NutritionWeekDelta,
   RiskCard,
   RiskTone,
-} from '../../utils/api'
+} from '../../../utils/api'
 
 /**
  * 把引擎的「每日营养状态」转成分析页展示数据。

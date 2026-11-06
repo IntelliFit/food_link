@@ -1,4 +1,4 @@
-import type { NutritionFocusChoice, RiskCard } from '../../utils/api'
+import type { NutritionFocusChoice, RiskCard } from '../../../utils/api'
 import { focusCardKey } from './nutrition-state-view'
 
 /**

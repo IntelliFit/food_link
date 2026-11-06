@@ -1,5 +1,5 @@
 // 分析页「健康关注」里接引擎营养状态的新模块。颜色走分析页 editorial 的 --stats-* 变量，深色模式跟着变。
-// 由 pages/stats/index.scss 引入（组件 tsx 不引），样式只进分析页的 wxss。
+// 由 packageStats/pages/stats/index.scss 引入（组件 tsx 不引），样式只进分析页的 wxss。
 $ns-fill: #5cb896;
 $ns-warn: #e0913f;
 $ns-over: #c8644a;

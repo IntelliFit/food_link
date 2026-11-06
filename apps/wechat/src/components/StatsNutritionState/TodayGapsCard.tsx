@@ -1,5 +1,5 @@
 import { Text, View } from '@tarojs/components'
-import type { NextMealView, TodayRowView } from '../../pages/stats/nutrition-state-view'
+import type { NextMealView, TodayRowView } from '../../packageStats/pages/stats/nutrition-state-view'
 
 function TodayRow({ row }: { row: TodayRowView }) {
   if (!row.known) {
