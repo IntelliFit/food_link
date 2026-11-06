@@ -248,51 +248,52 @@ v2 里读数是"拍照 + 手打数字"，这一版改成：
 - 自动审核看板：每天提交数、自动通过率、各类拒绝原因、重拍次数、读秤失败率。
 - 导出：按 `label_source` 分文件。
 
-### 7.3 数据模型草案
+### 7.3 数据模型（已按此实现，分支 `feat/campus-channel`）
 
 新表：
 
 | 表 | 主要字段 | 说明 |
 |---|---|---|
-| `campus_orgs` | `id`、`school_id`、`campus_id`、`name`、`org_type`（fitness_club / other）、`status`、`agreement_version`、`agreement_signed_at`、`note`、时间戳 | 唯一：(`school_id`, `name`) |
-| `campus_campaigns` | `id`、`org_id`、`school_id`、`title`、`join_code`（唯一）、`starts_at`、`ends_at`、`status`（draft / active / ended）、`core_member_cap`（默认 15）、`membership_plan_code`、`goals`（jsonb）、`club_reward_note`（社团自己写的奖励说明）、`created_by_admin_id`、时间戳 | 加入码就是二维码参数，也用作 `marketing_qr` 的 campaign_code |
-| `campus_campaign_members` | `id`、`campaign_id`、`user_id`、`role`（leader / core / member）、`has_scale`、`scale_precision_grams`、`join_source`（qr / link / code / admin）、`status`（active / left / removed）、`membership_grant_id`、`core_marked_by`、`core_marked_at`、`joined_at`、时间戳 | 唯一：(`campaign_id`, `user_id`)；"只能一个进行中活动"、核心成员名额由服务端校验 |
-| `campus_campaign_records` | `id`、`campaign_id`、`user_id`、`food_record_id`（唯一）、`analysis_task_id`、`execution_mode`、`label_source`（model_estimate / user_adjusted）、`estimated_total_grams`、`canteen_id`、`window_id`、`catalog_item_id`、`paired_research_sample_id`、`created_at` | 拍照估算的活动和菜品关联；E 层只在这里 |
-| `campus_station_sessions` | `id`、`campaign_id`、`created_by_user_id`、`canteen_id`、`location_text`、`session_date`、`meal_period`、`kind`（weigh_station / same_dish）、`scale_precision_grams`、`notes`、`created_at` | 负责人在小程序里建 |
+| `research_weight_photo_checks` | `object_key`（主键）、`user_id`、`content_sha256`、`readings`（jsonb：每个模型读到的数字、单位、显示步长、是否秤的显示屏）、`read_at`、时间戳 | 服务端自己的证据：上传时记内容哈希（防别人的照片拿来交），读秤结果存这里；客户端写不到 |
+| `campus_orgs` | `id`、`school_id`、`campus_id`、`name`、`org_type`（fitness_club / other）、`status`、`agreement_version`、`agreement_signed_at`、`note`、`created_by_admin_id`、时间戳 | 唯一：(`school_id`, `name`) |
+| `campus_campaigns` | `id`、`org_id`、`school_id`、`title`、`join_code`（6 位，唯一）、`starts_at`、`ends_at`、`status`（draft / active / ended）、`core_member_cap`（默认 15，0–200）、`membership_plan_code`（默认 standard_monthly）、`goals`（jsonb）、`club_reward_note`、`created_by_admin_id`、时间戳 | 约束：结束晚于开始 |
+| `campus_campaign_members` | `id`、`campaign_id`、`user_id`、`role`（leader / core / member）、`has_scale`、`scale_precision_grams`、`join_source`（qr / link / code / admin）、`status`、`core_marked_by`、`core_marked_at`、`membership_granted_at`、`membership_grant_days`、`joined_at`、时间戳 | 唯一：(`campaign_id`, `user_id`)；"只能一个进行中活动"、名额由服务端校验 |
+| `campus_campaign_records` | `id`、`campaign_id`、`user_id`、`food_record_id`（唯一）、`analysis_task_id`、`execution_mode`、`label_source`（只能是 model_estimate / user_adjusted）、`estimated_total_grams`、`canteen_id`、`window_id`、`catalog_item_id`、`dish_name`、`created_at` | E 层只在这里；数据库约束保证它不可能被标成实测 |
+| `campus_station_sessions` | `id`、`campaign_id`、`created_by_user_id`、`canteen_id`、`location_text`、`session_date`、`meal_period`、`kind`（weigh_station / same_dish）、`catalog_item_id`、`scale_precision_grams`、`notes`、`status`、`created_at` | 负责人在小程序里建 |
 
 改现有表（全部是新增可空列或带常量默认值的列，不改已有数据）：
 
 | 表 | 新增 |
 |---|---|
-| `research_weight_samples` | `campaign_id`、`collection_channel`（默认 `personal`；取值 personal / campus_self_scale / campus_station / campus_same_dish）、`station_session_id`、`canteen_id`、`catalog_item_id`、`paired_food_record_id`、`review_mode`（默认 `manual`；manual / auto）、`auto_review`（jsonb：各项检查结果、读秤结果、流水线版本）；索引 (`campaign_id`, `created_at`)、(`catalog_item_id`) |
-| `research_weight_containers` | `campaign_id`（活动共用容器；`user_id` 仍是创建人，活动成员可用） |
+| `research_weight_samples` | `campaign_id`、`collection_channel`（默认 `personal`；personal / campus_self_scale / campus_station / campus_same_dish）、`station_session_id`、`canteen_id`、`catalog_item_id`、`paired_food_record_id`、`review_mode`（默认 `manual`；manual / auto）、`auto_review`（jsonb：版本、决定、等级、积分、每项检查）；索引 (`campaign_id`, `created_at`)、(`catalog_item_id`) |
+| `research_weight_containers` | `campaign_id`（活动共用容器，列已加，页面还没用） |
 
-每张读数照片的自动读数（数字、单位、模型、置信度）放在现有 `photos` jsonb 的每一项里，不用改表结构。
+不改：`user_food_records`、`food_weight_labeled_samples`、会员和积分表（核心成员会员用现有赠送记录，来源类型 `campus_campaign_core`，来源键 `campus_campaign:<活动>:<用户>`，同一人同一活动只发一次）。
 
-不改：`user_food_records`、`food_weight_labeled_samples`（渠道等信息放进现有的 `metadata`）、会员和积分相关表（用现有的来源类型 / 来源键记活动）。
+### 7.4 接口（已实现）
 
-### 7.4 接口草案
+- 游客可访问：`GET /api/campus-campaigns/by-code/:code`（活动）、`GET /api/campus-campaigns/by-code/:code/board`（社团内排行）、`GET /api/campus-campaigns/board`（各校排行）
+- 登录后：`POST /api/campus-campaigns/by-code/:code/join`、`GET /api/campus-campaigns/mine`、`POST /api/campus-campaigns/records`（把今天的拍照记录挂到食堂菜）
+- 负责人：`GET /api/campus-campaigns/:id/leader`、`PUT /api/campus-campaigns/:id/members/:user_id/core`、`POST /api/campus-campaigns/:id/stations`
+- 读秤：`POST /api/research-weight-samples/scale-reading`（拍完即调，一张照片只读一次，每人每天最多 300 张）
+- 称重样本提交接口多了 `station_session_id`、`catalog_item_id`、`paired_food_record_id` 三个可选字段，服务端按本人进行中的活动校验；提交后立刻在后台自动审核，几秒后在"我的提交"里看到结果
+- 后台：`/api/admin/campus-orgs`（列、建）、`/api/admin/campus-campaigns`（列、建、改、`/:id/leaders` 设负责人）、`POST /api/admin/research-weight-samples/:id/auto-review`（重跑自动审核）；样本列表多了 `campaign_id`、`collection_channel`、`review_mode`、`quality_tier` 筛选
 
-- `GET /api/campus-campaigns/:code`：活动落地页（游客可访问）
-- `POST /api/campus-campaigns/:code/join`：加入（需登录；校验时间窗口和"只能一个进行中活动"）
-- `GET /api/campus-campaigns/mine`：我的活动、进度、我的提交、今天的称重日
-- `GET /api/campus-campaigns/:id/board`：排行榜（游客可看）
-- 负责人：`PUT /api/campus-campaigns/:id/members/:userId/core`（勾 / 取消核心成员，自动发放 / 停止会员）、`POST /api/campus-campaigns/:id/stations`、`POST /api/campus-campaigns/:id/containers`、`GET /api/campus-campaigns/:id/leader/summary`
-- `POST /api/research-weight/scale-reading`：上传一张读数照片，返回模型读数（拍完即调，页面自动填）
-- 称重样本创建接口不加参数：服务端根据用户是否在进行中活动里自动写入归属；W2/W3 由页面传场次 ID 和菜品 ID，服务端校验它们属于该活动。提交后同步跑自动审核，直接返回结果和等级
-- 记一餐保存后：如果用户在进行中活动里且选了食堂菜品，服务端写 `campus_campaign_records`
-- 后台：社团 / 活动增删改、筛选、份量分布、自动审核看板、导出
+和草案的差别：
+- 取消核心成员只是不再续，已发的会员不收回（会员按天叠加，收回会碰到用户自己买的天数）；
+- 拍照记录不改记录流程，成员记完回活动页把"今天的拍照记录"挂到菜上（避开正在被别的改动修改的记录代码）；
+- 分享靠小程序分享卡片（`packageExtra/pages/campus-campaign/index?code=加入码`），打印小程序码以后用现有工具生成，页面已支持 `scene` 参数。
 
-### 7.5 线上迁移清单（只列，不执行；执行前逐条确认）
+### 7.5 线上迁移和配置清单（只列，不执行；执行前逐条确认）
 
 | 顺序 | 迁移 | 内容 | 风险 |
 |---|---|---|---|
-| M0（前置，v2 已规划） | `--only-research-weight` | 建 `research_weight_containers`；放宽 `weighing_mode`、`tare_mode` 取值 | 只放宽约束、建新表 |
-| M1 | `--only-campus-campaign`（新） | 建 `campus_orgs`、`campus_campaigns`、`campus_campaign_members`、`campus_campaign_records`、`campus_station_sessions`；`research_weight_samples` 加 8 列和 2 个索引；`research_weight_containers` 加 `campaign_id` | 全部新增；`research_weight_samples` 现在 0 行，加列瞬间完成；回滚 = 删新表、删新列 |
-| 数据 | 建四校的社团和活动 | 后台页面创建 | 写线上数据，执行前确认 |
-| 配置 | 读秤用的视觉模型、自动审核开关和版本号 | 本地 `app-config.yaml` 和线上配置各加一项 | 线上配置改动，执行前确认 |
+| M0 | `--only-research-weight` | v2 原有：建 `research_weight_containers`、放宽取值约束；本分支加：建 `research_weight_photo_checks`，`research_weight_samples` 加 8 列 2 个索引，`research_weight_containers` 加 `campaign_id` | 全部新增；`research_weight_samples` 线上 0 行，加列瞬间完成 |
+| M1 | `--only-campus-campaign` | 建 5 张高校共建表 | 全部新表；回滚 = 删表 |
+| 配置 | `research_weight.auto_review_enabled: true` | 只在线上打开；本地默认关，避免本机连线上库时替别人审核 | 线上配置改动，执行前确认 |
+| 数据 | 四校的社团和活动 | 后台「高校共建」页创建，指定负责人 | 写线上数据，执行前确认 |
 
-发版顺序：M0 → v2 后端 → M1 → 高校通道后端（含读秤和自动审核）→ 小程序（v2 + 高校通道一起提审）。镜像和发布按惯例由你说了再做。
+发版顺序：M0 → M1 → 后端镜像（v2 + 自动审核 + 高校共建）→ 打开配置 → 小程序（v2 + 高校共建一起提审）→ 后台。镜像和发布按惯例由你说了再做。
 
 ## 8. 落地节奏
 
@@ -358,3 +359,25 @@ v2 里读数是"拍照 + 手打数字"，这一版改成：
 | D10 | 赞助上限每个社团每期一个固定金额，金额由你线下定，不进代码 |
 
 实现进度见分支 `feat/campus-channel`。
+
+## 10. 实现状态（分支 `feat/campus-channel`，未推送、未部署）
+
+已完成：
+
+| 部分 | 内容 |
+|---|---|
+| 自动读秤 | 两个不同厂商的模型并行读秤照片，服务端换算单位（g/kg/斤/两/oz/lb），毫升模式和负数一律当读不出；记录页拍完自动填数，读数和填写对不上时不能提交 |
+| 自动审核 | 提交后后台立即审核，另有每 2 分钟一次的巡检补漏；按 6.3 定级和发积分，每人每天最多 10 条计分；照片内容哈希跨用户查重；饭菜照片里能看到秤读数的定为 C；合理性只看物理范围，不看模型估算 |
+| 高校共建后端 | 社团、活动、加入码、成员角色、核心成员名额和自动开会员、称重日 / 同菜多份、拍照记录关联、两个排行榜、样本自动带活动和渠道 |
+| 小程序 | 「我的 → 科研共建 → 高校共建」入口；活动页（游客可看、加入要登录、分享卡片）；成员首页、负责人管理页；饭菜照片只能现拍 |
+| 后台 | 「高校共建」页（建社团、建活动、开始 / 结束、设负责人）；称重样本页加渠道 / 审核方式 / 等级 / 活动筛选、自动审核明细、重跑、随机抽查 50 条 |
+| 测试 | Go：读秤换算、定级表、自动审核全流程、归属、活动规则（嵌入式 Postgres）、两个迁移；小程序 Jest：读数核对、自动填写、草稿校验和提交内容；后台：建活动表单 |
+
+还没做：
+
+1. 抽查结果的记录（现在只能抽出来看，看完没地方记"这条有问题"），以及"抽查发现问题后自动把这个人其余样本降为 C"；
+2. 按同一道菜的实测分布做合理性检查（要等每道菜攒够 5 份）；感知哈希（近似重复照片）；
+3. 称重日共用容器的页面（列已加）；
+4. 社团营养报告的自动生成（第一个月远程手工出）；社团自助申请活动；
+5. 微信开发者工具里的界面验证（项目要求 UI 改动用 weapp-devtools 截图验证，这一轮还没跑）；
+6. 读秤准确率实测（8.1 里"5–10 种秤各拍 20 张"），要线上打开读秤后才能测。
