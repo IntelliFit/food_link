@@ -10,6 +10,7 @@ import type {
   ResearchWeighingMode,
   SavedResearchContainer,
 } from '../../../utils/research-weight-api'
+import { readingProblem, type PhotoReading } from './reading'
 
 /** 与后端 domain.ConsentVersion 保持一致；授权文案变化时两边一起升级。 */
 export const RESEARCH_CONSENT_VERSION = '2026-10-28'
@@ -54,6 +55,17 @@ export const PRECISIONS = [0.1, 1, 2]
 export interface DraftPhoto {
   url: string
   capturedAt: string
+  /** 饭菜照片只允许现拍，记为 camera；秤的照片不区分来源。 */
+  source?: 'camera' | 'album'
+  /** 秤的照片：服务端自动读出的数字。 */
+  reading?: PhotoReading
+}
+
+/** 从高校共建活动页进入时带上的称重日和菜品。 */
+export interface CampusContext {
+  stationSessionId?: string
+  catalogItemId?: string
+  label: string
 }
 
 /** 分项累加：同一个容器里依次加入的一样食物。 */
@@ -104,6 +116,7 @@ export interface ResearchDraft {
   notes: string
   videoUrl: string
   photos: Partial<Record<EvalRole, DraftPhoto>>
+  campus?: CampusContext
 }
 
 export type Library = Record<string, SavedResearchContainer>
@@ -219,6 +232,12 @@ function checkTare(label: string, source: ResearchTareSource, tare: string, phot
 
 const problemOnly = (problem: string): DraftCheck => ({ problem, waitingForMeal: false })
 
+/** 皮重照片的读数核对：归零时秤上应该是 0，常用容器不用核对。 */
+function tareReadingProblem(label: string, source: ResearchTareSource, tare: string, photo: DraftPhoto | undefined, precision: number): string {
+  if (source === 'library') return ''
+  return readingProblem(label, source === 'zeroed' ? '0' : tare, photo, precision)
+}
+
 function checkContainers(draft: ResearchDraft, library: Library): DraftCheck {
   let waitingForMeal = false
   for (let index = 0; index < draft.containers.length; index += 1) {
@@ -228,12 +247,16 @@ function checkContainers(draft: ResearchDraft, library: Library): DraftCheck {
     const gross = parseGrams(container.gross)
     if (gross === null || gross <= 0 || gross > MAX_READING_GRAMS) return problemOnly(`填${label}连盒的读数`)
     if (!container.grossPhoto) return problemOnly(`拍${label}连盒的读数`)
+    const grossMismatch = readingProblem(`${label}连盒读数`, container.gross, container.grossPhoto, draft.precision)
+    if (grossMismatch) return problemOnly(grossMismatch)
     const tareProblem = checkTare(label, container.tareSource, container.tare, container.tarePhoto, container.libraryId, library)
     if (tareProblem === AFTER_MEAL) {
       waitingForMeal = true
       continue
     }
     if (tareProblem) return problemOnly(tareProblem)
+    const tareMismatch = tareReadingProblem(`${label}空盒读数`, container.tareSource, container.tare, container.tarePhoto, draft.precision)
+    if (tareMismatch) return problemOnly(tareMismatch)
     const net = containerNet(container, library)
     if (net === null || net <= 0) return problemOnly(`${label}的连盒读数必须大于空盒重量`)
     if (net > MAX_NET_GRAMS) return problemOnly('单盒食物不能超过5000g')
@@ -247,6 +270,8 @@ function checkContainers(draft: ResearchDraft, library: Library): DraftCheck {
 function checkItemized(draft: ResearchDraft, library: Library): DraftCheck {
   const tareProblem = checkTare('', draft.tareSource, draft.tare, draft.tarePhoto, draft.tareLibraryId, library)
   if (tareProblem && tareProblem !== AFTER_MEAL) return problemOnly(tareProblem)
+  const tareMismatch = tareProblem ? '' : tareReadingProblem('空容器读数', draft.tareSource, draft.tare, draft.tarePhoto, draft.precision)
+  if (tareMismatch) return problemOnly(tareMismatch)
   if (draft.items.length === 0) return problemOnly('请至少添加一项')
   const increments = itemIncrements(draft, library)
   for (let index = 0; index < draft.items.length; index += 1) {
@@ -255,6 +280,8 @@ function checkItemized(draft: ResearchDraft, library: Library): DraftCheck {
     const reading = parseGrams(item.reading)
     if (reading === null || reading > MAX_READING_GRAMS) return problemOnly(`填第${index + 1}项的秤上读数`)
     if (!item.photo) return problemOnly(`拍第${index + 1}项的秤上读数`)
+    const itemMismatch = readingProblem(`第${index + 1}项读数`, item.reading, item.photo, draft.precision)
+    if (itemMismatch) return problemOnly(itemMismatch)
     const increment = increments[index]
     if (tareProblem !== AFTER_MEAL && (increment === null || increment <= 0)) {
       return problemOnly(`第${index + 1}项的秤上读数必须大于上一次读数`)
@@ -279,7 +306,11 @@ export function checkDraft(draft: ResearchDraft, library: Library): DraftCheck {
 }
 
 function photoPayload(role: ResearchPhotoRole, photo: DraftPhoto, itemIndex?: number): ResearchPhotoPayload {
-  return { role, url: photo.url, captured_at: photo.capturedAt, ...(itemIndex === undefined ? {} : { item_index: itemIndex }) }
+  return {
+    role, url: photo.url, captured_at: photo.capturedAt,
+    ...(photo.source ? { source: photo.source } : {}),
+    ...(itemIndex === undefined ? {} : { item_index: itemIndex }),
+  }
 }
 
 function evalPhotos(draft: ResearchDraft): ResearchPhotoPayload[] {
@@ -350,6 +381,8 @@ export function buildPayload(draft: ResearchDraft, library: Library, device: Rec
     device,
     notes: draft.notes.trim(),
     consent_version: RESEARCH_CONSENT_VERSION,
+    ...(draft.campus?.stationSessionId ? { station_session_id: draft.campus.stationSessionId } : {}),
+    ...(draft.campus?.catalogItemId ? { catalog_item_id: draft.campus.catalogItemId } : {}),
   }
 }
 
@@ -379,6 +412,8 @@ export function nextDraftAfterSubmit(draft: ResearchDraft, now = Date.now()): Re
     container: draft.container, tareSource: draft.tareSource, tare: draft.tareSource === 'after_meal' ? '' : draft.tare,
     tareLibraryId: draft.tareLibraryId, tarePhoto: draft.tareSource === 'after_meal' ? undefined : draft.tarePhoto,
     reference: draft.reference, containers: [newContainer(defaultTareSource(draft.scene), now)],
+    // 同一个称重日、同一道菜常常连着称几份，活动信息留着。
+    ...(draft.campus ? { campus: draft.campus } : {}),
   }
 }
 

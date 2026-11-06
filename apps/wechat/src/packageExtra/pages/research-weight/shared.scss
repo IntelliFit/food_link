@@ -46,6 +46,9 @@
 .rw-photo__label { margin-top: 8px; font-size: 23px; }
 .rw-photo__hint { margin-top: 4px; color: #a4afab; font-size: 20px; }
 .rw-photo__tag { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 0; background: rgb(0 0 0 / 45%); color: #fff; font-size: 20px; text-align: center; }
+.rw-photo-wrap { display: flex; flex-direction: column; flex-shrink: 0; width: 200px; }
+.rw-photo__note { margin-top: 8px; color: #00a875; font-size: 21px; line-height: 1.4; }
+.rw-photo__note--warn { color: #c27c0e; }
 .rw-photo__mask { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 35%); }
 
 .rw-grid { display: flex; gap: 20px; margin-top: 4px; }
@@ -92,6 +95,7 @@
 .research-weight-page--dark .rw-photo, .research-weight-page--dark .rw-video { border-color: #2c3b36; background: #16221f; }
 .research-weight-page--dark .rw-net { background: #143128; }
 .research-weight-page--dark .rw-net__label, .research-weight-page--dark .rw-consent__text { color: #b8c7c1; }
+.research-weight-page--dark .rw-photo__note--warn { color: #e2c27c; }
 .research-weight-page--dark .rw-tip--warn { background: #2a2414; color: #e2c27c; }
 .research-weight-page--dark .rw-item, .research-weight-page--dark .rw-mine { border-color: #26342f; }
 
@@ -145,3 +149,10 @@
 .research-weight-page--dark .rw-check__box { border-color: #2c3b36; }
 .research-weight-page--dark .rw-saved { border-color: #26342f; }
 .research-weight-page--dark .rw-saved__photo { background: #1b2824; }
+
+/* 高校共建：从活动页进入时的计入提示 */
+.rw-campus { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding: 18px 24px; border-radius: 16px; background: #e8f7f1; }
+.rw-campus__text { flex: 1; color: #00875f; font-size: 25px; }
+.rw-campus__clear { color: #7b8a85; font-size: 23px; }
+.research-weight-page--dark .rw-campus { background: #143128; }
+.research-weight-page--dark .rw-campus__text { color: #7fd8b5; }

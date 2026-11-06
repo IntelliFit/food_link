@@ -17,16 +17,20 @@ export function ensureLoggedIn(): boolean {
   return false
 }
 
-/** 拍一张原图并上传到本人的科研目录；取消或失败时返回 null。 */
-export async function takeResearchPhoto(onStart?: () => void): Promise<DraftPhoto | null> {
+/**
+ * 拍一张原图并上传到本人的科研目录；取消或失败时返回 null。
+ * 饭菜照片只能现拍（cameraOnly），这样服务端能确认是这一顿当场拍的。
+ */
+export async function takeResearchPhoto(onStart?: () => void, options: { cameraOnly?: boolean } = {}): Promise<DraftPhoto | null> {
   try {
-    const result = await Taro.chooseMedia({ count: 1, mediaType: ['image'], sourceType: ['camera', 'album'], sizeType: ['original'], camera: 'back' })
+    const sourceType: Array<'camera' | 'album'> = options.cameraOnly ? ['camera'] : ['camera', 'album']
+    const result = await Taro.chooseMedia({ count: 1, mediaType: ['image'], sourceType, sizeType: ['original'], camera: 'back' })
     const path = String(result.tempFiles?.[0]?.tempFilePath || '').trim()
     if (!path) return null
     const capturedAt = new Date().toISOString()
     onStart?.()
     const url = await uploadResearchImage(path)
-    return { url, capturedAt }
+    return { url, capturedAt, ...(options.cameraOnly ? { source: 'camera' as const } : {}) }
   } catch (error) {
     if (!isCancel(error)) await showUnifiedApiError(error, '照片上传失败')
     return null

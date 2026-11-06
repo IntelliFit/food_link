@@ -35,6 +35,19 @@ export interface ResearchPhotoPayload {
   source?: 'camera' | 'album'
 }
 
+/** 服务端读秤结果：两个模型一致为 agree，只有一个读出为 single。 */
+export type ScaleAgreement = 'agree' | 'single' | 'disagree' | 'unreadable'
+
+export interface ScaleReadingResult {
+  readable: boolean
+  grams?: number
+  raw_value?: string
+  unit?: string
+  resolution_grams?: number
+  agreement: ScaleAgreement
+  message?: string
+}
+
 export interface ResearchSamplePayload {
   client_key: string
   scene: ResearchScene
@@ -55,6 +68,10 @@ export interface ResearchSamplePayload {
   device: Record<string, string>
   notes: string
   consent_version: string
+  /** 高校共建：称重日、食堂菜品、同一顿的拍照记录，服务端按本人参加的活动校验。 */
+  station_session_id?: string
+  catalog_item_id?: string
+  paired_food_record_id?: string
 }
 
 export interface ResearchSampleItem {
@@ -81,6 +98,8 @@ export interface ResearchSample {
   review_note: string
   reward_credits: number
   created_at?: string
+  review_mode?: 'manual' | 'auto'
+  collection_channel?: string
 }
 
 export interface ResearchSummary {
@@ -139,6 +158,14 @@ export async function uploadResearchVideo(localPath: string): Promise<string> {
   const url = String(payload?.video_url || '').trim()
   if (!url) throw new Error('视频上传失败，请重试')
   return url
+}
+
+/** 拍完秤的照片后自动读数；服务端没开自动读数时抛错，页面照常手填。 */
+export async function readScalePhoto(imageUrl: string, precision: number): Promise<ScaleReadingResult> {
+  const response = await authenticatedRequest(`${BASE}/scale-reading`, {
+    method: 'POST', data: { image_url: imageUrl, scale_precision_grams: precision }, timeout: 40000,
+  })
+  return (response.data as { reading: ScaleReadingResult }).reading
 }
 
 export async function listResearchContainers(): Promise<SavedResearchContainer[]> {

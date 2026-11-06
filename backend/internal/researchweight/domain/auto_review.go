@@ -58,7 +58,10 @@ type ScaleReadView struct {
 	Grams     *float64 `json:"grams,omitempty"`
 	RawValue  string   `json:"raw_value,omitempty"`
 	Unit      string   `json:"unit,omitempty"`
-	Agreement string   `json:"agreement"`
+	// ResolutionGrams is the display step, so the client compares typed
+	// values with the same tolerance as the server.
+	ResolutionGrams float64 `json:"resolution_grams,omitempty"`
+	Agreement       string  `json:"agreement"`
 	Message   string   `json:"message,omitempty"`
 }
 

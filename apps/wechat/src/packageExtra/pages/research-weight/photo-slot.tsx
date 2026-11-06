@@ -1,6 +1,7 @@
 import { Image, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import type { DraftPhoto } from './model'
+import { readingNote } from './reading'
 
 interface PhotoSlotProps {
   label: string
@@ -8,12 +9,29 @@ interface PhotoSlotProps {
   required?: boolean
   photo?: DraftPhoto
   uploading?: boolean
+  /** 秤的照片：下方显示自动读数。 */
+  scale?: boolean
+  /** 秤的照片：正在自动读数。 */
+  reading?: boolean
   onPick: () => void
   onClear: () => void
 }
 
-/** 一个照片位：空时点击拍照，有图时可预览或重拍。 */
-export function PhotoSlot({ label, hint, required, photo, uploading, onPick, onClear }: PhotoSlotProps) {
+/** 一个照片位：空时点击拍照，有图时可预览或重拍；秤的照片下方显示自动读数。 */
+export function PhotoSlot(props: PhotoSlotProps) {
+  const { photo, scale, reading } = props
+  if (!scale) return <PhotoTile {...props} />
+  const note = readingNote(photo)
+  return (
+    <View className='rw-photo-wrap'>
+      <PhotoTile {...props} />
+      {reading ? <Text className='rw-photo__note'>正在读秤上的数字</Text> : null}
+      {!reading && note ? <Text className={`rw-photo__note ${note.warn ? 'rw-photo__note--warn' : ''}`}>{note.text}</Text> : null}
+    </View>
+  )
+}
+
+function PhotoTile({ label, hint, required, photo, uploading, onPick, onClear }: PhotoSlotProps) {
   const handleTap = async () => {
     if (uploading) return
     if (!photo) {

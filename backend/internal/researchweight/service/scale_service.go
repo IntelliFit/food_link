@@ -86,6 +86,7 @@ func scaleReadView(readings []domain.ScaleReading, precision float64) domain.Sca
 	view := domain.ScaleReadView{Agreement: agreement}
 	if chosen != nil {
 		view.Readable, view.Grams, view.RawValue, view.Unit = true, chosen.Grams, chosen.RawValue, chosen.Unit
+		view.ResolutionGrams = chosen.ResolutionGrams
 	}
 	switch agreement {
 	case domain.AgreementAgree, domain.AgreementSingle:
