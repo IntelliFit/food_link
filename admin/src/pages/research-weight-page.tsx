@@ -58,7 +58,22 @@ type Sample = {
   benchmark_sample_id?: string
   created_at?: string
   flags?: string[]
+  review_mode?: 'manual' | 'auto'
+  auto_review?: AutoReview
+  collection_channel?: string
+  campaign_id?: string
 }
+
+type AutoCheck = { name: string; status: 'pass' | 'flag' | 'fail'; detail?: string; photo_role?: string; item_index?: number }
+type AutoReview = { version: string; decision: 'approve' | 'reject'; tier?: string; credits: number; note?: string; checks: AutoCheck[]; decided_at: string }
+
+const CHANNEL_LABELS: Record<string, string> = { personal: '个人', campus_self_scale: '高校·自带秤', campus_station: '高校·称重日', campus_same_dish: '高校·同菜多份' }
+const CHECK_LABELS: Record<string, string> = {
+  agree_match: '两个模型读数一致且与填写相符', single_match: '一个模型读出且相符', split: '两个模型读数不一致',
+  mismatch_confirmed: '两个模型都读出另一个数', mismatch: '读数与填写不符（未确认）', unreadable: '读不出', library: '常用容器（无读数）',
+  album: '来自相册', unknown_source: '来源未知', stale: '拍摄早于提交两天以上', shows_scale_display: '照片里能看到秤的读数',
+}
+const SPOT_CHECK_SIZE = 50
 
 type ListResponse = { items: Sample[]; total: number; page: number; limit: number }
 
@@ -103,12 +118,17 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
   const [note, setNote] = useState('')
   const [batchName, setBatchName] = useState('')
   const [acting, setActing] = useState(false)
+  const [channel, setChannel] = useState('')
+  const [reviewMode, setReviewMode] = useState('')
+  const [tierFilter, setTierFilter] = useState('')
+  const [campaignId, setCampaignId] = useState('')
+  const [spotCheck, setSpotCheck] = useState(false)
   const limit = 40
 
   useEffect(() => {
     void loadList(page)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, status, mode, scene])
+  }, [page, status, mode, scene, channel, reviewMode, tierFilter])
 
   useEffect(() => {
     setNote(selected?.review_note || '')
@@ -120,12 +140,17 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
     if (mode) params.set('weighing_mode', mode)
     if (scene) params.set('scene', scene)
     if (query.trim()) params.set('q', query.trim())
+    if (channel) params.set('collection_channel', channel)
+    if (reviewMode) params.set('review_mode', reviewMode)
+    if (tierFilter) params.set('quality_tier', tierFilter)
+    if (campaignId.trim()) params.set('campaign_id', campaignId.trim())
     return params
   }
 
   async function loadList(nextPage = page) {
     try {
       const data = await adminRequest<ListResponse>(`/api/admin/research-weight-samples?${listParams(nextPage, limit)}`)
+      setSpotCheck(false)
       setItems(data.items || [])
       setTotal(data.total || 0)
       setSelected((current) => data.items.find((item) => item.id === current?.id) || data.items[0] || null)
@@ -158,6 +183,27 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
       if (credits.trim() !== '') body.reward_credits = Number(credits)
     }
     void act('review', body, action === 'approve' ? '已通过' : '已驳回')
+  }
+
+  /** 每月抽查：从自动通过的样本里随机抽 50 条人工看一眼，用来算自动审核的准确率。 */
+  async function startSpotCheck() {
+    try {
+      const params = new URLSearchParams({ page: '1', limit: '500', status: 'approved', review_mode: 'auto' })
+      const data = await adminRequest<ListResponse>(`/api/admin/research-weight-samples?${params}`)
+      const pool = [...(data.items || [])]
+      for (let index = pool.length - 1; index > 0; index -= 1) {
+        const swap = Math.floor(Math.random() * (index + 1))
+        ;[pool[index], pool[swap]] = [pool[swap], pool[index]]
+      }
+      const picked = pool.slice(0, SPOT_CHECK_SIZE)
+      setItems(picked)
+      setTotal(picked.length)
+      setSelected(picked[0] || null)
+      setSpotCheck(true)
+      toast.success(`已从 ${data.total} 条自动通过的样本里抽出 ${picked.length} 条`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '抽查失败')
+    }
   }
 
   async function exportApproved() {
@@ -194,7 +240,10 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
             <h1 className='text-2xl font-semibold tracking-tight'>称重科研数据</h1>
             <p className='text-sm text-muted-foreground'>审核用户上传的食物秤读数与评测照片；通过后可加入数据集评测。克重由服务端按读数计算。</p>
           </div>
-          <button className='h-10 rounded-xl border px-4 text-sm font-medium' onClick={() => void exportApproved()}>导出已通过 JSON</button>
+          <div className='flex gap-3'>
+            <button className='h-10 rounded-xl border px-4 text-sm font-medium' onClick={() => void startSpotCheck()}>抽查 {SPOT_CHECK_SIZE} 条自动通过</button>
+            <button className='h-10 rounded-xl border px-4 text-sm font-medium' onClick={() => void exportApproved()}>导出已通过 JSON</button>
+          </div>
         </section>
 
         <section className='flex flex-wrap items-end gap-3 rounded-2xl border bg-card/90 p-4 shadow-sm'>
@@ -207,7 +256,15 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
           <Select label='状态' value={status} onChange={(value) => { setStatus(value); setPage(1) }} options={[['pending', '待审核'], ['approved', '已通过'], ['rejected', '已驳回'], ['all', '全部']]} />
           <Select label='方式' value={mode} onChange={(value) => { setMode(value); setPage(1) }} options={[['', '全部'], ['multi', '按盒'], ['itemized', '分项'], ['whole', '整份']]} />
           <Select label='场景' value={scene} onChange={(value) => { setScene(value); setPage(1) }} options={[['', '全部'], ...Object.entries(SCENE_LABELS)]} />
-          <div className='text-sm text-muted-foreground'>共 {total} 条</div>
+          <Select label='渠道' value={channel} onChange={(value) => { setChannel(value); setPage(1) }} options={[['', '全部'], ...Object.entries(CHANNEL_LABELS)]} />
+          <Select label='审核方式' value={reviewMode} onChange={(value) => { setReviewMode(value); setPage(1) }} options={[['', '全部'], ['auto', '自动'], ['manual', '人工']]} />
+          <Select label='等级' value={tierFilter} onChange={(value) => { setTierFilter(value); setPage(1) }} options={[['', '全部'], ['A', 'A'], ['B', 'B'], ['C', 'C']]} />
+          <label className='text-sm'>活动 ID
+            <input className='mt-2 block h-10 w-72 rounded-xl border bg-background px-3 font-mono text-xs' value={campaignId}
+              onChange={(event) => setCampaignId(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') { setPage(1); void loadList(1) } }} />
+          </label>
+          <div className='text-sm text-muted-foreground'>{spotCheck ? `抽查中：${total} 条` : `共 ${total} 条`}</div>
         </section>
 
         <section className='grid min-h-[640px] gap-6 lg:grid-cols-[340px_minmax(0,1fr)]'>
@@ -221,6 +278,7 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
                 </div>
                 <div className='mt-1 text-xs text-muted-foreground'>
                   {SCENE_LABELS[item.scene] || item.scene} · {modeLabel(item)} · {item.status}{item.flags?.length ? ' · 需核对' : ''}{item.quality_tier ? ` ${item.quality_tier}` : ''}
+                  {item.review_mode === 'auto' ? ' · 自动' : ''}{item.collection_channel && item.collection_channel !== 'personal' ? ` · ${CHANNEL_LABELS[item.collection_channel] || item.collection_channel}` : ''}
                 </div>
               </button>
             ))}
@@ -288,13 +346,19 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
                   </table>
                 ) : null}
 
+                {selected.auto_review ? <AutoReviewCard review={selected.auto_review} /> : null}
+
                 <PhotoGroup title='读数证据（核对与填写读数是否一致）' photos={evidence} items={selected.items} />
                 <PhotoGroup title='评测照片（照片里不应出现秤读数）' photos={evaluation} items={selected.items} />
                 {selected.video_url ? <video className='max-h-72 rounded-xl border' src={selected.video_url} controls /> : null}
 
                 {selected.status === 'pending' ? (
                   <section className='space-y-3 rounded-2xl border p-4'>
-                    <h2 className='text-sm font-semibold'>审核</h2>
+                    <div className='flex items-center justify-between'>
+                      <h2 className='text-sm font-semibold'>审核</h2>
+                      <button className='rounded-xl border px-3 py-1 text-xs disabled:opacity-50' disabled={acting}
+                        onClick={() => void act('auto-review', {}, '自动审核完成')}>重新自动审核</button>
+                    </div>
                     <div className='flex flex-wrap gap-3'>
                       <Select label='等级' value={tier} onChange={setTier} options={[['A', 'A 金标'], ['B', 'B 银标'], ['C', 'C 铜标']]} />
                       <label className='text-sm'>奖励积分<input className='mt-2 h-10 w-24 rounded-xl border bg-background px-3' value={credits} onChange={(event) => setCredits(event.target.value)} /></label>
@@ -328,6 +392,27 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
         </section>
       </main>
     </div>
+  )
+}
+
+function AutoReviewCard({ review }: { review: AutoReview }) {
+  const flagged = review.checks.filter((check) => check.status !== 'pass')
+  return (
+    <section className='space-y-2 rounded-2xl border p-4 text-sm'>
+      <h2 className='font-semibold'>
+        自动审核 · {review.decision === 'approve' ? `通过 ${review.tier || ''}` : '驳回'} · {review.credits} 分
+        <span className='ml-2 font-normal text-muted-foreground'>{review.version} · {new Date(review.decided_at).toLocaleString()}</span>
+      </h2>
+      {review.note ? <p className='text-muted-foreground'>{review.note}</p> : null}
+      <ul className='space-y-1'>
+        {(flagged.length ? flagged : review.checks).map((check, index) => (
+          <li key={`${check.name}-${index}`} className={check.status === 'fail' ? 'text-red-600' : check.status === 'flag' ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'}>
+            {check.photo_role ? `${ROLE_LABELS[check.photo_role] || check.photo_role}${check.item_index != null ? ` #${check.item_index + 1}` : ''}：` : `${check.name}：`}
+            {CHECK_LABELS[check.detail || ''] || check.detail || check.status}
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
