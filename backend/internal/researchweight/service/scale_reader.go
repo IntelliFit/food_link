@@ -27,6 +27,10 @@ type ScaleReader struct {
 	timeout  time.Duration
 }
 
+// visionSlots bounds model calls across every review and reading in this
+// process, so a burst of submissions cannot flood the vendors.
+var visionSlots = make(chan struct{}, 8)
+
 const defaultScaleReadTimeout = 25 * time.Second
 
 // NewScaleReader returns nil when no model is configured, which turns the
@@ -79,6 +83,13 @@ func (r *ScaleReader) readWith(ctx context.Context, clients []VisionClient, prom
 		wg.Add(1)
 		go func(index int, client VisionClient) {
 			defer wg.Done()
+			select {
+			case visionSlots <- struct{}{}:
+				defer func() { <-visionSlots }()
+			case <-ctx.Done():
+				readings[index] = domain.ScaleReading{Error: ctx.Err().Error()}
+				return
+			}
 			raw, meta, err := client.AnalyzeWithImagesAndTemperatureMeta(ctx, prompt, []string{imageURL}, 0)
 			if err != nil {
 				readings[index] = domain.ScaleReading{Error: truncateRunes(err.Error(), 200)}
@@ -175,6 +186,17 @@ func displayResolution(value string) float64 {
 		return 1
 	}
 	return math.Pow(10, -float64(len(value)-dot-1))
+}
+
+// readingsFailed reports that no model answered (vendor errors, timeouts):
+// such a result is not evidence and must not be stored as a reading.
+func readingsFailed(readings []domain.ScaleReading) bool {
+	for _, reading := range readings {
+		if reading.Error == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // ReadingAgreement summarises the readings for the mini program: whether the

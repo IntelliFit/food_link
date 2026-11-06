@@ -48,8 +48,12 @@ type ResearchWeightSampleDO struct {
 	// every check the pipeline ran so a decision can be audited later.
 	ReviewMode string                    `gorm:"column:review_mode;type:text;not null;default:'manual';check:research_weight_samples_review_mode_valid,review_mode IN ('manual','auto')"`
 	AutoReview *ResearchWeightAutoReview `gorm:"column:auto_review;type:jsonb;serializer:json"`
-	CreatedAt  *time.Time                `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_research_weight_samples_user_created,priority:2,sort:desc;index:idx_research_weight_samples_status_created,priority:2,sort:desc;index:idx_research_weight_samples_campaign_created,priority:2,sort:desc"`
-	UpdatedAt  *time.Time                `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+	// A lease keeps replicas from reviewing the same sample at once; the
+	// attempt count stops a sample that keeps failing from blocking the sweep.
+	AutoReviewLeaseUntil *time.Time `gorm:"column:auto_review_lease_until;type:timestamptz"`
+	AutoReviewAttempts   int        `gorm:"column:auto_review_attempts;type:integer;not null;default:0"`
+	CreatedAt            *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_research_weight_samples_user_created,priority:2,sort:desc;index:idx_research_weight_samples_status_created,priority:2,sort:desc;index:idx_research_weight_samples_campaign_created,priority:2,sort:desc"`
+	UpdatedAt            *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
 
 func (ResearchWeightSampleDO) TableName() string { return "research_weight_samples" }

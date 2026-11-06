@@ -71,3 +71,38 @@ func TestAutoReviewIsStoredAndCountedForTheDailyCap(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, pending)
 }
+
+func TestClaimLeasesAPendingSampleOnceAndCountsAttempts(t *testing.T) {
+	repo := setupSampleRepo(t)
+	ctx := context.Background()
+	sample, _, err := repo.Create(ctx, pendingSample(uuid.NewString(), "client-key-claim"))
+	require.NoError(t, err)
+
+	claimed, err := repo.ClaimForAutoReview(ctx, sample.ID, time.Minute, domain.MaxAutoReviewAttempts)
+	require.NoError(t, err)
+	require.True(t, claimed)
+	claimed, err = repo.ClaimForAutoReview(ctx, sample.ID, time.Minute, domain.MaxAutoReviewAttempts)
+	require.NoError(t, err)
+	require.False(t, claimed, "the lease is held")
+	pending, err := repo.PendingForAutoReview(ctx, time.Now().Add(time.Minute), 10)
+	require.NoError(t, err)
+	require.Empty(t, pending, "a leased sample is not swept")
+
+	require.NoError(t, repo.db.Exec("UPDATE research_weight_samples SET auto_review_lease_until = now() - interval '1 second', auto_review_attempts = ? WHERE id = ?", domain.MaxAutoReviewAttempts, sample.ID).Error)
+	claimed, err = repo.ClaimForAutoReview(ctx, sample.ID, time.Minute, domain.MaxAutoReviewAttempts)
+	require.NoError(t, err)
+	require.False(t, claimed, "attempts used up")
+	claimed, err = repo.ClaimForAutoReview(ctx, sample.ID, time.Minute, 0)
+	require.NoError(t, err)
+	require.True(t, claimed, "an administrator can still re-run it")
+
+	_, err = repo.Review(ctx, sample.ID, map[string]any{"status": domain.StatusApproved, "quality_tier": "B", "reward_credits": 2, "reviewed_at": time.Now().Add(-time.Hour)})
+	require.NoError(t, err)
+	unpaid, err := repo.UnpaidApproved(ctx, time.Now(), 10)
+	require.NoError(t, err)
+	require.Len(t, unpaid, 1)
+	require.NoError(t, repo.MarkRewarded(ctx, sample.ID))
+	unpaid, err = repo.UnpaidApproved(ctx, time.Now(), 10)
+	require.NoError(t, err)
+	require.Empty(t, unpaid)
+}

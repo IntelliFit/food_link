@@ -82,7 +82,7 @@ func (r *CampaignRepo) ListCampaigns(ctx context.Context, status string) ([]doma
 // SchoolName returns the directory name of a school, or "" when unknown.
 func (r *CampaignRepo) SchoolName(ctx context.Context, schoolID string) (string, error) {
 	var names []string
-	err := r.db.WithContext(ctx).Raw(`SELECT name FROM schools WHERE id::text = ?`, schoolID).Scan(&names).Error
+	err := r.db.WithContext(ctx).Raw(`SELECT name FROM schools WHERE id = ?::uuid`, schoolID).Scan(&names).Error
 	if err != nil || len(names) == 0 {
 		return "", err
 	}
@@ -144,6 +144,50 @@ func (r *CampaignRepo) SetRole(ctx context.Context, campaignID, userID, role str
 	return nil
 }
 
+// MarkCore makes an active member a core member within the campaign's quota.
+// Slots count current core members and everyone who already received the
+// membership, so unmarking never frees a slot, and the advisory lock keeps
+// two leaders from both taking the last one. It reports whether the member
+// is core afterwards.
+func (r *CampaignRepo) MarkCore(ctx context.Context, campaignID, userID, markedBy string, quota int, at time.Time) (bool, error) {
+	ok := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext(?))`, "campus_campaign_core:"+campaignID).Error; err != nil {
+			return err
+		}
+		var member domain.Member
+		if err := tx.Where("campaign_id = ? AND user_id = ? AND status = ?", campaignID, userID, domain.MemberActive).First(&member).Error; err != nil {
+			return err
+		}
+		if member.Role != domain.RoleMember {
+			ok = true
+			return nil
+		}
+		if member.MembershipGrantedAt == nil {
+			var used int64
+			err := tx.Model(&domain.Member{}).
+				Where("campaign_id = ? AND role <> ? AND ((role = ? AND status = ?) OR membership_granted_at IS NOT NULL)", campaignID, domain.RoleLeader, domain.RoleCore, domain.MemberActive).
+				Count(&used).Error
+			if err != nil || used >= int64(quota) {
+				return err
+			}
+		}
+		ok = true
+		return tx.Model(&domain.Member{}).Where("id = ?", member.ID).
+			Updates(map[string]any{"role": domain.RoleCore, "core_marked_by": markedBy, "core_marked_at": at, "updated_at": time.Now()}).Error
+	})
+	return ok, err
+}
+
+// UngrantedPrivileged lists active leaders and core members still without
+// the campaign membership (marked before the campaign started).
+func (r *CampaignRepo) UngrantedPrivileged(ctx context.Context, campaignID string) ([]domain.Member, error) {
+	var members []domain.Member
+	err := r.db.WithContext(ctx).Where("campaign_id = ? AND status = ? AND role IN ? AND membership_granted_at IS NULL",
+		campaignID, domain.MemberActive, []string{domain.RoleLeader, domain.RoleCore}).Find(&members).Error
+	return members, err
+}
+
 func (r *CampaignRepo) MarkMembershipGranted(ctx context.Context, campaignID, userID string, days int, at time.Time) error {
 	return r.db.WithContext(ctx).Model(&domain.Member{}).Where("campaign_id = ? AND user_id = ?", campaignID, userID).
 		Updates(map[string]any{"membership_granted_at": at, "membership_grant_days": days, "updated_at": time.Now()}).Error
@@ -171,7 +215,7 @@ func (r *CampaignRepo) MemberCounts(ctx context.Context, campaignIDs []string) (
 	}
 	err := r.db.WithContext(ctx).Raw(`SELECT c.id AS campaign_id,
   (SELECT count(*) FROM campus_campaign_members m WHERE m.campaign_id = c.id AND m.status = 'active') AS members,
-  (SELECT count(*) FROM research_weight_samples s WHERE s.campaign_id = c.id AND s.status = 'approved') AS approved
+  (SELECT count(*) FROM research_weight_samples s WHERE s.campaign_id = c.id AND s.status = 'approved' AND s.quality_tier IN ('A','B')) AS approved
 FROM campus_campaigns c WHERE c.id IN ?`, campaignIDs).Scan(&rows).Error
 	for _, row := range rows {
 		result[row.CampaignID] = [2]int64{row.Members, row.Approved}
@@ -188,7 +232,7 @@ func (r *CampaignRepo) MemberStats(ctx context.Context, campaignID string) ([]do
   (m.membership_granted_at IS NOT NULL) AS membership_set
 FROM campus_campaign_members m
 LEFT JOIN weapp_user u ON u.id = m.user_id
-LEFT JOIN (SELECT user_id, count(*) AS submitted, count(*) FILTER (WHERE status = 'approved') AS approved
+LEFT JOIN (SELECT user_id, count(*) AS submitted, count(*) FILTER (WHERE status = 'approved' AND quality_tier IN ('A','B')) AS approved
            FROM research_weight_samples WHERE campaign_id = ? GROUP BY user_id) s ON s.user_id = m.user_id
 LEFT JOIN (SELECT user_id, count(*) AS photo_records FROM campus_campaign_records WHERE campaign_id = ? GROUP BY user_id) rec ON rec.user_id = m.user_id
 WHERE m.campaign_id = ? AND m.status = 'active'
@@ -202,12 +246,12 @@ LIMIT 500`, campaignID, campaignID, campaignID).Scan(&rows).Error
 func (r *CampaignRepo) CampaignsBoard(ctx context.Context, now time.Time) ([]domain.BoardEntry, error) {
 	var rows []domain.BoardEntry
 	err := r.db.WithContext(ctx).Raw(`SELECT o.name AS name, coalesce(sc.name, '') AS school_name,
-  (SELECT count(*) FROM research_weight_samples s WHERE s.campaign_id = c.id AND s.status = 'approved') AS approved,
+  (SELECT count(*) FROM research_weight_samples s WHERE s.campaign_id = c.id AND s.status = 'approved' AND s.quality_tier IN ('A','B')) AS approved,
   (SELECT count(*) FROM campus_campaign_members m WHERE m.campaign_id = c.id AND m.status = 'active') AS members,
-  (SELECT count(DISTINCT s.catalog_item_id) FROM research_weight_samples s WHERE s.campaign_id = c.id AND s.status = 'approved' AND s.catalog_item_id IS NOT NULL) AS dishes
+  (SELECT count(DISTINCT s.catalog_item_id) FROM research_weight_samples s WHERE s.campaign_id = c.id AND s.status = 'approved' AND s.quality_tier IN ('A','B') AND s.catalog_item_id IS NOT NULL) AS dishes
 FROM campus_campaigns c
 JOIN campus_orgs o ON o.id = c.org_id
-LEFT JOIN schools sc ON sc.id::text = c.school_id::text
+LEFT JOIN schools sc ON sc.id = c.school_id
 WHERE c.status = 'active' AND c.starts_at <= ?
 ORDER BY approved DESC, dishes DESC
 LIMIT 100`, now).Scan(&rows).Error
@@ -220,9 +264,14 @@ func (r *CampaignRepo) CreateStation(ctx context.Context, station *domain.Statio
 	return r.db.WithContext(ctx).Create(station).Error
 }
 
+// stationColumns reads session_date as text: the driver returns a date as a
+// timestamp, which the mini program could not compare with today.
+const stationColumns = `id, campaign_id, created_by_user_id, canteen_id, location_text, to_char(session_date, 'YYYY-MM-DD') AS session_date,
+  meal_period, kind, catalog_item_id, scale_precision_grams, notes, status, created_at`
+
 func (r *CampaignRepo) GetStation(ctx context.Context, id string) (*domain.Station, error) {
 	var station domain.Station
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&station).Error
+	err := r.db.WithContext(ctx).Select(stationColumns).Where("id = ?", id).First(&station).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -232,7 +281,7 @@ func (r *CampaignRepo) GetStation(ctx context.Context, id string) (*domain.Stati
 // ListStations returns the campaign's weighing days from a date on.
 func (r *CampaignRepo) ListStations(ctx context.Context, campaignID, fromDate string) ([]domain.Station, error) {
 	var stations []domain.Station
-	err := r.db.WithContext(ctx).Where("campaign_id = ? AND session_date >= ?", campaignID, fromDate).
+	err := r.db.WithContext(ctx).Select(stationColumns).Where("campaign_id = ? AND session_date >= ?", campaignID, fromDate).
 		Order("session_date ASC, created_at ASC").Limit(100).Find(&stations).Error
 	return stations, err
 }
@@ -260,8 +309,8 @@ func (r *CampaignRepo) FoodRecordForUser(ctx context.Context, recordID, userID s
 	err := r.db.WithContext(ctx).Raw(`SELECT f.source_task_id, f.total_weight_grams, f.record_time,
   coalesce(t.payload->>'execution_mode', '') AS execution_mode
 FROM user_food_records f
-LEFT JOIN analysis_tasks t ON t.id::text = f.source_task_id::text
-WHERE f.id::text = ? AND f.user_id::text = ?`, recordID, userID).Scan(&rows).Error
+LEFT JOIN analysis_tasks t ON t.id = f.source_task_id
+WHERE f.id = ?::uuid AND f.user_id = ?::uuid`, recordID, userID).Scan(&rows).Error
 	if err != nil || len(rows) == 0 {
 		return nil, err
 	}
@@ -279,7 +328,7 @@ type CatalogItemRef struct {
 func (r *CampaignRepo) CatalogItem(ctx context.Context, id string) (*CatalogItemRef, error) {
 	var rows []CatalogItemRef
 	err := r.db.WithContext(ctx).Raw(`SELECT school_id::text AS school_id, canteen_id::text AS canteen_id, window_id::text AS window_id, name
-FROM campus_food_catalog_items WHERE id::text = ?`, id).Scan(&rows).Error
+FROM campus_food_catalog_items WHERE id = ?::uuid`, id).Scan(&rows).Error
 	if err != nil || len(rows) == 0 {
 		return nil, err
 	}

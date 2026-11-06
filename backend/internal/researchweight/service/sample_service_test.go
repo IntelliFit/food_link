@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +28,9 @@ type fakeRepo struct {
 	savedReadings int
 	reads         int64
 	rewardedToday int64
+	leased        map[string]bool
+	holdLeases    bool
+	mu            sync.Mutex
 }
 
 func newFakeRepo() *fakeRepo { return &fakeRepo{samples: map[string]*domain.Sample{}} }

@@ -581,7 +581,9 @@ func New(cfg *config.Config) (*App, error) {
 	researchWeightSvc := researchweightservice.NewSampleService(researchweightrepo.NewSampleRepo(db), membershipSvc, storageClient)
 	// Scale photos are read by the same two vendors as canteen menus, so a
 	// reading counts as confirmed only when independent models agree.
-	if cfg.ResearchWeight.AutoReviewEnabled {
+	// Production only: a laptop on a refreshed config snapshot must never
+	// review real contributors' samples in the shared database.
+	if cfg.ResearchWeight.AutoReviewEnabled && cfg.App.Env == "production" {
 		researchWeightSvc.ConfigureAutoReview(researchweightservice.NewScaleReader(capturePrimary, captureVerifier))
 	}
 	researchWeightHandler := researchweighthandler.NewSampleHandler(researchWeightSvc)
@@ -968,7 +970,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/campus-campaigns/mine", authmw.RequireJWT(jwtSvc), campusCampaignHandler.Mine)
 	engine.POST("/api/campus-campaigns/records", authmw.RequireJWT(jwtSvc), campusCampaignHandler.LinkRecord)
 	engine.GET("/api/campus-campaigns/by-code/:code", campusCampaignHandler.Landing)
-	engine.GET("/api/campus-campaigns/by-code/:code/board", campusCampaignHandler.MembersBoard)
+	engine.GET("/api/campus-campaigns/by-code/:code/board", authmw.OptionalJWT(jwtSvc), campusCampaignHandler.MembersBoard)
 	engine.POST("/api/campus-campaigns/by-code/:code/join", authmw.RequireJWT(jwtSvc), campusCampaignHandler.Join)
 	engine.GET("/api/campus-campaigns/:campaign_id/leader", authmw.RequireJWT(jwtSvc), campusCampaignHandler.Leader)
 	engine.PUT("/api/campus-campaigns/:campaign_id/members/:user_id/core", authmw.RequireJWT(jwtSvc), campusCampaignHandler.SetCore)

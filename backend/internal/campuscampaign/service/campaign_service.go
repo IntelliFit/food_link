@@ -38,6 +38,8 @@ type Repository interface {
 	UpsertMember(ctx context.Context, member *domain.Member) (*domain.Member, error)
 	SetRole(ctx context.Context, campaignID, userID, role string, markedBy *string, at *time.Time) error
 	MarkMembershipGranted(ctx context.Context, campaignID, userID string, days int, at time.Time) error
+	MarkCore(ctx context.Context, campaignID, userID, markedBy string, quota int, at time.Time) (bool, error)
+	UngrantedPrivileged(ctx context.Context, campaignID string) ([]domain.Member, error)
 	CountRole(ctx context.Context, campaignID, role string) (int64, error)
 	MemberCounts(ctx context.Context, campaignIDs []string) (map[string][2]int64, error)
 	MemberStats(ctx context.Context, campaignID string) ([]domain.MemberStats, error)
@@ -150,7 +152,8 @@ func (s *CampaignService) Mine(ctx context.Context, userID string) (*domain.Mine
 }
 
 // MembersBoard ranks a campaign's members by approved weighed samples.
-func (s *CampaignService) MembersBoard(ctx context.Context, code string) ([]domain.BoardEntry, error) {
+// Members of the campaign see nicknames; everyone else sees masked names.
+func (s *CampaignService) MembersBoard(ctx context.Context, code, viewerID string) ([]domain.BoardEntry, error) {
 	campaign, err := s.campaignByCode(ctx, code)
 	if err != nil {
 		return nil, err
@@ -159,14 +162,31 @@ func (s *CampaignService) MembersBoard(ctx context.Context, code string) ([]doma
 	if err != nil {
 		return nil, err
 	}
+	insider := false
+	for _, row := range stats {
+		insider = insider || (viewerID != "" && row.UserID == viewerID)
+	}
 	board := make([]domain.BoardEntry, 0, len(stats))
 	for _, row := range stats {
 		if row.Approved == 0 {
 			continue
 		}
-		board = append(board, domain.BoardEntry{Name: displayName(row.Nickname), Approved: row.Approved})
+		name := displayName(row.Nickname)
+		if !insider {
+			name = maskName(name)
+		}
+		board = append(board, domain.BoardEntry{Name: name, Approved: row.Approved})
 	}
 	return ranked(board), nil
+}
+
+// maskName keeps the first character: "王小明" becomes "王同学".
+func maskName(name string) string {
+	runes := []rune(strings.TrimSpace(name))
+	if len(runes) == 0 {
+		return "匿名同学"
+	}
+	return string(runes[0]) + "同学"
 }
 
 // CampaignsBoard ranks the active campaigns across schools.
@@ -254,16 +274,12 @@ func (s *CampaignService) SetCore(ctx context.Context, leaderID, campaignID, use
 		return s.Leader(ctx, leaderID, campaignID)
 	}
 	if target.Role == domain.RoleMember {
-		count, err := s.repo.CountRole(ctx, campaign.ID, domain.RoleCore)
+		marked, err := s.repo.MarkCore(ctx, campaign.ID, userID, leaderID, campaign.CoreMemberCap, s.now())
 		if err != nil {
 			return nil, err
 		}
-		if count >= int64(campaign.CoreMemberCap) {
-			return nil, badRequest(fmt.Sprintf("核心成员最多%d人", campaign.CoreMemberCap))
-		}
-		now := s.now()
-		if err := s.repo.SetRole(ctx, campaign.ID, userID, domain.RoleCore, &leaderID, &now); err != nil {
-			return nil, err
+		if !marked {
+			return nil, badRequest(fmt.Sprintf("核心成员最多%d人（已开过会员的也算在内）", campaign.CoreMemberCap))
 		}
 	}
 	if err := s.grantMembership(ctx, campaign, target); err != nil {
@@ -275,7 +291,9 @@ func (s *CampaignService) SetCore(ctx context.Context, leaderID, campaignID, use
 // grantMembership gives a core member (or leader) membership until the
 // campaign ends. The source key makes it once per member and campaign.
 func (s *CampaignService) grantMembership(ctx context.Context, campaign *domain.Campaign, member *domain.Member) error {
-	if member.MembershipGrantedAt != nil || s.membership == nil {
+	// Draft or ended campaigns grant nothing; activation grants the people
+	// marked before it started.
+	if member.MembershipGrantedAt != nil || s.membership == nil || !s.open(campaign) {
 		return nil
 	}
 	days := grantDays(s.now(), campaign.EndsAt)
@@ -446,12 +464,18 @@ func (s *CampaignService) AttributeSample(ctx context.Context, userID string, in
 	}
 	result := &SampleAttribution{CampaignID: campaign.ID, Channel: domain.ChannelSelfScale}
 	if id := strings.TrimSpace(input.StationSessionID); id != "" {
+		if uuid.Validate(id) != nil {
+			return nil, badRequest("称重日不存在")
+		}
 		station, err := s.repo.GetStation(ctx, id)
 		if err != nil {
 			return nil, err
 		}
 		if station == nil || station.CampaignID != campaign.ID {
 			return nil, badRequest("称重日不属于你参加的活动")
+		}
+		if station.Status != "open" || !s.recentDay(station.SessionDate) {
+			return nil, badRequest("这个称重日已经过了，请回活动页重新选择")
 		}
 		result.StationSessionID, result.CanteenID, result.CatalogItemID = &station.ID, station.CanteenID, station.CatalogItemID
 		result.Channel = domain.ChannelStation
@@ -625,6 +649,7 @@ func (s *CampaignService) UpdateCampaign(ctx context.Context, id string, input C
 	if campaign == nil {
 		return nil, notFound("活动不存在")
 	}
+	wasActive := campaign.Status == domain.CampaignActive
 	if err := applyCampaignInput(campaign, input); err != nil {
 		return nil, err
 	}
@@ -641,7 +666,27 @@ func (s *CampaignService) UpdateCampaign(ctx context.Context, id string, input C
 			return nil, err
 		}
 	}
+	if !wasActive && campaign.Status == domain.CampaignActive {
+		if err := s.grantWaiting(ctx, campaign); err != nil {
+			return nil, err
+		}
+	}
 	return s.view(ctx, campaign)
+}
+
+// grantWaiting gives the membership to leaders and core members marked
+// before the campaign was opened.
+func (s *CampaignService) grantWaiting(ctx context.Context, campaign *domain.Campaign) error {
+	members, err := s.repo.UngrantedPrivileged(ctx, campaign.ID)
+	if err != nil {
+		return err
+	}
+	for index := range members {
+		if err := s.grantMembership(ctx, campaign, &members[index]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AddLeader makes a user the campaign's leader (joining them if needed) and
@@ -658,12 +703,19 @@ func (s *CampaignService) AddLeader(ctx context.Context, campaignID, userID stri
 	if campaign == nil {
 		return notFound("活动不存在")
 	}
-	member, err := s.repo.UpsertMember(ctx, &domain.Member{
-		ID: uuid.NewString(), CampaignID: campaignID, UserID: userID, Role: domain.RoleLeader, JoinSource: "admin",
-		Status: domain.MemberActive, JoinedAt: s.now(),
-	})
+	member, err := s.repo.GetMember(ctx, campaignID, userID)
 	if err != nil {
 		return err
+	}
+	if member == nil || member.Status != domain.MemberActive {
+		// Upsert only for someone not active: it resets the scale fields.
+		member, err = s.repo.UpsertMember(ctx, &domain.Member{
+			ID: uuid.NewString(), CampaignID: campaignID, UserID: userID, Role: domain.RoleLeader, JoinSource: "admin",
+			Status: domain.MemberActive, JoinedAt: s.now(),
+		})
+		if err != nil {
+			return err
+		}
 	}
 	if member.Role != domain.RoleLeader {
 		if err := s.repo.SetRole(ctx, campaignID, userID, domain.RoleLeader, nil, nil); err != nil {
@@ -671,10 +723,7 @@ func (s *CampaignService) AddLeader(ctx context.Context, campaignID, userID stri
 		}
 		member.Role = domain.RoleLeader
 	}
-	if campaign.Status == domain.CampaignActive {
-		return s.grantMembership(ctx, campaign, member)
-	}
-	return nil
+	return s.grantMembership(ctx, campaign, member)
 }
 
 // ListCampaigns returns campaigns with their member and sample counts.
@@ -699,6 +748,13 @@ func (s *CampaignService) ListCampaigns(ctx context.Context, status string) ([]d
 var chinaTime = time.FixedZone("CST", 8*3600)
 
 func (s *CampaignService) today() string { return s.now().In(chinaTime).Format(time.DateOnly) }
+
+// recentDay accepts a weighing day of today or yesterday (Beijing time): a
+// late-evening session may be submitted after midnight.
+func (s *CampaignService) recentDay(day string) bool {
+	now := s.now().In(chinaTime)
+	return day == now.Format(time.DateOnly) || day == now.AddDate(0, 0, -1).Format(time.DateOnly)
+}
 
 func (s *CampaignService) open(campaign *domain.Campaign) bool {
 	now := s.now()

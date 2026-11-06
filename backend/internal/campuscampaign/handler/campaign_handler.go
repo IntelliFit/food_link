@@ -36,7 +36,7 @@ func (h *CampaignHandler) Landing(c *gin.Context) {
 
 // GET /api/campus-campaigns/by-code/:code/board (guests allowed)
 func (h *CampaignHandler) MembersBoard(c *gin.Context) {
-	board, err := h.svc.MembersBoard(c.Request.Context(), c.Param("code"))
+	board, err := h.svc.MembersBoard(c.Request.Context(), c.Param("code"), c.GetString(authmw.ContextUserIDKey))
 	if err != nil {
 		response.Error(c, err)
 		return

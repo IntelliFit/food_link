@@ -60,6 +60,11 @@ func (s *SampleService) ReadScale(ctx context.Context, userID, imageURL string, 
 			return nil, badRequest("今天自动读数次数已用完，请手动填写读数")
 		}
 		readings = s.reader.Read(ctx, s.accessURL(key))
+		if readingsFailed(readings) {
+			// Not cached: the next tap (or the review) asks the models again.
+			view := domain.ScaleReadView{Agreement: domain.AgreementUnreadable, Message: "自动读数暂时不可用，可以稍后重拍，或先手动填写"}
+			return &view, nil
+		}
 		if err := s.repo.SaveReadings(ctx, userID, key, readings); err != nil {
 			return nil, err
 		}

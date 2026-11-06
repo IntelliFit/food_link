@@ -68,7 +68,7 @@ func (h *SampleHandler) ReadScale(c *gin.Context) {
 
 // POST /api/admin/research-weight-samples/:sample_id/auto-review
 func (h *SampleHandler) AdminAutoReview(c *gin.Context) {
-	item, err := h.svc.AutoReviewSample(c.Request.Context(), c.Param("sample_id"))
+	item, err := h.svc.RerunAutoReview(c.Request.Context(), c.Param("sample_id"))
 	if err != nil {
 		response.Error(c, err)
 		return

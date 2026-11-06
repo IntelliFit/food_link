@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -12,7 +13,10 @@ import (
 
 const (
 	// autoReviewTimeout bounds one sample's review, model readings included.
-	autoReviewTimeout = 2 * time.Minute
+	// Readings are saved as they finish, so a timeout keeps the progress.
+	autoReviewTimeout = 4 * time.Minute
+	// autoReviewLease is how long a replica owns a sample it is reviewing.
+	autoReviewLease = 5 * time.Minute
 	// autoReviewSweepInterval and autoReviewSweepDelay let the sweep pick up
 	// samples whose immediate review failed (a restart, a model outage)
 	// without racing the review started at submission.
@@ -23,9 +27,24 @@ const (
 	readConcurrency = 4
 )
 
-// AutoReviewSample decides one pending sample automatically. It is a no-op
-// when automatic review is off or the sample was already reviewed.
+// errReadingsUnavailable keeps a sample pending while the reading models are
+// down, instead of grading its photos as unreadable.
+var errReadingsUnavailable = errors.New("称重科研读秤模型暂时不可用")
+
+// AutoReviewSample decides one pending sample automatically (the immediate
+// review and the sweep). It does nothing when another replica holds the
+// sample or its attempts are used up.
 func (s *SampleService) AutoReviewSample(ctx context.Context, id string) (*domain.SampleView, error) {
+	return s.autoReview(ctx, id, domain.MaxAutoReviewAttempts)
+}
+
+// RerunAutoReview is an administrator asking for the review again; it
+// ignores the attempt limit but still waits for another replica's lease.
+func (s *SampleService) RerunAutoReview(ctx context.Context, id string) (*domain.SampleView, error) {
+	return s.autoReview(ctx, id, 0)
+}
+
+func (s *SampleService) autoReview(ctx context.Context, id string, maxAttempts int) (*domain.SampleView, error) {
 	if s.reader == nil {
 		return nil, badRequest("自动审核未开启")
 	}
@@ -37,7 +56,23 @@ func (s *SampleService) AutoReviewSample(ctx context.Context, id string) (*domai
 		view := s.toView(sample)
 		return &view, nil
 	}
+	claimed, err := s.repo.ClaimForAutoReview(ctx, id, autoReviewLease, maxAttempts)
+	if err != nil {
+		return nil, err
+	}
+	if !claimed {
+		if maxAttempts <= 0 {
+			return nil, badRequest("这条样本正在自动审核，请稍后刷新")
+		}
+		view := s.toView(sample)
+		return &view, nil
+	}
+	unlock := s.lockUser(sample.UserID)
+	defer unlock()
 	evidence, err := s.gatherEvidence(ctx, sample)
+	if errors.Is(err, errReadingsUnavailable) {
+		return nil, badRequest("读秤模型暂时不可用，稍后会自动重试")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +89,16 @@ func (s *SampleService) AutoReviewSample(ctx context.Context, id string) (*domai
 	logger.Info(ctx, "称重科研样本自动审核完成", slog.String("sample_id", id), slog.String("decision", decision.Decision),
 		slog.String("tier", decision.Tier), slog.Int("credits", decision.Credits))
 	return s.commitReview(ctx, id, domain.AutoReviewVersion, updates)
+}
+
+// lockUser serialises one contributor's reviews in this process: the daily
+// reward count and the approval must not interleave with another review of
+// the same person.
+func (s *SampleService) lockUser(userID string) func() {
+	value, _ := s.userLocks.LoadOrStore(userID, &sync.Mutex{})
+	mutex := value.(*sync.Mutex)
+	mutex.Lock()
+	return mutex.Unlock
 }
 
 // reviewSoon starts the automatic review of a fresh submission without
@@ -76,7 +121,7 @@ func (s *SampleService) reviewSoon(ctx context.Context, id string) {
 	go run()
 }
 
-// RunAutoReview sweeps pending samples until ctx is cancelled.
+// RunAutoReview sweeps pending and unpaid samples until ctx is cancelled.
 func (s *SampleService) RunAutoReview(ctx context.Context) {
 	if s.reader == nil {
 		return
@@ -95,9 +140,11 @@ func (s *SampleService) RunAutoReview(ctx context.Context) {
 }
 
 // SweepAutoReview reviews one batch of pending samples older than the sweep
-// delay and returns how many it decided.
+// delay, retries unpaid approvals, and returns how many samples it decided.
 func (s *SampleService) SweepAutoReview(ctx context.Context) int {
-	pending, err := s.repo.PendingForAutoReview(ctx, s.now().Add(-autoReviewSweepDelay), autoReviewSweepBatch)
+	cutoff := s.now().Add(-autoReviewSweepDelay)
+	s.retryUnpaid(ctx, cutoff)
+	pending, err := s.repo.PendingForAutoReview(ctx, cutoff, autoReviewSweepBatch)
 	if err != nil {
 		logger.Error(ctx, "称重科研自动审核巡检读取失败", err)
 		return 0
@@ -105,15 +152,30 @@ func (s *SampleService) SweepAutoReview(ctx context.Context) int {
 	decided := 0
 	for _, sample := range pending {
 		reviewCtx, cancel := context.WithTimeout(ctx, autoReviewTimeout)
-		_, err := s.AutoReviewSample(reviewCtx, sample.ID)
+		view, err := s.AutoReviewSample(reviewCtx, sample.ID)
 		cancel()
 		if err != nil {
 			logger.Warn(ctx, "称重科研样本巡检审核失败", slog.String("sample_id", sample.ID), slog.String("error", err.Error()))
 			continue
 		}
-		decided++
+		if view != nil && view.Status != domain.StatusPending {
+			decided++
+		}
 	}
 	return decided
+}
+
+func (s *SampleService) retryUnpaid(ctx context.Context, cutoff time.Time) {
+	unpaid, err := s.repo.UnpaidApproved(ctx, cutoff, autoReviewSweepBatch)
+	if err != nil {
+		logger.Error(ctx, "称重科研未发积分样本读取失败", err)
+		return
+	}
+	for index := range unpaid {
+		if err := s.payReward(ctx, &unpaid[index]); err != nil {
+			logger.Warn(ctx, "称重科研样本补发积分失败", slog.String("sample_id", unpaid[index].ID), slog.String("error", err.Error()))
+		}
+	}
 }
 
 func (s *SampleService) gatherEvidence(ctx context.Context, sample *domain.Sample) (ReviewEvidence, error) {
@@ -136,15 +198,20 @@ func (s *SampleService) gatherEvidence(ctx context.Context, sample *domain.Sampl
 	return evidence, err
 }
 
+type readJob struct {
+	photo    domain.Photo
+	eval     bool
+	readings []domain.ScaleReading
+	failed   bool
+	err      error
+}
+
 // readMissing reads every scale and evaluation photo that has no stored
-// reading yet (an older client, or a reading call that never happened) and
-// fills the evidence. Saved-container photos are not read again here.
+// reading yet (an older client, or a reading call that never happened),
+// saving each as soon as it is read. Photos no model could answer for keep
+// the sample pending, until ReadingGiveUpAfter has passed.
 func (s *SampleService) readMissing(ctx context.Context, sample *domain.Sample, checks map[string]domain.PhotoCheck, evidence ReviewEvidence) error {
-	type job struct {
-		photo domain.Photo
-		eval  bool
-	}
-	var jobs []job
+	var jobs []*readJob
 	for _, photo := range sample.Photos {
 		eval := isEvalRole(photo.Role)
 		if _, scale := expectedReading(sample, photo); !scale && !eval {
@@ -157,36 +224,50 @@ func (s *SampleService) readMissing(ctx context.Context, sample *domain.Sample, 
 		if photo.Source == domain.PhotoSourceLibrary {
 			continue
 		}
-		jobs = append(jobs, job{photo: photo, eval: eval})
+		jobs = append(jobs, &readJob{photo: photo, eval: eval})
 	}
-	results := make([][]domain.ScaleReading, len(jobs))
 	limit := make(chan struct{}, readConcurrency)
 	var wg sync.WaitGroup
-	for index, item := range jobs {
+	for _, job := range jobs {
 		wg.Add(1)
-		go func(index int, item job) {
+		go func(job *readJob) {
 			defer wg.Done()
 			limit <- struct{}{}
 			defer func() { <-limit }()
-			url := s.accessURL(item.photo.ObjectKey)
-			if item.eval {
-				results[index] = []domain.ScaleReading{s.reader.ReadPrimary(ctx, url)}
+			url := s.accessURL(job.photo.ObjectKey)
+			if job.eval {
+				job.readings = []domain.ScaleReading{s.reader.ReadPrimary(ctx, url)}
+			} else {
+				job.readings = s.reader.Read(ctx, url)
+			}
+			if readingsFailed(job.readings) {
+				job.failed = true
 				return
 			}
-			results[index] = s.reader.Read(ctx, url)
-		}(index, item)
+			job.err = s.repo.SaveReadings(ctx, sample.UserID, job.photo.ObjectKey, job.readings)
+		}(job)
 	}
 	wg.Wait()
-	if err := ctx.Err(); err != nil {
-		return err
+	submitted := s.now()
+	if sample.CreatedAt != nil {
+		submitted = *sample.CreatedAt
 	}
-	for index, item := range jobs {
-		if err := s.repo.SaveReadings(ctx, sample.UserID, item.photo.ObjectKey, results[index]); err != nil {
-			return err
+	giveUp := s.now().Sub(submitted) >= domain.ReadingGiveUpAfter
+	unavailable := false
+	for _, job := range jobs {
+		if job.err != nil {
+			return job.err
 		}
-		s.useReadings(item.photo, results[index], item.eval, evidence)
+		if job.failed && !giveUp {
+			unavailable = true
+			continue
+		}
+		s.useReadings(job.photo, job.readings, job.eval, evidence)
 	}
-	return nil
+	if unavailable {
+		return errReadingsUnavailable
+	}
+	return ctx.Err()
 }
 
 func (s *SampleService) useReadings(photo domain.Photo, readings []domain.ScaleReading, eval bool, evidence ReviewEvidence) {

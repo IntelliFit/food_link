@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
@@ -50,6 +51,8 @@ type Repository interface {
 	SameContentUploads(ctx context.Context, hashes, ownKeys []string) ([]domain.PhotoCheck, error)
 	CountRewardedSince(ctx context.Context, userID string, since time.Time) (int64, error)
 	PendingForAutoReview(ctx context.Context, before time.Time, limit int) ([]domain.Sample, error)
+	ClaimForAutoReview(ctx context.Context, id string, lease time.Duration, maxAttempts int) (bool, error)
+	UnpaidApproved(ctx context.Context, before time.Time, limit int) ([]domain.Sample, error)
 }
 
 // SampleAttribution is the campus campaign a new sample belongs to.
@@ -89,6 +92,9 @@ type SampleService struct {
 	// async runs background work; nil means a goroutine. Tests make it
 	// synchronous.
 	async func(func())
+	// userLocks serialises one contributor's automatic reviews in this
+	// process, so parallel submissions cannot all slip under the daily cap.
+	userLocks sync.Map
 }
 
 func NewSampleService(repo Repository, rewards RewardAwarder, store ObjectStore) *SampleService {
@@ -346,21 +352,29 @@ func (s *SampleService) commitReview(ctx context.Context, id, reviewerID string,
 	if err != nil {
 		return nil, err
 	}
-	if sample.Status == domain.StatusApproved && sample.RewardCredits > 0 && sample.RewardedAt == nil && s.rewards != nil {
-		_, rewardErr := s.rewards.AwardResearchWeightSample(ctx, sample.UserID, sample.ID, sample.RewardCredits, map[string]any{
-			"dish_name": sample.DishName, "weighing_mode": sample.WeighingMode, "quality_tier": sample.QualityTier,
-			"review_mode": sample.ReviewMode,
-		})
-		if rewardErr != nil {
-			logger.Error(ctx, "称重科研样本审核通过但积分发放失败", rewardErr, slog.String("sample_id", sample.ID), slog.String("user_id", sample.UserID))
-			return nil, rewardErr
-		}
-		if err := s.repo.MarkRewarded(ctx, sample.ID); err != nil {
-			return nil, err
-		}
+	if err := s.payReward(ctx, sample); err != nil {
+		return nil, err
 	}
 	logger.Info(ctx, "称重科研样本审核完成", slog.String("sample_id", sample.ID), slog.String("status", sample.Status), slog.String("reviewer_id", reviewerID))
 	return s.Get(ctx, sample.ID)
+}
+
+// payReward pays an approved sample's credits once. The ledger's source key
+// makes a repeated award (a retry, another replica) fail instead of paying
+// twice, so retrying an unpaid sample is safe.
+func (s *SampleService) payReward(ctx context.Context, sample *domain.Sample) error {
+	if sample.Status != domain.StatusApproved || sample.RewardCredits <= 0 || sample.RewardedAt != nil || s.rewards == nil {
+		return nil
+	}
+	_, err := s.rewards.AwardResearchWeightSample(ctx, sample.UserID, sample.ID, sample.RewardCredits, map[string]any{
+		"dish_name": sample.DishName, "weighing_mode": sample.WeighingMode, "quality_tier": sample.QualityTier,
+		"review_mode": sample.ReviewMode,
+	})
+	if err != nil {
+		logger.Error(ctx, "称重科研样本审核通过但积分发放失败", err, slog.String("sample_id", sample.ID), slog.String("user_id", sample.UserID))
+		return err
+	}
+	return s.repo.MarkRewarded(ctx, sample.ID)
 }
 
 // DefaultRewardCredits pays for the extra work: itemized samples need a reading

@@ -35,6 +35,8 @@ func (f *fakeRepo) PhotoChecks(_ context.Context, keys []string) (map[string]dom
 	return result, nil
 }
 func (f *fakeRepo) SaveReadings(_ context.Context, userID, key string, readings []domain.ScaleReading) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	check := f.checksMap()[key]
 	now := time.Now()
 	check.ObjectKey, check.Readings, check.ReadAt = key, readings, &now
@@ -60,6 +62,29 @@ func (f *fakeRepo) SameContentUploads(_ context.Context, hashes, ownKeys []strin
 }
 func (f *fakeRepo) CountRewardedSince(context.Context, string, time.Time) (int64, error) {
 	return f.rewardedToday, nil
+}
+func (f *fakeRepo) ClaimForAutoReview(_ context.Context, id string, _ time.Duration, maxAttempts int) (bool, error) {
+	if f.leased == nil {
+		f.leased = map[string]bool{}
+	}
+	sample := f.samples[id]
+	if sample == nil || sample.Status != domain.StatusPending || f.leased[id] || (maxAttempts > 0 && sample.AutoReviewAttempts >= maxAttempts) {
+		return false, nil
+	}
+	sample.AutoReviewAttempts++
+	if f.holdLeases {
+		f.leased[id] = true
+	}
+	return true, nil
+}
+func (f *fakeRepo) UnpaidApproved(_ context.Context, _ time.Time, _ int) ([]domain.Sample, error) {
+	var items []domain.Sample
+	for _, sample := range f.samples {
+		if sample.Status == domain.StatusApproved && sample.RewardCredits > 0 && sample.RewardedAt == nil {
+			items = append(items, *sample)
+		}
+	}
+	return items, nil
 }
 func (f *fakeRepo) PendingForAutoReview(_ context.Context, before time.Time, limit int) ([]domain.Sample, error) {
 	var items []domain.Sample
@@ -371,4 +396,74 @@ func TestSubmitCarriesTheContributorsCampaign(t *testing.T) {
 	input.Photos = []PhotoInput{photo(domain.RoleTareScale, "t3.jpg"), photo(domain.RoleGrossScale, "g3.jpg"), photo(domain.RoleEvalTop, "top3.jpg")}
 	_, err = svc.Submit(context.Background(), "u1", input)
 	require.ErrorContains(t, err, "称重日")
+}
+
+func TestModelOutageKeepsTheSamplePendingAndIsNotCached(t *testing.T) {
+	svc, repo, rewards := newTestService()
+	svc.ConfigureAutoReview(NewScaleReader(&fakeVision{err: errors.New("upstream 503")}, &fakeVision{err: errors.New("timeout")}))
+	svc.async = func(run func()) { run() }
+
+	view, err := svc.Submit(context.Background(), "u1", wholeInput())
+	require.NoError(t, err)
+	require.Equal(t, domain.StatusPending, repo.samples[view.ID].Status, "an outage is not evidence")
+	require.Zero(t, repo.savedReadings)
+	require.Empty(t, rewards.calls)
+
+	reading, err := svc.ReadScale(context.Background(), "u1", "https://cdn.test/research-weight/u1/g.jpg", 1)
+	require.NoError(t, err)
+	require.Equal(t, domain.AgreementUnreadable, reading.Agreement)
+	require.Contains(t, reading.Message, "暂时不可用")
+	require.Zero(t, repo.savedReadings, "a failed reading is asked again next time")
+
+	// After a day the sample is graded with what there is instead of waiting forever.
+	old := svc.now().Add(-25 * time.Hour)
+	repo.samples[view.ID].CreatedAt = &old
+	reviewed, err := svc.AutoReviewSample(context.Background(), view.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.StatusApproved, reviewed.Status)
+	require.Equal(t, "C", *reviewed.QualityTier)
+}
+
+func TestReviewWaitsForAnotherReplicasLease(t *testing.T) {
+	svc, repo, _ := newTestService()
+	replies := wholeReplies("905.3")
+	svc.ConfigureAutoReview(&ScaleReader{primary: &routedVision{replies: replies}, verifier: &routedVision{replies: replies}, timeout: time.Second})
+	svc.async = func(func()) {}
+	view, err := svc.Submit(context.Background(), "u1", wholeInput())
+	require.NoError(t, err)
+	repo.leased = map[string]bool{view.ID: true}
+
+	same, err := svc.AutoReviewSample(context.Background(), view.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.StatusPending, same.Status, "the replica holding the lease decides")
+	_, err = svc.RerunAutoReview(context.Background(), view.ID)
+	require.ErrorContains(t, err, "正在自动审核")
+
+	repo.leased = map[string]bool{}
+	repo.samples[view.ID].AutoReviewAttempts = domain.MaxAutoReviewAttempts
+	same, err = svc.AutoReviewSample(context.Background(), view.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.StatusPending, same.Status, "a sample out of attempts waits for an administrator")
+	rerun, err := svc.RerunAutoReview(context.Background(), view.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.StatusApproved, rerun.Status)
+}
+
+func TestSweepPaysApprovalsWhoseRewardFailed(t *testing.T) {
+	svc, repo, rewards := newTestService()
+	replies := wholeReplies("905.3")
+	svc.ConfigureAutoReview(&ScaleReader{primary: &routedVision{replies: replies}, verifier: &routedVision{replies: replies}, timeout: time.Second})
+	svc.async = func(run func()) { run() }
+	rewards.failNext = true
+	view, err := svc.Submit(context.Background(), "u1", wholeInput())
+	require.NoError(t, err)
+	require.Equal(t, domain.StatusApproved, repo.samples[view.ID].Status)
+	require.Nil(t, repo.samples[view.ID].RewardedAt)
+	require.Empty(t, rewards.calls)
+
+	svc.SweepAutoReview(context.Background())
+	require.Equal(t, []int{2}, rewards.calls)
+	require.NotNil(t, repo.samples[view.ID].RewardedAt)
+	svc.SweepAutoReview(context.Background())
+	require.Equal(t, []int{2}, rewards.calls, "paid once")
 }

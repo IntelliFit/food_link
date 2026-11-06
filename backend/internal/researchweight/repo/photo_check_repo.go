@@ -84,12 +84,40 @@ func (r *SampleRepo) CountRewardedSince(ctx context.Context, userID string, sinc
 	return count, err
 }
 
-// PendingForAutoReview lists pending samples submitted before the cutoff,
-// oldest first, for the automatic review sweep.
+// PendingForAutoReview lists pending samples submitted before the cutoff that
+// no replica is reviewing and that have attempts left, oldest first.
 func (r *SampleRepo) PendingForAutoReview(ctx context.Context, before time.Time, limit int) ([]domain.Sample, error) {
 	var items []domain.Sample
-	err := r.db.WithContext(ctx).Where("status = ? AND created_at <= ?", domain.StatusPending, before).
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND created_at <= ? AND (auto_review_lease_until IS NULL OR auto_review_lease_until < now()) AND auto_review_attempts < ?",
+			domain.StatusPending, before, domain.MaxAutoReviewAttempts).
 		Order("created_at ASC").Limit(limit).Find(&items).Error
+	return items, err
+}
+
+// ClaimForAutoReview takes a lease on a pending sample so only one replica
+// reviews it at a time. maxAttempts <= 0 ignores the attempt limit (an
+// administrator re-running the review).
+func (r *SampleRepo) ClaimForAutoReview(ctx context.Context, id string, lease time.Duration, maxAttempts int) (bool, error) {
+	query := r.db.WithContext(ctx).Model(&domain.Sample{}).
+		Where("id = ? AND status = ? AND (auto_review_lease_until IS NULL OR auto_review_lease_until < now())", id, domain.StatusPending)
+	if maxAttempts > 0 {
+		query = query.Where("auto_review_attempts < ?", maxAttempts)
+	}
+	result := query.Updates(map[string]any{
+		"auto_review_lease_until": gorm.Expr("now() + ?::interval", fmt.Sprintf("%d seconds", int(lease.Seconds()))),
+		"auto_review_attempts":    gorm.Expr("auto_review_attempts + 1"),
+	})
+	return result.RowsAffected > 0, result.Error
+}
+
+// UnpaidApproved lists approved samples whose credits were never paid (a
+// failed award, a pod that died after approving), for the sweep to retry.
+func (r *SampleRepo) UnpaidApproved(ctx context.Context, before time.Time, limit int) ([]domain.Sample, error) {
+	var items []domain.Sample
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND reward_credits > 0 AND rewarded_at IS NULL AND reviewed_at <= ?", domain.StatusApproved, before).
+		Order("reviewed_at ASC").Limit(limit).Find(&items).Error
 	return items, err
 }
 

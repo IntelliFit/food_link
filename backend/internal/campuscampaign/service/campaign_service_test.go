@@ -157,6 +157,14 @@ func TestJoinAttributesSamplesToTheActiveCampaign(t *testing.T) {
 	mine, err = f.svc.Mine(ctx, member)
 	require.NoError(t, err)
 	require.Len(t, mine.Stations, 2)
+	require.Equal(t, today, mine.Stations[0].SessionDate, "dates come back as YYYY-MM-DD")
+
+	// A weighing day from last week no longer takes samples.
+	require.NoError(t, f.db.Exec(`UPDATE campus_station_sessions SET session_date = current_date - 7 WHERE id = ?`, station.ID).Error)
+	_, err = f.svc.AttributeSample(ctx, member, SampleAttributionInput{StationSessionID: station.ID})
+	require.ErrorContains(t, err, "已经过了")
+	_, err = f.svc.AttributeSample(ctx, member, SampleAttributionInput{StationSessionID: "not-a-uuid"})
+	requireStatus(t, err, 400)
 }
 
 func TestSetCoreRespectsTheCapAndGrantsMembershipOnce(t *testing.T) {
@@ -184,8 +192,12 @@ func TestSetCoreRespectsTheCapAndGrantsMembershipOnce(t *testing.T) {
 	view, err = f.svc.SetCore(ctx, leader, campaign.ID, a, false)
 	require.NoError(t, err)
 	require.Zero(t, view.CoreCount)
+	// 甲 already received the membership, so unmarking does not free the slot.
 	_, err = f.svc.SetCore(ctx, leader, campaign.ID, b, true)
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "最多1人")
+	_, err = f.svc.SetCore(ctx, leader, campaign.ID, a, true)
+	require.NoError(t, err, "re-marking someone already granted needs no new slot")
+	require.Len(t, f.granter.calls, 2, "and grants nothing again")
 	_, err = f.svc.SetCore(ctx, leader, campaign.ID, leader, false)
 	require.ErrorContains(t, err, "负责人")
 }
@@ -219,21 +231,33 @@ func TestLinkRecordAndBoardsCountOnlyTheirOwnData(t *testing.T) {
 	_, err = f.svc.LinkRecord(ctx, leader, RecordLinkInput{FoodRecordID: recordID})
 	requireStatus(t, err, 404)
 
-	// Two approved weighed samples for the member, one for the leader.
+	// Two approved weighed samples for the member, one for the leader, and a
+	// C-grade sample that is kept but never ranked.
+	tierB, tierC := "B", "C"
+	campaignC := campaign.ID
+	require.NoError(t, f.db.Create(&researchdomain.Sample{
+		UserID: leader, ClientKey: uuid.NewString(), Scene: "canteen", WeighingMode: "whole", ContainerType: "bowl", TareMode: "measured",
+		TotalNetGrams: 280, ConsentVersion: researchdomain.ConsentVersion, ConsentedAt: time.Now(), Status: researchdomain.StatusApproved,
+		QualityTier: &tierC, CampaignID: &campaignC, CollectionChannel: domain.ChannelSelfScale,
+		Items: []researchdomain.Item{}, Photos: []researchdomain.Photo{}, Device: map[string]any{},
+	}).Error)
 	for index, owner := range []string{member, member, leader} {
 		campaignID := campaign.ID
 		require.NoError(t, f.db.Create(&researchdomain.Sample{
 			UserID: owner, ClientKey: uuid.NewString(), Scene: "canteen", WeighingMode: "whole", ContainerType: "bowl", TareMode: "measured",
 			TotalNetGrams: float64(300 + index), ConsentVersion: researchdomain.ConsentVersion, ConsentedAt: time.Now(),
-			Status: researchdomain.StatusApproved, CampaignID: &campaignID, CollectionChannel: domain.ChannelSelfScale, CatalogItemID: &dish,
+			Status: researchdomain.StatusApproved, QualityTier: &tierB, CampaignID: &campaignID, CollectionChannel: domain.ChannelSelfScale, CatalogItemID: &dish,
 			Items: []researchdomain.Item{}, Photos: []researchdomain.Photo{}, Device: map[string]any{},
 		}).Error)
 	}
-	board, err := f.svc.MembersBoard(ctx, campaign.JoinCode)
+	board, err := f.svc.MembersBoard(ctx, campaign.JoinCode, member)
 	require.NoError(t, err)
 	require.Len(t, board, 2)
 	require.Equal(t, "小王", board[0].Name)
 	require.EqualValues(t, 2, board[0].Approved)
+	guestBoard, err := f.svc.MembersBoard(ctx, campaign.JoinCode, "")
+	require.NoError(t, err)
+	require.Equal(t, "小同学", guestBoard[0].Name, "guests see masked names")
 
 	schools, err := f.svc.CampaignsBoard(ctx)
 	require.NoError(t, err)
@@ -273,4 +297,34 @@ func TestGrantDaysCoverTheRestOfTheCampaign(t *testing.T) {
 	require.Equal(t, 28, grantDays(now, now.Add(27*24*time.Hour+time.Minute)))
 	require.Equal(t, domain.MaxGrantDays, grantDays(now, now.Add(400*24*time.Hour)))
 	require.Equal(t, 1, grantDays(now, now.Add(-time.Hour)))
+}
+
+func TestActivatingACampaignGrantsWaitingLeadersAndKeepsScaleSettings(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	leader := f.user(t, "社长")
+	org, err := f.svc.CreateOrg(ctx, "admin", OrgInput{SchoolID: f.schoolID, Name: "健身协会"})
+	require.NoError(t, err)
+	now := time.Now()
+	input := CampaignInput{OrgID: org.ID, Title: "草稿期", StartsAt: now.Add(-time.Hour), EndsAt: now.Add(10 * 24 * time.Hour), LeaderUserIDs: []string{leader}}
+	draft, err := f.svc.CreateCampaign(ctx, "admin", input)
+	require.NoError(t, err)
+	require.Empty(t, f.granter.calls, "a draft grants nothing")
+
+	// The leader had joined as an ordinary member with a scale before.
+	require.NoError(t, f.db.Exec(`UPDATE campus_campaign_members SET has_scale = true, scale_precision_grams = 0.1 WHERE user_id = ?`, leader).Error)
+	require.NoError(t, f.svc.AddLeader(ctx, draft.ID, leader))
+	var member domain.Member
+	require.NoError(t, f.db.Where("campaign_id = ? AND user_id = ?", draft.ID, leader).First(&member).Error)
+	require.True(t, member.HasScale, "making someone leader keeps their scale settings")
+
+	input.Status = domain.CampaignActive
+	input.LeaderUserIDs = nil
+	_, err = f.svc.UpdateCampaign(ctx, draft.ID, input)
+	require.NoError(t, err)
+	require.Len(t, f.granter.calls, 1, "activation grants the waiting leader")
+	require.Equal(t, leader, f.granter.calls[0].userID)
+	_, err = f.svc.UpdateCampaign(ctx, draft.ID, input)
+	require.NoError(t, err)
+	require.Len(t, f.granter.calls, 1, "and only once")
 }

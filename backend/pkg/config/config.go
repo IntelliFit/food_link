@@ -286,9 +286,10 @@ type CanteenCaptureConfig struct {
 }
 
 // ResearchWeightConfig switches on automatic scale reading and review of
-// weighed benchmark samples. It stays off by default because local
-// development shares the production database: a laptop must never start
-// reviewing real contributors' samples.
+// weighed benchmark samples. It stays off by default and only takes effect
+// when app.env is production, because local development shares the
+// production database: a laptop must never start reviewing real
+// contributors' samples.
 type ResearchWeightConfig struct {
 	AutoReviewEnabled bool `mapstructure:"auto_review_enabled"`
 }

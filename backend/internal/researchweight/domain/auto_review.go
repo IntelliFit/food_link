@@ -21,6 +21,12 @@ const (
 	EvalPhotoMaxAge = 48 * time.Hour
 	// MinItemNetGrams is the smallest plausible weighed portion.
 	MinItemNetGrams = 5.0
+	// MaxAutoReviewAttempts stops retrying a sample that keeps failing; it
+	// then waits for an administrator.
+	MaxAutoReviewAttempts = 6
+	// ReadingGiveUpAfter is how long a model outage keeps a sample pending
+	// before its unreadable photos are graded as unreadable.
+	ReadingGiveUpAfter = 24 * time.Hour
 )
 
 // Per-photo reading outcomes, from strongest to weakest evidence.
