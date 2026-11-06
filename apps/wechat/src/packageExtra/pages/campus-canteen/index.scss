@@ -79,20 +79,6 @@
     .campus-chevron { flex-shrink: 0; font-size: 22rpx; color: var(--campus-accent); }
   }
   .campus-school-name { font-size: 36rpx; line-height: 48rpx; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .campus-more-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 84rpx;
-    height: 84rpx;
-    margin: 0;
-    padding: 0;
-    flex-shrink: 0;
-    background: transparent;
-    color: var(--campus-accent);
-    font-size: 36rpx;
-    border-radius: 20rpx;
-  }
   .campus-browse-search { display: flex; align-items: center; gap: 14rpx; }
   .search-input-wrap { min-width: 0; height: 84rpx; padding: 0 0 0 20rpx; box-sizing: border-box; background: var(--campus-soft); border-radius: 22rpx; }
   .search-input-icon { color: var(--campus-muted); margin-right: 12rpx; font-size: 30rpx; }
@@ -172,9 +158,6 @@
   .campus-meal-price { display: block; margin-top: auto; font-size: 30rpx; line-height: 42rpx; font-weight: 600; color: #a44927; overflow-wrap: anywhere; }
   .campus-meal-nutrition { color: var(--campus-muted); font-size: 24rpx; line-height: 36rpx; }
   .campus-meal-record { position: absolute; right: 4rpx; bottom: 4rpx; display: flex; align-items: center; justify-content: center; width: 84rpx; height: 84rpx; margin: 0; padding: 0; border: 1rpx solid var(--campus-border); border-radius: 50%; background: var(--campus-surface); color: var(--campus-accent); font-size: 34rpx; }
-  .campus-school-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 100rpx 24rpx; gap: 20rpx; .iconfont { font-size: 72rpx; color: var(--campus-accent); } }
-  .campus-empty-title { font-size: 34rpx; line-height: 48rpx; font-weight: 600; text-align: center; }
-  .campus-empty-hint { font-size: 28rpx; line-height: 40rpx; color: var(--campus-muted); }
   .campus-primary-button { display: flex; align-items: center; justify-content: center; min-height: 88rpx; margin: 20rpx 0 0; padding: 0 40rpx; border-radius: 22rpx; color: #fff; background: var(--campus-accent); font-size: 30rpx; }
   .campus-school-search-button { display: flex; align-items: center; justify-content: center; min-height: 88rpx; margin: 16rpx 0 0; padding: 0 40rpx; border-radius: 22rpx; color: var(--campus-accent); background: var(--campus-soft); font-size: 30rpx; }
   .empty-state { padding: 60rpx 20rpx; }

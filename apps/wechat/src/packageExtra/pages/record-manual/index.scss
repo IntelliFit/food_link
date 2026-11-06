@@ -80,13 +80,7 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   margin-bottom: $rm-s2;
 }
 
-.section-header .section-title {
-  margin-bottom: 0;
-}
-
-.workspace-card,
-.selected-section,
-.catalog-card {
+.workspace-card {
   @include rm-card-surface;
   padding: $rm-s3;
   margin-bottom: $rm-s3;
@@ -98,7 +92,6 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
 }
 
 .workspace-header,
-.section-header,
 .selected-main,
 .food-name-row,
 .food-item,
@@ -111,7 +104,6 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
 }
 
 .workspace-header,
-.section-header,
 .food-item,
 .item-actions,
 .item-name-row,
@@ -645,68 +637,6 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   margin-top: 14rpx;
 }
 
-.custom-public-row {
-  min-height: 78rpx;
-  margin-top: 18rpx;
-  padding: 14rpx 18rpx;
-  border-radius: 16rpx;
-  background: #f8fafc;
-  border: 1rpx solid rgba(148, 163, 184, 0.16);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18rpx;
-  box-sizing: border-box;
-}
-
-.custom-public-copy {
-  flex: 1;
-  min-width: 0;
-}
-
-.custom-public-title {
-  display: block;
-  font-size: 25rpx;
-  color: #0f172a;
-  font-weight: 700;
-}
-
-.custom-public-subtitle {
-  display: block;
-  margin-top: 4rpx;
-  font-size: 22rpx;
-  color: #64748b;
-}
-
-.custom-public-switch {
-  flex: 0 0 82rpx;
-  width: 82rpx;
-  height: 44rpx;
-  padding: 4rpx;
-  border-radius: 999rpx;
-  background: #cbd5e1;
-  box-sizing: border-box;
-  transition: background 0.18s ease;
-}
-
-.custom-public-switch.active {
-  background: #10b981;
-}
-
-.custom-public-knob {
-  width: 36rpx;
-  height: 36rpx;
-  border-radius: 999rpx;
-  background: #fff;
-  box-shadow: 0 4rpx 10rpx rgba(15, 23, 42, 0.16);
-  transform: translateX(0);
-  transition: transform 0.18s ease;
-}
-
-.custom-public-switch.active .custom-public-knob {
-  transform: translateX(38rpx);
-}
-
 .custom-food-actions {
   justify-content: flex-end;
   margin-top: 18rpx;
@@ -765,11 +695,6 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
 .clear-btn .iconfont {
   font-size: 28rpx;
   color: $rm-text-tertiary;
-}
-
-.catalog-card {
-  padding: $rm-s2;
-  overflow: hidden;
 }
 
 .catalog-shell {
@@ -833,24 +758,12 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   box-sizing: border-box;
 }
 
-.filter-scroll,
-.category-scroll {
-  white-space: nowrap;
-}
-
-.filter-row,
 .category-row {
   display: inline-flex;
   gap: $rm-s2;
   padding-right: $rm-s2;
 }
 
-.filter-scroll {
-  margin-bottom: $rm-s2;
-}
-
-.filter-chip,
-.category-chip,
 .serving-chip,
 .quick-adjust-chip,
 .option-item {
@@ -865,8 +778,6 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   box-sizing: border-box;
 }
 
-.filter-chip text,
-.category-chip text,
 .serving-chip text,
 .quick-adjust-chip text,
 .option-item text {
@@ -875,24 +786,16 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   line-height: 32rpx;
 }
 
-.filter-chip.active,
-.category-chip.active,
 .serving-chip.active,
 .option-item.active {
   background: linear-gradient(135deg, $rm-primary 0%, $rm-primary-gradient-end 100%);
   border-color: $rm-primary;
 }
 
-.filter-chip.active text,
-.category-chip.active text,
 .serving-chip.active text,
 .option-item.active text {
   color: #fff;
   font-weight: 600;
-}
-
-.food-library-section {
-  margin-bottom: $rm-s3;
 }
 
 .library-header {
@@ -1116,11 +1019,6 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
   animation: rm-spin 1s linear infinite;
 }
 
-.selected-section {
-  background: linear-gradient(135deg, #fff 0%, $rm-primary-soft 100%);
-  border-color: $rm-primary-border;
-}
-
 .selected-list {
   display: flex;
   flex-direction: column;
@@ -1224,30 +1122,6 @@ $rm-shadow-card: 0 8rpx 24rpx rgb(15 23 42 / 5%);
 .remove-btn .iconfont {
   font-size: 28rpx;
   color: #ef4444;
-}
-
-.total-calories {
-  display: flex;
-  align-items: baseline;
-  gap: $rm-s1;
-}
-
-.total-calories text:first-child {
-  font-size: 36rpx;
-  font-weight: 700;
-  color: $rm-primary;
-  line-height: 44rpx;
-}
-
-.total-calories .unit {
-  font-size: 22rpx;
-  color: $rm-text-secondary;
-}
-
-.nutrition-total {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: $rm-s2;
 }
 
 .total-item {

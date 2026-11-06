@@ -51,12 +51,6 @@ page {
   font-weight: 800;
 }
 
-.pet-chat-thinking-switch-note {
-  color: #829188;
-  font-size: 20rpx;
-  line-height: 28rpx;
-}
-
 .pet-chat-thinking-switch {
   flex-shrink: 0;
   transform: scale(0.78);
@@ -88,14 +82,6 @@ page {
   display: block;
 }
 
-.pet-chat-identity-subtitle {
-  display: block;
-  margin-top: 2rpx;
-  color: rgba(34, 111, 85, 0.58);
-  font-size: 20rpx;
-  line-height: 28rpx;
-}
-
 .pet-chat-identity-name {
   overflow: hidden;
   color: #193a30;
@@ -104,18 +90,6 @@ page {
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.pet-chat-title-block {
-  display: none;
-}
-
-.pet-chat-title {
-  display: block;
-  color: #17382f;
-  font-size: 40rpx;
-  line-height: 52rpx;
-  font-weight: 900;
 }
 
 .pet-chat-new-button {
@@ -167,55 +141,6 @@ page {
 
 .pet-chat-history-button {
   min-width: 78rpx;
-}
-
-.pet-chat-home-context {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18rpx;
-  margin: -8rpx 0 18rpx;
-  padding: 16rpx 18rpx;
-  border: 1rpx solid rgba(92, 184, 150, 0.18);
-  border-radius: 20rpx;
-  background: rgba(237, 248, 241, 0.88);
-  box-sizing: border-box;
-}
-
-.pet-chat-home-context__copy {
-  min-width: 0;
-  flex: 1;
-}
-
-.pet-chat-home-context__source,
-.pet-chat-home-context__advice {
-  display: block;
-}
-
-.pet-chat-home-context__source {
-  color: #2f8f6f;
-  font-size: 20rpx;
-  line-height: 28rpx;
-  font-weight: 800;
-}
-
-.pet-chat-home-context__advice {
-  margin-top: 2rpx;
-  overflow: hidden;
-  color: #315044;
-  font-size: 22rpx;
-  line-height: 31rpx;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pet-chat-home-context__status {
-  flex-shrink: 0;
-  color: rgba(34, 111, 85, 0.62);
-  font-size: 19rpx;
-  line-height: 28rpx;
-  font-weight: 700;
 }
 
 .pet-chat-scroll {
@@ -388,251 +313,6 @@ page {
   font-weight: 900;
 }
 
-.pet-chat-clues {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-  margin-top: 18rpx;
-}
-
-.pet-chat-clue {
-  display: flex;
-  align-items: flex-start;
-  gap: 12rpx;
-  padding: 16rpx;
-  border-radius: 18rpx;
-  background: rgba(238, 248, 235, 0.92);
-}
-
-.pet-chat-clue-index {
-  width: 34rpx;
-  height: 34rpx;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: rgba(47, 143, 111, 0.9);
-  color: #ffffff;
-  font-size: 20rpx;
-  line-height: 34rpx;
-  font-weight: 900;
-}
-
-.pet-chat-clue-text {
-  flex: 1;
-  min-width: 0;
-  color: #355247;
-  font-size: 24rpx;
-  line-height: 34rpx;
-}
-
-.pet-chat-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10rpx;
-  margin-top: 16rpx;
-}
-
-.pet-chat-diet-result {
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-  margin-top: 22rpx;
-}
-
-.pet-chat-diet-context {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-  padding: 16rpx 18rpx;
-  border-radius: 18rpx;
-  background: rgba(238, 248, 235, 0.92);
-}
-
-.pet-chat-diet-context-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2rpx;
-}
-
-.pet-chat-diet-context-school,
-.pet-chat-diet-context-source {
-  display: block;
-}
-
-.pet-chat-diet-context-school {
-  color: #1d4939;
-  font-size: 25rpx;
-  line-height: 34rpx;
-  font-weight: 900;
-}
-
-.pet-chat-diet-context-source {
-  color: rgba(35, 72, 60, 0.58);
-  font-size: 20rpx;
-  line-height: 28rpx;
-}
-
-.pet-chat-campus-save {
-  flex-shrink: 0;
-  padding: 10rpx 16rpx;
-  border-radius: 999rpx;
-  background: #2f8f6f;
-  color: #ffffff;
-  font-size: 21rpx;
-  line-height: 28rpx;
-  font-weight: 800;
-
-  &.saved {
-    background: rgba(47, 143, 111, 0.1);
-    color: #2f8f6f;
-  }
-}
-
-.pet-chat-diet-options {
-  display: flex;
-  flex-direction: column;
-  gap: 14rpx;
-}
-
-.pet-chat-diet-card {
-  padding: 20rpx;
-  border: 1rpx solid rgba(47, 143, 111, 0.14);
-  border-radius: 22rpx;
-  background: #fbfdfb;
-
-  &.clickable {
-    box-shadow: 0 8rpx 22rpx rgba(39, 112, 83, 0.07);
-  }
-}
-
-.pet-chat-diet-card-head {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-}
-
-.pet-chat-diet-card-rank {
-  flex-shrink: 0;
-  width: 34rpx;
-  height: 34rpx;
-  border-radius: 50%;
-  background: #2f8f6f;
-  color: #ffffff;
-  font-size: 20rpx;
-  line-height: 34rpx;
-  font-weight: 900;
-  text-align: center;
-}
-
-.pet-chat-diet-card-title {
-  flex: 1;
-  min-width: 0;
-  color: #183a31;
-  font-size: 27rpx;
-  line-height: 36rpx;
-  font-weight: 900;
-}
-
-.pet-chat-diet-card-role {
-  flex-shrink: 0;
-  padding: 3rpx 9rpx;
-  border-radius: 999rpx;
-  background: rgba(47, 143, 111, 0.1);
-  color: #2f8f6f;
-  font-size: 18rpx;
-  line-height: 26rpx;
-  font-weight: 900;
-
-  &.role-easy_to_follow {
-    background: rgba(208, 123, 45, 0.11);
-    color: #b96820;
-  }
-
-  &.role-balanced_best {
-    background: rgba(78, 103, 169, 0.11);
-    color: #4e67a9;
-  }
-}
-
-.pet-chat-diet-card-price {
-  flex-shrink: 0;
-  color: #d07b2d;
-  font-size: 23rpx;
-  line-height: 32rpx;
-  font-weight: 900;
-}
-
-.pet-chat-diet-card-location,
-.pet-chat-diet-card-evidence,
-.pet-chat-diet-card-reason,
-.pet-chat-diet-card-score,
-.pet-chat-diet-card-link {
-  display: block;
-}
-
-.pet-chat-diet-card-location {
-  margin-top: 10rpx;
-  color: #3a6657;
-  font-size: 22rpx;
-  line-height: 32rpx;
-  font-weight: 700;
-}
-
-.pet-chat-diet-card-macros {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8rpx 14rpx;
-  margin-top: 12rpx;
-  color: rgba(35, 72, 60, 0.68);
-  font-size: 21rpx;
-  line-height: 30rpx;
-}
-
-.pet-chat-diet-card-evidence {
-  margin-top: 8rpx;
-  color: rgba(47, 143, 111, 0.82);
-  font-size: 20rpx;
-  line-height: 28rpx;
-  font-weight: 700;
-}
-
-.pet-chat-diet-card-reason {
-  margin-top: 10rpx;
-  color: rgba(35, 72, 60, 0.72);
-  font-size: 22rpx;
-  line-height: 32rpx;
-}
-
-.pet-chat-diet-card-score {
-  margin-top: 8rpx;
-  color: rgba(47, 143, 111, 0.88);
-  font-size: 20rpx;
-  line-height: 28rpx;
-  font-weight: 800;
-}
-
-.pet-chat-diet-card-link {
-  margin-top: 12rpx;
-  color: #2f8f6f;
-  font-size: 22rpx;
-  line-height: 30rpx;
-  font-weight: 900;
-}
-
-.pet-chat-action-chip {
-  padding: 9rpx 15rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 240, 200, 0.82);
-  color: rgba(128, 91, 22, 0.9);
-  font-size: 21rpx;
-  line-height: 30rpx;
-  font-weight: 800;
-}
-
 .pet-chat-thinking-bubble {
   display: flex;
   align-items: center;
@@ -656,126 +336,6 @@ page {
   &:nth-child(3) {
     animation-delay: 0.24s;
   }
-}
-
-.pet-chat-starter {
-  padding: 2rpx 0 4rpx;
-  text-align: left;
-}
-
-.pet-chat-guide {
-  margin-bottom: 22rpx;
-  padding: 22rpx;
-  border: 1rpx solid rgba(92, 184, 150, 0.16);
-  border-radius: 24rpx;
-  background: rgba(235, 247, 239, 0.92);
-  text-align: left;
-}
-
-.pet-chat-guide-title {
-  display: block;
-  color: #183a31;
-  font-size: 25rpx;
-  font-weight: 900;
-  line-height: 36rpx;
-}
-
-.pet-chat-guide-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14rpx;
-  margin-top: 16rpx;
-}
-
-.pet-chat-guide-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12rpx;
-}
-
-.pet-chat-guide-index {
-  flex-shrink: 0;
-  width: 34rpx;
-  height: 34rpx;
-  border-radius: 50%;
-  background: #2f8f6f;
-  color: #ffffff;
-  font-size: 20rpx;
-  font-weight: 900;
-  line-height: 34rpx;
-  text-align: center;
-}
-
-.pet-chat-guide-copy {
-  flex: 1;
-  min-width: 0;
-}
-
-.pet-chat-guide-label,
-.pet-chat-guide-text,
-.pet-chat-guide-note {
-  display: block;
-}
-
-.pet-chat-guide-label {
-  color: #23483c;
-  font-size: 23rpx;
-  font-weight: 900;
-  line-height: 32rpx;
-}
-
-.pet-chat-guide-text {
-  margin-top: 2rpx;
-  color: rgba(35, 72, 60, 0.68);
-  font-size: 22rpx;
-  line-height: 32rpx;
-}
-
-.pet-chat-guide-note {
-  margin-top: 16rpx;
-  padding-top: 14rpx;
-  border-top: 1rpx solid rgba(92, 184, 150, 0.16);
-  color: rgba(34, 111, 85, 0.66);
-  font-size: 21rpx;
-  line-height: 30rpx;
-}
-
-.pet-chat-starter-title {
-  display: block;
-  margin: 0 4rpx 14rpx;
-  color: rgba(23, 56, 47, 0.56);
-  font-size: 23rpx;
-  line-height: 32rpx;
-  font-weight: 800;
-}
-
-.pet-chat-starter-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12rpx;
-  text-align: left;
-}
-
-.pet-chat-starter-card {
-  min-width: 0;
-  padding: 17rpx 18rpx;
-  border-radius: 999rpx;
-  background: #eff5f0;
-  border: 1rpx solid rgba(92, 184, 150, 0.08);
-  box-shadow: none;
-  box-sizing: border-box;
-}
-
-.pet-chat-starter-card-title {
-  display: block;
-  color: #213f35;
-  font-size: 24rpx;
-  line-height: 32rpx;
-  font-weight: 800;
-}
-
-.pet-chat-starter-card-subtitle {
-  display: none;
 }
 
 .pet-chat-bottom-dock {
@@ -1118,10 +678,6 @@ page {
       #0d1312 100%
     );
 
-  .pet-chat-title {
-    color: #edf8f1;
-  }
-
   .pet-chat-topbar {
     border-bottom-color: rgba(112, 196, 149, 0.1);
   }
@@ -1134,29 +690,10 @@ page {
     color: #edf8f1;
   }
 
-  .pet-chat-identity-subtitle {
-    color: rgba(154, 215, 188, 0.56);
-  }
-
-  .pet-chat-home-context {
-    border-color: rgba(112, 196, 149, 0.16);
-    background: rgba(24, 35, 31, 0.88);
-  }
-
-  .pet-chat-home-context__advice {
-    color: rgba(225, 239, 229, 0.8);
-  }
-
-  .pet-chat-home-context__status {
-    color: rgba(154, 215, 188, 0.58);
-  }
-
   .pet-chat-new-button,
   .pet-chat-bubble,
   .pet-chat-quick-chip,
-  .pet-chat-input-bar,
-  .pet-chat-starter-card,
-  .pet-chat-guide {
+  .pet-chat-input-bar {
     background: rgba(24, 35, 31, 0.88);
     border-color: rgba(112, 196, 149, 0.16);
     box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.24);
@@ -1181,31 +718,12 @@ page {
     color: rgba(225, 239, 229, 0.86);
   }
 
-  .pet-chat-thinking-switch-note {
-    color: rgba(154, 215, 188, 0.56);
-  }
-
   .pet-chat-message-text,
   .pet-chat-md-heading,
   .pet-chat-md-paragraph,
   .pet-chat-md-list-text,
-  .pet-chat-md-table-cell,
-  .pet-chat-starter-card-title,
-  .pet-chat-guide-title,
-  .pet-chat-guide-label {
+  .pet-chat-md-table-cell {
     color: #edf8f1;
-  }
-
-  .pet-chat-starter-title {
-    color: rgba(225, 239, 229, 0.62);
-  }
-
-  .pet-chat-clue {
-    background: rgba(255, 255, 255, 0.06);
-  }
-
-  .pet-chat-clue-text {
-    color: rgba(225, 239, 229, 0.78);
   }
 
   .pet-chat-md-list-bullet,
@@ -1228,10 +746,6 @@ page {
 
   .pet-chat-md-table-header {
     background: rgba(255, 255, 255, 0.07);
-  }
-
-  .pet-chat-starter-card-subtitle {
-    color: rgba(154, 215, 188, 0.72);
   }
 
   .pet-chat-input {
@@ -1270,41 +784,8 @@ page {
     color: rgba(225, 239, 229, 0.42);
   }
 
-  .pet-chat-guide-text,
-  .pet-chat-guide-note {
-    color: rgba(225, 239, 229, 0.62);
-  }
-
-  .pet-chat-guide-note {
-    border-top-color: rgba(112, 196, 149, 0.14);
-  }
-
   .pet-chat-history-skeleton-item {
     background: rgba(255, 255, 255, 0.04);
-  }
-
-  .pet-chat-diet-context,
-  .pet-chat-diet-card {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(112, 196, 149, 0.16);
-  }
-
-  .pet-chat-diet-context-school,
-  .pet-chat-diet-card-title,
-  .pet-chat-diet-card-location {
-    color: #edf8f1;
-  }
-
-  .pet-chat-diet-context-source,
-  .pet-chat-diet-card-macros,
-  .pet-chat-diet-card-evidence,
-  .pet-chat-diet-card-reason,
-  .pet-chat-diet-card-score {
-    color: rgba(225, 239, 229, 0.62);
-  }
-
-  .pet-chat-diet-card-role {
-    color: #8ed1ad;
   }
 }
 
@@ -1388,17 +869,10 @@ page {
   color: #438b65;
 }
 
-.pet-chat-location-hint,
-.pet-chat-location-clear,
-.pet-chat-diet-note {
+.pet-chat-location-clear {
   color: #718078;
   font-size: 22rpx;
   line-height: 1.6;
-}
-
-.pet-chat-diet-note {
-  display: block;
-  margin: 12rpx 0;
 }
 
 .pet-chat-location-spinner {
@@ -1412,9 +886,7 @@ page {
 
 .pet-chat-page--dark {
   .pet-chat-location-button { color: #9ad7bc; }
-  .pet-chat-location-hint,
-  .pet-chat-location-clear,
-  .pet-chat-diet-note { color: rgba(225, 239, 229, 0.65); }
+  .pet-chat-location-clear { color: rgba(225, 239, 229, 0.65); }
 }
 
 .pet-chat-page {

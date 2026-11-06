@@ -137,12 +137,6 @@
   height: 100%;
 }
 
-.chat-avatar-placeholder {
-  font-size: 36rpx;
-  line-height: 72rpx;
-  text-align: center;
-}
-
 /* 气泡 */
 .chat-bubble {
   max-width: 520rpx;
@@ -175,13 +169,6 @@
 
 .chat-bubble--self .chat-bubble-text {
   color: #fff;
-}
-
-.chat-bubble-image {
-  max-width: 400rpx;
-  max-height: 400rpx;
-  border-radius: 12rpx;
-  display: block;
 }
 
 .chat-bottom-anchor {
@@ -444,47 +431,3 @@
   }
 }
 
-/* 深色模式 */
-.page--dark {
-  .private-chat-action-sheet__actions,
-  .private-chat-action-sheet__cancel {
-    background: #1e2624;
-  }
-
-  .private-chat-action-sheet__item {
-    &:active {
-      background: #2a3330;
-    }
-
-    .private-chat-action-sheet__icon,
-    .private-chat-action-sheet__label {
-      color: #f2f7f4;
-    }
-
-    &--danger {
-      .private-chat-action-sheet__icon,
-      .private-chat-action-sheet__label {
-        color: #ef4444;
-      }
-    }
-  }
-
-  .private-chat-action-sheet__divider {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .private-chat-action-sheet__cancel-text {
-    color: rgba(214, 226, 220, 0.6);
-  }
-
-  .chat-user-action-bar,
-  .chat-disabled-bar {
-    background: #101716;
-    border-color: rgba(255, 255, 255, 0.08);
-  }
-
-  .chat-user-action-text,
-  .chat-disabled-text {
-    color: rgba(214, 226, 220, 0.7);
-  }
-}
