@@ -189,6 +189,11 @@ func validateMealArbitration(pool []groundedMeal, ids []string, limit int) ([]gr
 	return chosen, nil
 }
 
+// mealJudgeTimeout bounds the model's final pick. On 2026-11-06 an 8s limit
+// timed out 47 of 83 judge calls on prod; a judge-sized qwen3.8 call takes
+// about 4-8s on OpenLux and 6-14s on Wanjie. The preview as a whole has 25s.
+const mealJudgeTimeout = 15 * time.Second
+
 func (s *StatsService) arbitratePreviewMeals(ctx context.Context, state *campusDietAgentRunState, pool []groundedMeal, result *DietRecommendationResult) []groundedMeal {
 	pool = applyMealVarietyContext(state, pool)
 	chosen := selectHealthBoundedMeals(pool, 3)
@@ -237,7 +242,7 @@ func (s *StatsService) arbitratePreviewMeals(ctx context.Context, state *campusD
 第一项只能从first_slot_allowed_ids选择。每个位置在营养容差内若有recent_dish_repeat=false的菜，就不能选近期重复菜；再比较recent_family_penalty与和已选备选的重叠之和（同主食重叠6、同明确蛋白来源重叠4），只能选此代价最小的菜。family是名称启发式，未知部分不推断；看过与吃过仍是不同事件，不能把曝光当摄入。后端会逐项校验这些规则，不能用文字理由绕过。
 比较菜式、烹调描述、实际售卖份量、供应餐次证据、预算、距离、今日记录、近期重复和selection_score。不要把估算差0.1分当绝对健康差；营养近似时优先可信、方便、少重复的选择，不机械按学校配额轮换。不把名称合适当早餐供应证明，不承诺库存/入校/过敏安全，不推断未知用油/食材，不称满分=健康满分。若同食堂持续胜出，解释为何其他有据候选不合适。
 recorded_intake仅是已记录小计，未记录不等于没吃；看过不等于摄入。conditional_day_plan是假设吃完该候选后的后续搭配，loss越低表示在已记录口径下更容易搭配；不是摄入或全局最优。比较本餐与后续搭配的取舍。reason用简短中文描述真实依据，禁止医疗疗效承诺。`
-		judgeCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		judgeCtx, cancel := context.WithTimeout(ctx, mealJudgeTimeout)
 		completion, err := s.requestCampusDietAgentCompletion(judgeCtx, llm, []map[string]any{{"role": "system", "content": prompt}, {"role": "user", "content": string(payload)}}, nil, "none", false)
 		cancel()
 		if err == nil {
