@@ -192,6 +192,10 @@ type VisionRoutingConfig struct {
 	CircuitCooldownSeconds int      `mapstructure:"circuit_cooldown_seconds"`
 	UncertainReviewEnabled bool     `mapstructure:"uncertain_review_enabled"`
 	OrdinaryImageModel     string   `mapstructure:"ordinary_image_model"`
+	// OrdinaryHedgeSeconds fixes how long an ordinary photo waits for the lead
+	// channel before a second channel starts; 0 keeps the adaptive delay. At
+	// response_wait_seconds or more the second channel runs only on failure.
+	OrdinaryHedgeSeconds int `mapstructure:"ordinary_hedge_seconds"`
 }
 
 type AppAuthConfig struct {
@@ -1697,6 +1701,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.vision_routing.circuit_cooldown_seconds", 60)
 	v.SetDefault("external.vision_routing.uncertain_review_enabled", false)
 	v.SetDefault("external.vision_routing.ordinary_image_model", "gemini-3-flash-preview")
+	v.SetDefault("external.vision_routing.ordinary_hedge_seconds", 0)
 	v.SetDefault("external.openlux_ordinary_gemini_traffic_percent", 50)
 	v.SetDefault("external.openlux_precision_gemini_traffic_percent", 50)
 	v.SetDefault("external.nutrition_embedding_base_url", "https://yunwu.ai/v1")

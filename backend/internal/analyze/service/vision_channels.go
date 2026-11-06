@@ -103,6 +103,9 @@ func normalizeVisionRouting(c config.VisionRoutingConfig) config.VisionRoutingCo
 	default:
 		c.OrdinaryImageModel = gemini3FlashModel
 	}
+	if c.OrdinaryHedgeSeconds < 0 || c.OrdinaryHedgeSeconds > 120 {
+		c.OrdinaryHedgeSeconds = 0
+	}
 	if c.BalancedRoutingEnabled {
 		// Sequential attempts: one response budget per channel, no paid shadows.
 		c.A6ShadowPercent = 0
@@ -129,7 +132,7 @@ func (s *AnalyzeService) ConfigureA6VisionRouting(apiKey, baseURL string, c conf
 		slog.Bool("a6_independent_upstream", c.A6IndependentUpstream), slog.Int("shadow_max_concurrent", c.ShadowMaxConcurrent),
 		slog.Int("hedge_min_seconds", c.HedgeMinSeconds), slog.Int("hedge_max_seconds", c.HedgeMaxSeconds),
 		slog.Int("third_hedge_seconds", c.ThirdHedgeSeconds), slog.Int("overall_timeout_seconds", c.OverallTimeoutSeconds),
-		slog.String("ordinary_image_model", c.OrdinaryImageModel))
+		slog.String("ordinary_image_model", c.OrdinaryImageModel), slog.Int("ordinary_hedge_seconds", c.OrdinaryHedgeSeconds))
 }
 
 func (r *visionChannelRouter) approved(model string) bool {
