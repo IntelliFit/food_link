@@ -1413,6 +1413,8 @@ export interface DietRecommendationResult {
 	catalog_coverage?: { scope?: string; radius_km?: number; school?: { name: string }; total_matches: number; retrieved: number; status: string }[]
 	selection_audit?: { method: string; fallback_reason?: string; eligible_count: number; shortlisted_count: number }
 	recommendation_id?: string
+	/** The rule pick came back without waiting for the model; ask again with judge_mode 'background'. */
+	judge_pending?: boolean
 	decision_basis?: DietDecisionBasis
   harness_version?: string
   search_scope?: 'nearby' | 'school' | 'unknown' | 'history' | 'nearby_and_history'
@@ -4784,7 +4786,7 @@ export async function recordMealRecommendationFeedback(payload: { run_id: string
   if (res.statusCode !== 200) throw new Error('餐食反馈暂未保存')
 }
 
-export async function previewMeals(payload: { meal_type: string; location?: PetChatLocation; radius_km?: number; exclude_source_ids?: string[] }): Promise<DietRecommendationResult> {
+export async function previewMeals(payload: { meal_type: string; location?: PetChatLocation; radius_km?: number; exclude_source_ids?: string[]; judge_mode?: 'skip' | 'background' }): Promise<DietRecommendationResult> {
   const res = await authenticatedRequest('/api/diet/recommendations/preview', { method: 'POST', data: payload, timeout: 30000 })
   return res.data as DietRecommendationResult
 }
