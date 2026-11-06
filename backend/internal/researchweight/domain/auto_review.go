@@ -54,15 +54,15 @@ type AutoCheck = do.ResearchWeightAutoCheck
 
 // ScaleReadView is what the mini program gets after a scale photo is read.
 type ScaleReadView struct {
-	Readable  bool     `json:"readable"`
-	Grams     *float64 `json:"grams,omitempty"`
-	RawValue  string   `json:"raw_value,omitempty"`
-	Unit      string   `json:"unit,omitempty"`
+	Readable bool     `json:"readable"`
+	Grams    *float64 `json:"grams,omitempty"`
+	RawValue string   `json:"raw_value,omitempty"`
+	Unit     string   `json:"unit,omitempty"`
 	// ResolutionGrams is the display step, so the client compares typed
 	// values with the same tolerance as the server.
 	ResolutionGrams float64 `json:"resolution_grams,omitempty"`
 	Agreement       string  `json:"agreement"`
-	Message   string   `json:"message,omitempty"`
+	Message         string  `json:"message,omitempty"`
 }
 
 // Reading agreements returned to the mini program.

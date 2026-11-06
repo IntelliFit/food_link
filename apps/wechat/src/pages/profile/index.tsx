@@ -331,6 +331,13 @@ function ProfilePage() {
       path: extraPkgUrl('/pages/research-weight/index')
     },
     {
+      id: 17,
+      iconClass: 'icon-duoren',
+      title: '高校共建',
+      desc: '和健身社团一起称食堂的饭，扫社团的码加入',
+      path: extraPkgUrl('/pages/campus-campaign/index')
+    },
+    {
       id: 11,
       iconClass: 'icon-duoren',
       title: '邀请好友得会员',
@@ -379,7 +386,7 @@ function ProfilePage() {
     .sort((a, b) => [5, 9, 0, 4].indexOf(a.id) - [5, 9, 0, 4].indexOf(b.id))
   const serviceGroups = [
     { title: '记录与奖励', items: services.filter(service => [2, 6, 12].includes(service.id)) },
-    { title: '科研共建', items: services.filter(service => service.id === 16) },
+    { title: '科研共建', items: services.filter(service => service.id === 16 || service.id === 17) },
     {
       title: '帮助与邀请',
       items: services.filter(service => [11, 8, 10].includes(service.id) || (service.id === 13 && promoterEntryVisible))

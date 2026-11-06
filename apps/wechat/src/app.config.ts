@@ -53,6 +53,7 @@ const extraSubpackagePages = [
   'pages/research-weight/index',
   'pages/research-weight-record/index',
   'pages/research-weight-containers/index',
+  'pages/campus-campaign/index',
   'pages/my-vouchers/index',
   'pages/interaction-notifications/index',
   'pages/comment-history/index',
