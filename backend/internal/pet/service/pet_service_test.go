@@ -419,7 +419,13 @@ func TestSummaryCreatesStablePetAndSingleOfflineEvent(t *testing.T) {
 	require.NotNil(t, first.Event)
 	assert.Equal(t, 1, fake.createPetCalls)
 	assert.Equal(t, 1, fake.createEventCalls)
-	assert.Equal(t, 1, first.Event.CreditReward)
+	assert.Equal(t, 0, first.Event.CreditReward, "reviews give experience only")
+	assert.Positive(t, first.Event.ExpReward)
+	assert.NotContains(t, first.Event.Message, "积分")
+	assert.Zero(t, first.Rewards.DailyCreditCap)
+	for _, row := range fake.events {
+		assert.Zero(t, row.CreditReward)
+	}
 	assert.Equal(t, archetypeLightLifestyle, first.Pet.Archetype)
 	assert.False(t, first.Pet.NeedsSelection)
 	assert.Equal(t, builtinAvatarType, first.Pet.AvatarType)
@@ -554,16 +560,18 @@ func TestSummaryAutoProfileMatchPreservesExistingProgress(t *testing.T) {
 	require.Len(t, result.Pet.SelectionCandidates, 5)
 }
 
-func TestClaimEventIsIdempotent(t *testing.T) {
+func TestClaimEventIsIdempotentAndGivesExperienceOnly(t *testing.T) {
 	fake := newFakePetRepo()
 	fake.pet = &petdomain.UserPet{ID: "pet-1", UserID: "user-1", Level: 1}
 	eventDate := mustParseDate("2026-05-19")
+	// A review written before reviews stopped giving credits still carries one.
 	fake.events["event-1"] = &petdomain.UserPetEvent{
 		ID:           "event-1",
 		UserID:       "user-1",
 		PetID:        "pet-1",
 		EventDate:    eventDate,
 		EventType:    petdomain.EventTypeOfflineReview,
+		Message:      "你不在的时候，小麦整理了昨天的记录，发现蛋白质完成得不错，带回 1 积分。",
 		ExpReward:    16,
 		CreditReward: 1,
 	}
@@ -571,14 +579,17 @@ func TestClaimEventIsIdempotent(t *testing.T) {
 
 	first, err := svc.ClaimEvent(context.Background(), "user-1", "event-1")
 	require.NoError(t, err)
-	assert.Equal(t, 1, first.CreditsAwarded)
+	assert.Equal(t, 0, first.CreditsAwarded)
+	assert.Nil(t, first.EarnedCreditsBalance)
 	assert.Equal(t, 16, first.ExpAwarded)
+	assert.Equal(t, 0, first.Event.CreditReward)
+	assert.Equal(t, "你不在的时候，小麦整理了昨天的记录，发现蛋白质完成得不错。", first.Event.Message)
 
 	second, err := svc.ClaimEvent(context.Background(), "user-1", "event-1")
 	require.NoError(t, err)
 	assert.Equal(t, 0, second.CreditsAwarded)
 	assert.Equal(t, 0, second.ExpAwarded)
-	assert.Equal(t, 1, fake.balance)
+	assert.Equal(t, 0, fake.balance)
 	assert.Equal(t, 16, fake.pet.Experience)
 }
 

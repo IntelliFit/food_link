@@ -87,7 +87,7 @@
 | `focus` | 营养状态的 `focus` 原样（`[{key, title, custom}]`），给「我在意的」 |
 | `mood` | `{key, label, reason, icon}`。顺序：2 天以上没记录 → `sleepy`；今天有超标（`status=over`，钠/添加糖/饱和脂肪/能量，取超得最多的）→ `salty` `sweet` `greasy` `full`；昨天超标同上；昨天喝水/蔬菜/纤维/蛋白质不足 → `thirsty` `craving_greens` `craving_protein`；否则 `happy` / `hungry`。`reason` 只引用状态里的数字，如“昨天钠 2600 毫克，超过 2000 毫克” |
 | `report` | `{yesterday, today, facts, source, reward}`。`yesterday` = 昨天状态的 `headline`（空则用前两条 `findings`，没记录则说没记录；没有状态时用原来的离线小复盘文案）；`today` = 第一个 `gap` 的 `text` + `next_meal.advice`；`facts` = 昨天和今天 `findings[].text` 去重前 4 条。目前不经模型改写，全是引擎原句 |
-| `report.reward` | 昨天离线小复盘（`user_pet_events.offline_review`）的经验和积分。读这个接口时自动领取（复用原领取事务，幂等），`claimed_now=true` 表示这次刚领到 |
+| `report.reward` | `{exp, claimed_now}`：昨天离线小复盘（`user_pet_events.offline_review`）的经验。读这个接口时自动领取（复用原领取事务，幂等），`claimed_now=true` 表示这次刚领到。2026-11-06 起复盘只给经验、不给积分：新复盘 `credit_reward=0`，之前生成的复盘不论自动领还是在宠物页点领取都不再加积分，展示时去掉文案里的“带回 1 积分” |
 | `task` | 今日任务，见下 |
 | `water` | `{ml, goal_ml, cups, goal_cups, cup_ml: 250, known, is_task_goal}`，目标取 `today` 里 `water` 的 `target`，没有按 1500 毫升 |
 | `next_meal` | `{meal_type, label, advice, starter_question}`，来自 `next_meal`；没有时按时钟给早餐/午餐/晚餐/夜宵 |

@@ -236,7 +236,7 @@ func TestDailyDoesNotStartTasksForPastDays(t *testing.T) {
 	assert.Equal(t, 0, fake.startTaskCalls)
 }
 
-func TestDailyAddsYesterdaysReviewRewardOnce(t *testing.T) {
+func TestDailyAddsYesterdaysReviewExperienceOnceWithoutCredits(t *testing.T) {
 	fake := newDailyTestRepo()
 	fake.foodByDate["2026-11-03"] = []repo.FoodRecord{
 		{MealType: "breakfast", TotalCalories: 500, TotalProtein: 30},
@@ -250,18 +250,18 @@ func TestDailyAddsYesterdaysReviewRewardOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, first.Report.Reward)
 	assert.True(t, first.Report.Reward.ClaimedNow)
-	assert.Equal(t, 1, first.Report.Reward.Credits)
 	assert.Positive(t, first.Report.Reward.Exp)
 	assert.Equal(t, "habit_review", first.Report.Source)
 	assert.Contains(t, first.Report.Yesterday, first.Pet.Name)
-	assert.Equal(t, 1, fake.balance)
+	assert.NotContains(t, first.Report.Yesterday, "积分")
+	assert.Equal(t, 0, fake.balance, "a good day still gives no credits")
 
 	second, err := svc.Daily(context.Background(), "user-1", "")
 	require.NoError(t, err)
 	require.NotNil(t, second.Report.Reward)
 	assert.False(t, second.Report.Reward.ClaimedNow)
 	assert.Equal(t, first.Pet.Experience, second.Pet.Experience)
-	assert.Equal(t, 1, fake.balance)
+	assert.Equal(t, 0, fake.balance)
 }
 
 func TestDailyReportQuotesTheStateWithoutNewNumbers(t *testing.T) {

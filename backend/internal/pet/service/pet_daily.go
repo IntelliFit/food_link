@@ -94,11 +94,10 @@ type DailyReport struct {
 	Reward    *DailyReportReward `json:"reward,omitempty"`
 }
 
-// DailyReportReward is yesterday's review reward, now added when the pet tab is read
-// instead of waiting for a claim tap.
+// DailyReportReward is yesterday's review experience, now added when the pet tab is read
+// instead of waiting for a claim tap. Reviews give no credits.
 type DailyReportReward struct {
 	Exp        int  `json:"exp"`
-	Credits    int  `json:"credits"`
 	ClaimedNow bool `json:"claimed_now"`
 }
 
@@ -322,11 +321,11 @@ func (s *Service) readNutritionStates(ctx context.Context, userID, today, yester
 // autoClaimReview adds yesterday's review reward when the pet tab is opened. Claiming is
 // idempotent, so repeated reads add it once.
 func (s *Service) autoClaimReview(ctx context.Context, userID string, event *petdomain.UserPetEvent) (*DailyReportReward, bool) {
-	if event == nil || (event.ExpReward <= 0 && event.CreditReward <= 0) {
+	if event == nil || event.ExpReward <= 0 {
 		return nil, false
 	}
 	if event.IsClaimed {
-		return &DailyReportReward{Exp: event.ExpReward, Credits: event.CreditReward}, false
+		return &DailyReportReward{Exp: event.ExpReward}, false
 	}
 	result, err := s.ClaimEvent(ctx, userID, event.ID)
 	if err != nil || result == nil {
@@ -337,7 +336,7 @@ func (s *Service) autoClaimReview(ctx context.Context, userID string, event *pet
 		)
 		return nil, false
 	}
-	return &DailyReportReward{Exp: result.ExpAwarded, Credits: result.CreditsAwarded, ClaimedNow: result.ExpAwarded > 0 || result.CreditsAwarded > 0}, true
+	return &DailyReportReward{Exp: result.ExpAwarded, ClaimedNow: result.ExpAwarded > 0}, true
 }
 
 func dailyReport(petName string, event *petdomain.UserPetEvent, today, yesterday *healthdomain.DailyNutritionState, todayDetails map[string]any) DailyReport {
@@ -353,7 +352,7 @@ func dailyReport(petName string, event *petdomain.UserPetEvent, today, yesterday
 		report.Yesterday = fmt.Sprintf("昨天没有记录，%s只能猜你吃了什么。", petName)
 		report.Source = "nutrition_state"
 	case event != nil:
-		report.Yesterday = event.Message
+		report.Yesterday = reviewMessage(event.Message)
 		report.Source = "habit_review"
 	}
 	report.Today = todayAdvice(today, todayDetails)

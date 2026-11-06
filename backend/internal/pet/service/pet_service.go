@@ -21,7 +21,6 @@ import (
 
 const (
 	nextLevelExp            = 100
-	maxOfflineCreditDaily   = 1
 	petAppearanceRerollCost = 5
 	maxPetNameRunes         = 12
 )
@@ -236,7 +235,7 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 	}
 	status := s.statusForPet(ctx, userID, pet.Name, date, todayScore.HabitScore, todayScore.ScoreDetails)
 	if event != nil && !event.IsClaimed && status.InactivityDays < 2 && !truthy(todayScore.ScoreDetails["recorded_meal"]) {
-		status.Message = event.Message
+		status.Message = reviewMessage(event.Message)
 		status.TaskText = event.TaskText
 		status.Mood = "surprised"
 		status.State = "surprised"
@@ -248,7 +247,7 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 		Status:     status,
 		Event:      eventView(event),
 		MealPrompt: mealPrompt,
-		Rewards:    RewardPolicy{DailyCreditCap: maxOfflineCreditDaily},
+		Rewards:    RewardPolicy{DailyCreditCap: 0},
 	}, nil
 }
 
@@ -395,7 +394,9 @@ func (s *Service) ClaimEvent(ctx context.Context, userID, eventID string) (*Clai
 	}
 	alreadyClaimed := event.IsClaimed
 	eventDate := formatDate(event.EventDate)
-	claimedEvent, pet, ledger, appliedCredit, err := s.repo.ClaimEvent(ctx, userID, eventID, event.ExpReward, event.CreditReward, eventDate, map[string]any{
+	// Daily reviews give experience only (user decision 2026-11-06). Reviews created
+	// before that still carry credit_reward, so the credit is dropped here as well.
+	claimedEvent, pet, _, _, err := s.repo.ClaimEvent(ctx, userID, eventID, event.ExpReward, 0, eventDate, map[string]any{
 		"event_id":    eventID,
 		"event_date":  eventDate,
 		"event_type":  event.EventType,
@@ -404,25 +405,15 @@ func (s *Service) ClaimEvent(ctx context.Context, userID, eventID string) (*Clai
 	if err != nil || claimedEvent == nil || pet == nil {
 		return nil, err
 	}
-	creditsAwarded := 0
-	if appliedCredit {
-		creditsAwarded = event.CreditReward
-	}
 	expAwarded := 0
 	if !alreadyClaimed {
 		expAwarded = event.ExpReward
 	}
-	result := &ClaimResult{
-		Pet:            s.profileFromPet(pet),
-		Event:          *eventView(claimedEvent),
-		CreditsAwarded: creditsAwarded,
-		ExpAwarded:     expAwarded,
-	}
-	if ledger != nil {
-		value := ledger.BalanceAfter
-		result.EarnedCreditsBalance = &value
-	}
-	return result, nil
+	return &ClaimResult{
+		Pet:        s.profileFromPet(pet),
+		Event:      *eventView(claimedEvent),
+		ExpAwarded: expAwarded,
+	}, nil
 }
 
 func (s *Service) RerollAppearance(ctx context.Context, userID string) (*AppearanceRerollResult, error) {
@@ -782,10 +773,7 @@ func (s *Service) ensureOfflineEvent(ctx context.Context, userID string, pet *pe
 		return err
 	}
 	message, task := offlineMessage(pet.Name, score.HabitScore, score.ScoreDetails)
-	creditReward := 0
-	if score.HabitScore >= 3 {
-		creditReward = maxOfflineCreditDaily
-	}
+	// Experience only: the review no longer hands out credits.
 	event := &petdomain.UserPetEvent{
 		UserID:       userID,
 		PetID:        pet.ID,
@@ -796,7 +784,6 @@ func (s *Service) ensureOfflineEvent(ctx context.Context, userID string, pet *pe
 		TaskText:     task,
 		HabitScore:   score.HabitScore,
 		ExpReward:    10 + score.HabitScore*3,
-		CreditReward: creditReward,
 		ScoreDetails: score.ScoreDetails,
 	}
 	if err := s.repo.CreateEvent(ctx, event); err != nil {
@@ -1175,12 +1162,12 @@ func eventView(row *petdomain.UserPetEvent) *EventView {
 		EventDate:    formatDate(row.EventDate),
 		EventType:    row.EventType,
 		Title:        row.Title,
-		Message:      row.Message,
+		Message:      reviewMessage(row.Message),
 		TaskText:     row.TaskText,
 		HabitScore:   row.HabitScore,
 		ExpReward:    row.ExpReward,
-		CreditReward: row.CreditReward,
-		CanClaim:     !row.IsClaimed && (row.ExpReward > 0 || row.CreditReward > 0),
+		CreditReward: 0,
+		CanClaim:     !row.IsClaimed && row.ExpReward > 0,
 		IsRead:       row.IsRead,
 		IsClaimed:    row.IsClaimed,
 		Details:      row.ScoreDetails,
@@ -1309,12 +1296,23 @@ func nextTask(details map[string]any) string {
 func offlineMessage(name string, score int, details map[string]any) (string, string) {
 	good := bestHabit(details)
 	if score >= 3 {
-		return fmt.Sprintf("你不在的时候，%s整理了昨天的记录，发现%s，带回 1 积分。", name, good), nextTask(details)
+		return fmt.Sprintf("你不在的时候，%s整理了昨天的记录，发现%s。", name, good), nextTask(details)
 	}
 	if score > 0 {
 		return fmt.Sprintf("你不在的时候，%s看了看昨天的记录，准备了一点成长能量。", name), nextTask(details)
 	}
 	return fmt.Sprintf("你不在的时候，%s把小窝收拾好了，等你今天一起记录第一餐。", name), "今天先记录一餐"
+}
+
+// oldReviewCreditPromise is how reviews written before 2026-11-06 ended; claiming them
+// no longer adds the credit, so the promise is cut when the message is shown.
+const oldReviewCreditPromise = "，带回 1 积分。"
+
+func reviewMessage(message string) string {
+	if strings.HasSuffix(message, oldReviewCreditPromise) {
+		return strings.TrimSuffix(message, oldReviewCreditPromise) + "。"
+	}
+	return message
 }
 
 func bestHabit(details map[string]any) string {
