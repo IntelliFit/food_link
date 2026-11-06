@@ -815,6 +815,10 @@
 }
 
 .meal-label {
+  // display/margin used to leak in from packageMeal/common.scss while it sat in the global common.wxss;
+  // kept here so the meal picker looks the same now that those styles stay in packageMeal.
+  display: block;
+  margin: 26rpx 0 12rpx;
   font-size: 26rpx;
   color: #4b5563;
   font-weight: 500;

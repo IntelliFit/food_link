@@ -1,10 +1,11 @@
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
 import { createStyleImportPlugin } from 'vite-plugin-style-import'
 
 import devConfig from './dev'
 import prodConfig from './prod'
+import { linkSubpackageChunkStyles, subpackageSharedChunks } from './subpackage-chunks'
 
 const appRoot = process.cwd()
 const workspaceRoot = join(appRoot, '..', '..')
@@ -64,6 +65,11 @@ loadTaroEnv()
 // fix: @taroify/icons 字体文件 base64 内联，避免小程序环境中路径解析失败
 const vantIconWoff2Base64 = readFileSync(join(appRoot, 'src/assets/vant-icon/vant-icon.woff2')).toString('base64')
 const vantIconWoffBase64 = readFileSync(join(appRoot, 'src/assets/vant-icon/vant-icon.woff')).toString('base64')
+
+// Subpackage roots are the src/package* folders (app.config.ts declares one subpackage per folder).
+const subpackageRoots = readdirSync(join(appRoot, 'src'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && /^package[A-Z]/.test(entry.name))
+  .map((entry) => entry.name)
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
@@ -147,6 +153,18 @@ export default defineConfig<'vite'>(async (merge) => {
               resolveStyle: (name: string) => `@taroify/core/${name}/style`,
             },
           ],
+        }),
+        // Keep modules that only one subpackage uses out of the main package. Must stay before the other
+        // manualChunks plugins below so their explicit rules win. packageExtra is close to its 1900 KB
+        // budget, so its shared modules stay in the main package for now.
+        subpackageSharedChunks({ roots: subpackageRoots, exclude: ['packageExtra'] }),
+        linkSubpackageChunkStyles({
+          roots: subpackageRoots,
+          pageImports: {
+            // The feed detail page shows the community feed cards: load the community tab page's wxss
+            // (always in the main package) instead of compiling a second copy into packageExtra.
+            'packageExtra/pages/interaction-feed-detail/index': ['pages/community/index'],
+          },
         }),
         // fix: 覆盖 Taro 默认的 es6 target，避免 async/await 被编译为 generator
         // 内联辅助函数与局部变量名冲突，导致真机偶发 "c is not a function"
@@ -312,9 +330,9 @@ export default defineConfig<'vite'>(async (merge) => {
             }
           },
         },
-        // The after-record card is used by three packageExtra record pages only. Its styles are
-        // imported by those pages' scss: Taro only links common chunks' wxss into app.wxss, so a
-        // style imported here would be emitted next to the chunk and never loaded.
+        // The after-record card is used by three packageExtra record pages only. Its wxss is written
+        // next to the chunk (packageExtra/meal-impact.wxss) and linkSubpackageChunkStyles imports it
+        // into those pages.
         {
           name: 'meal-impact-chunk-to-package-extra',
           configResolved(config) {

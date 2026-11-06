@@ -16,7 +16,8 @@ import {
   type PetFeedback,
 } from './meal-impact-view'
 
-// 样式由用到它的页面 scss @import（见 config/index.ts 的 meal-impact 分包规则），这里不引入
+// 脚本和样式拆在 packageExtra/meal-impact.js / .wxss（config/index.ts 的 meal-impact 规则），页面自动 @import 样式
+import './index.scss'
 
 export type MealImpactSource = 'result' | 'result_text' | 'manual'
 

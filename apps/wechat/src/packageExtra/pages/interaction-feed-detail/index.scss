@@ -1,4 +1,5 @@
-@use '../../../pages/community/index.scss';
+// 动态卡片的样式在圈子页：pages/community/index.wxss 在主包，由 config/index.ts 的
+// linkSubpackageChunkStyles（pageImports）在运行时 @import，这里不再编译一份。
 
 .interaction-feed-detail-page {
   min-height: 100vh;
