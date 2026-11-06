@@ -21,9 +21,11 @@ export function toPhotoReading(result: ScaleReadingResult): PhotoReading {
   }
 }
 
-/** 读数可信（两个模型一致，或只有一个读出且没有分歧）时才拿来核对填写值。 */
-const confirmed = (reading?: PhotoReading) =>
-  Boolean(reading && typeof reading.grams === 'number' && (reading.agreement === 'agree' || reading.agreement === 'single'))
+const hasGrams = (reading?: PhotoReading) => Boolean(reading && typeof reading.grams === 'number')
+/** 两个模型读数一致才拦提交：和服务端一样，只有这种情况会被直接驳回。 */
+const confirmed = (reading?: PhotoReading) => hasGrams(reading) && reading?.agreement === 'agree'
+/** 只有一个模型读出：可以帮忙填数，但只提醒、不拦提交。 */
+const single = (reading?: PhotoReading) => hasGrams(reading) && reading?.agreement === 'single'
 
 const formatReading = (grams: number) => (Number.isInteger(grams) ? `${grams}g` : `${grams.toFixed(1)}g`)
 
@@ -46,15 +48,20 @@ export function readingNote(photo: ReadablePhoto | undefined): { text: string; w
   const reading = photo?.reading
   if (!reading) return null
   if (confirmed(reading)) return { text: reading.message || `已读出 ${formatReading(reading.grams ?? 0)}`, warn: false }
+  if (single(reading)) return { text: `只读到一次：${formatReading(reading.grams ?? 0)}，请自己核对一下`, warn: true }
   if (reading.agreement === 'disagree') return { text: reading.message || '两次读数不一致，建议重拍', warn: true }
   return { text: `${reading.message || '没读清秤上的数字'}；不重拍也能提交，但这条不计分`, warn: true }
 }
 
-/** 自动读出的克重，填进空着的或和上次自动填的值相同的输入框。 */
-export function autofillValue(current: string, previous: PhotoReading | undefined, next: PhotoReading): string | null {
-  if (!confirmed(next)) return null
-  const trimmed = String(current).trim()
-  const previousValue = typeof previous?.grams === 'number' ? String(previous.grams) : ''
-  if (trimmed && trimmed !== previousValue) return null
+/** 自动读出的克重只填进空着的输入框，不覆盖手填的值。 */
+export function autofillValue(current: string, next: PhotoReading): string | null {
+  if (!confirmed(next) && !single(next)) return null
+  if (String(current).trim()) return null
   return String(next.grams)
+}
+
+/** 换照片前，输入框里的值是不是从旧照片自动填的（是就清掉，等新照片的读数）。 */
+export function filledFrom(value: string, photo: ReadablePhoto | undefined): boolean {
+  const grams = photo?.reading?.grams
+  return typeof grams === 'number' && String(grams) === String(value).trim()
 }

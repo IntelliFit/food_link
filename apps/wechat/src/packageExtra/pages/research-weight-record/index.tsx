@@ -17,7 +17,9 @@ import {
   buildPayload,
   checkDraft,
   containersToSave,
+  chinaDay,
   defaultTareSource,
+  freshCampus,
   libraryIndex,
   netGrams,
   newContainer,
@@ -31,7 +33,7 @@ import {
 import { acceptConsent, loadDraft, readConsent, saveDraft } from '../research-weight/storage'
 import { ensureLoggedIn, takeResearchPhoto, takeResearchVideo } from '../research-weight/media'
 import { ConsentCard, formatGrams } from '../research-weight/controls'
-import { autofillValue, toPhotoReading } from '../research-weight/reading'
+import { autofillValue, filledFrom, toPhotoReading } from '../research-weight/reading'
 import { ContainerCard } from './container-card'
 import { ItemizedSection, PhotoSection, SetupSection } from './sections'
 import './index.scss'
@@ -58,6 +60,8 @@ export default function ResearchWeightRecordPage() {
   const [submitting, setSubmitting] = useState(false)
   const draftRef = useRef(draft)
   draftRef.current = draft
+  /** 每个秤照片位最新一张照片的地址：旧照片的读数回来时不再改动页面。 */
+  const latestScalePhoto = useRef<Record<string, string>>({})
   const submittingRef = useRef(false)
 
   useEffect(() => saveDraft(draft), [draft])
@@ -67,9 +71,18 @@ export default function ResearchWeightRecordPage() {
     const params = Taro.getCurrentInstance().router?.params || {}
     const stationSessionId = String(params.station || '').trim()
     const catalogItemId = String(params.dish || '').trim()
-    if (!stationSessionId && !catalogItemId) return
-    const label = decodeURIComponent(String(params.label || '')).slice(0, 40) || '高校共建活动'
-    setDraft((current) => ({ ...current, scene: 'canteen', campus: { stationSessionId, catalogItemId, label } }))
+    if (!stationSessionId && !catalogItemId) {
+      // A weighing day kept in the draft from another day no longer counts.
+      setDraft((current) => (current.campus && !freshCampus(current.campus) ? { ...current, campus: undefined } : current))
+      return
+    }
+    let label = '高校共建活动'
+    try {
+      label = decodeURIComponent(String(params.label || '')).slice(0, 40) || label
+    } catch {
+      // 标签编码不对时用默认名称。
+    }
+    setDraft((current) => ({ ...current, scene: 'canteen', campus: { stationSessionId, catalogItemId, label, day: chinaDay() } }))
   }, [])
 
   const loadLibrary = useCallback(async () => {
@@ -117,20 +130,22 @@ export default function ResearchWeightRecordPage() {
     apply: (photo: DraftPhoto, value: string | null) => void,
   ) => {
     if (!ready()) return
-    const previous = current()
     const photo = await takeResearchPhoto(() => setUploading((state) => ({ ...state, [key]: true })))
     setUploading((state) => ({ ...state, [key]: false }))
     if (!photo) return
-    apply(photo, null)
+    const before = current()
+    // 输入框里是旧照片自动填的数就清掉，等新照片的读数；手填的保留。
+    apply(photo, filledFrom(before.value, before.photo) ? '' : null)
+    latestScalePhoto.current[key] = photo.url
     setUploading((state) => ({ ...state, [`${key}:reading`]: true }))
     try {
       const reading = toPhotoReading(await readScalePhoto(photo.url, draftRef.current.precision))
       if (current().photo?.url !== photo.url) return
-      apply({ ...photo, reading }, autofillValue(current().value, previous.photo?.reading, reading))
+      apply({ ...photo, reading }, autofillValue(current().value, reading))
     } catch (error) {
       console.warn('[research-weight] scale reading unavailable', error)
     } finally {
-      setUploading((state) => ({ ...state, [`${key}:reading`]: false }))
+      if (latestScalePhoto.current[key] === photo.url) setUploading((state) => ({ ...state, [`${key}:reading`]: false }))
     }
   }
   const containerOf = (id: string) => draftRef.current.containers.find((c) => c.id === id)

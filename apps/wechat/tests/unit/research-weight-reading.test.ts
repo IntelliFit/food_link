@@ -7,7 +7,8 @@ import {
   type DraftPhoto,
   type ResearchDraft,
 } from '../../src/packageExtra/pages/research-weight/model'
-import { autofillValue, readingNote, readingProblem, toPhotoReading } from '../../src/packageExtra/pages/research-weight/reading'
+import { autofillValue, filledFrom, readingNote, readingProblem, toPhotoReading } from '../../src/packageExtra/pages/research-weight/reading'
+import { chinaDay, freshCampus } from '../../src/packageExtra/pages/research-weight/model'
 
 const read = (grams: number, agreement: 'agree' | 'single' | 'disagree' = 'agree', resolution?: number) =>
   toPhotoReading({ readable: true, grams, agreement, message: `已读出 ${grams} g，请核对`, ...(resolution ? { resolution_grams: resolution } : {}) })
@@ -22,9 +23,13 @@ describe('readingProblem', () => {
     expect(readingProblem('连盒读数', '452', shot('a', read(450, 'agree', 10)), 1)).toBe('')
   })
 
-  it('flags a confirmed reading that differs from the typed value', () => {
+  it('flags a reading both models agree on that differs from the typed value', () => {
     expect(readingProblem('第1盒连盒读数', '542', shot('a', read(452)), 1)).toBe('第1盒连盒读数填的是 542g，照片里是 452g，请改正或重拍')
-    expect(readingProblem('读数', '542', shot('a', read(452, 'single')), 1)).not.toBe('')
+  })
+
+  it('only warns when a single model read the display, as the server only grades it lower', () => {
+    expect(readingProblem('读数', '542', shot('a', read(452, 'single')), 1)).toBe('')
+    expect(readingNote(shot('a', read(452, 'single')))).toEqual({ text: '只读到一次：452g，请自己核对一下', warn: true })
   })
 
   it('never blocks on readings it cannot trust', () => {
@@ -43,11 +48,25 @@ describe('readingNote and autofillValue', () => {
     expect(readingNote(shot('a'))).toBeNull()
   })
 
-  it('fills empty fields and replaces only values it filled itself', () => {
-    expect(autofillValue('', undefined, read(452))).toBe('452')
-    expect(autofillValue('452', read(452), read(455))).toBe('455')
-    expect(autofillValue('460', read(452), read(455))).toBeNull()
-    expect(autofillValue('', undefined, unreadable)).toBeNull()
+  it('fills only empty fields and never a value the contributor typed', () => {
+    expect(autofillValue('', read(452))).toBe('452')
+    expect(autofillValue('', read(452, 'single'))).toBe('452')
+    expect(autofillValue('460', read(455))).toBeNull()
+    expect(autofillValue('', unreadable)).toBeNull()
+  })
+
+  it('knows when a value came from the photo being replaced', () => {
+    expect(filledFrom('452', shot('a', read(452)))).toBe(true)
+    expect(filledFrom('460', shot('a', read(452)))).toBe(false)
+    expect(filledFrom('452', shot('a'))).toBe(false)
+  })
+
+  it('keeps a campus weighing day only on the day it was opened', () => {
+    const now = Date.UTC(2026, 10, 6, 4, 0)
+    const campus = { stationSessionId: 's1', label: '周三称重日', day: chinaDay(now) }
+    expect(freshCampus(campus, now)).toBe(campus)
+    expect(freshCampus(campus, now + 24 * 3600 * 1000)).toBeUndefined()
+    expect(freshCampus({ ...campus, day: undefined }, now)).toBeUndefined()
   })
 })
 

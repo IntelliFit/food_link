@@ -61,11 +61,22 @@ export interface DraftPhoto {
   reading?: PhotoReading
 }
 
-/** 从高校共建活动页进入时带上的称重日和菜品。 */
+/** 从高校共建活动页进入时带上的称重日和菜品；只在当天有效。 */
 export interface CampusContext {
   stationSessionId?: string
   catalogItemId?: string
   label: string
+  day?: string
+}
+
+/** 北京时间的今天（YYYY-MM-DD）。 */
+export function chinaDay(now = Date.now()): string {
+  return new Date(now + 8 * 3600 * 1000).toISOString().slice(0, 10)
+}
+
+/** 草稿里留着的活动信息过了当天就不再计入。 */
+export function freshCampus(campus: CampusContext | undefined, now = Date.now()): CampusContext | undefined {
+  return campus && campus.day === chinaDay(now) ? campus : undefined
 }
 
 /** 分项累加：同一个容器里依次加入的一样食物。 */
