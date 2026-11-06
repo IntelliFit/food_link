@@ -1,4 +1,9 @@
-import { linkSubpackageChunkStyles, subpackageSharedChunks } from '../../config/subpackage-chunks'
+import {
+  failOnBlankedRequires,
+  linkSubpackageChunkStyles,
+  sharedChunkFileName,
+  subpackageSharedChunks,
+} from '../../config/subpackage-chunks'
 
 const ROOTS = ['packageA', 'packageB', 'packageExtra']
 const SRC = 'D:/app/src'
@@ -50,7 +55,8 @@ describe('subpackageSharedChunks', () => {
     const { chunkOf, fileNameOf } = manualChunksFor(graph, taroDecision)
     expect(chunkOf(`${SRC}/components/OnlyA.tsx`)).toBe('packageA-subpackage-shared')
     expect(chunkOf('D:/app/node_modules/lib/index.js')).toBe('packageB-subpackage-shared')
-    expect(fileNameOf('packageA-subpackage-shared')).toBe('packageA/subpackage-shared.js')
+    expect(fileNameOf('packageA-subpackage-shared')).toBe('packageA/packageA-shared.js')
+    expect(fileNameOf('packageB-subpackage-shared')).toBe('packageB/packageB-shared.js')
     expect(fileNameOf('common')).toBe('[name].js')
   })
 
@@ -96,14 +102,14 @@ describe('linkSubpackageChunkStyles', () => {
 
   function sampleBundle() {
     return {
-      'packageA/pages/x/index.js': chunk('packageA/pages/x/index.js', true, ['packageA/subpackage-shared.js', 'common.js'], ['x.css']),
+      'packageA/pages/x/index.js': chunk('packageA/pages/x/index.js', true, ['packageA/packageA-shared.js', 'common.js'], ['x.css']),
       'packageA/pages/y/index.js': chunk('packageA/pages/y/index.js', true, ['common.js'], ['pure.css']),
       'packageB/pages/z/index.js': chunk('packageB/pages/z/index.js', true, ['common.js'], ['z.css']),
-      'packageA/subpackage-shared.js': chunk('packageA/subpackage-shared.js', false, ['common.js'], ['shared.css']),
+      'packageA/packageA-shared.js': chunk('packageA/packageA-shared.js', false, ['common.js'], ['shared.css']),
       'common.js': chunk('common.js', false, [], ['common.css']),
       'x.css': asset('packageA/pages/x/index.wxss', '@charset "UTF-8";.x{color:red}'),
       'pure.css': asset('packageA/pure.wxss', '.pure{}'),
-      'shared.css': asset('packageA/subpackage-shared.wxss', '.shared{}'),
+      'shared.css': asset('packageA/packageA-shared.wxss', '.shared{}'),
       'z.css': asset('packageB/pages/z/index.wxss', '.z{}'),
       'common.css': asset('common.wxss', '.common{}'),
       'main.css': asset('pages/community/index.wxss', '.feed{}'),
@@ -113,7 +119,7 @@ describe('linkSubpackageChunkStyles', () => {
   it('imports subpackage chunk styles into the pages that load them', () => {
     const bundle = sampleBundle()
     const emitted = run(bundle)
-    expect(bundle['x.css'].source).toBe('@charset "UTF-8";@import "../../subpackage-shared.wxss";\n.x{color:red}')
+    expect(bundle['x.css'].source).toBe('@charset "UTF-8";@import "../../packageA-shared.wxss";\n.x{color:red}')
     expect(emitted).toEqual([{ type: 'asset', fileName: 'packageA/pages/y/index.wxss', source: '@import "../../pure.wxss";\n' }])
     expect(bundle['z.css'].source).toBe('.z{}')
     expect(bundle['common.css'].source).toBe('.common{}')
@@ -124,5 +130,31 @@ describe('linkSubpackageChunkStyles', () => {
     run(bundle, { 'packageB/pages/z/index': ['pages/community/index'] })
     expect(bundle['z.css'].source).toBe('@import "../../../pages/community/index.wxss";\n.z{}')
     expect(() => run(sampleBundle(), { 'packageB/pages/z/index': ['pages/missing/index'] })).toThrow('pages/missing/index.wxss')
+  })
+})
+
+describe('shared chunk file names', () => {
+  it('gives every root its own basename, none that Taro links into app.wxss', () => {
+    const names = ['packageMeal', 'packageStats', 'packageFoodLibraryShare'].map((root) => sharedChunkFileName(root))
+    const basenames = names.map((name) => name.split('/').pop())
+    expect(new Set(basenames).size).toBe(names.length)
+    for (const base of basenames) expect(['common.js', 'vendors.js', 'taro.js', 'runtime.js']).not.toContain(base)
+  })
+})
+
+describe('failOnBlankedRequires', () => {
+  const run = (code: string) => {
+    const plugin = failOnBlankedRequires() as any
+    const context = { error: (message: string) => { throw new Error(message) } }
+    plugin.generateBundle.handler.call(context, {}, { 'packageStats/pages/stats/index.js': { type: 'chunk', fileName: 'packageStats/pages/stats/index.js', code } })
+  }
+
+  it('fails when vite blanked a require whose value is used', () => {
+    // 2026-11-06: packageMeal's style-only chunk shared the basename and took packageStats' require with it
+    expect(() => run('"use strict";const a=require("../../../taro.js"),s=/* empty css                 */const K=1;')).toThrow('packageStats/pages/stats/index.js')
+  })
+
+  it('accepts a blanked require that was a statement of its own', () => {
+    expect(() => run('"use strict";const a=require("../../../taro.js");/* empty css                 */const K=1;')).not.toThrow()
   })
 })

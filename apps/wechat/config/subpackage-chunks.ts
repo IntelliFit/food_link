@@ -17,8 +17,16 @@ type ManualChunksFn = (id: string, meta: ManualChunkMeta) => string | null | voi
 
 const MAIN = 'main'
 const SHARED_CHUNK_SUFFIX = '-subpackage-shared'
-// taro:vite-style links any wxss named common/vendors/taro/runtime into app.wxss, so this file needs its own name.
-const SHARED_FILE_NAME = 'subpackage-shared.js'
+
+/**
+ * `<root>/<root>-shared.js`. The basename must be unique per root: vite drops a style-only chunk and
+ * blanks every `require("…/<its basename>");` in the bundle, so a shared basename would also blank
+ * another root's real require (`const x=/* empty css *\/`, a syntax error that leaves the page blank).
+ * It must also not be common/vendors/taro/runtime, whose wxss taro:vite-style links into app.wxss.
+ */
+export function sharedChunkFileName(root: string): string {
+  return `${root}/${root}-shared.js`
+}
 
 function normalizeId(id: string): string {
   return id.replace(/^\0/, '').replace(/\\/g, '/').replace(/\?.*$/, '')
@@ -90,7 +98,7 @@ function forEachOutput(
 
 /**
  * Moves a module that Taro would put in the main `common`/`vendors` chunk into
- * `<root>/subpackage-shared.js` when only pages of that one subpackage use it.
+ * `<root>/<root>-shared.js` when only pages of that one subpackage use it.
  *
  * Register it before the other manualChunks plugins: each plugin wraps the previous function, so the
  * explicit rules (echarts, lifespan, ...) still run first and this one only sees Taro's decision.
@@ -123,7 +131,7 @@ export function subpackageSharedChunks(options: {
         const prevNames = output.chunkFileNames
         output.chunkFileNames = (chunkInfo: { name: string }) => {
           const root = chunkRoot.get(chunkInfo.name)
-          if (root) return `${root}/${SHARED_FILE_NAME}`
+          if (root) return sharedChunkFileName(root)
           if (typeof prevNames === 'function') return prevNames(chunkInfo)
           if (typeof prevNames === 'string') return prevNames
           return '[name]-[hash].js'
@@ -244,3 +252,32 @@ export function linkSubpackageChunkStyles(options: {
     },
   }
 }
+
+// vite blanks the require of a dropped style-only chunk as `/* empty css … */`. That is only safe as a
+// statement of its own; after `=`, `,`, `(`, `:`, `?` or `[` it broke a real expression.
+const BLANKED_REQUIRE_IN_EXPRESSION = /[=,(:?[]\s*\/\* empty css/
+
+/**
+ * Fails the build when vite's style-only-chunk cleanup blanked a require that a chunk uses, which ships as
+ * a syntax error and a blank page (2026-11-06: two roots' shared chunks had the same basename).
+ */
+export function failOnBlankedRequires(): Plugin {
+  return {
+    name: 'fail-on-blanked-requires',
+    generateBundle: {
+      // After vite:css-post has removed style-only chunks and blanked their requires.
+      order: 'post',
+      handler(_opts, bundle) {
+        const broken = (Object.values(bundle) as Array<OutputChunkLike | BundleAsset>)
+          .filter((item): item is OutputChunkLike => item.type === 'chunk')
+          .filter((chunk) => BLANKED_REQUIRE_IN_EXPRESSION.test(chunk.code))
+          .map((chunk) => chunk.fileName)
+        if (broken.length > 0) {
+          this.error(`fail-on-blanked-requires: a used require was blanked as "empty css" in ${broken.join(', ')}`)
+        }
+      },
+    },
+  }
+}
+
+type OutputChunkLike = { type: 'chunk'; fileName: string; code: string }

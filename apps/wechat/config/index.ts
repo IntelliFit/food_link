@@ -5,7 +5,7 @@ import { createStyleImportPlugin } from 'vite-plugin-style-import'
 
 import devConfig from './dev'
 import prodConfig from './prod'
-import { linkSubpackageChunkStyles, subpackageSharedChunks } from './subpackage-chunks'
+import { failOnBlankedRequires, linkSubpackageChunkStyles, subpackageSharedChunks } from './subpackage-chunks'
 
 const appRoot = process.cwd()
 const workspaceRoot = join(appRoot, '..', '..')
@@ -166,6 +166,7 @@ export default defineConfig<'vite'>(async (merge) => {
             'packageExtra/pages/interaction-feed-detail/index': ['pages/community/index'],
           },
         }),
+        failOnBlankedRequires(),
         // fix: 覆盖 Taro 默认的 es6 target，避免 async/await 被编译为 generator
         // 内联辅助函数与局部变量名冲突，导致真机偶发 "c is not a function"
         {
