@@ -30,6 +30,8 @@ type MealPreviewInput struct {
 	MealType         string               `json:"meal_type"`
 	Location         *domain.DietLocation `json:"location,omitempty"`
 	ExcludeSourceIDs []string             `json:"exclude_source_ids,omitempty"`
+	// JudgeMode is "", "skip" or "background"; see mealJudgeModeSkip.
+	JudgeMode string `json:"judge_mode,omitempty"`
 }
 
 func (s *StatsService) PreviewMeals(ctx context.Context, userID string, input MealPreviewInput) (*DietRecommendationResult, error) {
@@ -38,7 +40,7 @@ func (s *StatsService) PreviewMeals(ctx context.Context, userID string, input Me
 	if strings.TrimSpace(userID) == "" {
 		return nil, fmt.Errorf("请先登录")
 	}
-	if len(input.ExcludeSourceIDs) > 60 {
+	if len(input.ExcludeSourceIDs) > 60 || !validMealJudgeMode(input.JudgeMode) {
 		return nil, commonerrors.ErrBadRequest
 	}
 	if math.IsNaN(input.RadiusKM) || math.IsInf(input.RadiusKM, 0) || input.RadiusKM < 0 || input.RadiusKM > 10 {
@@ -49,7 +51,7 @@ func (s *StatsService) PreviewMeals(ctx context.Context, userID string, input Me
 			return nil, commonerrors.ErrBadRequest
 		}
 	}
-	state := &campusDietAgentRunState{UserID: userID, Intent: "initial", Question: "下一餐吃什么", Location: input.Location, IsHomePreview: true, ExcludedSourceIDs: input.ExcludeSourceIDs}
+	state := &campusDietAgentRunState{UserID: userID, Intent: "initial", Question: "下一餐吃什么", Location: input.Location, IsHomePreview: true, ExcludedSourceIDs: input.ExcludeSourceIDs, JudgeMode: input.JudgeMode}
 	state.Constraints.RadiusKM = input.RadiusKM
 	if state.Constraints.RadiusKM == 0 {
 		state.Constraints.RadiusKM = 5

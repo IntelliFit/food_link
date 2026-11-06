@@ -97,6 +97,7 @@ type campusDietAgentRunState struct {
 	AsOf              time.Time
 	ReadOnlyReplay    bool
 	IsHomePreview     bool
+	JudgeMode         string // home preview only: "", "skip" or "background"
 	PreviewContextKey string
 	PreviewMemory     []domain.MealRecommendationMemory
 	ExposureLoaded    bool
