@@ -127,6 +127,11 @@ type SampleView struct {
 	BenchmarkSampleID   *string        `json:"benchmark_sample_id,omitempty"`
 	CreatedAt           *time.Time     `json:"created_at,omitempty"`
 	Flags               []string       `json:"flags,omitempty"`
+	ReviewMode          string         `json:"review_mode"`
+	AutoReview          *AutoReview    `json:"auto_review,omitempty"`
+	CollectionChannel   string         `json:"collection_channel"`
+	CampaignID          *string        `json:"campaign_id,omitempty"`
+	CatalogItemID       *string        `json:"catalog_item_id,omitempty"`
 }
 
 // MineSummary counts one contributor's samples by status.

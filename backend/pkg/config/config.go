@@ -45,6 +45,7 @@ type Config struct {
 	AIUsagePricing AIUsagePricingConfig `mapstructure:"ai_usage_pricing"`
 	Apollo         ApolloConfig         `mapstructure:"apollo"`
 	CanteenCapture CanteenCaptureConfig `mapstructure:"canteen_capture"`
+	ResearchWeight ResearchWeightConfig `mapstructure:"research_weight"`
 	Promoter       PromoterConfig       `mapstructure:"promoter"`
 	WechatTransfer WechatTransferConfig `mapstructure:"wechat_transfer"`
 }
@@ -282,6 +283,14 @@ type CanteenCaptureConfig struct {
 	WithdrawMinCents    int64                            `mapstructure:"withdraw_min_cents"`
 	DisableAutoPublish  bool                             `mapstructure:"disable_auto_publish"`
 	MembershipOptions   []CanteenCaptureMembershipOption `mapstructure:"membership_options"`
+}
+
+// ResearchWeightConfig switches on automatic scale reading and review of
+// weighed benchmark samples. It stays off by default because local
+// development shares the production database: a laptop must never start
+// reviewing real contributors' samples.
+type ResearchWeightConfig struct {
+	AutoReviewEnabled bool `mapstructure:"auto_review_enabled"`
 }
 
 // PromoterConfig sets the promoter commission rules. The feature stays off

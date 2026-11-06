@@ -43,6 +43,13 @@ type Repository interface {
 	ListContainers(ctx context.Context, userID string) ([]domain.Container, error)
 	CreateContainer(ctx context.Context, container *domain.Container) error
 	ArchiveContainer(ctx context.Context, userID, id string) error
+	SavePhotoCheck(ctx context.Context, check *domain.PhotoCheck) error
+	PhotoChecks(ctx context.Context, keys []string) (map[string]domain.PhotoCheck, error)
+	SaveReadings(ctx context.Context, userID, key string, readings []domain.ScaleReading) error
+	CountReadsSince(ctx context.Context, userID string, since time.Time) (int64, error)
+	SameContentUploads(ctx context.Context, hashes, ownKeys []string) ([]domain.PhotoCheck, error)
+	CountRewardedSince(ctx context.Context, userID string, since time.Time) (int64, error)
+	PendingForAutoReview(ctx context.Context, before time.Time, limit int) ([]domain.Sample, error)
 }
 
 type RewardAwarder interface {
@@ -60,7 +67,11 @@ type SampleService struct {
 	repo    Repository
 	rewards RewardAwarder
 	store   ObjectStore
+	reader  *ScaleReader
 	now     func() time.Time
+	// async runs background work; nil means a goroutine. Tests make it
+	// synchronous.
+	async func(func())
 }
 
 func NewSampleService(repo Repository, rewards RewardAwarder, store ObjectStore) *SampleService {
@@ -132,6 +143,9 @@ func (s *SampleService) Submit(ctx context.Context, userID string, input SubmitI
 	logger.Info(ctx, "称重科研样本提交完成", slog.String("user_id", userID), slog.String("sample_id", saved.ID),
 		slog.String("weighing_mode", saved.WeighingMode), slog.Bool("created", created))
 	view := s.toView(saved)
+	if created {
+		s.reviewSoon(ctx, saved.ID)
+	}
 	return &view, nil
 }
 
@@ -205,6 +219,9 @@ func (s *SampleService) UploadImage(ctx context.Context, userID string, data []b
 	if err != nil {
 		return "", err
 	}
+	if err := s.recordUpload(ctx, userID, key, data); err != nil {
+		return "", err
+	}
 	logger.Info(ctx, "称重科研照片上传完成", slog.String("user_id", userID), slog.Int("file.size", len(data)))
 	return url, nil
 }
@@ -269,6 +286,12 @@ func (s *SampleService) Review(ctx context.Context, id, reviewerID string, input
 		}
 		updates["reward_credits"] = DefaultRewardCredits(current)
 	}
+	return s.commitReview(ctx, id, reviewerID, updates)
+}
+
+// commitReview applies a reviewer's or the automatic review's decision and
+// pays the reward exactly once.
+func (s *SampleService) commitReview(ctx context.Context, id, reviewerID string, updates map[string]any) (*domain.SampleView, error) {
 	sample, err := s.repo.Review(ctx, id, updates)
 	if errors.Is(err, researchrepo.ErrNotPending) && updates["status"] == domain.StatusApproved {
 		// A retry after a failed payout: the sample is already approved, so
@@ -285,6 +308,7 @@ func (s *SampleService) Review(ctx context.Context, id, reviewerID string, input
 	if sample.Status == domain.StatusApproved && sample.RewardCredits > 0 && sample.RewardedAt == nil && s.rewards != nil {
 		_, rewardErr := s.rewards.AwardResearchWeightSample(ctx, sample.UserID, sample.ID, sample.RewardCredits, map[string]any{
 			"dish_name": sample.DishName, "weighing_mode": sample.WeighingMode, "quality_tier": sample.QualityTier,
+			"review_mode": sample.ReviewMode,
 		})
 		if rewardErr != nil {
 			logger.Error(ctx, "称重科研样本审核通过但积分发放失败", rewardErr, slog.String("sample_id", sample.ID), slog.String("user_id", sample.UserID))
@@ -315,7 +339,7 @@ func reviewUpdates(input ReviewInput, reviewerID string, now time.Time) (map[str
 	if runeLen(note) > 300 {
 		return nil, badRequest("审核备注不超过300字")
 	}
-	updates := map[string]any{"review_note": note, "reviewed_at": now, "reviewed_by": reviewerID}
+	updates := map[string]any{"review_note": note, "reviewed_at": now, "reviewed_by": reviewerID, "review_mode": domain.ReviewModeManual}
 	switch strings.TrimSpace(input.Action) {
 	case "approve":
 		tier := strings.ToUpper(strings.TrimSpace(input.QualityTier))
@@ -473,6 +497,7 @@ func (s *SampleService) toView(sample *domain.Sample) domain.SampleView {
 		Device: sample.Device, Notes: sample.Notes, ConsentVersion: sample.ConsentVersion, Status: sample.Status,
 		QualityTier: sample.QualityTier, ReviewNote: sample.ReviewNote, ReviewedAt: sample.ReviewedAt,
 		RewardCredits: sample.RewardCredits, RewardedAt: sample.RewardedAt, BenchmarkSampleID: sample.BenchmarkSampleID, CreatedAt: sample.CreatedAt,
-		Flags: sampleFlags(sample),
+		Flags: sampleFlags(sample), ReviewMode: sample.ReviewMode, AutoReview: sample.AutoReview,
+		CollectionChannel: sample.CollectionChannel, CampaignID: sample.CampaignID, CatalogItemID: sample.CatalogItemID,
 	}
 }

@@ -22,6 +22,11 @@ type fakeRepo struct {
 	labeled    []*do.FoodWeightLabeledSampleDO
 	rewarded   []string
 	containers []domain.Container
+	// photo checks and auto review counters
+	checks        map[string]domain.PhotoCheck
+	savedReadings int
+	reads         int64
+	rewardedToday int64
 }
 
 func newFakeRepo() *fakeRepo { return &fakeRepo{samples: map[string]*domain.Sample{}} }
@@ -74,6 +79,16 @@ func (f *fakeRepo) Review(_ context.Context, id string, updates map[string]any) 
 	}
 	if credits, ok := updates["reward_credits"].(int); ok {
 		sample.RewardCredits = credits
+	}
+	if mode, ok := updates["review_mode"].(string); ok {
+		sample.ReviewMode = mode
+	}
+	if note, ok := updates["review_note"].(string); ok {
+		sample.ReviewNote = note
+	}
+	if review, ok := updates["auto_review"].(*domain.AutoReview); ok {
+		copyReview := *review
+		sample.AutoReview = &copyReview
 	}
 	copySample := *sample
 	return &copySample, nil

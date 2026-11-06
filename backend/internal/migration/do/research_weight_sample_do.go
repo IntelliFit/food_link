@@ -36,8 +36,20 @@ type ResearchWeightSampleDO struct {
 	RewardCredits       int                   `gorm:"column:reward_credits;type:integer;not null;default:0;check:research_weight_samples_reward_nonnegative,reward_credits >= 0"`
 	RewardedAt          *time.Time            `gorm:"column:rewarded_at;type:timestamptz"`
 	BenchmarkSampleID   *string               `gorm:"column:benchmark_sample_id;type:uuid"`
-	CreatedAt           *time.Time            `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_research_weight_samples_user_created,priority:2,sort:desc;index:idx_research_weight_samples_status_created,priority:2,sort:desc"`
-	UpdatedAt           *time.Time            `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+	// Campus channel attribution: set by the server at submission from the
+	// contributor's active campaign, never changed afterwards.
+	CampaignID         *string `gorm:"column:campaign_id;type:uuid;index:idx_research_weight_samples_campaign_created,priority:1"`
+	CollectionChannel  string  `gorm:"column:collection_channel;type:text;not null;default:'personal';check:research_weight_samples_channel_valid,collection_channel IN ('personal','campus_self_scale','campus_station','campus_same_dish')"`
+	StationSessionID   *string `gorm:"column:station_session_id;type:uuid"`
+	CanteenID          *string `gorm:"column:canteen_id;type:uuid"`
+	CatalogItemID      *string `gorm:"column:catalog_item_id;type:uuid;index:idx_research_weight_samples_catalog_item"`
+	PairedFoodRecordID *string `gorm:"column:paired_food_record_id;type:uuid"`
+	// ReviewMode tells automatic decisions from reviewer ones; AutoReview keeps
+	// every check the pipeline ran so a decision can be audited later.
+	ReviewMode string                    `gorm:"column:review_mode;type:text;not null;default:'manual';check:research_weight_samples_review_mode_valid,review_mode IN ('manual','auto')"`
+	AutoReview *ResearchWeightAutoReview `gorm:"column:auto_review;type:jsonb;serializer:json"`
+	CreatedAt  *time.Time                `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_research_weight_samples_user_created,priority:2,sort:desc;index:idx_research_weight_samples_status_created,priority:2,sort:desc;index:idx_research_weight_samples_campaign_created,priority:2,sort:desc"`
+	UpdatedAt  *time.Time                `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
 
 func (ResearchWeightSampleDO) TableName() string { return "research_weight_samples" }
@@ -75,19 +87,75 @@ type ResearchWeightPhoto struct {
 // takeout box model, a home bowl) weighed once so later samples can reuse its
 // weight instead of weighing the empty container again.
 type ResearchWeightContainerDO struct {
-	ID             string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID         string     `gorm:"column:user_id;type:uuid;not null;index:idx_research_weight_containers_user_status,priority:1"`
-	Name           string     `gorm:"column:name;type:text;not null"`
-	ContainerType  string     `gorm:"column:container_type;type:text;not null;check:research_weight_containers_type_valid,container_type IN ('bowl','plate','tray','box','other')"`
-	Grams          float64    `gorm:"column:grams;type:numeric;not null;check:research_weight_containers_grams_positive,grams > 0"`
-	PhotoObjectKey string     `gorm:"column:photo_object_key;type:text;not null"`
-	Status         string     `gorm:"column:status;type:text;not null;default:'active';index:idx_research_weight_containers_user_status,priority:2;check:research_weight_containers_status_valid,status IN ('active','archived')"`
-	CreatedAt      *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
-	UpdatedAt      *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+	ID             string  `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID         string  `gorm:"column:user_id;type:uuid;not null;index:idx_research_weight_containers_user_status,priority:1"`
+	Name           string  `gorm:"column:name;type:text;not null"`
+	ContainerType  string  `gorm:"column:container_type;type:text;not null;check:research_weight_containers_type_valid,container_type IN ('bowl','plate','tray','box','other')"`
+	Grams          float64 `gorm:"column:grams;type:numeric;not null;check:research_weight_containers_grams_positive,grams > 0"`
+	PhotoObjectKey string  `gorm:"column:photo_object_key;type:text;not null"`
+	// CampaignID marks a container shared with a campus campaign (a canteen
+	// tray weighed once by the club); UserID stays the member who saved it.
+	CampaignID *string    `gorm:"column:campaign_id;type:uuid;index:idx_research_weight_containers_campaign"`
+	Status     string     `gorm:"column:status;type:text;not null;default:'active';index:idx_research_weight_containers_user_status,priority:2;check:research_weight_containers_status_valid,status IN ('active','archived')"`
+	CreatedAt  *time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt  *time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
 
 func (ResearchWeightContainerDO) TableName() string { return "research_weight_containers" }
 
+// ResearchWeightPhotoCheckDO is the server's own evidence about one uploaded
+// research photo: its content hash (to catch the same picture submitted by
+// someone else) and, for scale photos, what the reading models saw. Clients
+// never write it, so the automatic review can trust it.
+type ResearchWeightPhotoCheckDO struct {
+	ObjectKey     string                       `gorm:"column:object_key;type:text;primaryKey"`
+	UserID        string                       `gorm:"column:user_id;type:uuid;not null;index:idx_research_weight_photo_checks_user"`
+	ContentSHA256 string                       `gorm:"column:content_sha256;type:text;not null;index:idx_research_weight_photo_checks_sha"`
+	Readings      []ResearchWeightScaleReading `gorm:"column:readings;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	ReadAt        *time.Time                   `gorm:"column:read_at;type:timestamptz"`
+	CreatedAt     *time.Time                   `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt     *time.Time                   `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (ResearchWeightPhotoCheckDO) TableName() string { return "research_weight_photo_checks" }
+
+// ResearchWeightScaleReading is one model's reading of a scale display. Grams
+// is converted by the server from RawValue and Unit; ResolutionGrams is the
+// smallest step the display can show in that unit.
+type ResearchWeightScaleReading struct {
+	Model           string   `json:"model,omitempty"`
+	IsScaleDisplay  bool     `json:"is_scale_display"`
+	Readable        bool     `json:"readable"`
+	RawValue        string   `json:"raw_value,omitempty"`
+	Unit            string   `json:"unit,omitempty"`
+	Grams           *float64 `json:"grams,omitempty"`
+	ResolutionGrams float64  `json:"resolution_grams,omitempty"`
+	TareIndicator   bool     `json:"tare_indicator,omitempty"`
+	Negative        bool     `json:"negative,omitempty"`
+	Reason          string   `json:"reason,omitempty"`
+	Error           string   `json:"error,omitempty"`
+}
+
+// ResearchWeightAutoReview records what the automatic review decided and why.
+type ResearchWeightAutoReview struct {
+	Version   string                    `json:"version"`
+	Decision  string                    `json:"decision"`
+	Tier      string                    `json:"tier,omitempty"`
+	Credits   int                       `json:"credits"`
+	Note      string                    `json:"note,omitempty"`
+	Checks    []ResearchWeightAutoCheck `json:"checks"`
+	DecidedAt string                    `json:"decided_at"`
+}
+
+// ResearchWeightAutoCheck is one check the automatic review ran.
+type ResearchWeightAutoCheck struct {
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	Detail    string `json:"detail,omitempty"`
+	PhotoRole string `json:"photo_role,omitempty"`
+	ItemIndex *int   `json:"item_index,omitempty"`
+}
+
 func ResearchWeightModels() []any {
-	return []any{&ResearchWeightSampleDO{}, &ResearchWeightContainerDO{}}
+	return []any{&ResearchWeightSampleDO{}, &ResearchWeightContainerDO{}, &ResearchWeightPhotoCheckDO{}}
 }

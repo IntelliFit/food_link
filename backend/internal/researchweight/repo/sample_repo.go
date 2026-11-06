@@ -138,6 +138,9 @@ func (r *SampleRepo) List(ctx context.Context, filter domain.ListFilter) (*domai
 // Review moves a pending sample to approved or rejected exactly once.
 func (r *SampleRepo) Review(ctx context.Context, id string, updates map[string]any) (*domain.Sample, error) {
 	updates["updated_at"] = time.Now()
+	if err := autoReviewValue(updates); err != nil {
+		return nil, err
+	}
 	result := r.db.WithContext(ctx).Model(&domain.Sample{}).
 		Where("id = ? AND status = ?", id, domain.StatusPending).Updates(updates)
 	if result.Error != nil {

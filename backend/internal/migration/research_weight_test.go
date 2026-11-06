@@ -57,3 +57,30 @@ VALUES ('11111111-1111-1111-1111-111111111111', ?, 'takeout', ?, 'box', ?, 420, 
 	require.Error(t, db.Exec(container, "x", "bag", 10).Error, "type is constrained")
 	require.Error(t, db.Exec(container, "x", "box", 0).Error, "grams must be positive")
 }
+
+func TestMigrateResearchWeightAddsAutoReviewAndCampusColumns(t *testing.T) {
+	db := testdb.New(t)
+	ctx := context.Background()
+	require.NoError(t, MigrateResearchWeightSamples(ctx, db, "public"))
+	// A v2 table without the new columns, as production will have it.
+	for _, column := range []string{"campaign_id", "collection_channel", "station_session_id", "canteen_id", "catalog_item_id", "paired_food_record_id", "review_mode", "auto_review"} {
+		require.NoError(t, db.Exec(`ALTER TABLE research_weight_samples DROP COLUMN `+column).Error)
+	}
+	require.NoError(t, db.Exec(`DROP TABLE research_weight_photo_checks`).Error)
+	insert := `INSERT INTO research_weight_samples (user_id, client_key, scene, weighing_mode, container_type, tare_mode, total_net_grams, consent_version, consented_at)
+VALUES ('11111111-1111-1111-1111-111111111111', ?, 'canteen', 'whole', 'bowl', 'measured', 420, 'v', now())`
+	require.NoError(t, db.Exec(insert, "before").Error)
+
+	require.NoError(t, MigrateResearchWeightSamples(ctx, db, "public"))
+	var row struct {
+		CollectionChannel string
+		ReviewMode        string
+	}
+	require.NoError(t, db.Raw(`SELECT collection_channel, review_mode FROM research_weight_samples WHERE client_key = 'before'`).Scan(&row).Error)
+	require.Equal(t, "personal", row.CollectionChannel, "existing rows default to the personal channel")
+	require.Equal(t, "manual", row.ReviewMode)
+	require.Error(t, db.Exec(`UPDATE research_weight_samples SET collection_channel = 'elsewhere'`).Error, "channel is constrained")
+	require.Error(t, db.Exec(`UPDATE research_weight_samples SET review_mode = 'robot'`).Error, "review mode is constrained")
+	require.True(t, db.Migrator().HasTable("research_weight_photo_checks"))
+	require.True(t, db.Migrator().HasColumn("research_weight_containers", "campaign_id"))
+}

@@ -39,7 +39,41 @@ func (h *SampleHandler) Submit(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"item": item, "message": "已提交，审核通过后发放奖励"})
+	message := "已提交，审核通过后发放奖励"
+	if h.svc.AutoReviewEnabled() {
+		message = "已提交，正在自动审核"
+	}
+	response.Success(c, gin.H{"item": item, "message": message})
+}
+
+type scaleReadingBody struct {
+	ImageURL            string  `json:"image_url"`
+	ScalePrecisionGrams float64 `json:"scale_precision_grams"`
+}
+
+// POST /api/research-weight-samples/scale-reading
+func (h *SampleHandler) ReadScale(c *gin.Context) {
+	var body scaleReadingBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "读数请求格式不正确", HTTPStatus: 400})
+		return
+	}
+	reading, err := h.svc.ReadScale(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), body.ImageURL, body.ScalePrecisionGrams)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"reading": reading})
+}
+
+// POST /api/admin/research-weight-samples/:sample_id/auto-review
+func (h *SampleHandler) AdminAutoReview(c *gin.Context) {
+	item, err := h.svc.AutoReviewSample(c.Request.Context(), c.Param("sample_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"item": item, "message": "自动审核完成"})
 }
 
 // GET /api/research-weight-samples/mine

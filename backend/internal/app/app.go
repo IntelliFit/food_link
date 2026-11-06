@@ -165,6 +165,8 @@ type App struct {
 	mealReminderDone      chan struct{}
 	promoterSyncCancel    context.CancelFunc
 	promoterSyncDone      chan struct{}
+	researchReviewCancel  context.CancelFunc
+	researchReviewDone    chan struct{}
 	transferPollCancel    context.CancelFunc
 	transferPollDone      chan struct{}
 	taskQueue             taskqueue.Queue
@@ -574,6 +576,11 @@ func New(cfg *config.Config) (*App, error) {
 	foodContributionSvc := foodcontributionservice.NewContributionService(foodContributionRepo, membershipSvc, storageClient)
 	foodContributionHandler := foodcontributionhandler.NewContributionHandler(foodContributionSvc)
 	researchWeightSvc := researchweightservice.NewSampleService(researchweightrepo.NewSampleRepo(db), membershipSvc, storageClient)
+	// Scale photos are read by the same two vendors as canteen menus, so a
+	// reading counts as confirmed only when independent models agree.
+	if cfg.ResearchWeight.AutoReviewEnabled {
+		researchWeightSvc.ConfigureAutoReview(researchweightservice.NewScaleReader(capturePrimary, captureVerifier))
+	}
 	researchWeightHandler := researchweighthandler.NewSampleHandler(researchWeightSvc)
 
 	// Recipe module DI
@@ -669,6 +676,12 @@ func New(cfg *config.Config) (*App, error) {
 			app.promoterSyncCancel = promoterSyncCancel
 			app.promoterSyncDone = make(chan struct{})
 			go func() { defer close(app.promoterSyncDone); promoterSvc.RunSync(promoterSyncCtx) }()
+		}
+		if researchWeightSvc.AutoReviewEnabled() {
+			reviewCtx, reviewCancel := context.WithCancel(context.Background())
+			app.researchReviewCancel = reviewCancel
+			app.researchReviewDone = make(chan struct{})
+			go func() { defer close(app.researchReviewDone); researchWeightSvc.RunAutoReview(reviewCtx) }()
 		}
 		app.startWechatTransferPoller(transferSvc)
 		app.startOpenPlatformReconciliation(openPlatformSvc)
@@ -941,6 +954,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/research-weight-samples/mine", authmw.RequireJWT(jwtSvc), researchWeightHandler.Mine)
 	engine.POST("/api/research-weight-samples/upload-image", authmw.RequireJWT(jwtSvc), researchWeightHandler.UploadImage)
 	engine.POST("/api/research-weight-samples/upload-video", authmw.RequireJWT(jwtSvc), researchWeightHandler.UploadVideo)
+	engine.POST("/api/research-weight-samples/scale-reading", authmw.RequireJWT(jwtSvc), researchWeightHandler.ReadScale)
 	engine.GET("/api/research-weight-containers", authmw.RequireJWT(jwtSvc), researchWeightHandler.ListContainers)
 	engine.POST("/api/research-weight-containers", authmw.RequireJWT(jwtSvc), researchWeightHandler.CreateContainer)
 	engine.POST("/api/research-weight-containers/:container_id/archive", authmw.RequireJWT(jwtSvc), researchWeightHandler.ArchiveContainer)
@@ -1145,6 +1159,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/research-weight-samples/:sample_id", adminAuth, researchWeightHandler.AdminGet)
 	adminAPI.POST("/research-weight-samples/:sample_id/review", adminAuth, researchWeightHandler.AdminReview)
 	adminAPI.POST("/research-weight-samples/:sample_id/promote", adminAuth, researchWeightHandler.AdminPromote)
+	adminAPI.POST("/research-weight-samples/:sample_id/auto-review", adminAuth, researchWeightHandler.AdminAutoReview)
 	adminAPI.GET("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Get)
 	adminAPI.POST("/food-nutrition", adminAuth, adminFoodNutritionHandler.Create)
 	adminAPI.PATCH("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Update)
@@ -1679,6 +1694,16 @@ func (a *App) Close(ctx context.Context) error {
 		case <-a.promoterSyncDone:
 		case <-ctx.Done():
 			logger.Warn(context.Background(), "推广佣金同步关闭超时", logger.Err(ctx.Err()))
+		}
+	}
+	if a.researchReviewCancel != nil {
+		a.researchReviewCancel()
+	}
+	if a.researchReviewDone != nil {
+		select {
+		case <-a.researchReviewDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "称重科研自动审核巡检关闭超时", logger.Err(ctx.Err()))
 		}
 	}
 	a.stopWechatTransferPoller(ctx)
