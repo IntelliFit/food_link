@@ -23,21 +23,6 @@ const baseNutrients = (overrides: Partial<Nutrients> = {}): Nutrients => ({
 })
 
 describe('result item converter', () => {
-  it('carries the backend request for a package nutrition label', () => {
-    const asked: FoodItem = {
-      name: '某品牌柠檬茶',
-      type: 'packaged',
-      estimatedWeightGrams: 500,
-      originalWeightGrams: 500,
-      nutrients: baseNutrients(),
-      ask_package_label: true,
-    }
-    const matched: FoodItem = { ...asked, ask_package_label: undefined, nutrition_source: 'packaged_food_library' }
-    const [askedItem, matchedItem] = convertApiFoodItemsToNutritionItems([asked, matched])
-    expect(askedItem.askPackageLabel).toBe(true)
-    expect(matchedItem.askPackageLabel).toBe(false)
-  })
-
   it('keeps actual intake at 100 percent while preserving AI ratio and packaged metadata', () => {
     const item: FoodItem = {
       itemId: 9,

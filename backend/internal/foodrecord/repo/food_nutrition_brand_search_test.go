@@ -37,3 +37,31 @@ func TestFoodNutritionRepo_SearchPackagedFoodByBrandKeepsOnlyActiveRowsOfTheBran
 	require.NoError(t, err)
 	require.Empty(t, empty, "a one-character brand would match half the catalogue")
 }
+
+func TestFoodNutritionRepo_CapturePackagedFoodIfAbsentNeverTouchesAKnownProduct(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+	input := PackagedFoodInput{Brand: "某品牌", ProductName: "柠檬茶", Source: "photo_label_auto", ReviewStatus: "active",
+		NetContentValue: 500, NetContentUnit: "ml", UnitCount: 1, NetWeightG: 500, KcalPer100g: 43, CarbsPer100g: 10.6}
+
+	created, err := repo.CapturePackagedFoodIfAbsent(ctx, input)
+	require.NoError(t, err)
+	require.True(t, created)
+
+	// The same product in another size, with other values, is left alone.
+	other := input
+	other.NetContentValue, other.NetWeightG, other.KcalPer100g = 250, 250, 99
+	created, err = repo.CapturePackagedFoodIfAbsent(ctx, other)
+	require.NoError(t, err)
+	require.False(t, created)
+
+	var rows []domain.PackagedFood
+	require.NoError(t, db.Where("brand = ?", "某品牌").Find(&rows).Error)
+	require.Len(t, rows, 1)
+	require.InDelta(t, 43, rows[0].KcalPer100g, 0.01)
+
+	created, err = repo.CapturePackagedFoodIfAbsent(ctx, PackagedFoodInput{ProductName: "柠檬茶", KcalPer100g: 43})
+	require.NoError(t, err)
+	require.False(t, created, "no brand, no row")
+}

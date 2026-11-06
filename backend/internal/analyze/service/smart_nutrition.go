@@ -89,11 +89,6 @@ func assembleSmartNutrition(resp map[string]any, items []map[string]any, outcome
 			backfill = append(backfill, map[string]any{"name": stringFromAny(item["name"]), "kind": string(outcome.kind), "reason": outcome.status})
 		}
 		next = copyAnyMap(next)
-		if outcome.item == nil && outcome.kind == smartKindPackaged && outcome.status != "label_kept" && smartShouldAskPackageLabel(item) {
-			// No label, no library row: the estimate stands and the result
-			// page asks for the nutrition panel.
-			next["ask_package_label"] = true
-		}
 		next["smart_match_kind"] = string(outcome.kind)
 		next["smart_match_status"] = outcome.status
 		next["nutrition_source_category"] = nutritionSourceCategory(stringFromAny(next["nutrition_source"]))
@@ -430,20 +425,4 @@ var smartStandardPreparedFoods = map[string]bool{
 	"煎蛋": true, "煎鸡蛋": true, "荷包蛋": true, "煎荷包蛋": true,
 	"豆浆": true, "花卷": true, "馒头": true, "米饭": true, "白米饭": true, "杂粮饭": true,
 	"玉米": true, "红薯": true, "紫薯": true, "烤红薯": true, "蒸红薯": true,
-}
-
-// smartAskLabelHeads are kinds whose nutrition varies most between products:
-// drinks (sugar or none), dairy and sweets.
-var smartAskLabelHeads = map[string]bool{
-	"可乐": true, "汽水": true, "果汁": true, "茶": true, "饮料": true, "奶茶": true, "咖啡": true,
-	"酸奶": true, "酸牛奶": true, "发酵乳": true, "牛奶": true, "豆奶": true, "乳酸菌": true,
-}
-
-// smartShouldAskPackageLabel asks for the label when the product's nutrition
-// is hard to guess: a drink or dairy kind, or at least 80 kcal on the plate.
-func smartShouldAskPackageLabel(item map[string]any) bool {
-	if smartAskLabelHeads[smartPackagedHead(stringFromAny(item["name"])+smartPackagedField(item, "productName", "product_name"))] {
-		return true
-	}
-	return numberFromAny(mapFromAny(item["nutrients"])["calories"]) >= 80
 }

@@ -385,7 +385,7 @@ const snackContributionEnabled = false
 const isSnackLikeItem = (item: NutritionItem) => {
   if (!snackContributionEnabled) return false
   const source = String(item.nutritionSource || '').toLowerCase()
-  if (source === 'packaged_food_library' || source === 'ingredient_label') return false
+  if (source === 'packaged_food_library') return false
   const marker = `${item.itemType || ''} ${item.category || ''} ${item.name || ''}`.toLowerCase()
   return (
     marker.includes('snack') ||
@@ -3106,19 +3106,7 @@ function ResultPage() {
                     )}
                   </View>
 
-                  {item.askPackageLabel ? (
-                    <View className='snack-contribution-card'>
-                      <View className='snack-contribution-copy'>
-                        <Text className='snack-contribution-title'>食物库里还没有这款</Text>
-                        <Text className='snack-contribution-desc'>
-                          营养先按 AI 估算。拍一下包装背面的营养成分表，这次更准，下次你和其他人都能直接用。
-                        </Text>
-                      </View>
-                      <View className='snack-contribution-action' onClick={() => openSnackContribution(item)}>
-                        <Text className='snack-contribution-action-text'>拍营养成分表</Text>
-                      </View>
-                    </View>
-                  ) : isSnackLikeItem(item) && (
+                  {isSnackLikeItem(item) && (
                     <View className='snack-contribution-card'>
                       <View className='snack-contribution-copy'>
                         <Text className='snack-contribution-title'>识别为包装食品</Text>

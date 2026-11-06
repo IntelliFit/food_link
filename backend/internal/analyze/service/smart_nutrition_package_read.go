@@ -65,8 +65,10 @@ func (s *AnalyzeService) withSmartPackageReading(ctx context.Context, resp map[s
 	keys := s.smartKnownBrands(ctx)
 	indexes := []int{}
 	for index, item := range items {
-		// An item whose label the main call already read needs nothing more.
-		if len(ingredientLabelNutritionFromItem(item)) == 0 && smartPackageReadCandidate(item, keys) {
+		// An item whose label the main call already read only needs its brand
+		// and name, so the panel can be added to the library.
+		labelled := len(ingredientLabelNutritionFromItem(item)) > 0
+		if smartPackageReadCandidate(item, keys) && (!labelled || smartPackagedField(item, "brand", "brandName") == "") {
 			indexes = append(indexes, index)
 		}
 	}
@@ -86,6 +88,7 @@ func (s *AnalyzeService) withSmartPackageReading(ctx context.Context, resp map[s
 	out := make([]map[string]any, len(items))
 	copy(out, items)
 	counts := map[string]int{}
+	captures := []smartLabelCapture{}
 	for index, reading := range readings {
 		reading.brand = smartLibraryBrand(reading, stringFromAny(out[index]["name"]), keys)
 		next, applied := applySmartPackageReading(out[index], reading)
@@ -93,7 +96,12 @@ func (s *AnalyzeService) withSmartPackageReading(ctx context.Context, resp map[s
 		for _, what := range applied {
 			counts[what]++
 		}
+		if capture, ok := smartLabelCaptureFrom(next, reading); ok {
+			captures = append(captures, capture)
+		}
 	}
+	s.captureSmartLabels(ctx, captures)
+	counts["label_capture_candidates"] = len(captures)
 	resp["items"] = out
 	summary["status"] = "completed"
 	summary["read_count"] = len(readings)
@@ -271,7 +279,7 @@ func applySmartPackageReading(item map[string]any, reading smartPackageReading) 
 		weight = edible
 		applied = append(applied, "weight")
 	}
-	if reading.label != nil && weight > 0 {
+	if reading.label != nil && weight > 0 && len(ingredientLabelNutritionFromItem(item)) == 0 {
 		// The same field the main call uses for a label it read; the AI-direct
 		// pass turns it into an ingredient_label item the library keeps.
 		ingredients := copyAnyMap(mapFromAny(next["ingredients"]))

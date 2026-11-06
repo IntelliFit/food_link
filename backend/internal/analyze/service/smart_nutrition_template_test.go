@@ -102,19 +102,6 @@ func TestSmartStandardPreparedFoodSkipsTheSplit(t *testing.T) {
 	require.Equal(t, "卤蛋", items[0]["matched_food_name"])
 }
 
-func TestSmartAsksForTheLabelOnlyWhenNothingMatched(t *testing.T) {
-	drink := smartItem("某品牌柠檬茶", "packaged", 500, 150, map[string]any{"type": "packaged", "brand": "某品牌"})
-	small := smartItem("某品牌硬糖", "packaged", 5, 20, map[string]any{"type": "packaged", "brand": "某品牌"})
-	items := runSmart(t, newSmartLibrary(), drink, small)
-	require.Equal(t, true, items[0]["ask_package_label"], "a drink whose sugar is unknown")
-	require.Nil(t, items[1]["ask_package_label"], "20 kcal of candy is not worth asking")
-
-	labelled := smartItem("某品牌柠檬茶", "packaged", 500, 150, map[string]any{"type": "packaged", "brand": "某品牌",
-		"ingredients": map[string]any{"nutritionPer100g": map[string]any{"calories": 30.0, "protein": 0.0, "carbs": 7.5, "fat": 0.0}}})
-	items = runSmart(t, newSmartLibrary(), labelled)
-	require.Nil(t, items[0]["ask_package_label"], "the label was already read")
-}
-
 func TestSmartPackagedHeadIsTheLastNoun(t *testing.T) {
 	require.Equal(t, "派", smartPackagedHead("好丽友巧克力味派"))
 	require.Equal(t, "酸牛奶", smartPackagedHead("完达山风味酸牛奶"))
