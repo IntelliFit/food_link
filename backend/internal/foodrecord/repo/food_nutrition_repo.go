@@ -2910,71 +2910,106 @@ func (r *FoodNutritionRepo) UpsertDeepSeekNutrition(ctx context.Context, rawName
 		source = strings.TrimSpace(sources[0])
 	}
 	unit = normalizeAIGeneratedNutritionUnit(unit, source)
-	var existing domain.FoodNutrition
-	err := r.db.WithContext(ctx).Where("normalized_name = ?", normalized).First(&existing).Error
-	if err == nil {
-		// Never overwrite a curated row with a runtime estimate. Existing AI
-		// rows may be refreshed for review, but they remain quarantined and are
-		// not eligible for exact/fuzzy runtime matching.
-		if !domain.IsAIGeneratedNutritionSource(existing.Source) ||
-			domain.EffectiveNutritionQualityTier(existing) == domain.NutritionQualityReviewedEstimate {
-			return existing.ID, nil
+	now := time.Now().UTC()
+	estimate := aiNutritionEstimateEntry(unit, source, now)
+	var foodID string
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing domain.FoodNutrition
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("normalized_name = ?", normalized).First(&existing).Error
+		if err == nil {
+			foodID = existing.ID
+			// Never overwrite a curated row with a runtime estimate. Existing AI
+			// rows stay quarantined with their first values, review tier and
+			// review evidence; each new estimate is only appended to the history
+			// so reviewers can see how much repeated estimates disagree.
+			if !domain.IsAIGeneratedNutritionSource(existing.Source) ||
+				domain.EffectiveNutritionQualityTier(existing) == domain.NutritionQualityReviewedEstimate {
+				return nil
+			}
+			updates := map[string]any{
+				"quality_evidence": appendAINutritionEstimate(existing, estimate, now),
+			}
+			if existing.KcalPer100g <= 0 {
+				for column, value := range nutritionColumnValues(unit) {
+					updates[column] = value
+				}
+			}
+			return tx.Model(&domain.FoodNutrition{}).Where("id = ?", existing.ID).Updates(updates).Error
 		}
-		updates := map[string]any{
-			"kcal_per_100g":              number(unit["calories"]),
-			"protein_per_100g":           number(unit["protein"]),
-			"carbs_per_100g":             number(unit["carbs"]),
-			"fat_per_100g":               number(unit["fat"]),
-			"fiber_per_100g":             number(unit["fiber"]),
-			"sugar_per_100g":             number(unit["sugar"]),
-			"saturated_fat_per_100g":     number(unit["saturatedFat"]),
-			"cholesterol_mg_per_100g":    number(unit["cholesterolMg"]),
-			"sodium_mg_per_100g":         number(unit["sodiumMg"]),
-			"potassium_mg_per_100g":      number(unit["potassiumMg"]),
-			"calcium_mg_per_100g":        number(unit["calciumMg"]),
-			"iron_mg_per_100g":           number(unit["ironMg"]),
-			"magnesium_mg_per_100g":      number(unit["magnesiumMg"]),
-			"zinc_mg_per_100g":           number(unit["zincMg"]),
-			"vitamin_a_rae_mcg_per_100g": number(unit["vitaminARaeMcg"]),
-			"vitamin_c_mg_per_100g":      number(unit["vitaminCMg"]),
-			"vitamin_d_mcg_per_100g":     number(unit["vitaminDMcg"]),
-			"vitamin_e_mg_per_100g":      number(unit["vitaminEMg"]),
-			"vitamin_k_mcg_per_100g":     number(unit["vitaminKMcg"]),
-			"thiamin_mg_per_100g":        number(unit["thiaminMg"]),
-			"riboflavin_mg_per_100g":     number(unit["riboflavinMg"]),
-			"niacin_mg_per_100g":         number(unit["niacinMg"]),
-			"vitamin_b6_mg_per_100g":     number(unit["vitaminB6Mg"]),
-			"folate_mcg_per_100g":        number(unit["folateMcg"]),
-			"vitamin_b12_mcg_per_100g":   number(unit["vitaminB12Mcg"]),
-			"source":                     source,
-			"is_active":                  false,
-			"quality_tier":               domain.NutritionQualityPlausible,
-			"quality_evidence": datatypes.JSONMap{
-				"method": "runtime_single_model_estimate",
-				"model":  source,
-			},
+		if err != gorm.ErrRecordNotFound {
+			return err
 		}
-		if err := r.db.WithContext(ctx).Model(&domain.FoodNutrition{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
-			return "", err
+		foodID = uuid.NewString()
+		values := nutritionCreateValues(raw, normalized, unit, source)
+		values["id"] = foodID
+		values["is_active"] = false
+		values["quality_tier"] = domain.NutritionQualityPlausible
+		values["quality_evidence"] = datatypes.JSONMap{
+			"method":            "runtime_single_model_estimate",
+			"model":             source,
+			"estimates":         []any{estimate},
+			"estimate_count":    1,
+			"last_estimated_at": now.Format(time.RFC3339),
 		}
-		return existing.ID, nil
-	}
-	if err != gorm.ErrRecordNotFound {
+		return tx.Table((&domain.FoodNutrition{}).TableName()).Create(values).Error
+	})
+	if err != nil {
 		return "", err
 	}
-	id := uuid.NewString()
-	values := nutritionCreateValues(raw, normalized, unit, source)
-	values["id"] = id
-	values["is_active"] = false
-	values["quality_tier"] = domain.NutritionQualityPlausible
-	values["quality_evidence"] = datatypes.JSONMap{
-		"method": "runtime_single_model_estimate",
-		"model":  source,
+	return foodID, nil
+}
+
+// maxAINutritionEstimates bounds the per-row history kept for review.
+const maxAINutritionEstimates = 30
+
+func aiNutritionEstimateEntry(unit map[string]any, source string, at time.Time) map[string]any {
+	return map[string]any{
+		"source":  source,
+		"at":      at.Format(time.RFC3339),
+		"kcal":    number(unit["calories"]),
+		"protein": number(unit["protein"]),
+		"carbs":   number(unit["carbs"]),
+		"fat":     number(unit["fat"]),
+		"fiber":   number(unit["fiber"]),
+		"sugar":   number(unit["sugar"]),
 	}
-	if err := r.db.WithContext(ctx).Table((&domain.FoodNutrition{}).TableName()).Create(values).Error; err != nil {
-		return "", err
+}
+
+// appendAINutritionEstimate returns a copy of the row's evidence with one more
+// estimate. Rows written before the history existed get their stored values
+// seeded as the oldest entry, because those columns hold an earlier estimate.
+func appendAINutritionEstimate(existing domain.FoodNutrition, estimate map[string]any, at time.Time) datatypes.JSONMap {
+	evidence := datatypes.JSONMap{}
+	for key, value := range existing.QualityEvidence {
+		evidence[key] = value
 	}
-	return id, nil
+	previous, _ := evidence["estimates"].([]any)
+	history := make([]any, 0, len(previous)+2)
+	history = append(history, previous...)
+	count := number(evidence["estimate_count"])
+	if len(history) == 0 && count == 0 && existing.KcalPer100g > 0 {
+		history = append(history, map[string]any{
+			"source":  existing.Source,
+			"origin":  "stored_row_before_history",
+			"kcal":    existing.KcalPer100g,
+			"protein": existing.ProteinPer100g,
+			"carbs":   existing.CarbsPer100g,
+			"fat":     existing.FatPer100g,
+			"fiber":   existing.FiberPer100g,
+			"sugar":   existing.SugarPer100g,
+		})
+	}
+	if count < float64(len(history)) {
+		count = float64(len(history))
+	}
+	history = append(history, estimate)
+	if len(history) > maxAINutritionEstimates {
+		history = history[len(history)-maxAINutritionEstimates:]
+	}
+	evidence["estimates"] = history
+	evidence["estimate_count"] = count + 1
+	evidence["last_estimated_at"] = at.Format(time.RFC3339)
+	return evidence
 }
 
 func normalizeAIGeneratedNutritionUnit(unit map[string]any, source string) map[string]any {
@@ -2994,9 +3029,18 @@ func normalizeAIGeneratedNutritionUnit(unit map[string]any, source string) map[s
 }
 
 func nutritionCreateValues(raw, normalized string, unit map[string]any, source string) map[string]any {
+	values := nutritionColumnValues(unit)
+	values["canonical_name"] = raw
+	values["normalized_name"] = normalized
+	values["source"] = source
+	values["is_active"] = true
+	values["quality_tier"] = domain.NutritionQualityUnreviewed
+	values["quality_evidence"] = datatypes.JSONMap{}
+	return values
+}
+
+func nutritionColumnValues(unit map[string]any) map[string]any {
 	return map[string]any{
-		"canonical_name":             raw,
-		"normalized_name":            normalized,
 		"kcal_per_100g":              number(unit["calories"]),
 		"protein_per_100g":           number(unit["protein"]),
 		"carbs_per_100g":             number(unit["carbs"]),
@@ -3022,10 +3066,6 @@ func nutritionCreateValues(raw, normalized string, unit map[string]any, source s
 		"vitamin_b6_mg_per_100g":     number(unit["vitaminB6Mg"]),
 		"folate_mcg_per_100g":        number(unit["folateMcg"]),
 		"vitamin_b12_mcg_per_100g":   number(unit["vitaminB12Mcg"]),
-		"source":                     source,
-		"is_active":                  true,
-		"quality_tier":               domain.NutritionQualityUnreviewed,
-		"quality_evidence":           datatypes.JSONMap{},
 	}
 }
 
@@ -3221,6 +3261,13 @@ func number(value any) float64 {
 		return float64(v)
 	case int32:
 		return float64(v)
+	case json.Number:
+		// datatypes.JSONMap decodes stored jsonb numbers as json.Number.
+		parsed, err := v.Float64()
+		if err != nil {
+			return 0
+		}
+		return parsed
 	default:
 		return 0
 	}

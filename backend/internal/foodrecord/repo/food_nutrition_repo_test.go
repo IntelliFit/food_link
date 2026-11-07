@@ -758,6 +758,217 @@ func TestFoodNutritionRepo_UpsertGeneratedNutritionForcesMacroCalories(t *testin
 	assert.False(t, food.IsActive)
 }
 
+func loadNutritionByName(t *testing.T, db *gorm.DB, name string) domain.FoodNutrition {
+	t.Helper()
+	var food domain.FoodNutrition
+	require.NoError(t, db.Where("normalized_name = ?", normalizeFoodName(name)).First(&food).Error)
+	return food
+}
+
+func nutritionEstimates(t *testing.T, food domain.FoodNutrition) []map[string]any {
+	t.Helper()
+	raw, ok := food.QualityEvidence["estimates"].([]any)
+	require.True(t, ok, "estimates missing: %#v", food.QualityEvidence)
+	out := make([]map[string]any, 0, len(raw))
+	for _, entry := range raw {
+		item, ok := entry.(map[string]any)
+		require.True(t, ok)
+		out = append(out, item)
+	}
+	return out
+}
+
+func TestFoodNutritionRepo_UpsertGeneratedNutritionKeepsFirstValuesAndAppendsHistory(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	firstID, err := repo.UpsertDeepSeekNutrition(ctx, "鸡胸肉", map[string]any{
+		"protein": 24, "carbs": 0, "fat": 3, "fiber": 0,
+	}, "qwen_generated")
+	require.NoError(t, err)
+	created := loadNutritionByName(t, db, "鸡胸肉")
+	assert.Equal(t, 1.0, number(created.QualityEvidence["estimate_count"]))
+	require.Len(t, nutritionEstimates(t, created), 1)
+
+	secondID, err := repo.UpsertDeepSeekNutrition(ctx, "鸡胸肉", map[string]any{
+		"protein": 31, "carbs": 1, "fat": 4, "sugar": 0.5,
+	}, "gemini_generated")
+	require.NoError(t, err)
+	assert.Equal(t, firstID, secondID)
+
+	food := loadNutritionByName(t, db, "鸡胸肉")
+	assert.Equal(t, 123.0, food.KcalPer100g)
+	assert.Equal(t, 24.0, food.ProteinPer100g)
+	assert.Equal(t, 3.0, food.FatPer100g)
+	assert.Equal(t, "qwen_generated", food.Source)
+	assert.False(t, food.IsActive)
+	assert.Equal(t, domain.NutritionQualityPlausible, food.QualityTier)
+	assert.Equal(t, "runtime_single_model_estimate", food.QualityEvidence["method"])
+	assert.Equal(t, 2.0, number(food.QualityEvidence["estimate_count"]))
+	assert.NotEmpty(t, food.QualityEvidence["last_estimated_at"])
+
+	estimates := nutritionEstimates(t, food)
+	require.Len(t, estimates, 2)
+	assert.Equal(t, "qwen_generated", estimates[0]["source"])
+	assert.Equal(t, 123.0, number(estimates[0]["kcal"]))
+	assert.Equal(t, "gemini_generated", estimates[1]["source"])
+	assert.Equal(t, 164.0, number(estimates[1]["kcal"]))
+	assert.Equal(t, 31.0, number(estimates[1]["protein"]))
+	assert.Equal(t, 0.5, number(estimates[1]["sugar"]))
+	assert.NotEmpty(t, estimates[1]["at"])
+}
+
+func TestFoodNutritionRepo_UpsertGeneratedNutritionPreservesReviewDecision(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name   string
+		tier   string
+		action string
+	}{
+		{name: "清炒绿豆芽", tier: domain.NutritionQualityRejected, action: "reject_invalid"},
+		{name: "葱爆肉片", tier: domain.NutritionQualityPlausible, action: "hold_ambiguous"},
+	} {
+		require.NoError(t, db.Create(&domain.FoodNutrition{
+			ID:             "held-" + tc.action,
+			CanonicalName:  tc.name,
+			NormalizedName: normalizeFoodName(tc.name),
+			KcalPer100g:    74,
+			ProteinPer100g: 2,
+			CarbsPer100g:   6,
+			FatPer100g:     4.4,
+			Source:         "qwen_generated",
+			IsActive:       false,
+			QualityTier:    tc.tier,
+			QualityEvidence: map[string]any{
+				"batch_id":        "nutrition-ai-promotion-20260719-v1",
+				"action":          tc.action,
+				"review_evidence": map[string]any{"rule_risks": []any{"kcal_out_of_range"}},
+			},
+		}).Error)
+
+		_, err := repo.UpsertDeepSeekNutrition(ctx, tc.name, map[string]any{
+			"protein": 3, "carbs": 4, "fat": 1,
+		}, "qwen_generated")
+		require.NoError(t, err)
+
+		food := loadNutritionByName(t, db, tc.name)
+		assert.Equal(t, tc.tier, food.QualityTier, tc.name)
+		assert.False(t, food.IsActive, tc.name)
+		assert.Equal(t, 74.0, food.KcalPer100g, tc.name)
+		assert.Equal(t, 4.4, food.FatPer100g, tc.name)
+		assert.Equal(t, "nutrition-ai-promotion-20260719-v1", food.QualityEvidence["batch_id"], tc.name)
+		assert.Equal(t, tc.action, food.QualityEvidence["action"], tc.name)
+		assert.NotNil(t, food.QualityEvidence["review_evidence"], tc.name)
+		assert.Equal(t, 2.0, number(food.QualityEvidence["estimate_count"]), tc.name)
+
+		estimates := nutritionEstimates(t, food)
+		require.Len(t, estimates, 2, tc.name)
+		assert.Equal(t, "stored_row_before_history", estimates[0]["origin"], tc.name)
+		assert.Equal(t, 74.0, number(estimates[0]["kcal"]), tc.name)
+		assert.Equal(t, 37.0, number(estimates[1]["kcal"]), tc.name)
+	}
+}
+
+func TestFoodNutritionRepo_UpsertGeneratedNutritionCapsHistory(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+
+	previous := make([]any, 0, maxAINutritionEstimates)
+	for i := 0; i < maxAINutritionEstimates; i++ {
+		previous = append(previous, map[string]any{"source": "qwen_generated", "kcal": float64(100 + i)})
+	}
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:              "capped",
+		CanonicalName:   "炒包菜",
+		NormalizedName:  normalizeFoodName("炒包菜"),
+		KcalPer100g:     60,
+		ProteinPer100g:  1.5,
+		CarbsPer100g:    6,
+		FatPer100g:      3.3,
+		Source:          "qwen_generated",
+		QualityTier:     domain.NutritionQualityPlausible,
+		QualityEvidence: map[string]any{"estimates": previous, "estimate_count": 45},
+	}).Error)
+
+	_, err := repo.UpsertDeepSeekNutrition(context.Background(), "炒包菜", map[string]any{
+		"protein": 2, "carbs": 7, "fat": 4,
+	}, "qwen_generated")
+	require.NoError(t, err)
+
+	food := loadNutritionByName(t, db, "炒包菜")
+	estimates := nutritionEstimates(t, food)
+	require.Len(t, estimates, maxAINutritionEstimates)
+	assert.Equal(t, 101.0, number(estimates[0]["kcal"]))
+	assert.Equal(t, 72.0, number(estimates[len(estimates)-1]["kcal"]))
+	assert.Equal(t, 46.0, number(food.QualityEvidence["estimate_count"]))
+	assert.Equal(t, 60.0, food.KcalPer100g)
+}
+
+func TestFoodNutritionRepo_UpsertGeneratedNutritionRepairsZeroCalorieRow(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:              "zero-row",
+		CanonicalName:   "卤鸡腿",
+		NormalizedName:  normalizeFoodName("卤鸡腿"),
+		Source:          "qwen_generated",
+		QualityTier:     domain.NutritionQualityPlausible,
+		QualityEvidence: map[string]any{"batch_id": "nutrition-ai-promotion-20260719-v1", "action": "hold_ambiguous"},
+	}).Error)
+
+	_, err := repo.UpsertDeepSeekNutrition(context.Background(), "卤鸡腿", map[string]any{
+		"protein": 10, "carbs": 20, "fat": 5, "fiber": 1, "sodiumMg": 400,
+	}, "gemini_generated")
+	require.NoError(t, err)
+
+	food := loadNutritionByName(t, db, "卤鸡腿")
+	assert.Equal(t, 165.0, food.KcalPer100g)
+	assert.Equal(t, 10.0, food.ProteinPer100g)
+	assert.Equal(t, 1.0, food.FiberPer100g)
+	assert.Equal(t, 400.0, food.SodiumMgPer100g)
+	assert.Equal(t, "qwen_generated", food.Source)
+	assert.False(t, food.IsActive)
+	assert.Equal(t, domain.NutritionQualityPlausible, food.QualityTier)
+	assert.Equal(t, "hold_ambiguous", food.QualityEvidence["action"])
+	assert.Equal(t, 1.0, number(food.QualityEvidence["estimate_count"]))
+	require.Len(t, nutritionEstimates(t, food), 1)
+}
+
+func TestFoodNutritionRepo_UpsertGeneratedNutritionLeavesTrustedRowsUntouched(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+
+	for _, row := range []domain.FoodNutrition{
+		{ID: "curated-rice", CanonicalName: "白米饭", Source: "项目内置初始营养数据", QualityTier: domain.NutritionQualityLegacyCurated},
+		{ID: "reviewed-rice", CanonicalName: "米饭", Source: "AI估算（DeepSeek）", QualityTier: domain.NutritionQualityReviewedEstimate},
+	} {
+		row.NormalizedName = normalizeFoodName(row.CanonicalName)
+		row.KcalPer100g = 116
+		row.CarbsPer100g = 25.9
+		row.IsActive = true
+		row.QualityEvidence = map[string]any{"approval_source": "admin_create"}
+		require.NoError(t, db.Create(&row).Error)
+
+		id, err := repo.UpsertDeepSeekNutrition(context.Background(), row.CanonicalName, map[string]any{
+			"protein": 3, "carbs": 30, "fat": 1,
+		}, "qwen_generated")
+		require.NoError(t, err)
+		assert.Equal(t, row.ID, id)
+
+		food := loadNutritionByName(t, db, row.CanonicalName)
+		assert.Equal(t, 116.0, food.KcalPer100g, row.CanonicalName)
+		assert.Equal(t, row.Source, food.Source, row.CanonicalName)
+		assert.True(t, food.IsActive, row.CanonicalName)
+		assert.Equal(t, row.QualityTier, food.QualityTier, row.CanonicalName)
+		assert.Equal(t, map[string]any{"approval_source": "admin_create"}, map[string]any(food.QualityEvidence), row.CanonicalName)
+	}
+}
+
 func TestFoodNutritionRepo_ResolveFoodNeverPromotesFuzzyCandidate(t *testing.T) {
 	db := setupFoodNutritionFullTestDB(t)
 	repo := NewFoodNutritionRepo(db)
