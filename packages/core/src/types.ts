@@ -1098,6 +1098,25 @@ export interface StatsSummary {
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
 export type CommunityAuthorScope = 'all' | 'priority' | 'public'
 export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food' | 'circle_post'
+
+export interface OwnCommentHistoryItem {
+  id: string
+  content: string
+  created_at: string | null
+  parent_comment_id?: string
+  target_type: string
+  target_id: string
+  target_available: boolean
+  target_preview?: string
+}
+
+export interface StatsCalendarMonth {
+  month: string
+  start_date: string
+  end_date: string
+  tdee: number
+  days: Array<{ date: string; calories: number; has_record: boolean }>
+}
 export type CommunityFeedContentType = 'all' | CommunityFeedTargetType
 
 export interface CommunityFeedQueryParams {
@@ -1669,10 +1688,15 @@ export interface SleepRecord {
 export type SleepRecordInput = Pick<SleepRecord, 'bedtime' | 'wake_time' | 'quality' | 'note'>
 
 export interface ReminderPreferences {
+	/** Server-managed; other clients must not alter device routing. */
+	local_meal_devices?: string[]
   enabled: boolean
   meal_enabled: boolean
   log_enabled: boolean
   expiry_enabled: boolean
+  /** Optional for old clients; new event reminders require explicit opt-in. */
+  private_message_enabled?: boolean
+  analysis_completed_enabled?: boolean
   breakfast_time: string
   lunch_time: string
   dinner_time: string
@@ -1684,6 +1708,11 @@ export interface ReminderPreferences {
 }
 
 export interface ReminderSettings {
+  event_notifications_supported?: boolean
+	/** Only enable local meals after the server acknowledges device routing. */
+	local_meal_supported?: boolean
+  /** Absent on legacy servers; clients then retain Expo registration. */
+  push_providers?: Array<'expo' | 'honor'>
   preferences: ReminderPreferences
   push_available: boolean
 }

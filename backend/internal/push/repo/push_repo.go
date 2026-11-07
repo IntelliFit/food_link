@@ -57,6 +57,7 @@ func (r *Repository) SavePreferences(ctx context.Context, userID string, p domai
 		}
 		// Legacy clients cannot erase routing, and body-supplied IDs are untrusted.
 		p.LocalMealDevices = preferences(old).Preferences.LocalMealDevices
+		p.MergeEventPreferences(preferences(old).Preferences, time.Now().UTC())
 		if len(localDevice) == 1 && !p.MealsAreLocal(localDevice[0]) {
 			if len(p.LocalMealDevices) >= 32 {
 				return errors.New("本地提醒设备数量超限")
@@ -90,7 +91,7 @@ func (r *Repository) ListPreferences(ctx context.Context, after string) ([]Setti
 
 func (r *Repository) Register(ctx context.Context, row migrationdo.PushDeviceDO) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Serialize renewals of the same Expo token across app instances.
+		// Serialize renewals of the same token across app instances.
 		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", row.Token).Error; err != nil {
 			return err
 		}
@@ -100,7 +101,7 @@ func (r *Repository) Register(ctx context.Context, row migrationdo.PushDeviceDO)
 		if err := tx.Model(&migrationdo.PushDeviceDO{}).Where("token = ? AND id <> ?", row.Token, row.ID).Updates(map[string]any{"active": false, "updated_at": row.UpdatedAt}).Error; err != nil {
 			return err
 		}
-		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}}, DoUpdates: clause.AssignmentColumns([]string{"user_id", "token", "project_id", "platform", "active", "last_seen_at", "updated_at"})}).Create(&row).Error; err != nil {
+		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}}, DoUpdates: clause.AssignmentColumns([]string{"user_id", "token", "provider", "project_id", "platform", "protocol_version", "active", "last_seen_at", "updated_at"})}).Create(&row).Error; err != nil {
 			return err
 		}
 		// Keep at most five active installations per account.
@@ -177,6 +178,9 @@ func (r *Repository) Claim(ctx context.Context, now time.Time, receipt bool) (*m
 			status = "receipt_processing"
 		} else {
 			q = q.Where("(status = 'pending' AND not_before <= ?) OR (status = 'processing' AND lease_until <= ?)", now, now)
+			// Preserve the short-lived scheduled reminders when business events
+			// burst. Only eligible rows are sorted; future timers never block events.
+			q = q.Order("CASE WHEN kind IN ('meal','log','expiry') THEN 0 ELSE 1 END, expires_at")
 		}
 		err := q.Order("not_before, id").First(&row).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {

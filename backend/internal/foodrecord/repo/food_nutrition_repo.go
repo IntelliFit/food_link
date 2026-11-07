@@ -1025,6 +1025,55 @@ func (r *FoodNutritionRepo) PatchPackagedFood(ctx context.Context, foodID string
 	return &updated, nil
 }
 
+// CapturePackagedFoodIfAbsent adds a product read from a meal photo unless the
+// library already knows it: a row with the same product key, or the same
+// brand and product family, in any review status, is never touched. It reports
+// whether a row was created.
+func (r *FoodNutritionRepo) CapturePackagedFoodIfAbsent(ctx context.Context, input PackagedFoodInput) (bool, error) {
+	fields := normalizePackagedProductFields(PackagedProductNormalizeInput{
+		Brand: input.Brand, ProductName: strings.TrimSpace(input.ProductName), FlavorText: input.FlavorText,
+		SpecText: input.SpecText, NetWeightG: input.NetWeightG, NetContentValue: input.NetContentValue,
+		NetContentUnit: input.NetContentUnit, UnitCount: input.UnitCount, ReviewStatus: input.ReviewStatus,
+	})
+	if strings.TrimSpace(input.Brand) == "" || fields.ProductKey == "" || fields.ProductFamilyKey == "" {
+		return false, nil
+	}
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&domain.PackagedFood{}).
+		Where("product_key = ? OR product_family_key = ? OR normalized_name = ?", fields.ProductKey, fields.ProductFamilyKey, fields.ProductFamilyKey).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return false, nil
+	}
+	_, action, err := r.UpsertPackagedFoodWithAction(ctx, input)
+	if err != nil {
+		return false, err
+	}
+	return action == "created", nil
+}
+
+// SearchPackagedFoodByBrand returns active packaged rows of one brand, exact
+// brand rows first. Photo matching filters them by product kind and name.
+func (r *FoodNutritionRepo) SearchPackagedFoodByBrand(ctx context.Context, brand string, limit int) ([]domain.PackagedFood, error) {
+	brand = strings.ToLower(strings.TrimSpace(brand))
+	if runeCount(brand) < 2 {
+		return []domain.PackagedFood{}, nil
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	pattern := "%" + brand + "%"
+	var foods []domain.PackagedFood
+	err := activePackagedFoodScope(r.db.WithContext(ctx)).
+		Where("is_active = ? AND (LOWER(COALESCE(brand, '')) LIKE ? OR LOWER(COALESCE(display_name, '')) LIKE ? OR LOWER(product_name) LIKE ?)", true, pattern, pattern, pattern).
+		Order(gorm.Expr("CASE WHEN LOWER(COALESCE(brand, '')) = ? THEN 0 ELSE 1 END, updated_at DESC", brand)).
+		Limit(limit).
+		Find(&foods).Error
+	return foods, err
+}
+
 func (r *FoodNutritionRepo) SearchPackagedFood(ctx context.Context, query string, limit int) ([]domain.PackagedFood, error) {
 	if limit <= 0 {
 		limit = 5

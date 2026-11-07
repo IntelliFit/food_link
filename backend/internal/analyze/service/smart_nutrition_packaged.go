@@ -13,17 +13,23 @@ import (
 
 const (
 	smartPackagedSearchLimit      = 40
+	smartPackagedBrandSearchLimit = 600
 	smartPackagedNameMatchScore   = 0.6
 	smartPackagedNameMargin       = 0.15
 	smartPackagedFamilyKcalSpread = 0.12
+	// A product whose label energy is this far from the photo estimate is a
+	// different form of the food: dry noodles for a cooked bowl, coffee powder
+	// for the drink, regular cola for the sugar-free can.
+	smartPackagedMaxDensityRatio = 2.5
+	smartPackagedDensityFloor    = 5.0
 )
 
 // smartPackagedHeadNouns are product kinds. A candidate must share the kind
 // with the item, so "乐事薯片" can never resolve to a 乐事 drink.
 var smartPackagedHeadNouns = []string{
 	"薯片", "薯条", "巧克力", "饼干", "曲奇", "威化", "蛋卷", "薄饼", "面包", "吐司", "蛋糕", "蛋黄派", "派",
-	"牛奶", "酸奶", "乳酸菌", "豆奶", "豆浆", "奶茶", "咖啡", "可乐", "雪碧", "汽水", "果汁", "茶", "饮料", "矿泉水", "苏打水",
-	"辣条", "面筋", "魔芋爽", "海带", "方便面", "泡面", "拉面", "粉丝", "米粉", "火腿肠", "香肠", "肠",
+	"牛奶", "酸奶", "酸牛奶", "发酵乳", "酸乳", "牛奶糖", "奶糖", "奶片", "奶粉", "乳酸菌", "豆奶", "豆浆", "奶茶", "咖啡", "可乐", "雪碧", "汽水", "果汁", "茶", "饮料", "矿泉水", "苏打水",
+	"辣条", "面筋", "魔芋爽", "海带", "方便面", "泡面", "拉面", "面", "粉丝", "米粉", "火腿肠", "香肠", "肠",
 	"牛肉干", "鸭脖", "鸡爪", "凤爪", "鸭翅", "豆干", "果冻", "糖果", "软糖", "硬糖", "口香糖", "坚果", "瓜子", "花生",
 	"麦片", "燕麦", "谷物", "能量棒", "蛋白棒", "饭团", "三明治", "汉堡", "冰淇淋", "雪糕",
 }
@@ -45,6 +51,12 @@ func (s *AnalyzeService) resolveSmartPackaged(ctx context.Context, item map[stri
 	food, method, reason := s.matchSmartPackaged(ctx, item)
 	if food == nil {
 		return nil, reason
+	}
+	if !smartPackagedDensityPlausible(item, food.KcalPer100g) {
+		return nil, "packaged_density_mismatch"
+	}
+	if !smartPackagedQualifiersAgree(item, food) {
+		return nil, "packaged_qualifier_mismatch"
 	}
 	next := applySmartLibraryNutrition(item, packagedNutritionUnit(food), nutritionWeightFromItem(item))
 	next["type"] = "snack"
@@ -89,7 +101,7 @@ func (s *AnalyzeService) matchSmartPackaged(ctx context.Context, item map[string
 	if brand == "" {
 		return nil, "", "packaged_without_brand"
 	}
-	candidates, err := s.nutrition.SearchPackagedFood(ctx, strings.TrimSpace(brand+" "+product), smartPackagedSearchLimit)
+	candidates, err := s.searchSmartPackagedCandidates(ctx, brand, product)
 	if err != nil {
 		return nil, "", "lookup_error"
 	}
@@ -98,6 +110,23 @@ func (s *AnalyzeService) matchSmartPackaged(ctx context.Context, item map[string
 		return nil, "", method
 	}
 	return food, method, ""
+}
+
+// packagedBrandSearcher returns active rows of one brand. With the large
+// third-party catalogue a general search caps out on generic words (牛奶,
+// 饼干) before it reaches the brand's own rows.
+type packagedBrandSearcher interface {
+	SearchPackagedFoodByBrand(ctx context.Context, brand string, limit int) ([]foodrecorddomain.PackagedFood, error)
+}
+
+func (s *AnalyzeService) searchSmartPackagedCandidates(ctx context.Context, brand, product string) ([]foodrecorddomain.PackagedFood, error) {
+	if searcher, ok := s.nutrition.(packagedBrandSearcher); ok {
+		rows, err := searcher.SearchPackagedFoodByBrand(ctx, brand, smartPackagedBrandSearchLimit)
+		if err == nil && len(rows) > 0 {
+			return rows, nil
+		}
+	}
+	return s.nutrition.SearchPackagedFood(ctx, strings.TrimSpace(brand+" "+product), smartPackagedSearchLimit)
 }
 
 // smartPickPackagedCandidate accepts a same-brand, same-kind candidate whose
@@ -121,7 +150,7 @@ func smartPickPackagedCandidate(brand, product, flavor string, candidates []food
 		if brandKey == "" || !strings.Contains(text, brandKey) {
 			continue
 		}
-		if head != "" && !strings.Contains(text, head) {
+		if head != "" && !smartPackagedHeadIn(text, head) {
 			continue
 		}
 		name := smartTextKey(strings.ReplaceAll(food.ProductName+flavorText, food.Brand, ""))
@@ -182,6 +211,33 @@ func smartConsistentPackagedChoice(rows []foodrecorddomain.PackagedFood) *foodre
 	return &closest
 }
 
+// smartPackagedQualifiers change the nutrition of the same product line.
+var smartPackagedQualifiers = [][]string{{"脱脂"}, {"低脂"}, {"无糖", "零糖", "0糖", "零度", "zero", "0蔗糖", "零蔗糖", "无蔗糖"}, {"低糖", "减糖"}, {"酸奶", "酸牛奶", "发酵乳", "酸乳"}}
+
+// smartPackagedQualifiersAgree rejects 纯牛奶 resolving to 脱脂纯牛奶 (or the
+// reverse) through a shared alias: one side names a qualifier the other lacks.
+func smartPackagedQualifiersAgree(item map[string]any, food *foodrecorddomain.PackagedFood) bool {
+	itemText := strings.ToLower(stringFromAny(item["name"]) + smartPackagedField(item, "productName", "product_name") + smartPackagedField(item, "flavorText", "flavor_text"))
+	foodText := strings.ToLower(food.ProductName + food.DisplayName + derefString(food.FlavorText))
+	for _, group := range smartPackagedQualifiers {
+		if containsAnyAnalyzeText(itemText, group) != containsAnyAnalyzeText(foodText, group) {
+			return false
+		}
+	}
+	return true
+}
+
+func smartPackagedDensityPlausible(item map[string]any, libraryKcalPer100g float64) bool {
+	weight := nutritionWeightFromItem(item)
+	modelKcal := numberFromAny(mapFromAny(item["nutrients"])["calories"])
+	if weight <= 0 || modelKcal <= 0 {
+		return true
+	}
+	model := modelKcal * 100 / weight
+	high, low := math.Max(model, libraryKcalPer100g), math.Min(model, libraryKcalPer100g)
+	return high/math.Max(low, smartPackagedDensityFloor) <= smartPackagedMaxDensityRatio
+}
+
 // smartPackagedBrandConsistent rejects a resolved row that carries another
 // brand than the one read from the package.
 func smartPackagedBrandConsistent(brand string, food *foodrecorddomain.PackagedFood) bool {
@@ -201,15 +257,37 @@ func smartLooksBranded(displayName string) bool {
 	return len(strings.Fields(displayName)) >= 2
 }
 
+// smartPackagedHead returns the product kind: a Chinese name ends with its
+// head noun, so the noun that ends last wins ("巧克力味派" is a 派, not a
+// 巧克力), and the longer noun wins a tie ("风味酸牛奶" is a 酸牛奶).
 func smartPackagedHead(product string) string {
 	key := smartTextKey(product)
-	best := ""
+	best, bestEnd := "", -1
 	for _, noun := range smartPackagedHeadNouns {
-		if strings.Contains(key, noun) && len(noun) > len(best) {
-			best = noun
+		index := strings.LastIndex(key, noun)
+		if index < 0 {
+			continue
+		}
+		end := index + len(noun)
+		if end > bestEnd || (end == bestEnd && len(noun) > len(best)) {
+			best, bestEnd = noun, end
 		}
 	}
 	return best
+}
+
+// smartPackagedHeadSynonyms lists spellings of the same product kind.
+var smartPackagedHeadSynonyms = map[string][]string{
+	"酸奶": {"酸奶", "酸牛奶", "发酵乳", "酸乳"}, "酸牛奶": {"酸奶", "酸牛奶", "发酵乳", "酸乳"},
+	"发酵乳": {"酸奶", "酸牛奶", "发酵乳", "酸乳"}, "酸乳": {"酸奶", "酸牛奶", "发酵乳", "酸乳"},
+	"方便面": {"方便面", "泡面"}, "泡面": {"方便面", "泡面"}, "奶糖": {"奶糖", "牛奶糖"}, "牛奶糖": {"奶糖", "牛奶糖"},
+}
+
+func smartPackagedHeadIn(text, head string) bool {
+	if synonyms, ok := smartPackagedHeadSynonyms[head]; ok {
+		return containsAnyAnalyzeText(text, synonyms)
+	}
+	return strings.Contains(text, head)
 }
 
 // smartTextKey lowercases and keeps only letters and digits, so "乐事（Lay's）"

@@ -312,6 +312,18 @@ func (r *visionChannelRouter) recentlyHealthy(key string, now time.Time) bool {
 	return total < balancedHealthMinSamples || float64(failed)/float64(total) <= balancedUnhealthyFailureRate
 }
 
+// balancedHedgeDelayFor applies the configured ordinary-photo delay. On the 33
+// weighed photos (2026-11-07) Gemini 3.6 on A6 answered in 7.1 s p50 against
+// 18.8 s on OpenLux but missed the weight by 28% median against 19% (biased
+// x1.21 against x0.97), with or without a high thinking level; a longer wait
+// keeps more results on OpenLux at the cost of slower answers.
+func (s *AnalyzeService) balancedHedgeDelayFor(key string, fallback time.Duration, precision, image bool, now time.Time) time.Duration {
+	if seconds := s.visionChannels.config.OrdinaryHedgeSeconds; seconds > 0 && image && !precision {
+		return time.Duration(seconds) * time.Second
+	}
+	return s.visionChannels.balancedHedgeDelay(key, fallback, now)
+}
+
 // balancedHedgeDelay uses the channel's own recent p75 once enough valid samples
 // exist, bounded so a slow period cannot push the hedge out indefinitely.
 func (r *visionChannelRouter) balancedHedgeDelay(key string, fallback time.Duration, now time.Time) time.Duration {
@@ -418,7 +430,7 @@ func (s *AnalyzeService) runBalancedGeminiChannels(ctx context.Context, stage, p
 			go func() {
 				results <- s.callBalancedVisionChannel(hedgeCtx, req, stage, p, key, wait, prompt, imageURLs, temperature, validate, payloadCheck)
 			}()
-			resetTimer(timer, r.balancedHedgeDelay(key, fallbackDelay, time.Now()))
+			resetTimer(timer, s.balancedHedgeDelayFor(key, fallbackDelay, precision, image, time.Now()))
 			return true
 		}
 		return false

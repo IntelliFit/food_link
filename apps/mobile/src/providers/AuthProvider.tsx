@@ -1,9 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 import { AppState } from 'react-native'
 import * as Notifications from 'expo-notifications'
-import { apiClient, hasStoredToken } from '../api'
+import { apiClient, getStoredUserId, hasStoredToken, subscribeFoodRecordChanges } from '../api'
+import { syncNotificationDiagnosticOwner } from '../diagnostics/notificationDiagnostics'
+import { syncLocalMealSession } from '../native/localMeals'
+import { addHonorPushTokenListener } from '../native/honorPush'
 import { authorizeWithWechat, isNativeWechatAuthAvailable } from '../native/wechatAuth'
-import { refreshReminderDevice, revokeReminderDevice, setReminderSessionActive } from '../utils/businessNotifications'
+import { refreshReminderDevice, refreshLocalMealRecords, revokeReminderDevice, setReminderSessionActive } from '../utils/businessNotifications'
 
 const DEFAULT_DEBUG_OPENID = 'mobile-poc-debug-openid'
 const DEFAULT_APP_WECHAT_DEV_CODE = process.env.EXPO_PUBLIC_APP_WECHAT_DEV_CODE || 'expo-go-dev-wechat-code'
@@ -34,16 +37,31 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   useEffect(() => {
+    if (isBootstrapping) return undefined
+    let active = true
+    void (async () => {
+      const owner = isAuthenticated ? await getStoredUserId() : null
+      if (active) await syncNotificationDiagnosticOwner(owner)
+      if (active) await syncLocalMealSession(owner)
+    })().catch(() => undefined)
+    return () => { active = false }
+  }, [isAuthenticated, isBootstrapping])
+
+  useEffect(() => {
     setReminderSessionActive(isAuthenticated)
     if (!isAuthenticated) return undefined
     const refresh = () => { void refreshReminderDevice().catch(() => undefined) }
     refresh()
     const foreground = AppState.addEventListener('change', (state) => { if (state === 'active') refresh() })
     const tokenChange = Notifications.addPushTokenListener(refresh)
+    const honorTokenChange = addHonorPushTokenListener(refresh)
+    const recordsChange = subscribeFoodRecordChanges(() => { void refreshLocalMealRecords().catch(() => undefined) })
     return () => {
       setReminderSessionActive(false)
       foreground.remove()
       tokenChange.remove()
+      honorTokenChange.remove()
+      recordsChange()
     }
   }, [isAuthenticated])
 

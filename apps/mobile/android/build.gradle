@@ -26,4 +26,14 @@ allprojects {
 }
 
 apply plugin: "expo-root-project"
+
+// FOODLINK_HONOR_REPOSITORY: keep vendor artifacts separate from other groups.
+allprojects {
+  repositories {
+    maven {
+      url 'https://developer.hihonor.com/repo'
+      content { includeGroupByRegex 'com\\.hihonor.*' }
+    }
+  }
+}
 apply plugin: "com.facebook.react.rootproject"

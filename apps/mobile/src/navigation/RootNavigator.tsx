@@ -29,11 +29,16 @@ import { StandardFoodContributionScreen } from '../screens/StandardFoodContribut
 import { FoodContributionScreen } from '../screens/FoodContributionScreen'
 import { RecordSettingsScreen } from '../screens/RecordSettingsScreen'
 import { ReminderSettingsScreen } from '../screens/ReminderSettingsScreen'
+import { NotificationDiagnosticsScreen } from '../screens/NotificationDiagnosticsScreen'
+import { getStoredUserId } from '../api'
+import { LOCAL_CHECK_SOURCE, observeNotification } from '../diagnostics/notificationDiagnostics'
 import { MealSuggestionsScreen } from '../screens/MealSuggestionsScreen'
 import { CampusDiningSettingsScreen } from '../screens/CampusDiningSettingsScreen'
 import { SleepRecordScreen } from '../screens/SleepRecordScreen'
+import { MyCommentsScreen } from '../screens/MyCommentsScreen'
+import { WeeklyRecapScreen } from '../screens/WeeklyRecapScreen'
 import * as Notifications from 'expo-notifications'
-import { reminderDestination } from '../utils/businessNotifications'
+import { reminderDestination, reminderDataDestination } from '../utils/businessNotifications'
 import { PackagedFoodCorrectionScreen } from '../screens/PackagedFoodCorrectionScreen'
 import {
   AboutScreen,
@@ -131,33 +136,84 @@ export function RootNavigator() {
   const pendingStaticRouteRef = useRef<StaticDeepLinkRoute | null>(null)
   const pendingRecordIdRef = useRef<string | null>(null)
   const pendingNotificationRef = useRef<Notifications.NotificationResponse | null>(null)
+  const pendingBusinessUrlRef = useRef<string | null>(null)
+  const handledBusinessUrlRef = useRef<string | null>(null)
   const handledNotificationRef = useRef<string | null>(null)
+  const pendingLocalMealUrlRef = useRef<string | null>(null)
+  const handledLocalMealUrlRef = useRef<string | null>(null)
   const flushNotificationRef = useRef<() => void>(() => undefined)
 
   useEffect(() => {
     let active = true
+    const handleBusinessUrl = async (url: string | null) => {
+      if (!url || !url.startsWith('foodlink://business-notification?') || handledBusinessUrlRef.current === url) return
+      if (!navigationRef.isReady() || !isAuthenticated) { pendingBusinessUrlRef.current = url; return }
+      const data = Object.fromEntries(new URL(url).searchParams.entries())
+      const destination = await reminderDataDestination(data)
+      const currentOwner = await getStoredUserId()
+      if (!active || !navigationRef.isReady() || data.user_id !== currentOwner) return
+      pendingBusinessUrlRef.current = null
+      handledBusinessUrlRef.current = url
+      if (destination?.route === 'PrivateChat') navigationRef.navigate('PrivateChat', { userId: destination.userId })
+      else if (destination?.route === 'AnalyzeHistory') navigationRef.navigate('AnalyzeHistory')
+    }
+    const handleLocalMealUrl = async (url: string | null) => {
+      if (!url || !url.startsWith('foodlink://local-meal/') || handledLocalMealUrlRef.current === url) return
+      const parsed = new URL(url)
+      const meal = parsed.pathname.slice(1)
+      if (!['breakfast', 'lunch', 'dinner'].includes(meal)) return
+      if (!navigationRef.isReady() || !isAuthenticated) { pendingLocalMealUrlRef.current = url; return }
+      if (parsed.searchParams.get('owner') !== await getStoredUserId() || !active) { pendingLocalMealUrlRef.current = null; return }
+      handledLocalMealUrlRef.current = url
+      pendingLocalMealUrlRef.current = null
+      navigationRef.navigate('MealSuggestions', { mealType: meal as 'breakfast' | 'lunch' | 'dinner' })
+    }
     const handle = async (response: Notifications.NotificationResponse) => {
       const id = response.notification.request.identifier
       if (handledNotificationRef.current === id) return
-      if (!navigationRef.isReady()) { pendingNotificationRef.current = response; return }
+      if (!navigationRef.isReady() || !isAuthenticated) { pendingNotificationRef.current = response; return }
+      if (response.notification.request.content.data?.source === LOCAL_CHECK_SOURCE) {
+        if (response.notification.request.content.data.user_id !== (await getStoredUserId() ?? '') || !active) return
+        handledNotificationRef.current = id
+        pendingNotificationRef.current = null
+        void observeNotification(response.notification, 'local_opened').catch(() => undefined)
+        navigationRef.navigate('NotificationDiagnostics')
+        Notifications.clearLastNotificationResponse()
+        return
+      }
       const destination = await reminderDestination(response)
-      if (!active || !isAuthenticated || !navigationRef.isReady()) return
+      const currentOwner = await getStoredUserId()
+      if (!active || !isAuthenticated || !navigationRef.isReady() || response.notification.request.content.data?.user_id !== currentOwner) return
+      void observeNotification(response.notification, 'opened').catch(() => undefined)
       handledNotificationRef.current = id
       pendingNotificationRef.current = null
       if (!destination) return
       if (destination.route === 'MealSuggestions') navigationRef.navigate('MealSuggestions', { mealType: destination.mealType })
       else if (destination.route === 'DayRecord') navigationRef.navigate('DayRecord', { date: destination.date })
+      else if (destination.route === 'PrivateChat') navigationRef.navigate('PrivateChat', { userId: destination.userId })
+      else if (destination.route === 'AnalyzeHistory') navigationRef.navigate('AnalyzeHistory')
       else navigationRef.navigate('Expiry')
       Notifications.clearLastNotificationResponse()
     }
     flushNotificationRef.current = () => {
+      if (pendingBusinessUrlRef.current) void handleBusinessUrl(pendingBusinessUrlRef.current).catch(() => undefined)
+      if (pendingLocalMealUrlRef.current) void handleLocalMealUrl(pendingLocalMealUrlRef.current).catch(() => undefined)
       const pending = pendingNotificationRef.current
       if (pending) void handle(pending).catch(() => undefined)
     }
     const listener = Notifications.addNotificationResponseReceivedListener((response) => { void handle(response).catch(() => undefined) })
     const previous = Notifications.getLastNotificationResponse()
     if (previous) void handle(previous).catch(() => undefined)
-    return () => { active = false; listener.remove() }
+    const localLink = Linking.addEventListener('url', ({ url }) => {
+      void handleLocalMealUrl(url).catch(() => undefined)
+      void handleBusinessUrl(url).catch(() => undefined)
+    })
+    void Linking.getInitialURL().then(handleLocalMealUrl).catch(() => undefined)
+    void Linking.getInitialURL().then(handleBusinessUrl).catch(() => undefined)
+    if (pendingBusinessUrlRef.current) void handleBusinessUrl(pendingBusinessUrlRef.current).catch(() => undefined)
+    if (pendingNotificationRef.current) void handle(pendingNotificationRef.current).catch(() => undefined)
+    if (pendingLocalMealUrlRef.current) void handleLocalMealUrl(pendingLocalMealUrlRef.current).catch(() => undefined)
+    return () => { active = false; listener.remove(); localLink.remove() }
   }, [isAuthenticated])
 
   useEffect(() => {
@@ -334,9 +390,12 @@ export function RootNavigator() {
         }}
       >
         <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+        <Stack.Screen name='NotificationDiagnostics' component={NotificationDiagnosticsScreen} options={{ title: '通知自检与诊断' }} />
         {isAuthenticated ? (
           <>
             <Stack.Screen name="ReminderSettings" component={ReminderSettingsScreen} options={{ title: '消息提醒' }} />
+            <Stack.Screen name="MyComments" component={MyCommentsScreen} options={{ title: '我的评论' }} />
+            <Stack.Screen name="WeeklyRecap" component={WeeklyRecapScreen} options={{ title: '上周回顾' }} />
             <Stack.Screen name="CampusDiningSettings" component={CampusDiningSettingsScreen} options={{ title: '校园就餐偏好' }} />
             <Stack.Screen name="SleepRecord" component={SleepRecordScreen} options={{ title: '睡眠记录' }} />
             <Stack.Screen name="MealSuggestions" component={MealSuggestionsScreen} options={{ title: '餐食建议' }} />
