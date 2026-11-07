@@ -2,12 +2,14 @@ import { authenticatedRequest, uploadAuthenticatedFile } from './api'
 
 /** 称重科研数据：带食物秤读数的中餐克重样本，用于建立评测集。 */
 export type ResearchScene = 'canteen' | 'home' | 'takeout' | 'restaurant' | 'other'
-export type ResearchWeighingMode = 'whole' | 'itemized'
+export type ResearchWeighingMode = 'whole' | 'itemized' | 'multi'
 export type ResearchContainer = 'bowl' | 'plate' | 'tray' | 'box' | 'other'
-export type ResearchTareMode = 'measured' | 'zeroed'
+/** 一个容器的空重从哪来：先称、归零、吃完再称、常用容器。 */
+export type ResearchTareSource = 'measured' | 'zeroed' | 'after_meal' | 'library'
+export type ResearchTareMode = ResearchTareSource | 'per_container'
 export type ResearchReference = 'none' | 'chopsticks' | 'spoon' | 'card' | 'hand' | 'other'
 export type ResearchPhotoRole =
-  | 'tare_scale' | 'gross_scale' | 'item_scale'
+  | 'tare_scale' | 'gross_scale' | 'item_scale' | 'container_gross' | 'container_tare'
   | 'eval_top' | 'eval_angle' | 'eval_top_ref' | 'eval_angle_ref'
 export type ResearchSampleStatus = 'pending' | 'approved' | 'rejected'
 
@@ -17,6 +19,12 @@ export interface ResearchItemPayload {
   contains_bone: boolean
   contains_soup: boolean
   cooking_method?: string
+  /** 按盒称：这一盒自己的连盒读数和皮重。 */
+  gross_reading_grams?: number
+  tare_source?: ResearchTareSource
+  tare_grams?: number
+  container_id?: string
+  container_type?: ResearchContainer
 }
 
 export interface ResearchPhotoPayload {
@@ -25,6 +33,19 @@ export interface ResearchPhotoPayload {
   item_index?: number
   captured_at?: string
   source?: 'camera' | 'album'
+}
+
+/** 服务端读秤结果：两个模型一致为 agree，只有一个读出为 single。 */
+export type ScaleAgreement = 'agree' | 'single' | 'disagree' | 'unreadable'
+
+export interface ScaleReadingResult {
+  readable: boolean
+  grams?: number
+  raw_value?: string
+  unit?: string
+  resolution_grams?: number
+  agreement: ScaleAgreement
+  message?: string
 }
 
 export interface ResearchSamplePayload {
@@ -37,6 +58,7 @@ export interface ResearchSamplePayload {
   container_type: ResearchContainer
   tare_mode: ResearchTareMode
   tare_grams: number
+  container_id?: string
   gross_reading_grams?: number
   scale_precision_grams: number
   items: ResearchItemPayload[]
@@ -46,6 +68,10 @@ export interface ResearchSamplePayload {
   device: Record<string, string>
   notes: string
   consent_version: string
+  /** 高校共建：称重日、食堂菜品、同一顿的拍照记录，服务端按本人参加的活动校验。 */
+  station_session_id?: string
+  catalog_item_id?: string
+  paired_food_record_id?: string
 }
 
 export interface ResearchSampleItem {
@@ -54,6 +80,9 @@ export interface ResearchSampleItem {
   grams: number
   contains_bone: boolean
   contains_soup: boolean
+  gross_reading_grams?: number
+  tare_grams?: number
+  tare_source?: ResearchTareSource
 }
 
 export interface ResearchSample {
@@ -69,6 +98,8 @@ export interface ResearchSample {
   review_note: string
   reward_credits: number
   created_at?: string
+  review_mode?: 'manual' | 'auto'
+  collection_channel?: string
 }
 
 export interface ResearchSummary {
@@ -84,7 +115,25 @@ export interface ResearchMineResult {
   consent_version: string
 }
 
+/** 称过一次就能反复用的空容器（同款外卖盒、自家的碗）。 */
+export interface SavedResearchContainer {
+  id: string
+  name: string
+  container_type: ResearchContainer
+  grams: number
+  photo_url: string
+  created_at?: string
+}
+
+export interface ResearchContainerInput {
+  name: string
+  container_type: ResearchContainer
+  grams: number
+  photo_url: string
+}
+
 const BASE = '/api/research-weight-samples'
+const CONTAINERS_BASE = '/api/research-weight-containers'
 
 export async function getMyResearchSamples(): Promise<ResearchMineResult> {
   const response = await authenticatedRequest(`${BASE}/mine`, { method: 'GET', timeout: 20000 })
@@ -109,4 +158,26 @@ export async function uploadResearchVideo(localPath: string): Promise<string> {
   const url = String(payload?.video_url || '').trim()
   if (!url) throw new Error('视频上传失败，请重试')
   return url
+}
+
+/** 拍完秤的照片后自动读数；服务端没开自动读数时抛错，页面照常手填。 */
+export async function readScalePhoto(imageUrl: string, precision: number): Promise<ScaleReadingResult> {
+  const response = await authenticatedRequest(`${BASE}/scale-reading`, {
+    method: 'POST', data: { image_url: imageUrl, scale_precision_grams: precision }, timeout: 40000,
+  })
+  return (response.data as { reading: ScaleReadingResult }).reading
+}
+
+export async function listResearchContainers(): Promise<SavedResearchContainer[]> {
+  const response = await authenticatedRequest(CONTAINERS_BASE, { method: 'GET', timeout: 20000 })
+  return ((response.data as { items?: SavedResearchContainer[] }).items) || []
+}
+
+export async function createResearchContainer(input: ResearchContainerInput): Promise<SavedResearchContainer> {
+  const response = await authenticatedRequest(CONTAINERS_BASE, { method: 'POST', data: input, timeout: 20000 })
+  return (response.data as { item: SavedResearchContainer }).item
+}
+
+export async function archiveResearchContainer(id: string): Promise<void> {
+  await authenticatedRequest(`${CONTAINERS_BASE}/${encodeURIComponent(id)}/archive`, { method: 'POST', timeout: 20000 })
 }

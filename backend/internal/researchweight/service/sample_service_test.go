@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,10 +18,19 @@ import (
 )
 
 type fakeRepo struct {
-	samples  map[string]*domain.Sample
-	count    int64
-	labeled  []*do.FoodWeightLabeledSampleDO
-	rewarded []string
+	samples    map[string]*domain.Sample
+	count      int64
+	labeled    []*do.FoodWeightLabeledSampleDO
+	rewarded   []string
+	containers []domain.Container
+	// photo checks and auto review counters
+	checks        map[string]domain.PhotoCheck
+	savedReadings int
+	reads         int64
+	rewardedToday int64
+	leased        map[string]bool
+	holdLeases    bool
+	mu            sync.Mutex
 }
 
 func newFakeRepo() *fakeRepo { return &fakeRepo{samples: map[string]*domain.Sample{}} }
@@ -74,6 +84,16 @@ func (f *fakeRepo) Review(_ context.Context, id string, updates map[string]any) 
 	if credits, ok := updates["reward_credits"].(int); ok {
 		sample.RewardCredits = credits
 	}
+	if mode, ok := updates["review_mode"].(string); ok {
+		sample.ReviewMode = mode
+	}
+	if note, ok := updates["review_note"].(string); ok {
+		sample.ReviewNote = note
+	}
+	if review, ok := updates["auto_review"].(*domain.AutoReview); ok {
+		copyReview := *review
+		sample.AutoReview = &copyReview
+	}
 	copySample := *sample
 	return &copySample, nil
 }
@@ -87,6 +107,29 @@ func (f *fakeRepo) Promote(_ context.Context, id string, build func(*domain.Samp
 	f.labeled = append(f.labeled, labeled)
 	f.samples[id].BenchmarkSampleID = &labeled.ID
 	return f.samples[id], nil
+}
+
+func (f *fakeRepo) ListContainers(_ context.Context, userID string) ([]domain.Container, error) {
+	var active []domain.Container
+	for _, container := range f.containers {
+		if container.UserID == userID && container.Status == domain.ContainerActive {
+			active = append(active, container)
+		}
+	}
+	return active, nil
+}
+func (f *fakeRepo) CreateContainer(_ context.Context, container *domain.Container) error {
+	f.containers = append(f.containers, *container)
+	return nil
+}
+func (f *fakeRepo) ArchiveContainer(_ context.Context, userID, id string) error {
+	for index := range f.containers {
+		if f.containers[index].ID == id && f.containers[index].UserID == userID && f.containers[index].Status == domain.ContainerActive {
+			f.containers[index].Status = domain.ContainerArchived
+			return nil
+		}
+	}
+	return researchrepo.ErrNotPromotable
 }
 
 type fakeRewards struct {
@@ -270,4 +313,160 @@ func TestUploadsSniffFileContent(t *testing.T) {
 	require.Contains(t, url, "research-weight/u1/videos/")
 	_, err = svc.UploadVideo(context.Background(), "u1", jpeg, ".mp4", "video/mp4")
 	require.Error(t, err)
+}
+
+func savedContainerFor(userID string) domain.Container {
+	container := savedLibrary()["c1"]
+	container.UserID, container.Status = userID, domain.ContainerActive
+	return container
+}
+
+func TestSubmitMultiUsesOnlyTheUsersOwnSavedContainers(t *testing.T) {
+	svc, repo, rewards := newTestService()
+	repo.containers = []domain.Container{savedContainerFor("u2")}
+	_, err := svc.Submit(context.Background(), "u1", multiInput())
+	require.ErrorContains(t, err, "不存在或已停用")
+
+	repo.containers = append(repo.containers, savedContainerFor("u1"))
+	view, err := svc.Submit(context.Background(), "u1", multiInput())
+	require.NoError(t, err)
+	require.Equal(t, 960.8, view.TotalNetGrams)
+	require.Equal(t, "https://cdn.test/research-weight/u1/photos/lib.jpg", view.Photos[len(view.Photos)-1].URL)
+	require.Empty(t, view.Flags)
+
+	_, err = svc.Review(context.Background(), view.ID, "admin", ReviewInput{Action: "approve", QualityTier: "B"})
+	require.NoError(t, err)
+	require.Equal(t, []int{4}, rewards.calls, "3 boxes: 2 + 1 per extra box")
+}
+
+func TestDefaultRewardCreditsCapsMultiMeals(t *testing.T) {
+	boxes := func(n int) *domain.Sample {
+		return &domain.Sample{WeighingMode: domain.ModeMulti, Items: make([]domain.Item, n)}
+	}
+	require.Equal(t, 2, DefaultRewardCredits(boxes(1)))
+	require.Equal(t, 3, DefaultRewardCredits(boxes(2)))
+	require.Equal(t, 6, DefaultRewardCredits(boxes(8)))
+	require.Equal(t, 4, DefaultRewardCredits(&domain.Sample{WeighingMode: domain.ModeItemized}))
+	require.Equal(t, 2, DefaultRewardCredits(&domain.Sample{WeighingMode: domain.ModeWhole}))
+}
+
+func TestSubmitLetsAnEmptyBoxPhotoBackTwoMeals(t *testing.T) {
+	svc, repo, _ := newTestService()
+	repo.containers = []domain.Container{savedContainerFor("u1")}
+	_, err := svc.Submit(context.Background(), "u1", multiInput())
+	require.NoError(t, err)
+
+	next := multiInput()
+	next.ClientKey = "sample-key-multi-2"
+	for index := range next.Photos {
+		if next.Photos[index].Role != domain.RoleContainerTare {
+			next.Photos[index].URL = strings.Replace(next.Photos[index].URL, ".jpg", "-b.jpg", 1)
+		}
+	}
+	_, err = svc.Submit(context.Background(), "u1", next)
+	require.NoError(t, err, "empty-box photos and the saved box photo may repeat")
+
+	again := multiInput()
+	again.ClientKey = "sample-key-multi-3"
+	_, err = svc.Submit(context.Background(), "u1", again)
+	require.ErrorContains(t, err, "之前的样本")
+}
+
+func TestPromoteLabelsEachContainerOfAMultiMeal(t *testing.T) {
+	svc, repo, _ := newTestService()
+	repo.containers = []domain.Container{savedContainerFor("u1")}
+	view, err := svc.Submit(context.Background(), "u1", multiInput())
+	require.NoError(t, err)
+	_, err = svc.Review(context.Background(), view.ID, "admin", ReviewInput{Action: "approve", QualityTier: "A"})
+	require.NoError(t, err)
+	_, err = svc.Promote(context.Background(), view.ID, PromoteInput{})
+	require.NoError(t, err)
+	labeled := repo.labeled[0]
+	require.Equal(t, "items", labeled.LabelType)
+	require.Equal(t, map[string]any{"米饭": 247.0, "宫保鸡丁": 383.8, "紫菜汤": 330.0}, labeled.Items)
+	require.Equal(t, "research-weight/u1/meal.jpg", *labeled.ImageObjectKey)
+
+	single := multiInput()
+	single.ClientKey = "sample-key-single"
+	single.Items = single.Items[:1]
+	single.Photos = []PhotoInput{
+		photo(domain.RoleEvalAngle, "one.jpg"),
+		containerPhoto(domain.RoleContainerGross, 0, "one-g.jpg", ""),
+		containerPhoto(domain.RoleContainerTare, 0, "one-t.jpg", ""),
+	}
+	one, err := svc.Submit(context.Background(), "u1", single)
+	require.NoError(t, err)
+	_, err = svc.Review(context.Background(), one.ID, "admin", ReviewInput{Action: "approve", QualityTier: "B"})
+	require.NoError(t, err)
+	_, err = svc.Promote(context.Background(), one.ID, PromoteInput{})
+	require.NoError(t, err)
+	require.Equal(t, "total", repo.labeled[1].LabelType)
+	require.Equal(t, "research-weight/u1/one.jpg", *repo.labeled[1].ImageObjectKey, "falls back to the 45° photo")
+}
+
+func TestContainerLibraryValidatesInputAndOwnership(t *testing.T) {
+	svc, repo, _ := newTestService()
+	good := ContainerInput{Name: "美团 750ml 圆盒", ContainerType: "box", Grams: 28.46, PhotoURL: "https://cdn.test/research-weight/u1/photos/box.jpg"}
+	created, err := svc.CreateContainer(context.Background(), "u1", good)
+	require.NoError(t, err)
+	require.Equal(t, 28.5, created.Grams)
+	require.Equal(t, "https://cdn.test/research-weight/u1/photos/box.jpg", created.PhotoURL)
+
+	bad := map[string]func(*ContainerInput){
+		"empty name":    func(in *ContainerInput) { in.Name = " " },
+		"unknown type":  func(in *ContainerInput) { in.ContainerType = "bag" },
+		"no weight":     func(in *ContainerInput) { in.Grams = 0 },
+		"too heavy":     func(in *ContainerInput) { in.Grams = 3500 },
+		"foreign photo": func(in *ContainerInput) { in.PhotoURL = "https://cdn.test/research-weight/u2/photos/box.jpg" },
+	}
+	for name, mutate := range bad {
+		t.Run(name, func(t *testing.T) {
+			input := good
+			mutate(&input)
+			_, err := svc.CreateContainer(context.Background(), "u1", input)
+			require.Error(t, err)
+		})
+	}
+
+	for len(repo.containers) < domain.MaxSavedContainers {
+		repo.containers = append(repo.containers, savedContainerFor("u1"))
+	}
+	_, err = svc.CreateContainer(context.Background(), "u1", good)
+	require.ErrorContains(t, err, "最多保存")
+
+	require.Error(t, svc.ArchiveContainer(context.Background(), "u2", created.ID), "cannot archive someone else's box")
+	require.NoError(t, svc.ArchiveContainer(context.Background(), "u1", created.ID))
+	views, err := svc.ListContainers(context.Background(), "u1")
+	require.NoError(t, err)
+	for _, view := range views {
+		require.NotEqual(t, created.ID, view.ID)
+	}
+}
+
+func TestSubmitRetryStillReturnsTheMealAfterItsContainerWasArchived(t *testing.T) {
+	svc, repo, _ := newTestService()
+	repo.containers = []domain.Container{savedContainerFor("u1")}
+	first, err := svc.Submit(context.Background(), "u1", multiInput())
+	require.NoError(t, err)
+	repo.containers[0].Status = domain.ContainerArchived
+
+	again, err := svc.Submit(context.Background(), "u1", multiInput())
+	require.NoError(t, err)
+	require.Equal(t, first.ID, again.ID)
+
+	fresh := multiInput()
+	fresh.ClientKey = "sample-key-after-archive"
+	_, err = svc.Submit(context.Background(), "u1", fresh)
+	require.ErrorContains(t, err, "不存在或已停用")
+}
+
+func TestCreateContainerExplainsTheWeightLimitAndNeedsAPhotoUpload(t *testing.T) {
+	svc, _, _ := newTestService()
+	input := ContainerInput{Name: "大汤盆", ContainerType: "bowl", Grams: 3200, PhotoURL: "https://cdn.test/research-weight/u1/photos/pot.jpg"}
+	_, err := svc.CreateContainer(context.Background(), "u1", input)
+	require.ErrorContains(t, err, "不能超过3000g")
+
+	input.Grams, input.PhotoURL = 900, "https://cdn.test/research-weight/u1/videos/pot.mp4"
+	_, err = svc.CreateContainer(context.Background(), "u1", input)
+	require.ErrorContains(t, err, "拍空容器")
 }

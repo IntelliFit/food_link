@@ -39,7 +39,41 @@ func (h *SampleHandler) Submit(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"item": item, "message": "已提交，审核通过后发放奖励"})
+	message := "已提交，审核通过后发放奖励"
+	if h.svc.AutoReviewEnabled() {
+		message = "已提交，正在自动审核"
+	}
+	response.Success(c, gin.H{"item": item, "message": message})
+}
+
+type scaleReadingBody struct {
+	ImageURL            string  `json:"image_url"`
+	ScalePrecisionGrams float64 `json:"scale_precision_grams"`
+}
+
+// POST /api/research-weight-samples/scale-reading
+func (h *SampleHandler) ReadScale(c *gin.Context) {
+	var body scaleReadingBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "读数请求格式不正确", HTTPStatus: 400})
+		return
+	}
+	reading, err := h.svc.ReadScale(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), body.ImageURL, body.ScalePrecisionGrams)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"reading": reading})
+}
+
+// POST /api/admin/research-weight-samples/:sample_id/auto-review
+func (h *SampleHandler) AdminAutoReview(c *gin.Context) {
+	item, err := h.svc.RerunAutoReview(c.Request.Context(), c.Param("sample_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"item": item, "message": "自动审核完成"})
 }
 
 // GET /api/research-weight-samples/mine
@@ -120,6 +154,40 @@ func (h *SampleHandler) UploadVideo(c *gin.Context) {
 	response.Success(c, gin.H{"video_url": url})
 }
 
+// GET /api/research-weight-containers
+func (h *SampleHandler) ListContainers(c *gin.Context) {
+	items, err := h.svc.ListContainers(c.Request.Context(), c.GetString(authmw.ContextUserIDKey))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"items": items})
+}
+
+// POST /api/research-weight-containers
+func (h *SampleHandler) CreateContainer(c *gin.Context) {
+	var body service.ContainerInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "容器信息格式不正确", HTTPStatus: 400})
+		return
+	}
+	item, err := h.svc.CreateContainer(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"item": item, "message": "已存为常用容器"})
+}
+
+// POST /api/research-weight-containers/:container_id/archive
+func (h *SampleHandler) ArchiveContainer(c *gin.Context) {
+	if err := h.svc.ArchiveContainer(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("container_id")); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "已停用"})
+}
+
 // GET /api/admin/research-weight-samples
 func (h *SampleHandler) AdminList(c *gin.Context) {
 	page := positiveInt(c.Query("page"), 1)
@@ -127,6 +195,8 @@ func (h *SampleHandler) AdminList(c *gin.Context) {
 	result, err := h.svc.List(c.Request.Context(), domain.ListFilter{
 		Status: c.DefaultQuery("status", domain.StatusPending), WeighingMode: c.Query("weighing_mode"),
 		Scene: c.Query("scene"), Query: c.Query("q"), Limit: limit, Offset: (page - 1) * limit,
+		CampaignID: c.Query("campaign_id"), CollectionChannel: c.Query("collection_channel"),
+		ReviewMode: c.Query("review_mode"), QualityTier: c.Query("quality_tier"),
 	})
 	if err != nil {
 		response.Error(c, err)

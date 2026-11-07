@@ -121,6 +121,21 @@ func (r *SampleRepo) List(ctx context.Context, filter domain.ListFilter) (*domai
 	if scene := strings.TrimSpace(filter.Scene); scene != "" {
 		query = query.Where("scene = ?", scene)
 	}
+	if campaign := strings.TrimSpace(filter.CampaignID); campaign != "" {
+		if _, err := uuid.Parse(campaign); err != nil {
+			return &domain.ListResult{Items: []domain.Sample{}}, nil
+		}
+		query = query.Where("campaign_id = ?", campaign)
+	}
+	if channel := strings.TrimSpace(filter.CollectionChannel); channel != "" {
+		query = query.Where("collection_channel = ?", channel)
+	}
+	if mode := strings.TrimSpace(filter.ReviewMode); mode != "" {
+		query = query.Where("review_mode = ?", mode)
+	}
+	if tier := strings.TrimSpace(filter.QualityTier); tier != "" {
+		query = query.Where("quality_tier = ?", tier)
+	}
 	if keyword := strings.TrimSpace(filter.Query); keyword != "" {
 		like := "%" + keyword + "%"
 		query = query.Where("dish_name ILIKE ? OR venue_name ILIKE ? OR notes ILIKE ?", like, like, like)
@@ -138,6 +153,9 @@ func (r *SampleRepo) List(ctx context.Context, filter domain.ListFilter) (*domai
 // Review moves a pending sample to approved or rejected exactly once.
 func (r *SampleRepo) Review(ctx context.Context, id string, updates map[string]any) (*domain.Sample, error) {
 	updates["updated_at"] = time.Now()
+	if err := autoReviewValue(updates); err != nil {
+		return nil, err
+	}
 	result := r.db.WithContext(ctx).Model(&domain.Sample{}).
 		Where("id = ? AND status = ?", id, domain.StatusPending).Updates(updates)
 	if result.Error != nil {
@@ -190,4 +208,36 @@ func (r *SampleRepo) Promote(ctx context.Context, id string, build func(*domain.
 		return nil, err
 	}
 	return r.Get(ctx, id)
+}
+
+// ListContainers returns the user's active saved containers, newest first.
+func (r *SampleRepo) ListContainers(ctx context.Context, userID string) ([]domain.Container, error) {
+	var containers []domain.Container
+	err := r.db.WithContext(ctx).Where("user_id = ? AND status = ?", userID, domain.ContainerActive).
+		Order("created_at DESC").Find(&containers).Error
+	return containers, err
+}
+
+func (r *SampleRepo) CreateContainer(ctx context.Context, container *domain.Container) error {
+	if strings.TrimSpace(container.ID) == "" {
+		container.ID = uuid.NewString()
+	}
+	return r.db.WithContext(ctx).Create(container).Error
+}
+
+// ArchiveContainer only touches the user's own active container.
+func (r *SampleRepo) ArchiveContainer(ctx context.Context, userID, id string) error {
+	if _, err := uuid.Parse(id); err != nil {
+		return commonerrors.ErrNotFound
+	}
+	result := r.db.WithContext(ctx).Model(&domain.Container{}).
+		Where("id = ? AND user_id = ? AND status = ?", id, userID, domain.ContainerActive).
+		Updates(map[string]any{"status": domain.ContainerArchived, "updated_at": time.Now()})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return commonerrors.ErrNotFound
+	}
+	return nil
 }

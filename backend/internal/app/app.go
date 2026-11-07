@@ -24,6 +24,9 @@ import (
 	authhandler "food_link/backend/internal/auth/handler"
 	authrepo "food_link/backend/internal/auth/repo"
 	authservice "food_link/backend/internal/auth/service"
+	campuscampaignhandler "food_link/backend/internal/campuscampaign/handler"
+	campuscampaignrepo "food_link/backend/internal/campuscampaign/repo"
+	campuscampaignservice "food_link/backend/internal/campuscampaign/service"
 	campuscataloghandler "food_link/backend/internal/campuscatalog/handler"
 	campuscatalogrepo "food_link/backend/internal/campuscatalog/repo"
 	campuscatalogservice "food_link/backend/internal/campuscatalog/service"
@@ -165,6 +168,8 @@ type App struct {
 	mealReminderDone      chan struct{}
 	promoterSyncCancel    context.CancelFunc
 	promoterSyncDone      chan struct{}
+	researchReviewCancel  context.CancelFunc
+	researchReviewDone    chan struct{}
 	transferPollCancel    context.CancelFunc
 	transferPollDone      chan struct{}
 	taskQueue             taskqueue.Queue
@@ -580,7 +585,17 @@ func New(cfg *config.Config) (*App, error) {
 	foodContributionSvc := foodcontributionservice.NewContributionService(foodContributionRepo, membershipSvc, storageClient)
 	foodContributionHandler := foodcontributionhandler.NewContributionHandler(foodContributionSvc)
 	researchWeightSvc := researchweightservice.NewSampleService(researchweightrepo.NewSampleRepo(db), membershipSvc, storageClient)
+	// Scale photos are read by the same two vendors as canteen menus, so a
+	// reading counts as confirmed only when independent models agree.
+	// Production only: a laptop on a refreshed config snapshot must never
+	// review real contributors' samples in the shared database.
+	if cfg.ResearchWeight.AutoReviewEnabled && cfg.App.Env == "production" {
+		researchWeightSvc.ConfigureAutoReview(researchweightservice.NewScaleReader(capturePrimary, captureVerifier))
+	}
 	researchWeightHandler := researchweighthandler.NewSampleHandler(researchWeightSvc)
+	campusCampaignSvc := campuscampaignservice.NewCampaignService(campuscampaignrepo.NewCampaignRepo(db), membershipSvc)
+	researchWeightSvc.ConfigureCampaigns(campusCampaignAttributor{campaigns: campusCampaignSvc})
+	campusCampaignHandler := campuscampaignhandler.NewCampaignHandler(campusCampaignSvc)
 
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
@@ -675,6 +690,12 @@ func New(cfg *config.Config) (*App, error) {
 			app.promoterSyncCancel = promoterSyncCancel
 			app.promoterSyncDone = make(chan struct{})
 			go func() { defer close(app.promoterSyncDone); promoterSvc.RunSync(promoterSyncCtx) }()
+		}
+		if researchWeightSvc.AutoReviewEnabled() {
+			reviewCtx, reviewCancel := context.WithCancel(context.Background())
+			app.researchReviewCancel = reviewCancel
+			app.researchReviewDone = make(chan struct{})
+			go func() { defer close(app.researchReviewDone); researchWeightSvc.RunAutoReview(reviewCtx) }()
 		}
 		app.startWechatTransferPoller(transferSvc)
 		app.startOpenPlatformReconciliation(openPlatformSvc)
@@ -953,6 +974,21 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/research-weight-samples/mine", authmw.RequireJWT(jwtSvc), researchWeightHandler.Mine)
 	engine.POST("/api/research-weight-samples/upload-image", authmw.RequireJWT(jwtSvc), researchWeightHandler.UploadImage)
 	engine.POST("/api/research-weight-samples/upload-video", authmw.RequireJWT(jwtSvc), researchWeightHandler.UploadVideo)
+	engine.POST("/api/research-weight-samples/scale-reading", authmw.RequireJWT(jwtSvc), researchWeightHandler.ReadScale)
+	engine.GET("/api/research-weight-containers", authmw.RequireJWT(jwtSvc), researchWeightHandler.ListContainers)
+	// Campus club campaigns: guests may look at a campaign and its boards;
+	// joining and everything after needs login.
+	engine.GET("/api/campus-campaigns/board", campusCampaignHandler.CampaignsBoard)
+	engine.GET("/api/campus-campaigns/mine", authmw.RequireJWT(jwtSvc), campusCampaignHandler.Mine)
+	engine.POST("/api/campus-campaigns/records", authmw.RequireJWT(jwtSvc), campusCampaignHandler.LinkRecord)
+	engine.GET("/api/campus-campaigns/by-code/:code", campusCampaignHandler.Landing)
+	engine.GET("/api/campus-campaigns/by-code/:code/board", authmw.OptionalJWT(jwtSvc), campusCampaignHandler.MembersBoard)
+	engine.POST("/api/campus-campaigns/by-code/:code/join", authmw.RequireJWT(jwtSvc), campusCampaignHandler.Join)
+	engine.GET("/api/campus-campaigns/:campaign_id/leader", authmw.RequireJWT(jwtSvc), campusCampaignHandler.Leader)
+	engine.PUT("/api/campus-campaigns/:campaign_id/members/:user_id/core", authmw.RequireJWT(jwtSvc), campusCampaignHandler.SetCore)
+	engine.POST("/api/campus-campaigns/:campaign_id/stations", authmw.RequireJWT(jwtSvc), campusCampaignHandler.CreateStation)
+	engine.POST("/api/research-weight-containers", authmw.RequireJWT(jwtSvc), researchWeightHandler.CreateContainer)
+	engine.POST("/api/research-weight-containers/:container_id/archive", authmw.RequireJWT(jwtSvc), researchWeightHandler.ArchiveContainer)
 	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), contentGuard(3), publicFoodHandler.Create)
 	engine.GET("/api/public-food-library/mine", authmw.RequireJWT(jwtSvc), publicFoodHandler.Mine)
 	engine.GET("/api/public-food-library/collections", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collections)
@@ -1154,6 +1190,13 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/research-weight-samples/:sample_id", adminAuth, researchWeightHandler.AdminGet)
 	adminAPI.POST("/research-weight-samples/:sample_id/review", adminAuth, researchWeightHandler.AdminReview)
 	adminAPI.POST("/research-weight-samples/:sample_id/promote", adminAuth, researchWeightHandler.AdminPromote)
+	adminAPI.POST("/research-weight-samples/:sample_id/auto-review", adminAuth, researchWeightHandler.AdminAutoReview)
+	adminAPI.GET("/campus-orgs", adminAuth, campusCampaignHandler.AdminListOrgs)
+	adminAPI.POST("/campus-orgs", adminAuth, campusCampaignHandler.AdminCreateOrg)
+	adminAPI.GET("/campus-campaigns", adminAuth, campusCampaignHandler.AdminListCampaigns)
+	adminAPI.POST("/campus-campaigns", adminAuth, campusCampaignHandler.AdminCreateCampaign)
+	adminAPI.PUT("/campus-campaigns/:campaign_id", adminAuth, campusCampaignHandler.AdminUpdateCampaign)
+	adminAPI.POST("/campus-campaigns/:campaign_id/leaders", adminAuth, campusCampaignHandler.AdminAddLeader)
 	adminAPI.GET("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Get)
 	adminAPI.POST("/food-nutrition", adminAuth, adminFoodNutritionHandler.Create)
 	adminAPI.PATCH("/food-nutrition/:food_id", adminAuth, adminFoodNutritionHandler.Update)
@@ -1688,6 +1731,16 @@ func (a *App) Close(ctx context.Context) error {
 		case <-a.promoterSyncDone:
 		case <-ctx.Done():
 			logger.Warn(context.Background(), "推广佣金同步关闭超时", logger.Err(ctx.Err()))
+		}
+	}
+	if a.researchReviewCancel != nil {
+		a.researchReviewCancel()
+	}
+	if a.researchReviewDone != nil {
+		select {
+		case <-a.researchReviewDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "称重科研自动审核巡检关闭超时", logger.Err(ctx.Err()))
 		}
 	}
 	a.stopWechatTransferPoller(ctx)

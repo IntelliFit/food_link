@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
@@ -40,6 +41,34 @@ type Repository interface {
 	Review(ctx context.Context, id string, updates map[string]any) (*domain.Sample, error)
 	MarkRewarded(ctx context.Context, id string) error
 	Promote(ctx context.Context, id string, build func(*domain.Sample) *do.FoodWeightLabeledSampleDO) (*domain.Sample, error)
+	ListContainers(ctx context.Context, userID string) ([]domain.Container, error)
+	CreateContainer(ctx context.Context, container *domain.Container) error
+	ArchiveContainer(ctx context.Context, userID, id string) error
+	SavePhotoCheck(ctx context.Context, check *domain.PhotoCheck) error
+	PhotoChecks(ctx context.Context, keys []string) (map[string]domain.PhotoCheck, error)
+	SaveReadings(ctx context.Context, userID, key string, readings []domain.ScaleReading) error
+	CountReadsSince(ctx context.Context, userID string, since time.Time) (int64, error)
+	SameContentUploads(ctx context.Context, hashes, ownKeys []string) ([]domain.PhotoCheck, error)
+	CountRewardedSince(ctx context.Context, userID string, since time.Time) (int64, error)
+	PendingForAutoReview(ctx context.Context, before time.Time, limit int) ([]domain.Sample, error)
+	ClaimForAutoReview(ctx context.Context, id string, lease time.Duration, maxAttempts int) (bool, error)
+	UnpaidApproved(ctx context.Context, before time.Time, limit int) ([]domain.Sample, error)
+}
+
+// SampleAttribution is the campus campaign a new sample belongs to.
+type SampleAttribution struct {
+	CampaignID         string
+	Channel            string
+	StationSessionID   *string
+	CanteenID          *string
+	CatalogItemID      *string
+	PairedFoodRecordID *string
+}
+
+// CampaignAttributor decides a new sample's campus campaign; nil means the
+// personal channel.
+type CampaignAttributor interface {
+	AttributeSample(ctx context.Context, userID string, input SubmitInput) (*SampleAttribution, error)
 }
 
 type RewardAwarder interface {
@@ -54,10 +83,18 @@ type ObjectStore interface {
 }
 
 type SampleService struct {
-	repo    Repository
-	rewards RewardAwarder
-	store   ObjectStore
-	now     func() time.Time
+	repo      Repository
+	rewards   RewardAwarder
+	store     ObjectStore
+	reader    *ScaleReader
+	campaigns CampaignAttributor
+	now       func() time.Time
+	// async runs background work; nil means a goroutine. Tests make it
+	// synchronous.
+	async func(func())
+	// userLocks serialises one contributor's automatic reviews in this
+	// process, so parallel submissions cannot all slip under the daily cap.
+	userLocks sync.Map
 }
 
 func NewSampleService(repo Repository, rewards RewardAwarder, store ObjectStore) *SampleService {
@@ -86,24 +123,36 @@ type ListResult struct {
 }
 
 func (s *SampleService) Submit(ctx context.Context, userID string, input SubmitInput) (*domain.SampleView, error) {
-	sample, err := BuildSample(userID, input, s.keyResolver(userID), s.now())
+	library, err := s.libraryFor(ctx, userID, input)
 	if err != nil {
 		return nil, err
 	}
-	existing, err := s.repo.FindByClientKey(ctx, userID, sample.ClientKey)
+	existing, err := s.repo.FindByClientKey(ctx, userID, strings.TrimSpace(input.ClientKey))
 	if err != nil {
+		return nil, err
+	}
+	sample, err := BuildSample(userID, input, s.keyResolver(userID), library, s.now())
+	if err != nil {
+		if existing != nil {
+			// A retry of a saved meal whose container was archived since.
+			view := s.toView(existing)
+			return &view, nil
+		}
 		return nil, err
 	}
 	if existing != nil {
 		// A retried request returns the saved row; an edited draft under an
 		// already-used key must not be silently dropped.
 		if existing.TotalNetGrams != sample.TotalNetGrams || len(existing.Photos) != len(sample.Photos) {
-			return nil, &commonerrors.AppError{Code: 10002, Message: "这一份已经提交过，请点“清空本份”后重新填写", HTTPStatus: 409}
+			return nil, &commonerrors.AppError{Code: 10002, Message: "这一顿已经提交过，请点「清空这一顿」后重新填写", HTTPStatus: 409}
 		}
 		view := s.toView(existing)
 		return &view, nil
 	}
 	if err := s.rejectReusedPhotos(ctx, userID, sample.Photos); err != nil {
+		return nil, err
+	}
+	if err := s.attribute(ctx, userID, input, sample); err != nil {
 		return nil, err
 	}
 	count, err := s.repo.CountSince(ctx, userID, s.now().Add(-24*time.Hour))
@@ -120,7 +169,31 @@ func (s *SampleService) Submit(ctx context.Context, userID string, input SubmitI
 	logger.Info(ctx, "称重科研样本提交完成", slog.String("user_id", userID), slog.String("sample_id", saved.ID),
 		slog.String("weighing_mode", saved.WeighingMode), slog.Bool("created", created))
 	view := s.toView(saved)
+	if created {
+		s.reviewSoon(ctx, saved.ID)
+	}
 	return &view, nil
+}
+
+// ConfigureCampaigns lets submissions carry the contributor's campus campaign.
+func (s *SampleService) ConfigureCampaigns(campaigns CampaignAttributor) { s.campaigns = campaigns }
+
+// attribute stamps a new sample with the campus campaign the server finds for
+// the contributor; the channel is fixed at submission and never changed.
+func (s *SampleService) attribute(ctx context.Context, userID string, input SubmitInput, sample *domain.Sample) error {
+	sample.CollectionChannel = "personal"
+	if s.campaigns == nil {
+		return nil
+	}
+	attribution, err := s.campaigns.AttributeSample(ctx, userID, input)
+	if err != nil || attribution == nil {
+		return err
+	}
+	campaignID := attribution.CampaignID
+	sample.CampaignID, sample.CollectionChannel = &campaignID, attribution.Channel
+	sample.StationSessionID, sample.CanteenID = attribution.StationSessionID, attribution.CanteenID
+	sample.CatalogItemID, sample.PairedFoodRecordID = attribution.CatalogItemID, attribution.PairedFoodRecordID
+	return nil
 }
 
 func (s *SampleService) Mine(ctx context.Context, userID string) (*MineResult, error) {
@@ -135,12 +208,33 @@ func (s *SampleService) Mine(ctx context.Context, userID string) (*MineResult, e
 	return &MineResult{Items: s.toViews(items), Summary: summary}, nil
 }
 
-// rejectReusedPhotos stops one photo from backing two samples. The tare photo
-// is exempt: in a canteen the same empty bowl is weighed once per session.
+// libraryFor loads the user's saved containers only when the submission
+// uses one, so ordinary submissions cost no extra query.
+func (s *SampleService) libraryFor(ctx context.Context, userID string, input SubmitInput) (Library, error) {
+	uses := strings.TrimSpace(input.TareMode) == domain.TareLibrary
+	for _, item := range input.Items {
+		uses = uses || strings.TrimSpace(item.TareSource) == domain.TareLibrary
+	}
+	if !uses {
+		return Library{}, nil
+	}
+	containers, err := s.repo.ListContainers(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	library := make(Library, len(containers))
+	for _, container := range containers {
+		library[container.ID] = container
+	}
+	return library, nil
+}
+
+// rejectReusedPhotos stops one photo from backing two samples. Empty-container
+// photos are exempt: the same bowl or saved box is weighed once for many meals.
 func (s *SampleService) rejectReusedPhotos(ctx context.Context, userID string, photos []domain.Photo) error {
 	keys := make([]string, 0, len(photos))
 	for _, photo := range photos {
-		if photo.Role != domain.RoleTareScale {
+		if !isTareRole(photo.Role) && photo.Source != domain.PhotoSourceLibrary {
 			keys = append(keys, photo.ObjectKey)
 		}
 	}
@@ -170,6 +264,9 @@ func (s *SampleService) UploadImage(ctx context.Context, userID string, data []b
 	key := fmt.Sprintf("%sphotos/%s%s", researchKeyPrefix(userID), uuid.NewString(), ext)
 	url, err := s.store.UploadBytes(imageBucket, key, data, contentType)
 	if err != nil {
+		return "", err
+	}
+	if err := s.recordUpload(ctx, userID, key, data); err != nil {
 		return "", err
 	}
 	logger.Info(ctx, "称重科研照片上传完成", slog.String("user_id", userID), slog.Int("file.size", len(data)))
@@ -234,8 +331,14 @@ func (s *SampleService) Review(ctx context.Context, id, reviewerID string, input
 		if err != nil {
 			return nil, err
 		}
-		updates["reward_credits"] = DefaultRewardCredits(current.WeighingMode)
+		updates["reward_credits"] = DefaultRewardCredits(current)
 	}
+	return s.commitReview(ctx, id, reviewerID, updates)
+}
+
+// commitReview applies a reviewer's or the automatic review's decision and
+// pays the reward exactly once.
+func (s *SampleService) commitReview(ctx context.Context, id, reviewerID string, updates map[string]any) (*domain.SampleView, error) {
 	sample, err := s.repo.Review(ctx, id, updates)
 	if errors.Is(err, researchrepo.ErrNotPending) && updates["status"] == domain.StatusApproved {
 		// A retry after a failed payout: the sample is already approved, so
@@ -249,27 +352,39 @@ func (s *SampleService) Review(ctx context.Context, id, reviewerID string, input
 	if err != nil {
 		return nil, err
 	}
-	if sample.Status == domain.StatusApproved && sample.RewardCredits > 0 && sample.RewardedAt == nil && s.rewards != nil {
-		_, rewardErr := s.rewards.AwardResearchWeightSample(ctx, sample.UserID, sample.ID, sample.RewardCredits, map[string]any{
-			"dish_name": sample.DishName, "weighing_mode": sample.WeighingMode, "quality_tier": sample.QualityTier,
-		})
-		if rewardErr != nil {
-			logger.Error(ctx, "称重科研样本审核通过但积分发放失败", rewardErr, slog.String("sample_id", sample.ID), slog.String("user_id", sample.UserID))
-			return nil, rewardErr
-		}
-		if err := s.repo.MarkRewarded(ctx, sample.ID); err != nil {
-			return nil, err
-		}
+	if err := s.payReward(ctx, sample); err != nil {
+		return nil, err
 	}
 	logger.Info(ctx, "称重科研样本审核完成", slog.String("sample_id", sample.ID), slog.String("status", sample.Status), slog.String("reviewer_id", reviewerID))
 	return s.Get(ctx, sample.ID)
 }
 
-// DefaultRewardCredits pays itemized samples more because each component
-// needs its own reading and photo.
-func DefaultRewardCredits(mode string) int {
-	if mode == domain.ModeItemized {
+// payReward pays an approved sample's credits once. The ledger's source key
+// makes a repeated award (a retry, another replica) fail instead of paying
+// twice, so retrying an unpaid sample is safe.
+func (s *SampleService) payReward(ctx context.Context, sample *domain.Sample) error {
+	if sample.Status != domain.StatusApproved || sample.RewardCredits <= 0 || sample.RewardedAt != nil || s.rewards == nil {
+		return nil
+	}
+	_, err := s.rewards.AwardResearchWeightSample(ctx, sample.UserID, sample.ID, sample.RewardCredits, map[string]any{
+		"dish_name": sample.DishName, "weighing_mode": sample.WeighingMode, "quality_tier": sample.QualityTier,
+		"review_mode": sample.ReviewMode,
+	})
+	if err != nil {
+		logger.Error(ctx, "称重科研样本审核通过但积分发放失败", err, slog.String("sample_id", sample.ID), slog.String("user_id", sample.UserID))
+		return err
+	}
+	return s.repo.MarkRewarded(ctx, sample.ID)
+}
+
+// DefaultRewardCredits pays for the extra work: itemized samples need a reading
+// per component, and each extra container in a meal adds one credit (up to 6).
+func DefaultRewardCredits(sample *domain.Sample) int {
+	switch sample.WeighingMode {
+	case domain.ModeItemized:
 		return 4
+	case domain.ModeMulti:
+		return min(2+max(len(sample.Items)-1, 0), 6)
 	}
 	return 2
 }
@@ -279,7 +394,7 @@ func reviewUpdates(input ReviewInput, reviewerID string, now time.Time) (map[str
 	if runeLen(note) > 300 {
 		return nil, badRequest("审核备注不超过300字")
 	}
-	updates := map[string]any{"review_note": note, "reviewed_at": now, "reviewed_by": reviewerID}
+	updates := map[string]any{"review_note": note, "reviewed_at": now, "reviewed_by": reviewerID, "review_mode": domain.ReviewModeManual}
 	switch strings.TrimSpace(input.Action) {
 	case "approve":
 		tier := strings.ToUpper(strings.TrimSpace(input.QualityTier))
@@ -328,6 +443,9 @@ func (s *SampleService) Promote(ctx context.Context, id string, input PromoteInp
 // is the evaluated image, and the other photos travel in metadata.
 func (s *SampleService) toLabeledSample(sample *domain.Sample, batch string) *do.FoodWeightLabeledSampleDO {
 	topKey := photoKey(sample.Photos, domain.RoleEvalTop)
+	if topKey == "" {
+		topKey = photoKey(sample.Photos, domain.RoleEvalAngle)
+	}
 	labeled := &do.FoodWeightLabeledSampleDO{
 		ID: uuid.NewString(), BatchName: batch, SampleName: fmt.Sprintf("%s-%s", sample.DishName, sample.ID[:8]),
 		OriginalFilename: path.Base(topKey), Status: "labeled", Items: map[string]any{},
@@ -336,6 +454,7 @@ func (s *SampleService) toLabeledSample(sample *domain.Sample, batch string) *do
 			"weighing_mode": sample.WeighingMode, "quality_tier": sample.QualityTier, "container_type": sample.ContainerType,
 			"reference_object": sample.ReferenceObject, "photos": sample.Photos, "video_object_key": sample.VideoObjectKey,
 			"device": sample.Device, "consent_version": sample.ConsentVersion, "promoted_at": s.now().UTC().Format(time.RFC3339),
+			"items": sample.Items, "flags": sampleFlags(sample),
 		},
 	}
 	if topKey != "" {
@@ -347,7 +466,9 @@ func (s *SampleService) toLabeledSample(sample *domain.Sample, batch string) *do
 	}
 	total := sample.TotalNetGrams
 	labeled.TotalWeightGrams = &total
-	if sample.WeighingMode == domain.ModeItemized {
+	// A meal with several containers is labeled per container; one container
+	// (or all boxes weighed together) only has a total.
+	if sample.WeighingMode == domain.ModeItemized || (sample.WeighingMode == domain.ModeMulti && len(sample.Items) > 1) {
 		labeled.LabelType = "items"
 		labeled.Items = itemsByUniqueName(sample.Items)
 	} else {
@@ -431,5 +552,7 @@ func (s *SampleService) toView(sample *domain.Sample) domain.SampleView {
 		Device: sample.Device, Notes: sample.Notes, ConsentVersion: sample.ConsentVersion, Status: sample.Status,
 		QualityTier: sample.QualityTier, ReviewNote: sample.ReviewNote, ReviewedAt: sample.ReviewedAt,
 		RewardCredits: sample.RewardCredits, RewardedAt: sample.RewardedAt, BenchmarkSampleID: sample.BenchmarkSampleID, CreatedAt: sample.CreatedAt,
+		Flags: sampleFlags(sample), ReviewMode: sample.ReviewMode, AutoReview: sample.AutoReview,
+		CollectionChannel: sample.CollectionChannel, CampaignID: sample.CampaignID, CatalogItemID: sample.CatalogItemID,
 	}
 }
