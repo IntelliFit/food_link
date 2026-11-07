@@ -84,8 +84,20 @@ function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
   return campusNutritionState(item).failed
 }
 
+// Merchant dishes uploaded without nutrition get it from a background analysis;
+// until then they must not read as 0 kcal.
 function needsNutritionUpdate(item: PublicFoodLibraryItem): boolean {
-  return isCampusFoodItem(item) && !campusNutritionState(item).displayNutrition
+  return !campusNutritionState(item).displayNutrition
+}
+
+function quickRecordBlocked(item: PublicFoodLibraryItem): boolean {
+  return isCampusFoodItem(item) ? !campusNutritionState(item).canRecord : needsNutritionUpdate(item)
+}
+
+/** Only a linked analysis task means work is running; other merchant dishes simply lack nutrition. */
+function nutritionBeingAnalyzed(item: PublicFoodLibraryItem): boolean {
+  const nutrition = campusNutritionState(item)
+  return isCampusFoodItem(item) ? nutrition.pending : nutrition.analyzing
 }
 
 function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
@@ -380,7 +392,7 @@ function FoodLibraryDetailPage() {
       Taro.showToast({ title: '分析失败，暂不能记录', icon: 'none' })
       return
     }
-    if (isCampusFoodItem(item) && !campusNutritionState(item).canRecord) {
+    if (quickRecordBlocked(item)) {
       Taro.showToast({ title: '营养待核验，暂不能记录', icon: 'none' })
       return
     }
@@ -679,6 +691,8 @@ function FoodLibraryDetailPage() {
   const nutrition = campusNutritionState(item)
   const nutritionPrefix = isCampusFoodItem(item) && (nutrition.estimated || nutrition.pending) ? '约 ' : ''
   const nutritionPending = needsNutritionUpdate(item)
+  const nutritionAnalyzing = nutritionBeingAnalyzed(item)
+  const recordBlocked = quickRecordBlocked(item)
   const micronutrientRows = isCampusFoodItem(item) ? campusMicronutrientRows(item) : []
   const hasPreciseMicronutrients = nutrition.displayNutrition && !nutrition.pending && item.items?.length > 0 && item.items.every(food => food.micronutrient_analysis === 'ai_precise_v1')
   const commentsTotal = countCommentTotal(comments)
@@ -789,7 +803,7 @@ function FoodLibraryDetailPage() {
           <Text className='info-title'>{item.food_name || item.description || '健康餐'}</Text>
           <View className='info-calories-badge'>
             <Text className='iconfont icon-huore info-calories-icon' />
-            <Text className='info-calories'>{nutritionPending ? (analysisFailed ? '营养分析未完成' : nutrition.pending ? '营养分析中' : '营养待补充') : `${nutritionPrefix}${item.total_calories.toFixed(0)} kcal`}</Text>
+            <Text className='info-calories'>{nutritionPending ? (analysisFailed ? '营养分析未完成' : nutritionAnalyzing ? '营养分析中' : '营养待补充') : `${nutritionPrefix}${item.total_calories.toFixed(0)} kcal`}</Text>
           </View>
         </View>
         {item.description && (
@@ -1006,8 +1020,8 @@ function FoodLibraryDetailPage() {
       <View className='bottom-bar'>
         <View className='bottom-bar-row1'>
           {isCampusFoodItem(item) && (
-            <View className={`action-btn quick-record-btn ${isCampusFoodItem(item) && !nutrition.canRecord ? 'disabled' : ''}`} onClick={handleQuickRecord}>
-              <Text className='action-text'>{isCampusFoodItem(item) && !nutrition.canRecord ? (nutrition.pending ? '营养分析中' : '营养待补充') : '一键记录'}</Text>
+            <View className={`action-btn quick-record-btn ${recordBlocked ? 'disabled' : ''}`} onClick={handleQuickRecord}>
+              <Text className='action-text'>{recordBlocked ? (nutritionAnalyzing ? '营养分析中' : '营养待补充') : '一键记录'}</Text>
             </View>
           )}
           <View className='bottom-bar-actions'>

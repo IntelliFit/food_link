@@ -287,6 +287,11 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		NutritionStatus:    "pending",
 		AvailabilityStatus: "available",
 	}
+	// Campus dishes keep their own precise-nutrition gate below.
+	if !isCampusPublicFood(item) && hasSuppliedNutrition(item) {
+		item.NutritionStatus = "current"
+		item.NutritionVersion = item.ContentVersion
+	}
 	if isCampusPublicFood(item) {
 		// Campus foods must not become client-visible until the existing precise
 		// analysis pipeline has produced a complete micronutrient result. The
@@ -325,10 +330,22 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 	text := strings.TrimSpace(strings.Join([]string{
 		item.FoodName, item.MerchantName, item.MerchantAddress, item.Description, item.Insight, item.UserNotes,
 	}, " "))
-	if text != "" {
-		task, err := s.repo.CreateModerationTask(ctx, userID, item.ID, text)
+	// Photos without nutrition are analysed by the worker after the text check,
+	// so the uploader is not kept waiting on the page.
+	var nutritionImages []string
+	if !hasSuppliedNutrition(item) {
+		nutritionImages = imagePaths
+	}
+	if text != "" || len(nutritionImages) > 0 {
+		task, err := s.repo.CreateModerationTask(ctx, userID, item.ID, text, nutritionImages)
 		if err != nil {
 			return "", err
+		}
+		if len(nutritionImages) > 0 {
+			// The linked task drives the "营养分析中" state on the dish pages.
+			if err := s.repo.LinkAnalysisTask(ctx, item.ID, task.ID); err != nil {
+				return "", err
+			}
 		}
 		if err := s.enqueueTask(ctx, task.ID, task.TaskType); err != nil {
 			return "", err
@@ -344,6 +361,10 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		})
 	}
 	return item.ID, nil
+}
+
+func hasSuppliedNutrition(item *domain.PublicFoodItem) bool {
+	return item.TotalCalories > 0 || len(item.Items) > 0
 }
 
 func (s *PublicFoodService) submitCampusAnalyzeTask(ctx context.Context, userID string, item *domain.PublicFoodItem, imageURL *string, imagePaths []string) (string, error) {

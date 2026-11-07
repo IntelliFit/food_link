@@ -169,6 +169,69 @@ func (r *PublicFoodRepo) UpdateNutritionFromAnalysis(ctx context.Context, itemID
 		}).Error
 }
 
+// UpdateCommonNutritionFromAnalysis fills an uploaded merchant dish from its
+// background photo analysis. Nutrition the uploader already supplied is never
+// overwritten, and the name, description and insight are only filled when blank.
+// It reports false when the row already had nutrition.
+func (r *PublicFoodRepo) UpdateCommonNutritionFromAnalysis(ctx context.Context, itemID string, result map[string]any) (bool, error) {
+	snapshot := NutritionSnapshotFromResult(result)
+	updated := r.db.WithContext(ctx).
+		Model(&domain.PublicFoodItem{}).
+		Where("id = ? AND COALESCE(total_calories, 0) <= 0", itemID).
+		Updates(map[string]any{
+			"total_calories":           snapshot.TotalCalories,
+			"total_protein":            snapshot.TotalProtein,
+			"total_carbs":              snapshot.TotalCarbs,
+			"total_fat":                snapshot.TotalFat,
+			"items":                    datatypes.JSONSlice[map[string]any](snapshot.Items),
+			"food_name":                gorm.Expr("COALESCE(NULLIF(BTRIM(food_name), ''), ?)", nullableText(InferPublicFoodName(snapshot.Items, snapshot.Description))),
+			"description":              gorm.Expr("COALESCE(NULLIF(BTRIM(description), ''), ?)", nullableText(snapshot.Description)),
+			"insight":                  gorm.Expr("COALESCE(NULLIF(BTRIM(insight), ''), ?)", nullableText(snapshot.Insight)),
+			"nutrition_status":         "current",
+			"nutrition_source_version": gorm.Expr("content_version"),
+			"updated_at":               time.Now(),
+		})
+	return updated.RowsAffected > 0, updated.Error
+}
+
+// MarkNutritionFailed records that the background analysis found no usable
+// nutrition, so the dish shows as missing nutrition instead of zero calories.
+func (r *PublicFoodRepo) MarkNutritionFailed(ctx context.Context, itemID string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.PublicFoodItem{}).
+		Where("id = ? AND COALESCE(total_calories, 0) <= 0", itemID).
+		Updates(map[string]any{"nutrition_status": "failed", "updated_at": time.Now()}).Error
+}
+
+// InferPublicFoodName names a dish from its recognised foods the way the upload
+// page used to: up to three food names, else the start of the description.
+func InferPublicFoodName(items []map[string]any, description string) string {
+	names := make([]string, 0, 3)
+	for _, item := range items {
+		if name := strings.TrimSpace(stringFromAny(item["name"])); name != "" {
+			names = append(names, name)
+		}
+		if len(names) == 3 {
+			break
+		}
+	}
+	if len(names) > 0 {
+		return strings.Join(names, "、")
+	}
+	runes := []rune(strings.TrimSpace(description))
+	if len(runes) > 20 {
+		runes = runes[:20]
+	}
+	return string(runes)
+}
+
+func nullableText(value string) any {
+	if value = strings.TrimSpace(value); value == "" {
+		return nil
+	}
+	return value
+}
+
 type NutritionSnapshot struct {
 	TotalCalories float64
 	TotalProtein  float64
@@ -869,14 +932,21 @@ func (r *PublicFoodRepo) CreateCampusAnalysisTask(ctx context.Context, userID, i
 	return &task, nil
 }
 
-func (r *PublicFoodRepo) CreateModerationTask(ctx context.Context, userID, itemID, text string) (*analyzedomain.AnalysisTask, error) {
+// CreateModerationTask queues the text check of an upload. nutritionImages, when
+// given, also asks the worker to read the dish's nutrition from those photos
+// after the check, so the uploader does not wait for the analysis.
+func (r *PublicFoodRepo) CreateModerationTask(ctx context.Context, userID, itemID, text string, nutritionImages []string) (*analyzedomain.AnalysisTask, error) {
+	payload := map[string]any{"item_id": itemID}
+	if len(nutritionImages) > 0 {
+		payload["nutrition_image_urls"] = nutritionImages
+	}
 	task := analyzedomain.AnalysisTask{
 		ID:        uuid.New().String(),
 		UserID:    userID,
 		TaskType:  "public_food_library_text",
 		Status:    "pending",
 		TextInput: &text,
-		Payload:   map[string]any{"item_id": itemID},
+		Payload:   payload,
 	}
 	if err := r.db.WithContext(ctx).Create(&task).Error; err != nil {
 		return nil, err

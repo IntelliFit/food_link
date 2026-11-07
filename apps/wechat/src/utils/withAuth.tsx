@@ -126,6 +126,8 @@ export function withAuth<P extends object>(
   options?: {
     /** 是否允许未登录访问（默认 false） */
     public?: boolean
+    /** 按当前页面参数决定是否允许未登录访问，例如带着分享地点打开的美食图谱 */
+    publicWhen?: () => boolean
     /** 自定义未登录时的处理逻辑，返回 true 则阻止默认跳转 */
     onUnauthenticated?: () => boolean
   }
@@ -134,12 +136,12 @@ export function withAuth<P extends object>(
     const { scheme } = useAppColorScheme()
     /** 已登录时首帧即渲染，避免分包页（如记录详情）短暂空白 */
     const [isAuthenticated, setIsAuthenticated] = useState(
-      () => Boolean(options?.public) || checkIsLoggedIn()
+      () => Boolean(options?.public) || Boolean(options?.publicWhen?.()) || checkIsLoggedIn()
     )
 
     const doAuthCheck = useCallback(() => {
       // 如果是公共页面，直接通过
-      if (options?.public) {
+      if (options?.public || options?.publicWhen?.()) {
         setIsAuthenticated(true)
         return
       }
