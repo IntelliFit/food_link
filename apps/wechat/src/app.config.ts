@@ -53,10 +53,6 @@ const extraSubpackagePages = [
   'pages/reward-center/index',
   'pages/food-contribution/index',
   'pages/standard-food-contribution/index',
-  'pages/research-weight/index',
-  'pages/research-weight-record/index',
-  'pages/research-weight-containers/index',
-  'pages/campus-campaign/index',
   'pages/my-vouchers/index',
   'pages/interaction-notifications/index',
   'pages/comment-history/index',
@@ -108,6 +104,8 @@ export default defineAppConfig({
     { root: 'packageLifespan', name: 'lifespan', pages: ['pages/predictor/index'] },
     // 拍照识别的 3:4 / 4:3 取景相机；packageExtra 快满了，单独分包。
     { root: 'packageCamera', name: 'camera', pages: ['pages/shoot/index'] },
+    // 称重科研计划和高校共建活动：packageExtra 已到 1900 KB 预算，单独分包。
+    { root: 'packageResearch', name: 'research', pages: ['pages/research-weight/index', 'pages/research-weight-record/index', 'pages/research-weight-containers/index', 'pages/campus-campaign/index'] },
     {
       root: 'packageExtra',
       name: 'extra',

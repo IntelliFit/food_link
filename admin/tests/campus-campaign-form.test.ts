@@ -26,5 +26,5 @@ test('rejects incomplete or wrong input', () => {
 })
 
 test('share path points at the campaign page', () => {
-  assert.equal(sharePath('ABC234'), 'packageExtra/pages/campus-campaign/index?code=ABC234')
+  assert.equal(sharePath('ABC234'), 'packageResearch/pages/campus-campaign/index?code=ABC234')
 })

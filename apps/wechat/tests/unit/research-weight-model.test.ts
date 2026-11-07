@@ -15,7 +15,7 @@ import {
   tareSwitchPatch,
   type DraftContainer,
   type ResearchDraft,
-} from '../../src/packageExtra/pages/research-weight/model'
+} from '../../src/packageResearch/pages/research-weight/model'
 
 const shot = (name: string) => ({ url: `https://cdn.test/${name}`, capturedAt: '2026-11-04T04:00:00.000Z' })
 const library = libraryIndex([{ id: 'c1', name: '750ml 圆盒', container_type: 'box', grams: 28.5, photo_url: 'https://cdn.test/lib.jpg' }])

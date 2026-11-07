@@ -6,9 +6,9 @@ import {
   newContainer,
   type DraftPhoto,
   type ResearchDraft,
-} from '../../src/packageExtra/pages/research-weight/model'
-import { autofillValue, filledFrom, readingNote, readingProblem, toPhotoReading } from '../../src/packageExtra/pages/research-weight/reading'
-import { chinaDay, freshCampus } from '../../src/packageExtra/pages/research-weight/model'
+} from '../../src/packageResearch/pages/research-weight/model'
+import { autofillValue, filledFrom, readingNote, readingProblem, toPhotoReading } from '../../src/packageResearch/pages/research-weight/reading'
+import { chinaDay, freshCampus } from '../../src/packageResearch/pages/research-weight/model'
 
 const read = (grams: number, agreement: 'agree' | 'single' | 'disagree' = 'agree', resolution?: number) =>
   toPhotoReading({ readable: true, grams, agreement, message: `已读出 ${grams} g，请核对`, ...(resolution ? { resolution_grams: resolution } : {}) })

@@ -1,4 +1,4 @@
-import { chinaToday, joinCodeFrom } from '../../src/packageExtra/pages/campus-campaign/labels'
+import { chinaToday, joinCodeFrom } from '../../src/packageResearch/pages/campus-campaign/labels'
 
 describe('campus campaign page helpers', () => {
   it('reads the join code from a share link or a mini program code scene', () => {

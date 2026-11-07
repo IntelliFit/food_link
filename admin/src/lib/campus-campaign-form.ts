@@ -54,5 +54,5 @@ export function campaignInputFromForm(form: CampaignForm): CampaignInput | { err
 
 /** 社团分享和打印小程序码用的页面路径。 */
 export function sharePath(joinCode: string): string {
-  return `packageExtra/pages/campus-campaign/index?code=${joinCode}`
+  return `packageResearch/pages/campus-campaign/index?code=${joinCode}`
 }

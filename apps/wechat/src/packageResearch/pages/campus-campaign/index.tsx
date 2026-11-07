@@ -99,7 +99,7 @@ export default function CampusCampaignPage() {
     const shown = mine?.campaign || campaign
     return {
       title: shown ? `加入${shown.school_name}${shown.org_name}「${shown.title}」` : '高校共建：和社团一起称一称食堂的饭',
-      path: `/packageExtra/pages/campus-campaign/index${shown ? `?code=${shown.join_code}` : ''}`,
+      path: `/packageResearch/pages/campus-campaign/index${shown ? `?code=${shown.join_code}` : ''}`,
     }
   })
 

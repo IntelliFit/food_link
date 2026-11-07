@@ -7,6 +7,7 @@ export const SUBPACKAGE_USER_GROUP_ROOT = '/packageUserGroup' as const
 export const SUBPACKAGE_STATS_METABOLIC_ROOT = '/packageStatsMetabolic' as const
 export const SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT = '/packageFoodLibraryShare' as const
 export const SUBPACKAGE_STATS_ROOT = '/packageStats' as const
+export const SUBPACKAGE_RESEARCH_ROOT = '/packageResearch' as const
 
 const EXTRA_PACKAGE_ROOT_BY_PAGE: Readonly<Record<string, string>> = {
   '/pages/about/index': SUBPACKAGE_ABOUT_ROOT,
@@ -15,6 +16,11 @@ const EXTRA_PACKAGE_ROOT_BY_PAGE: Readonly<Record<string, string>> = {
   '/pages/food-library-share/index': SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT,
   // 完整分析在 4.6.20 是主包 Tab 页，本地保存的旧回跳地址 /pages/stats/index 也会映射到这里。
   '/pages/stats/index': SUBPACKAGE_STATS_ROOT,
+  // 称重科研计划和高校共建活动在 packageResearch（4.6.22 起）；旧的 /packageExtra 地址经 normalizeRedirectUrlForSubpackage 也映射到这里。
+  '/pages/research-weight/index': SUBPACKAGE_RESEARCH_ROOT,
+  '/pages/research-weight-record/index': SUBPACKAGE_RESEARCH_ROOT,
+  '/pages/research-weight-containers/index': SUBPACKAGE_RESEARCH_ROOT,
+  '/pages/campus-campaign/index': SUBPACKAGE_RESEARCH_ROOT,
 }
 
 const KNOWN_EXTRA_PACKAGE_ROOTS = [
@@ -25,6 +31,7 @@ const KNOWN_EXTRA_PACKAGE_ROOTS = [
   SUBPACKAGE_STATS_METABOLIC_ROOT,
   SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT,
   SUBPACKAGE_STATS_ROOT,
+  SUBPACKAGE_RESEARCH_ROOT,
 ] as const
 
 /** TabBar 主包页面（与 `getCurrentPageRoute()` 一致，形如 /pages/xxx/index） */
