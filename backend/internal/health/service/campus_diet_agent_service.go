@@ -102,7 +102,8 @@ type campusDietAgentRunState struct {
 	AsOf              time.Time
 	ReadOnlyReplay    bool
 	IsHomePreview     bool
-	MealForTomorrow   bool // plan tomorrow's meal on a fresh day budget (the home card at night)
+	MealForTomorrow   bool   // plan tomorrow's meal on a fresh day budget (the home card at night)
+	JudgeMode         string // home preview only: "", "skip" or "background"
 	PreviewContextKey string
 	PreviewMemory     []domain.MealRecommendationMemory
 	ExposureLoaded    bool
