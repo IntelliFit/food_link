@@ -278,7 +278,7 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 		return nil, err
 	}
 	pointsBalance := 100.0
-	publicRecords := false
+	publicRecords := true
 	now := time.Now()
 	nickname := strings.TrimSpace(input.Nickname)
 	if nickname == "" {
@@ -714,7 +714,7 @@ func (s *LoginService) issueLoginOutput(user *repo.User, openID, unionID string)
 
 func newDefaultUser(openID string, phone *string) *repo.User {
 	pointsBalance := 100.0
-	publicRecords := false
+	publicRecords := true
 	return &repo.User{
 		OpenID:        openID,
 		Nickname:      buildDefaultWechatNickname(),

@@ -41,7 +41,7 @@ type UserDO struct {
 	OnboardingDraftStep            *int       `gorm:"column:onboarding_draft_step;type:integer"`
 	DietGoal                       *string    `gorm:"column:diet_goal;type:varchar(50)"`
 	Searchable                     *bool      `gorm:"column:searchable;type:boolean;default:true"`
-	PublicRecords                  *bool      `gorm:"column:public_records;type:boolean;default:false"`
+	PublicRecords                  *bool      `gorm:"column:public_records;type:boolean;default:true"`
 	PublicRecordsConsentedAt       *time.Time `gorm:"column:public_records_consented_at;type:timestamptz"`
 	PublicRecordsReconfirmPending  bool       `gorm:"column:public_records_reconfirm_pending;type:boolean;not null;default:false"`
 	FriendsCanViewRecords          *bool      `gorm:"column:friends_can_view_records;type:boolean;not null;default:true"`

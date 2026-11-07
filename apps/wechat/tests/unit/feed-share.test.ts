@@ -1,10 +1,17 @@
 import Taro from '@tarojs/taro'
 import { authenticatedRequest, getAccessToken, getUserProfile } from '../../src/utils/api'
-import { circlePostAudienceHint, nextRecordVisibility, promptPublicRecordsReconfirm } from '../../src/utils/feed-share'
+import { circlePostAudienceHint, nextRecordVisibility, promptPublicRecordsReconfirm, recordVisibilityNotice, markRecordVisibilityNoticeDue, remindRecordVisibilityOnce } from '../../src/utils/feed-share'
 
+const mockStorage = new Map<string, string>()
 jest.mock('@tarojs/taro', () => ({
   __esModule: true,
-  default: { showModal: jest.fn() },
+  default: {
+    showModal: jest.fn(),
+    navigateTo: jest.fn(() => Promise.resolve()),
+    getStorageSync: jest.fn((key: string) => mockStorage.get(key) || ''),
+    setStorageSync: jest.fn((key: string, value: string) => { mockStorage.set(key, value) }),
+    removeStorageSync: jest.fn((key: string) => { mockStorage.delete(key) }),
+  },
 }))
 
 jest.mock('../../src/utils/api', () => ({
@@ -97,5 +104,45 @@ describe('promptPublicRecordsReconfirm', () => {
     showModal.mockRejectedValueOnce(new Error('modal failed'))
     await promptPublicRecordsReconfirm()
     expect(update).not.toHaveBeenCalled()
+  })
+})
+
+describe('recordVisibilityNotice', () => {
+  it('says exactly who can see new records', () => {
+    expect(recordVisibilityNotice({ public_records: true, friends_can_view_records: true })).toContain('所有用户')
+    expect(recordVisibilityNotice({ public_records: false, friends_can_view_records: true })).toContain('互相加了好友')
+    expect(recordVisibilityNotice({ public_records: false, friends_can_view_records: false })).toContain('只有你自己')
+  })
+})
+
+describe('remindRecordVisibilityOnce', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockStorage.clear()
+    mockStorage.set('user_id', 'u1')
+    ;(getAccessToken as jest.Mock).mockReturnValue('token')
+    ;(getUserProfile as jest.Mock).mockResolvedValue({ public_records: true, friends_can_view_records: true })
+    showModal.mockResolvedValue({ confirm: true, cancel: false })
+  })
+
+  it('waits until a record has been saved', async () => {
+    await remindRecordVisibilityOnce()
+    expect(showModal).not.toHaveBeenCalled()
+  })
+
+  it('tells a public account once', async () => {
+    markRecordVisibilityNoticeDue()
+    await remindRecordVisibilityOnce()
+    markRecordVisibilityNoticeDue()
+    await remindRecordVisibilityOnce()
+    expect(showModal).toHaveBeenCalledTimes(1)
+    expect(showModal.mock.calls[0][0].content).toContain('所有用户')
+  })
+
+  it('leaves accounts that are still being asked to the reconfirm prompt', async () => {
+    ;(getUserProfile as jest.Mock).mockResolvedValue({ public_records: false, public_records_reconfirm_pending: true })
+    markRecordVisibilityNoticeDue()
+    await remindRecordVisibilityOnce()
+    expect(showModal).not.toHaveBeenCalled()
   })
 })

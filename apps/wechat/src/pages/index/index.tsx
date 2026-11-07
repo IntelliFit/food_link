@@ -13,7 +13,7 @@ import {
 import * as React from 'react'
 import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { useLocalToday } from '../../hooks/useLocalToday'
-import { promptPublicRecordsReconfirm } from '../../utils/feed-share'
+import { promptPublicRecordsReconfirm, remindRecordVisibilityOnce } from '../../utils/feed-share'
 import {
   getHomeDashboard,
   getDashboardTargets,
@@ -1379,7 +1379,7 @@ function IndexPage() {
 
   useDidShow(() => {
     homeVisibleRef.current = true
-    void promptPublicRecordsReconfirm()
+    void promptPublicRecordsReconfirm().then(() => remindRecordVisibilityOnce())
     clearHomeAuxiliaryTimers()
     setPetHidden(getStoredPetHidden())
     setHiddenMicronutrientKeys(getStoredHiddenMicronutrientKeys())

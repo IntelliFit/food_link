@@ -33,14 +33,14 @@ func readFeedPrivacyRow(t *testing.T, db *gorm.DB, id string) feedPrivacyRow {
 	return row
 }
 
-func TestMigrateFeedPrivacySchemaIsIdempotentAndDefaultsPrivate(t *testing.T) {
+func TestMigrateFeedPrivacySchemaIsIdempotentAndDefaultsPublic(t *testing.T) {
 	db := setupFeedPrivacyUsers(t)
 	require.NoError(t, MigrateFeedPrivacySchema(context.Background(), db, "public"))
 
 	require.NoError(t, db.Exec(`INSERT INTO weapp_user (id) VALUES ('new_user')`).Error)
 	newUser := readFeedPrivacyRow(t, db, "new_user")
 	require.NotNil(t, newUser.PublicRecords)
-	assert.False(t, *newUser.PublicRecords)
+	assert.True(t, *newUser.PublicRecords, "new accounts are public by default and told on their first record")
 	assert.False(t, newUser.Pending)
 
 	unset := readFeedPrivacyRow(t, db, "unset")
@@ -79,6 +79,10 @@ func TestMigrateFeedFriendsSchemaDefaultsExistingAccountsToOn(t *testing.T) {
 	assert.Zero(t, off)
 	row := readFeedPrivacyRow(t, db, "defaulted")
 	assert.True(t, *row.PublicRecords, "other settings are untouched")
+	already := readFeedPrivacyRow(t, db, "already_private")
+	assert.False(t, *already.PublicRecords, "existing private choices are untouched")
+	require.NoError(t, db.Exec(`INSERT INTO weapp_user (id) VALUES ('after_friends')`).Error)
+	assert.True(t, *readFeedPrivacyRow(t, db, "after_friends").PublicRecords, "new accounts default to public")
 }
 
 func TestFlipUnconsentedRecordsKeepsExplicitChoices(t *testing.T) {

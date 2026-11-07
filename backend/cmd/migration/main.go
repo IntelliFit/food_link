@@ -40,6 +40,9 @@ func main() {
 	onlyFeedPrivacy := flag.Bool("only-feed-privacy", false, "only add consent columns and make public records default to off; existing choices are kept")
 	onlyFeedFriends := flag.Bool("only-feed-friends", false, "only add the switch that lets an account hide its records from friends; defaults to on for everyone")
 	flipFeedPrivacy := flag.Bool("flip-feed-privacy", false, "count accounts that never explicitly agreed to public records; read-only unless -flip-feed-privacy-apply is set")
+	restoreFeedPublic := flag.Bool("restore-feed-public", false, "count accounts the privacy flip turned private that have not answered the prompt; read-only unless -restore-feed-public-apply is set")
+	restoreFeedPublicApply := flag.Bool("restore-feed-public-apply", false, "with -restore-feed-public, make those accounts public again and stop asking them")
+	restoreFeedPublicExclude := flag.String("restore-feed-public-exclude", "", "with -restore-feed-public, comma-separated user IDs to keep private")
 	flipFeedPrivacyApply := flag.Bool("flip-feed-privacy-apply", false, "with -flip-feed-privacy, turn those accounts private and ask them once in the mini program")
 	officialAccount := flag.Bool("official-account", false, "count what the no-login official account and its posts would add; read-only unless -official-account-apply is set")
 	officialAccountApply := flag.Bool("official-account-apply", false, "with -official-account, create the account and publish its posts")
@@ -70,6 +73,9 @@ func main() {
 	onlyAnalytics := flag.Bool("only-analytics", false, "only migrate admin roles and isolated analytics tables")
 	printTarget := flag.Bool("print-target", false, "print resolved database target without credentials; do not connect or migrate")
 	flag.Parse()
+	if (*restoreFeedPublicApply || *restoreFeedPublicExclude != "") && !*restoreFeedPublic {
+		log.Fatal("--restore-feed-public-apply 和 --restore-feed-public-exclude 须与 --restore-feed-public 一起使用")
+	}
 	if *flipFeedPrivacyApply && !*flipFeedPrivacy {
 		log.Fatal("--flip-feed-privacy-apply 须与 --flip-feed-privacy 一起使用")
 	}
@@ -104,7 +110,7 @@ func main() {
 	if *onlySupplementProduct {
 		selectedOnlyModes++
 	}
-	for _, selected := range []bool{*onlyResearchWeight, *onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyWechatTransfer, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyFeedPrivacy, *onlyFeedFriends, *flipFeedPrivacy, *officialAccount, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations, *onlyContentConfigs, *onlyExperiments} {
+	for _, selected := range []bool{*onlyResearchWeight, *onlyAnalytics, *onlyPushReminders, *onlySleep, *onlyPapay, *onlyPromoterCommission, *onlyWechatTransfer, *onlyNutritionQuality, *onlyNutritionStates, *verifyNutritionStates, *onlyNutritionEmbeddings, *onlyOnboardingStatus, *onlyCampusDirectoryReviewed, *onlyCampusDirectoryPending, *onlyFoodRecordMood, *onlyFeedPrivacy, *onlyFeedFriends, *flipFeedPrivacy, *restoreFeedPublic, *officialAccount, *onlyManualFoodSausage, *onlyCampusCatalogPublishing, *onlySupplements, *onlySupplementFeed, *onlyGrowthPerformanceIndexes, *onlyMarketingQR, *onlyCampusMapLocations, *onlyContentConfigs, *onlyExperiments} {
 		if selected {
 			selectedOnlyModes++
 		}
@@ -320,6 +326,10 @@ func main() {
 		migrateErr = migration.MigrateFeedPrivacySchema(ctx, db, cfg.Database.Schema)
 	} else if *onlyFeedFriends {
 		migrateErr = migration.MigrateFeedFriendsSchema(ctx, db, cfg.Database.Schema)
+	} else if *restoreFeedPublic {
+		restoreResult, restoreErr := migration.RestoreFlippedRecordsToPublic(ctx, db, cfg.Database.Schema, strings.Split(*restoreFeedPublicExclude, ","), *restoreFeedPublicApply)
+		migrateErr = restoreErr
+		log.Printf("恢复公开: 候选=%d 排除=%d 已恢复=%d 已执行=%t", restoreResult.Candidates, restoreResult.Excluded, restoreResult.Restored, restoreResult.Applied)
 	} else if *flipFeedPrivacy {
 		flipResult, flipErr := migration.FlipUnconsentedRecordsToPrivate(ctx, db, cfg.Database.Schema, *flipFeedPrivacyApply)
 		migrateErr = flipErr
@@ -406,7 +416,7 @@ func main() {
 		log.Printf("圈子好友可见开关字段迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 		return
 	}
-	if *flipFeedPrivacy || *officialAccount {
+	if *flipFeedPrivacy || *restoreFeedPublic || *officialAccount {
 		return
 	}
 	if *onlyManualFoodSausage {

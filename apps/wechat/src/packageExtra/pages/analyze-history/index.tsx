@@ -19,6 +19,7 @@ import {
   type ExecutionMode,
   type MealType,
 } from '../../../utils/api'
+import { markRecordVisibilityNoticeDue, remindRecordVisibilityOnce } from '../../../utils/feed-share'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -1115,6 +1116,8 @@ function AnalyzeHistoryPage() {
         }
         const saveResult = await saveFoodRecord(payload)
         Taro.hideLoading()
+        markRecordVisibilityNoticeDue()
+        void remindRecordVisibilityOnce()
         const targetDateKey = payload.date || formatDateKey(new Date())
         if (!saveResult.already_saved) {
           applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)

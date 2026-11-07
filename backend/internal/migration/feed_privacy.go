@@ -19,7 +19,7 @@ func MigrateFeedPrivacySchema(ctx context.Context, db *gorm.DB, schema string) e
 		for _, statement := range []string{
 			`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS public_records_consented_at timestamptz`,
 			`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS public_records_reconfirm_pending boolean NOT NULL DEFAULT false`,
-			`ALTER TABLE weapp_user ALTER COLUMN public_records SET DEFAULT false`,
+			`ALTER TABLE weapp_user ALTER COLUMN public_records SET DEFAULT true`,
 		} {
 			if err := tx.Exec(statement).Error; err != nil {
 				return fmt.Errorf("migrate feed privacy schema: %w", err)
@@ -35,8 +35,14 @@ func MigrateFeedFriendsSchema(ctx context.Context, db *gorm.DB, schema string) e
 	if err := prepareSchema(ctx, db, schema); err != nil {
 		return err
 	}
-	if err := db.WithContext(ctx).Exec(`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS friends_can_view_records boolean NOT NULL DEFAULT true`).Error; err != nil {
-		return fmt.Errorf("migrate feed friends schema: %w", err)
+	for _, statement := range []string{
+		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS friends_can_view_records boolean NOT NULL DEFAULT true`,
+		// New accounts are public by default again (2026-11-04); existing choices stay.
+		`ALTER TABLE weapp_user ALTER COLUMN public_records SET DEFAULT true`,
+	} {
+		if err := db.WithContext(ctx).Exec(statement).Error; err != nil {
+			return fmt.Errorf("migrate feed friends schema: %w", err)
+		}
 	}
 	return nil
 }
