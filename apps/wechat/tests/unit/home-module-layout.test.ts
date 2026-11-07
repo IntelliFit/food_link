@@ -77,55 +77,30 @@ describe('home module preferences', () => {
   })
 })
 
-describe('moving stored layouts to the new defaults', () => {
-  it('gives the new order and hidden expiry to anyone still on the old default', () => {
-    const storage = useStorage([
-      ['user_id', 'alice'],
-      ['home_module_layout_v4:alice', { order: V4_DEFAULT_ORDER, hidden: ['supplements'], quickStats: ['weight', 'water'], density: 'compact' }],
-    ])
+describe('putting every account back on the recommended layout once', () => {
+  const custom = { order: ['meals', 'diet', 'nextMeal', 'body', 'supplements', 'expiry', 'rewards', 'recap'], hidden: ['recap'], quickStats: ['weight', 'water'], density: 'compact' }
+  it.each(['v5', 'v4', 'v3', 'v2'])('replaces a %s layout, custom choices included, and drops the old key', (version) => {
+    const oldKey = `home_module_layout_${version}:alice`
+    const storage = useStorage([['user_id', 'alice'], [oldKey, version === 'v4' ? { ...custom, order: V4_DEFAULT_ORDER } : custom]])
+    ;(Taro.removeStorageSync as jest.Mock).mockImplementation(key => storage.delete(key))
     const layout = readHomeModuleLayout()
-    expect(layout.order).toEqual(defaultHomeModuleLayout().order)
-    expect(layout.hidden).toEqual(['supplements', 'expiry'])
-    expect(layout.quickStats).toEqual(['weight', 'water'])
-    expect(layout.density).toBe('compact')
+    expect(layout).toEqual(defaultHomeModuleLayout())
     expect(storage.get(`${HOME_MODULE_LAYOUT_PREFIX}alice`)).toEqual(layout)
+    expect(storage.has(oldKey)).toBe(false)
   })
-  it('keeps a supplements choice when moving an otherwise default layout', () => {
-    useStorage([
-      ['user_id', 'alice'],
-      ['home_module_layout_v4:alice', { order: V4_DEFAULT_ORDER, hidden: [], quickStats: ['weight'], density: 'smart' }],
-    ])
-    expect(readHomeModuleLayout().hidden).toEqual(['expiry'])
-  })
-  it('leaves a custom order and its modules alone', () => {
-    const order = ['meals', 'diet', 'nextMeal', 'body', 'supplements', 'expiry', 'rewards', 'recap']
-    useStorage([
-      ['user_id', 'alice'],
-      ['home_module_layout_v4:alice', { order, hidden: ['supplements'], quickStats: ['weight'], density: 'smart' }],
-    ])
+  it('keeps what people choose after the reset', () => {
+    useStorage([['user_id', 'alice'], [`${HOME_MODULE_LAYOUT_PREFIX}alice`, custom]])
     const layout = readHomeModuleLayout()
-    expect(layout.order).toEqual(order)
-    expect(layout.hidden).toEqual(['supplements'])
+    expect(layout.order).toEqual(custom.order)
+    expect(layout.hidden).toEqual(['recap'])
+    expect(layout.density).toBe('compact')
   })
-  it('keeps expiry visible for someone who already hid other modules on the default order', () => {
-    useStorage([
-      ['user_id', 'alice'],
-      ['home_module_layout_v4:alice', { order: V4_DEFAULT_ORDER, hidden: ['supplements', 'recap'], quickStats: ['weight'], density: 'smart' }],
-    ])
-    const layout = readHomeModuleLayout()
-    expect(layout.order).toEqual(defaultHomeModuleLayout().order)
-    expect(layout.hidden).toEqual(['supplements', 'recap'])
+  it('still opens the home if old keys cannot be removed', () => {
+    useStorage([['user_id', 'alice'], ['home_module_layout_v5:alice', custom]])
+    ;(Taro.removeStorageSync as jest.Mock).mockImplementation(() => { throw new Error('storage busy') })
+    expect(readHomeModuleLayout()).toEqual(defaultHomeModuleLayout())
   })
-  it('does not migrate a layout already saved in the new format', () => {
-    useStorage([
-      ['user_id', 'alice'],
-      [`${HOME_MODULE_LAYOUT_PREFIX}alice`, { order: V4_DEFAULT_ORDER, hidden: [], quickStats: ['weight'], density: 'smart' }],
-    ])
-    const layout = readHomeModuleLayout()
-    expect(layout.order).toEqual(V4_DEFAULT_ORDER)
-    expect(layout.hidden).toEqual([])
-  })
-  it('starts accounts with nothing stored on the new default', () => {
+  it('starts accounts with nothing stored on the recommended layout', () => {
     useStorage([['user_id', 'alice']])
     expect(readHomeModuleLayout()).toEqual(defaultHomeModuleLayout())
   })

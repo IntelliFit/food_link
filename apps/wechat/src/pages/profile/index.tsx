@@ -613,9 +613,7 @@ function ProfilePage() {
               key.startsWith('record_manual_custom_foods_v1:') ||
               key.startsWith('home_experience_config_v1:') ||
               key.startsWith('home_experience_config_v2:') ||
-              key.startsWith('home_module_layout_v2:') ||
-              key.startsWith('home_module_layout_v3:') ||
-              key.startsWith('home_module_layout_v4:') ||
+              key.startsWith('home_module_layout_') ||
               key.startsWith('home_check_in_snooze_v1:')
             ) {
               try { Taro.removeStorageSync(key) } catch (_) {}

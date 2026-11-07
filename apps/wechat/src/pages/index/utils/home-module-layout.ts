@@ -26,17 +26,11 @@ export type HomeModuleLayout = { order: HomeModuleId[]; hidden: HomeModuleId[]; 
 export type HomeModuleLocks = Partial<Record<HomeModuleId, string>>
 const ids: HomeModuleId[] = HOME_MODULES.map(item => item.id)
 const defaultHidden: HomeModuleId[] = ['supplements', 'expiry']
-const pastDefaultOrders: string[][] = [
-  ['nextMeal', 'diet', 'supplements', 'rewards', 'body', 'meals', 'expiry', 'recap'],
-  ['diet', 'nextMeal', 'body', 'supplements', 'expiry', 'rewards', 'meals', 'recap'],
-]
 const quickStatIds: HomeQuickStatId[] = HOME_QUICK_STATS.map(item => item.id)
 const defaultQuickStats: HomeQuickStatId[] = ['weight', 'exercise', 'sleep']
-const legacyDefaultQuickStats: HomeQuickStatId[] = ['weight', 'water', 'sleep']
-export const HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v5:'
-const V4_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v4:'
-const V3_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v3:'
-const V2_HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v2:'
+export const HOME_MODULE_LAYOUT_PREFIX = 'home_module_layout_v6:'
+// 2026-11 起所有账号统一回到推荐布局一次，旧版本存的布局（自己调过的也算）不再沿用。
+const RETIRED_LAYOUT_PREFIXES = ['home_module_layout_v5:', 'home_module_layout_v4:', 'home_module_layout_v3:', 'home_module_layout_v2:']
 const ORGANIZE_HINT_PREFIX = 'home_organize_hint_v1:'
 
 export function defaultHomeModuleLayout(): HomeModuleLayout {
@@ -119,32 +113,18 @@ export function homeLayoutOwner(): string {
   return String(Taro.getStorageSync('user_id') || 'guest')
 }
 
-/** 没动过顺序的老用户换成新默认；动过顺序或关过其他模块的，尊重本人的选择。 */
-function adoptNewDefaults(stored: unknown, layout: HomeModuleLayout): HomeModuleLayout {
-  const storedOrder = stored && typeof stored === 'object' ? (stored as { order?: unknown }).order : undefined
-  const keptPastOrder = Array.isArray(storedOrder)
-    && pastDefaultOrders.some(order => order.length === storedOrder.length && order.every((id, index) => storedOrder[index] === id))
-  if (!keptPastOrder) return layout
-  const hidOthers = layout.hidden.some(id => id !== 'supplements')
-  return { ...layout, order: [...ids], hidden: hidOthers ? layout.hidden : [...layout.hidden, 'expiry'] }
-}
-
 export function readHomeModuleLayout(): HomeModuleLayout {
   try {
     const owner = homeLayoutOwner()
     const current = Taro.getStorageSync(HOME_MODULE_LAYOUT_PREFIX + owner)
     if (current) return normalizeHomeModuleLayout(current)
-    const v4 = Taro.getStorageSync(V4_HOME_MODULE_LAYOUT_PREFIX + owner)
-    const v3 = v4 ? null : Taro.getStorageSync(V3_HOME_MODULE_LAYOUT_PREFIX + owner)
-    const stored = v4 || v3 || Taro.getStorageSync(V2_HOME_MODULE_LAYOUT_PREFIX + owner)
-    let migrated = stored ? adoptNewDefaults(stored, normalizeHomeModuleLayout(stored)) : defaultHomeModuleLayout()
-    // Replace the old quick-card default once; subsequent custom choices stay.
-    if (v3 && migrated.quickStats.length === legacyDefaultQuickStats.length
-      && legacyDefaultQuickStats.every(id => migrated.quickStats.includes(id))) {
-      migrated = { ...migrated, quickStats: [...defaultQuickStats] }
-    }
-    Taro.setStorageSync(HOME_MODULE_LAYOUT_PREFIX + owner, migrated)
-    return migrated
+    const layout = defaultHomeModuleLayout()
+    Taro.setStorageSync(HOME_MODULE_LAYOUT_PREFIX + owner, layout)
+    RETIRED_LAYOUT_PREFIXES.forEach(prefix => {
+      try { Taro.removeStorageSync(prefix + owner) }
+      catch { /* 旧键清不掉只占一点空间，不影响首页 */ }
+    })
+    return layout
   }
   catch { return defaultHomeModuleLayout() }
 }
