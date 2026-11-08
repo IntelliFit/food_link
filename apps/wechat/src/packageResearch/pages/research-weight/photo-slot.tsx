@@ -13,15 +13,17 @@ interface PhotoSlotProps {
   scale?: boolean
   /** 秤的照片：正在自动读数。 */
   reading?: boolean
+  /** 秤的照片：旁边输入框里填的读数，和照片对不上时在照片下提醒。 */
+  typed?: { value: string; precision: number }
   onPick: () => void
   onClear: () => void
 }
 
 /** 一个照片位：空时点击拍照，有图时可预览或重拍；秤的照片下方显示自动读数。 */
 export function PhotoSlot(props: PhotoSlotProps) {
-  const { photo, scale, reading } = props
+  const { photo, scale, reading, typed } = props
   if (!scale) return <PhotoTile {...props} />
-  const note = readingNote(photo)
+  const note = readingNote(photo, typed)
   return (
     <View className='rw-photo-wrap'>
       <PhotoTile {...props} />

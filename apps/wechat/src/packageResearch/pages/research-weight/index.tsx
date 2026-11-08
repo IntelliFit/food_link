@@ -14,6 +14,7 @@ import { STATUS_LABELS, checkDraft, draftHasContent, emptyDraft, libraryIndex, t
 import { acceptConsent, clearDraft, loadDraft, readConsent } from './storage'
 import { ensureLoggedIn } from './media'
 import { ConsentCard } from './controls'
+import { mineRow } from './mine'
 import './index.scss'
 
 const STEPS = [
@@ -21,8 +22,6 @@ const STEPS = [
   { title: '称', desc: '每盒连盒放秤上拍读数' },
   { title: '吃完称空盒', desc: '存过常用容器就不用称' },
 ]
-
-const MODE_LABELS: Record<string, string> = { multi: '按盒', itemized: '分项', whole: '整份' }
 
 /** 称重科研计划首页：说明、进行中的一顿、常用容器和我的提交。游客也能看。 */
 export default function ResearchWeightPlanPage() {
@@ -129,17 +128,19 @@ export default function ResearchWeightPlanPage() {
       {mine?.items?.length ? (
         <View className='rw-card'>
           <Text className='rw-card__title'>我的提交</Text>
-          {mine.items.slice(0, 20).map((item) => (
-            <View key={item.id} className='rw-mine'>
-              <View className='rw-mine__copy'>
-                <Text className='rw-mine__name'>{item.dish_name}</Text>
-                <Text className='rw-mine__meta'>
-                  {MODE_LABELS[item.weighing_mode] || item.weighing_mode}{item.items.length ? ` ${item.items.length} 项` : ''} · {item.total_net_grams}g{item.review_note ? ` · ${item.review_note}` : ''}
-                </Text>
+          {mine.items.slice(0, 20).map((item) => {
+            const row = mineRow(item)
+            return (
+              <View key={item.id} className='rw-mine'>
+                <View className='rw-mine__copy'>
+                  <Text className='rw-mine__name'>{item.dish_name}</Text>
+                  <Text className='rw-mine__meta'>{row.meta}{row.reward ? <Text className='rw-mine__reward'> · {row.reward}</Text> : null}</Text>
+                  {row.note ? <Text className={`rw-mine__note rw-mine__note--${item.status}`}>{row.note}</Text> : null}
+                </View>
+                <Text className={`rw-status rw-status--${item.status}`}>{STATUS_LABELS[item.status] || item.status}</Text>
               </View>
-              <Text className={`rw-status rw-status--${item.status}`}>{STATUS_LABELS[item.status] || item.status}</Text>
-            </View>
-          ))}
+            )
+          })}
         </View>
       ) : null}
     </View>

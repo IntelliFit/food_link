@@ -43,10 +43,15 @@ export function readingProblem(label: string, typed: string, photo: ReadablePhot
   return `${label}填的是 ${formatReading(value)}，照片里是 ${formatReading(reading?.grams ?? 0)}，请改正或重拍`
 }
 
-/** 照片下方的一行说明：读出了什么、读不出时怎么办。 */
-export function readingNote(photo: ReadablePhoto | undefined): { text: string; warn: boolean } | null {
+/**
+ * 照片下方的一行说明：读出了什么、读不出时怎么办。
+ * 传入输入框里填的数时，填的和照片对不上就直接在照片下提醒（提交栏也会拦），不用翻到页面底部才看到。
+ */
+export function readingNote(photo: ReadablePhoto | undefined, typed?: { value: string; precision: number }): { text: string; warn: boolean } | null {
   const reading = photo?.reading
   if (!reading) return null
+  const mismatch = typed ? readingProblem('', typed.value, photo, typed.precision) : ''
+  if (mismatch) return { text: mismatch, warn: true }
   if (confirmed(reading)) return { text: reading.message || `已读出 ${formatReading(reading.grams ?? 0)}`, warn: false }
   if (single(reading)) return { text: `只读到一次：${formatReading(reading.grams ?? 0)}，请自己核对一下`, warn: true }
   if (reading.agreement === 'disagree') return { text: reading.message || '两次读数不一致，建议重拍', warn: true }

@@ -48,6 +48,13 @@ describe('readingNote and autofillValue', () => {
     expect(readingNote(shot('a'))).toBeNull()
   })
 
+  it('flags a typed value that disagrees with a confirmed reading right under the photo', () => {
+    expect(readingNote(shot('a', read(431)), { value: '400', precision: 1 })).toEqual({ text: '填的是 400g，照片里是 431g，请改正或重拍', warn: true })
+    expect(readingNote(shot('a', read(431)), { value: '431', precision: 1 })).toEqual({ text: '已读出 431 g，请核对', warn: false })
+    expect(readingNote(shot('a', read(431)), { value: '', precision: 1 })?.warn).toBe(false)
+    expect(readingNote(shot('a', read(431, 'single')), { value: '400', precision: 1 })?.text).toBe('只读到一次：431g，请自己核对一下')
+  })
+
   it('fills only empty fields and never a value the contributor typed', () => {
     expect(autofillValue('', read(452))).toBe('452')
     expect(autofillValue('', read(452, 'single'))).toBe('452')
