@@ -30,10 +30,28 @@ func (r *CampaignRepo) GetOrg(ctx context.Context, id string) (*domain.Org, erro
 	return &org, err
 }
 
-func (r *CampaignRepo) ListOrgs(ctx context.Context) ([]domain.Org, error) {
-	var orgs []domain.Org
-	err := r.db.WithContext(ctx).Order("created_at DESC").Limit(500).Find(&orgs).Error
+// ListOrgs lists clubs with their school and how many campaigns they ran,
+// optionally for one school.
+func (r *CampaignRepo) ListOrgs(ctx context.Context, schoolID string) ([]domain.OrgView, error) {
+	query := `SELECT o.id, o.school_id, coalesce(s.name, '') AS school_name, o.name, o.status, o.agreement_version, o.created_at,
+  (SELECT count(*) FROM campus_campaigns c WHERE c.org_id = o.id) AS campaign_count
+FROM campus_orgs o LEFT JOIN schools s ON s.id = o.school_id`
+	args := []any{}
+	if schoolID != "" {
+		query += ` WHERE o.school_id = ?::uuid`
+		args = append(args, schoolID)
+	}
+	var orgs []domain.OrgView
+	err := r.db.WithContext(ctx).Raw(query+` ORDER BY o.created_at DESC LIMIT 500`, args...).Scan(&orgs).Error
 	return orgs, err
+}
+
+// DeleteOrg removes a club that never ran a campaign; it reports whether a
+// row was deleted.
+func (r *CampaignRepo) DeleteOrg(ctx context.Context, id string) (bool, error) {
+	result := r.db.WithContext(ctx).Exec(`DELETE FROM campus_orgs o WHERE o.id = ?::uuid
+AND NOT EXISTS (SELECT 1 FROM campus_campaigns c WHERE c.org_id = o.id)`, id)
+	return result.RowsAffected > 0, result.Error
 }
 
 func (r *CampaignRepo) CreateCampaign(ctx context.Context, campaign *domain.Campaign) error {

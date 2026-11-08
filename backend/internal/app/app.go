@@ -1193,6 +1193,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.POST("/research-weight-samples/:sample_id/auto-review", adminAuth, researchWeightHandler.AdminAutoReview)
 	adminAPI.GET("/campus-orgs", adminAuth, campusCampaignHandler.AdminListOrgs)
 	adminAPI.POST("/campus-orgs", adminAuth, campusCampaignHandler.AdminCreateOrg)
+	adminAPI.DELETE("/campus-orgs/:org_id", adminAuth, campusCampaignHandler.AdminDeleteOrg)
 	adminAPI.GET("/campus-campaigns", adminAuth, campusCampaignHandler.AdminListCampaigns)
 	adminAPI.POST("/campus-campaigns", adminAuth, campusCampaignHandler.AdminCreateCampaign)
 	adminAPI.PUT("/campus-campaigns/:campaign_id", adminAuth, campusCampaignHandler.AdminUpdateCampaign)

@@ -167,6 +167,15 @@ func (h *CampaignHandler) AdminCreateOrg(c *gin.Context) {
 	response.Success(c, gin.H{"item": org})
 }
 
+// DELETE /api/admin/campus-orgs/:org_id
+func (h *CampaignHandler) AdminDeleteOrg(c *gin.Context) {
+	if err := h.svc.DeleteOrg(c.Request.Context(), c.Param("org_id")); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "社团已删除"})
+}
+
 // GET /api/admin/campus-campaigns
 func (h *CampaignHandler) AdminListCampaigns(c *gin.Context) {
 	items, err := h.svc.ListCampaigns(c.Request.Context(), c.Query("status"))

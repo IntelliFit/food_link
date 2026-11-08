@@ -26,7 +26,8 @@ import (
 type Repository interface {
 	CreateOrg(ctx context.Context, org *domain.Org) error
 	GetOrg(ctx context.Context, id string) (*domain.Org, error)
-	ListOrgs(ctx context.Context) ([]domain.Org, error)
+	ListOrgs(ctx context.Context, schoolID string) ([]domain.OrgView, error)
+	DeleteOrg(ctx context.Context, id string) (bool, error)
 	CreateCampaign(ctx context.Context, campaign *domain.Campaign) error
 	UpdateCampaign(ctx context.Context, id string, updates map[string]any) error
 	GetCampaign(ctx context.Context, id string) (*domain.Campaign, error)
@@ -517,7 +518,7 @@ type OrgInput struct {
 }
 
 func (s *CampaignService) CreateOrg(ctx context.Context, adminID string, input OrgInput) (*domain.Org, error) {
-	name := strings.TrimSpace(input.Name)
+	name := strings.Join(strings.Fields(input.Name), " ")
 	if name == "" || len([]rune(name)) > 40 {
 		return nil, badRequest("请填写不超过40字的社团名称")
 	}
@@ -531,6 +532,15 @@ func (s *CampaignService) CreateOrg(ctx context.Context, adminID string, input O
 	}
 	if schoolName == "" {
 		return nil, badRequest("学校不存在")
+	}
+	existing, err := s.repo.ListOrgs(ctx, school)
+	if err != nil {
+		return nil, err
+	}
+	for _, other := range existing {
+		if clubKey(other.Name, schoolName) == clubKey(name, schoolName) {
+			return nil, badRequest(fmt.Sprintf("%s已经有社团「%s」，不用再建，直接在第 2 步选它", schoolName, other.Name))
+		}
 	}
 	org := &domain.Org{
 		ID: uuid.NewString(), SchoolID: school, CampusID: optionalUUID(input.CampusID), Name: name, OrgType: domain.OrgFitnessClub,
@@ -550,8 +560,35 @@ func (s *CampaignService) CreateOrg(ctx context.Context, adminID string, input O
 	return org, nil
 }
 
-func (s *CampaignService) ListOrgs(ctx context.Context) ([]domain.Org, error) {
-	return s.repo.ListOrgs(ctx)
+func (s *CampaignService) ListOrgs(ctx context.Context) ([]domain.OrgView, error) {
+	return s.repo.ListOrgs(ctx, "")
+}
+
+// DeleteOrg removes a club created by mistake; clubs that ran a campaign
+// stay, their data belongs to the campaign.
+func (s *CampaignService) DeleteOrg(ctx context.Context, id string) error {
+	if uuid.Validate(strings.TrimSpace(id)) != nil {
+		return notFound("社团不存在")
+	}
+	deleted, err := s.repo.DeleteOrg(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return badRequest("社团不存在，或已经建过活动（建过活动的社团不能删）")
+	}
+	return nil
+}
+
+// clubKey compares club names the way people write them: "清华大学健身协会"
+// and "健身 协会" at 清华大学 are the same club.
+func clubKey(name, schoolName string) string {
+	key := strings.ToLower(strings.Join(strings.Fields(name), ""))
+	school := strings.ToLower(strings.Join(strings.Fields(schoolName), ""))
+	if school != "" && strings.HasPrefix(key, school) && key != school {
+		key = strings.TrimPrefix(key, school)
+	}
+	return key
 }
 
 type CampaignInput struct {
@@ -828,7 +865,7 @@ func (s *CampaignService) view(ctx context.Context, campaign *domain.Campaign) (
 	view := &domain.CampaignView{
 		ID: campaign.ID, Title: campaign.Title, JoinCode: campaign.JoinCode, Status: campaign.Status, Open: s.open(campaign),
 		StartsAt: campaign.StartsAt, EndsAt: campaign.EndsAt, SchoolID: campaign.SchoolID, SchoolName: schoolName,
-		Goals: campaign.Goals, ClubRewardNote: campaign.ClubRewardNote,
+		Goals: campaign.Goals, ClubRewardNote: campaign.ClubRewardNote, CoreMemberCap: campaign.CoreMemberCap,
 		MemberCount: counts[campaign.ID][0], ApprovedCount: counts[campaign.ID][1],
 	}
 	if view.Goals == nil {

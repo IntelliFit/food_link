@@ -84,8 +84,21 @@ type CampaignView struct {
 	OrgName        string         `json:"org_name"`
 	Goals          map[string]any `json:"goals"`
 	ClubRewardNote string         `json:"club_reward_note"`
+	CoreMemberCap  int            `json:"core_member_cap"`
 	MemberCount    int64          `json:"member_count"`
 	ApprovedCount  int64          `json:"approved_count"`
+}
+
+// OrgView is a club as the admin page lists it.
+type OrgView struct {
+	ID               string     `json:"id"`
+	SchoolID         string     `json:"school_id"`
+	SchoolName       string     `json:"school_name"`
+	Name             string     `json:"name"`
+	Status           string     `json:"status"`
+	AgreementVersion string     `json:"agreement_version"`
+	CampaignCount    int64      `json:"campaign_count"`
+	CreatedAt        *time.Time `json:"created_at,omitempty"`
 }
 
 // MemberStats counts one member's contributions in a campaign.

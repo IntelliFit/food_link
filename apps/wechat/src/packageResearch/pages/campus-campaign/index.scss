@@ -52,3 +52,14 @@
 .research-weight-page--dark .cc-action--ghost, .research-weight-page--dark .cc-sheet { background: #121d1a; }
 .research-weight-page--dark .cc-code__input { background: #16221f; }
 .research-weight-page--dark .cc-dish { border-color: #26342f; }
+
+.cc-howto__step { display: flex; gap: 18px; margin-top: 20px; }
+.cc-howto__index { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: #e8f7f1; color: #00875f; font-size: 25px; font-weight: 600; }
+.cc-howto__copy { flex: 1; min-width: 0; }
+.cc-howto__title { display: block; font-size: 27px; font-weight: 600; }
+.cc-howto__desc { display: block; margin-top: 6px; color: #5f6f6a; font-size: 24px; line-height: 1.5; }
+.cc-code-big { display: block; margin: 12px 0; color: #00875f; font-size: 40px; font-weight: 700; letter-spacing: 4px; }
+.cc-share { margin-top: 20px; border: none; line-height: inherit; }
+.cc-share::after { border: none; }
+.research-weight-page--dark .cc-howto__index { background: #143128; color: #7fd8b5; }
+.research-weight-page--dark .cc-howto__desc { color: #a8b8b2; }

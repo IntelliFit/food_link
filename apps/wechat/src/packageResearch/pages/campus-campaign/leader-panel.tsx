@@ -1,4 +1,4 @@
-import { Input, Picker, Text, View } from '@tarojs/components'
+import { Button, Input, Picker, Text, View } from '@tarojs/components'
 import { useState } from 'react'
 import Taro from '@tarojs/taro'
 import { showUnifiedApiError } from '../../../utils/api'
@@ -12,6 +12,7 @@ import { Chips, Field } from '../research-weight/controls'
 import { PRECISIONS } from '../research-weight/model'
 import { DishPicker, type PickedDish } from './dish-picker'
 import { MEAL_LABELS, ROLE_LABELS, chinaToday } from './labels'
+import { HowTo, LEADER_STEPS } from './how-to'
 
 interface LeaderPanelProps {
   leader: CampaignLeader
@@ -78,6 +79,13 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
 
   return (
     <View>
+      <HowTo title='负责人要做的三件事' steps={LEADER_STEPS} />
+      <View className='rw-card'>
+        <Text className='rw-card__title'>邀请成员</Text>
+        <Text className='cc-code-big'>加入码 {campaign.join_code}</Text>
+        <Text className='rw-tip'>成员在「我的 → 科研共建 → 高校共建」输入加入码，或点你转发的卡片加入。</Text>
+        <Button className='rw-submit cc-share' openType='share'>转发活动卡片给成员</Button>
+      </View>
       <View className='rw-card'>
         <Text className='rw-card__title'>核心成员 {leader.core_count}/{leader.core_cap}</Text>
         <Text className='rw-tip'>核心成员活动期间免费使用标准版（含精准模式），到活动结束自动到期。</Text>

@@ -22,6 +22,7 @@ import { JoinCard } from './join-card'
 import { LeaderPanel } from './leader-panel'
 import { MemberHome } from './member-home'
 import { joinCodeFrom } from './labels'
+import { HowTo, JOIN_STEPS } from './how-to'
 import './index.scss'
 
 type Tab = 'home' | 'board' | 'leader'
@@ -164,6 +165,8 @@ export default function CampusCampaignPage() {
       ) : null}
 
       {tab === 'home' && campaign && memberOfShown && mine ? <MemberHome mine={mine} /> : null}
+      {!campaign ? <HowTo title='怎么参加' steps={JOIN_STEPS} /> : null}
+      {tab === 'home' && campaign && !memberOfShown && campaign.open ? <HowTo title='怎么参加' steps={JOIN_STEPS.slice(1)} /> : null}
       {tab === 'home' && campaign && !memberOfShown && campaign.open ? (
         mine?.campaign ? (
           <View className='rw-card'><Text className='rw-tip'>你已加入「{mine.campaign.title}」，同一时间只能参加一个活动。</Text></View>

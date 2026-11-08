@@ -6,6 +6,10 @@ import { getFoodRecordList, type FoodRecord } from '../../../utils/api'
 import { linkCampaignRecord, type CampaignMine, type CampaignStation } from '../../../utils/campus-campaign-api'
 import { DishPicker, type PickedDish } from './dish-picker'
 import { MEAL_LABELS, ROLE_LABELS, chinaToday } from './labels'
+import { HowTo, MEMBER_STEPS } from './how-to'
+
+/** 拍照记一餐走自建相机页（小程序已没有「记录」Tab）。 */
+const FOOD_CAMERA_PAGE = '/packageCamera/pages/shoot/index'
 
 interface MemberHomeProps {
   mine: CampaignMine
@@ -43,6 +47,12 @@ export function MemberHome({ mine }: MemberHomeProps) {
   const todayStations = mine.stations.filter((station) => station.session_date === today)
   const laterStations = mine.stations.filter((station) => station.session_date > today).slice(0, 3)
   const canPrecision = mine.role === 'core' || mine.role === 'leader'
+
+  const openCamera = () => {
+    Taro.navigateTo({ url: `${FOOD_CAMERA_PAGE}?date=${encodeURIComponent(today)}` }).catch(() => {
+      Taro.showToast({ title: '打开相机失败，请从首页「记一餐」拍照', icon: 'none' })
+    })
+  }
 
   const pickDish = async (dish: PickedDish) => {
     const record = linking
@@ -82,13 +92,14 @@ export function MemberHome({ mine }: MemberHomeProps) {
         <View className='rw-submit cc-action' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/research-weight-record/index') })}>
           <Text>用秤记一顿</Text>
         </View>
-        <View className='rw-submit cc-action cc-action--ghost' onClick={() => Taro.switchTab({ url: '/pages/record/index' })}>
+        <View className='rw-submit cc-action cc-action--ghost' onClick={openCamera}>
           <Text>拍照记一顿</Text>
         </View>
       </View>
       <Text className='rw-tip'>
-        {canPrecision ? '拍照时选「精准模式」，俯拍和斜拍各一张；' : ''}记完回到这里，把这一餐挂到食堂的菜上才会计入活动。
+        {canPrecision ? '拍照时选「精准模式」，俯拍和斜拍各一张；' : ''}拍照记完要回到这里，把这一餐挂到食堂的菜上才会计入活动。
       </Text>
+      <HowTo title='怎么参与' steps={MEMBER_STEPS} />
 
       <View className='rw-card'>
         <Text className='rw-card__title'>今天的拍照记录</Text>

@@ -278,7 +278,7 @@ func TestDraftCampaignsAreNotPublic(t *testing.T) {
 	org, err := f.svc.CreateOrg(ctx, "admin", OrgInput{SchoolID: f.schoolID, Name: "健身协会"})
 	require.NoError(t, err)
 	_, err = f.svc.CreateOrg(ctx, "admin", OrgInput{SchoolID: f.schoolID, Name: "健身协会"})
-	require.ErrorContains(t, err, "同名")
+	require.ErrorContains(t, err, "已经有社团")
 	now := time.Now()
 	draft, err := f.svc.CreateCampaign(ctx, "admin", CampaignInput{OrgID: org.ID, Title: "草稿", StartsAt: now, EndsAt: now.Add(time.Hour)})
 	require.NoError(t, err)
@@ -327,4 +327,54 @@ func TestActivatingACampaignGrantsWaitingLeadersAndKeepsScaleSettings(t *testing
 	_, err = f.svc.UpdateCampaign(ctx, draft.ID, input)
 	require.NoError(t, err)
 	require.Len(t, f.granter.calls, 1, "and only once")
+}
+
+func TestClubsAreNotCreatedTwiceUnderSlightlyDifferentNames(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	first, err := f.svc.CreateOrg(ctx, "admin", OrgInput{SchoolID: f.schoolID, Name: " 清华大学健身协会 "})
+	require.NoError(t, err)
+	require.Equal(t, "清华大学健身协会", first.Name)
+	for _, again := range []string{"健身协会", "健身 协会", "清华大学 健身协会"} {
+		_, err = f.svc.CreateOrg(ctx, "admin", OrgInput{SchoolID: f.schoolID, Name: again})
+		require.ErrorContains(t, err, "已经有社团「清华大学健身协会」", again)
+	}
+	_, err = f.svc.CreateOrg(ctx, "admin", OrgInput{SchoolID: f.schoolID, Name: "健美协会"})
+	require.NoError(t, err, "a different club at the same school is fine")
+	_, err = f.svc.CreateOrg(ctx, "admin", OrgInput{SchoolID: f.otherID, Name: "健身协会"})
+	require.NoError(t, err, "the same name at another school is fine")
+
+	orgs, err := f.svc.ListOrgs(ctx)
+	require.NoError(t, err)
+	require.Len(t, orgs, 3)
+	byName := map[string]domain.OrgView{}
+	for _, org := range orgs {
+		byName[org.SchoolName+"/"+org.Name] = org
+	}
+	require.Contains(t, byName, "清华大学/清华大学健身协会")
+	require.Contains(t, byName, "北京大学/健身协会")
+}
+
+func TestOnlyClubsWithoutCampaignsCanBeDeleted(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	mistake, err := f.svc.CreateOrg(ctx, "admin", OrgInput{SchoolID: f.schoolID, Name: "建错的社团"})
+	require.NoError(t, err)
+	require.NoError(t, f.svc.DeleteOrg(ctx, mistake.ID))
+	require.ErrorContains(t, f.svc.DeleteOrg(ctx, mistake.ID), "不存在")
+
+	f.activeCampaign(t, f.schoolID, 15, f.user(t, "社长"))
+	orgs, err := f.svc.ListOrgs(ctx)
+	require.NoError(t, err)
+	require.Len(t, orgs, 1)
+	require.EqualValues(t, 1, orgs[0].CampaignCount)
+	require.ErrorContains(t, f.svc.DeleteOrg(ctx, orgs[0].ID), "已经建过活动")
+	require.ErrorContains(t, f.svc.DeleteOrg(ctx, "not-a-uuid"), "不存在")
+}
+
+func TestClubKeyIgnoresSpacesCaseAndTheSchoolPrefix(t *testing.T) {
+	require.Equal(t, clubKey("清华大学健身协会", "清华大学"), clubKey("健身协会", "清华大学"))
+	require.Equal(t, clubKey("Fitness Club", "清华大学"), clubKey("fitnessclub", "清华大学"))
+	require.NotEqual(t, clubKey("健美协会", "清华大学"), clubKey("健身协会", "清华大学"))
+	require.Equal(t, "清华大学", clubKey("清华大学", "清华大学"), "a club named only after the school keeps its name")
 }
