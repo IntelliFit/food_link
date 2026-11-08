@@ -72,10 +72,10 @@ Component({
         text: '首页'
       },
       {
-        // 小麦替换了原来的「分析」格：一屏看完今天；完整分析 packageStats/pages/stats/index 从小麦页进去，是二级页。
+        // 伙伴替换了原来的「分析」格：一屏看完今天；完整分析 packageStats/pages/stats/index 从伙伴页进去，是二级页。
         id: 'pet',
         pagePath: '/pages/pet/index',
-        text: '小麦'
+        text: '伙伴'
       },
       { 
         id: 'record',

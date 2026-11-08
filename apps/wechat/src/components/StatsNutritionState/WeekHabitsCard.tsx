@@ -1,5 +1,5 @@
 import { Text, View } from '@tarojs/components'
-import type { WeekDeltaView, WeekHabitRowView } from '../../packageStats/pages/stats/nutrition-state-view'
+import type { WeekDeltaView, WeekHabitRowView } from '../../utils/nutrition-state-view'
 
 /** 「本周规律」：每个习惯一行 7 个点 */
 export function WeekHabitsCard({ dayLabels, rows, countTexts, headlineDelta, otherDeltas }: {

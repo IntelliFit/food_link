@@ -24,7 +24,7 @@ export type MealImpactSource = 'result' | 'result_text' | 'manual'
 const IMPACT_DEADLINE_MS = 3000
 /** 营养变化到了之后，宠物那句话最多再等这么久，免得弹层出来后又长高一截 */
 const PET_GRACE_MS = 600
-/** 小麦 Tab：今天还差什么，刚记的这餐会在那里完成今天的任务 */
+/** 伙伴 Tab：今天还差什么，刚记的这餐会在那里完成今天的任务 */
 const PET_TAB_URL = '/pages/pet/index'
 /** 完整分析是二级页，看过去某天时去这里 */
 const STATS_DETAIL_URL = '/packageStats/pages/stats/index'

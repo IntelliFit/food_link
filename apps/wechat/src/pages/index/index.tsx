@@ -992,7 +992,7 @@ function IndexPage() {
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = React.useState<string | null>(null)
   const [showDailyPosterModal, setShowDailyPosterModal] = React.useState(false)
   const [showHealthProfilePrompt, setShowHealthProfilePrompt] = React.useState(false)
-  // onboarding_v2：只有首次打开的游客参与；两组在同一时刻记曝光，实验组再盖上小麦首屏
+  // onboarding_v2：只有首次打开的游客参与；两组在同一时刻记曝光，实验组再盖上伙伴首屏
   const [welcomeEligible] = React.useState(readWelcomeEligible)
   const [welcomeClosed, setWelcomeClosed] = React.useState(false)
   const onboardingExperiment = useExperiment(ONBOARDING_EXPERIMENT, ONBOARDING_CONTROL, { expose: welcomeEligible })
@@ -2719,9 +2719,14 @@ function IndexPage() {
     return undefined
   }, [analyzeReminder])
 
+  /** 首页左上角的宠物只是伙伴页的入口：点它去底栏「伙伴」，识别提醒照旧 */
+  const openPetTab = React.useCallback(() => {
+    void Taro.switchTab({ url: '/pages/pet/index' })
+  }, [])
+
   const handlePetAnalyzeReminderPress = React.useCallback(() => {
     if (!analyzeReminder.taskId) {
-      openPetChat()
+      openPetTab()
       return
     }
     if (analyzeReminder.kind === 'auto_recorded') {
@@ -2738,7 +2743,7 @@ function IndexPage() {
     void openAnalyzeTaskFromReminder(analyzeReminder.taskId).finally(() => {
       setTimeout(() => void refreshAnalyzeReminder(), 600)
     })
-  }, [analyzeReminder.kind, analyzeReminder.taskId, refreshAnalyzeReminder])
+  }, [analyzeReminder.kind, analyzeReminder.taskId, openPetTab, refreshAnalyzeReminder])
 
   const handleShareDailyPosterImage = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -3081,7 +3086,7 @@ function IndexPage() {
               className='greeting-pet__avatar'
             />
           )}
-          onPetPress={openPetChat}
+          onPetPress={openPetTab}
           petReminder={petAnalyzeReminder}
           onPetReminderPress={handlePetAnalyzeReminderPress}
         />

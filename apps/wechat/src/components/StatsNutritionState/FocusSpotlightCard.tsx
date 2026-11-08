@@ -18,7 +18,7 @@ export type FocusSpotlightItem = {
 
 const EVIDENCE_SHOWN = 3
 
-/** 分析页最上面：用户选的 1–3 项关注，分数、原因、依据直接摊开 */
+/** 分析页最上面：「我在意的」1–3 项，分数、原因、依据直接摊开；「改」打开和伙伴页同一个弹窗 */
 export function FocusSpotlightCard({ items, maxCount, footnote, onOpen, onManage }: {
   items: FocusSpotlightItem[]
   maxCount: number
@@ -30,11 +30,11 @@ export function FocusSpotlightCard({ items, maxCount, footnote, onOpen, onManage
     <View className='stats-card stats-ns-focus'>
       <View className='stats-ns-focus__head'>
         <View className='stats-ns-focus__title-wrap'>
-          <Text className='stats-ns-card-head__title'>我的关注</Text>
+          <Text className='stats-ns-card-head__title'>我在意的</Text>
           <Text className='stats-ns-card-head__meta'>{items.length}/{maxCount}</Text>
         </View>
-        <View className='stats-ns-focus__manage' aria-role='button' aria-label='管理我的关注' onClick={onManage}>
-          <Text>管理</Text>
+        <View className='stats-ns-focus__manage' aria-role='button' aria-label='改我在意的' onClick={onManage}>
+          <Text>改</Text>
         </View>
       </View>
       {items.length === 0 ? (

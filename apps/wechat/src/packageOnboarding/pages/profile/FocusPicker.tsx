@@ -20,7 +20,7 @@ export interface FocusChoice {
   custom: boolean
   /** 用户那条气泡 */
   said: string
-  /** 小麦回的一句 */
+  /** 伙伴回的一句 */
   reply: string
   /** 后台保存，永不 reject；跳过时直接是 false */
   saved: Promise<boolean>

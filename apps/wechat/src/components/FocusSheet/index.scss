@@ -1,0 +1,221 @@
+// 「我在意的」弹窗：伙伴页和完整分析页共用，颜色自带，不依赖页面变量。
+.focus-sheet {
+  --fs-card: #fffdf7;
+  --fs-bg: #f7f4ec;
+  --fs-on: #eef6f1;
+  --fs-on-border: #5cb896;
+  --fs-border: #e1e6dc;
+  --fs-text: #1e2939;
+  --fs-muted: #5b6676;
+  --fs-deep: #1f4d3a;
+  --fs-on-deep: #ffffff;
+  --fs-input-bg: #ffffff;
+
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.focus-sheet--dark {
+  --fs-card: #161e1c;
+  --fs-bg: #101716;
+  --fs-on: #17241f;
+  --fs-on-border: #5cb896;
+  --fs-border: #26332f;
+  --fs-text: #e5efe9;
+  --fs-muted: #9aa8a1;
+  --fs-deep: #7dd3b0;
+  --fs-on-deep: #0f1a16;
+  --fs-input-bg: #1f2a27;
+}
+
+.focus-sheet__mask {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(15, 26, 22, 0.45);
+}
+
+.focus-sheet__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding: 36rpx 32rpx calc(36rpx + env(safe-area-inset-bottom));
+  border-radius: 36rpx 36rpx 0 0;
+  background: var(--fs-card);
+}
+
+.focus-sheet__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.focus-sheet__title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--fs-text);
+}
+
+.focus-sheet__count {
+  font-size: 24rpx;
+  color: var(--fs-muted);
+}
+
+.focus-sheet__desc,
+.focus-sheet__hint {
+  font-size: 26rpx;
+  line-height: 38rpx;
+  color: var(--fs-muted);
+}
+
+.focus-sheet__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.focus-sheet__option {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-height: 80rpx;
+  padding: 0 28rpx;
+  box-sizing: border-box;
+  border-radius: 40rpx;
+  border: 2rpx solid var(--fs-border);
+  background: var(--fs-bg);
+}
+
+.focus-sheet__option.is-on {
+  border-color: var(--fs-on-border);
+  background: var(--fs-on);
+}
+
+.focus-sheet__order {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 18rpx;
+  background: var(--fs-deep);
+  color: var(--fs-on-deep);
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 36rpx;
+  text-align: center;
+}
+
+.focus-sheet__label {
+  font-size: 28rpx;
+  color: var(--fs-text);
+}
+
+.focus-sheet__remove {
+  margin-right: -12rpx;
+  padding: 8rpx 12rpx;
+}
+
+.focus-sheet__remove-text {
+  font-size: 30rpx;
+  line-height: 30rpx;
+  color: var(--fs-muted);
+}
+
+.focus-sheet__add {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.focus-sheet__input {
+  flex: 1;
+  height: 80rpx;
+  padding: 0 28rpx;
+  border-radius: 40rpx;
+  border: 2rpx solid var(--fs-border);
+  background: var(--fs-input-bg);
+  color: var(--fs-text);
+  font-size: 28rpx;
+}
+
+.focus-sheet__placeholder {
+  color: var(--fs-muted);
+}
+
+.focus-sheet__add-btn {
+  flex-shrink: 0;
+  width: 136rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+  border: 2rpx solid var(--fs-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.focus-sheet__add-btn.is-disabled {
+  opacity: 0.45;
+}
+
+.focus-sheet__add-text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--fs-deep);
+}
+
+.focus-sheet__actions {
+  display: flex;
+  gap: 20rpx;
+  padding-top: 8rpx;
+}
+
+.focus-sheet__btn {
+  flex: 1;
+  height: 88rpx;
+  border-radius: 44rpx;
+  border: 2rpx solid var(--fs-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.focus-sheet__btn--primary {
+  border-color: var(--fs-deep);
+  background: var(--fs-deep);
+}
+
+.focus-sheet__btn-text {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--fs-text);
+}
+
+.focus-sheet__btn--primary .focus-sheet__btn-text {
+  color: var(--fs-on-deep);
+}
+
+.focus-sheet__spinner {
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  border: 4rpx solid var(--fs-border);
+  border-top-color: var(--fs-deep);
+  animation: focus-sheet-spin 0.8s linear infinite;
+}
+
+.focus-sheet__spinner--light {
+  border-color: rgba(255, 255, 255, 0.4);
+  border-top-color: var(--fs-on-deep);
+}
+
+@keyframes focus-sheet-spin {
+  to { transform: rotate(360deg); }
+}

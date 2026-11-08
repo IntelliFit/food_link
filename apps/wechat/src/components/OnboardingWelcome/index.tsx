@@ -10,6 +10,7 @@ import {
 } from '../../utils/onboarding-api'
 import { formatTrustCount, WELCOME_DONE_KEY, WELCOME_VISIBLE_KEY } from '../../utils/onboarding-v2'
 import { HOME_BOTANICAL_BG_URL } from '../../utils/static-asset-cdn-url'
+import { DEFAULT_PET_NAME } from '../../utils/pet-name'
 import { TrustBadges } from '../TrustBadges'
 import './index.scss'
 
@@ -27,7 +28,7 @@ function markDone() {
 }
 
 /**
- * 注册新流程首屏（onboarding_v2 实验组）：盖在首页上，小麦出场，先试后登。
+ * 注册新流程首屏（onboarding_v2 实验组）：盖在首页上，健文伙伴出场，先试后登。
  * 「先随便逛逛」直接回到首页，游客照常浏览。
  */
 export function OnboardingWelcome({ onClose }: { onClose: () => void }) {
@@ -69,7 +70,7 @@ export function OnboardingWelcome({ onClose }: { onClose: () => void }) {
         <Text className='ob-welcome__brand'>智健食探</Text>
         <Image className='ob-welcome__mascot' src={XIAOMAI} mode='aspectFit' />
         <View className='ob-welcome__bubble'>
-          <Text>嗨，我是小麦～{'\n'}拍一下你眼前这顿，我马上告诉你吃了多少。</Text>
+          <Text>嗨，我是{DEFAULT_PET_NAME}～{'\n'}拍一下你眼前这顿，我马上告诉你吃了多少。</Text>
         </View>
         <Text className='ob-welcome__slogan'>下一顿吃什么，问食探。</Text>
 
@@ -85,7 +86,7 @@ export function OnboardingWelcome({ onClose }: { onClose: () => void }) {
             ))}
             {answer && (
               <View className='ob-welcome__answer'>
-                <Text className='ob-welcome__answer-tag'>小麦 · 示例回答</Text>
+                <Text className='ob-welcome__answer-tag'>{DEFAULT_PET_NAME} · 示例回答</Text>
                 <Text className='ob-welcome__answer-text'>{answer.answer}</Text>
                 <View className='ob-welcome__answer-go' onClick={() => go('login')}><Text>按我的情况来 →</Text></View>
               </View>

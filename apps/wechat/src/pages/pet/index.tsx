@@ -3,19 +3,21 @@ import { useCallback, useRef, useState } from 'react'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
 import CustomNavBar from '../../components/CustomNavBar'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
-import { addBodyWaterLog, showUnifiedApiError } from '../../utils/api'
+import { FocusSheet } from '../../components/FocusSheet'
+import { addBodyWaterLog, getNutritionState, showUnifiedApiError } from '../../utils/api'
 import { experiments } from '../../utils/experiments'
 import { requestHomeRecordMenu } from '../../utils/home-record-menu'
-import { openPetChat, openPetSettings } from '../../utils/pet-navigation'
+import { normalizeNutritionState, planLineText, todayRowView, type TodayRowView } from '../../utils/nutrition-state-view'
+import { askPetNow, openPetChat, openPetSettings } from '../../utils/pet-navigation'
+import { DEFAULT_PET_NAME, petDisplayName } from '../../utils/pet-name'
 import { checkIsLoggedIn, redirectToLogin, withAuth } from '../../utils/withAuth'
 import { getPetDaily, type PetDaily, type PetDailyTask, type PetMood } from './pet-daily-api'
-import { petFocusSummary } from './pet-focus'
+import { petFocusLabels } from './pet-focus'
 import { askTarget, petActionNeedsLogin, petActionTarget, pickMealTarget, type PetActionId, type PetActionTarget } from './pet-tools'
-import { PetAskBar, PetDailySkeleton, PetGapsCard, PetHero, PetLevelRow, PetTaskRow, PetWeekRow } from './PetDailyCards'
-import { PetFocusSheet } from './PetFocusSheet'
+import { PetAskBar, PetDailySkeleton, PetFocusRow, PetGapsCard, PetHero, PetTaskRow, PetWeekRow } from './PetDailyCards'
 import './index.scss'
 
-const GUEST_MOOD: PetMood = { key: 'calm', label: '等你来认识', reason: '', icon: 'sun' }
+const GUEST_MOOD: PetMood = { key: 'calm', label: '', reason: '', icon: 'sun' }
 const ASK_FALLBACK = '晚上吃什么好？'
 
 function openTarget(target: PetActionTarget) {
@@ -26,6 +28,9 @@ function openTarget(target: PetActionTarget) {
     case 'petChat':
       openPetChat(target.starter)
       return
+    case 'petAsk':
+      askPetNow(target.question)
+      return
     case 'petChatMeal':
       openPetChat(target.entry)
       return
@@ -35,8 +40,8 @@ function openTarget(target: PetActionTarget) {
 }
 
 /**
- * 底栏「小麦」：替换了原来的「分析」格，一屏看完今天——宠物和一句话、今天还差（按关注排）、
- * 今天一个任务（记录后自动完成）、本周分数、问小麦。完整分析是 packageStats/pages/stats/index 二级页。
+ * 底栏「伙伴」：只管今天、现在该做什么，一屏看完——宠物和一句话、我在意的、今天还差（按关注排）、
+ * 今天一个任务（记录后自动完成）、本周分数、问一句。回头看的完整分析是 packageStats/pages/stats/index 二级页。
  */
 function PetTabPage() {
   const { scheme } = useAppColorScheme()
@@ -46,6 +51,9 @@ function PetTabPage() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [addingWater, setAddingWater] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+  const [details, setDetails] = useState<{ rows: TodayRowView[]; plan: string }>({ rows: [], plan: '' })
   const loadingRef = useRef(false)
 
   const loadDaily = useCallback(async () => {
@@ -62,15 +70,16 @@ function PetTabPage() {
       const data = await getPetDaily()
       setDaily(data)
       setLoadFailed(false)
+      setDetailsOpen(false)
       if (data.task?.just_done) {
         experiments.track('pet_task_done', { key: data.task.key })
         Taro.showToast({ title: `任务完成 +${data.task.exp_reward} 经验`, icon: 'none' })
       } else if (data.report.reward?.claimed_now) {
-        Taro.showToast({ title: `${data.pet.name}带回 +${data.report.reward.exp} 经验`, icon: 'none' })
+        Taro.showToast({ title: `${petDisplayName(data.pet?.name)}带回 +${data.report.reward.exp} 经验`, icon: 'none' })
       }
     } catch (error) {
       setLoadFailed(true)
-      console.error('[pet-tab] 获取小麦日报失败', error)
+      console.error('[pet-tab] 获取伙伴日报失败', error)
     } finally {
       loadingRef.current = false
       setLoading(false)
@@ -126,6 +135,30 @@ function PetTabPage() {
     void loadDaily()
   }, [loadDaily])
 
+  /** 「看全部」：今天每一项营养素都摊开（数据来自同一份每日营养状态） */
+  const handleToggleDetails = useCallback(async () => {
+    if (detailsOpen) {
+      setDetailsOpen(false)
+      return
+    }
+    experiments.track('pet_tool_click', { tool: 'today_all' })
+    if (detailsLoading) return
+    setDetailsLoading(true)
+    try {
+      const state = normalizeNutritionState(await getNutritionState())
+      if (!state || state.today.length === 0) {
+        Taro.showToast({ title: '今天的明细还没算出来', icon: 'none' })
+        return
+      }
+      setDetails({ rows: state.today.map(todayRowView), plan: planLineText(state.plan) })
+      setDetailsOpen(true)
+    } catch (error) {
+      await showUnifiedApiError(error, '读取今天的明细失败')
+    } finally {
+      setDetailsLoading(false)
+    }
+  }, [detailsLoading, detailsOpen])
+
   const handleAddWater = useCallback(async () => {
     experiments.track('pet_tool_click', { tool: 'water_cup' })
     if (addingWater) return
@@ -147,9 +180,9 @@ function PetTabPage() {
   }, [])
 
   const isDark = scheme === 'dark'
-  const petName = daily?.pet?.name || '小麦'
+  const petName = petDisplayName(daily?.pet?.name)
   const meal = daily?.next_meal
-  const mealLine = meal?.advice ? `${meal.label}：${meal.advice}` : `${meal?.label || '下一餐'}吃什么，让小麦看看`
+  const mealLine = meal?.advice ? `${meal.label}：${meal.advice}` : `${meal?.label || '下一餐'}吃什么，让${petName}看看`
 
   return (
     <View className={`pet-tab-page ${isDark ? 'pet-tab-page--dark' : ''}`}>
@@ -163,15 +196,27 @@ function PetTabPage() {
           <GuestView onLogin={() => redirectToLogin()} onOpenStats={handleOpenStats} onAsk={handleAsk} />
         ) : daily ? (
           <>
-            <PetLevelRow pet={daily.pet} focusText={petFocusSummary(daily.focus || [])} onOpenFocus={handleOpenFocus} />
             <PetHero
               pet={daily.pet}
+              name={petName}
               status={daily.status}
               mood={daily.mood}
               line={daily.headline || daily.mood.reason || '记一餐，我来看看你今天吃得怎么样。'}
               onOpenPet={handleOpenPet}
             />
-            <PetGapsCard gaps={daily.gaps || []} mealsToday={daily.meals_today} mealLine={mealLine} onPickMeal={handlePickMeal} />
+            <PetFocusRow labels={petFocusLabels(daily.focus || [])} onOpen={handleOpenFocus} />
+            <PetGapsCard
+              gaps={daily.gaps || []}
+              mealsToday={daily.meals_today}
+              mealLine={mealLine}
+              petName={petName}
+              details={details.rows}
+              detailsOpen={detailsOpen}
+              detailsLoading={detailsLoading}
+              planText={details.plan}
+              onToggleDetails={() => void handleToggleDetails()}
+              onPickMeal={handlePickMeal}
+            />
             {daily.task ? (
               <PetTaskRow task={daily.task} addingWater={addingWater} onAction={handleTaskAction} onAddWater={handleAddWater} />
             ) : null}
@@ -189,9 +234,11 @@ function PetTabPage() {
           <PetDailySkeleton />
         )}
       </View>
-      <PetFocusSheet
+      <FocusSheet
         visible={focusOpen}
-        current={daily?.focus || []}
+        current={(daily?.focus || []).map((item) => item.key)}
+        dark={isDark}
+        source='pet'
         onClose={() => setFocusOpen(false)}
         onSaved={handleFocusSaved}
       />
@@ -199,7 +246,7 @@ function PetTabPage() {
   )
 }
 
-/** 游客先看：小麦是谁、每天会给什么、完整分析都能浏览，点操作才去登录（微信审核要求）。 */
+/** 游客先看：伙伴是谁、每天会给什么、完整分析都能浏览，点操作才去登录（微信审核要求）。 */
 function GuestView({ onLogin, onOpenStats, onAsk }: {
   onLogin: () => void
   onOpenStats: () => void
@@ -207,7 +254,11 @@ function GuestView({ onLogin, onOpenStats, onAsk }: {
 }) {
   return (
     <>
-      <PetHero mood={GUEST_MOOD} line='我是小麦。登录后我每天帮你看吃得怎么样、今天还差什么，再给你一个记了就自动完成的小任务。' />
+      <PetHero
+        name={DEFAULT_PET_NAME}
+        mood={GUEST_MOOD}
+        line={`我是${DEFAULT_PET_NAME}。登录后我每天帮你看吃得怎么样、今天还差什么，再给你一个记了就自动完成的小任务。`}
+      />
       <View className='pet-tab-card'>
         <View className='pet-tab-card-head'>
           <Text className='pet-tab-card-title'>今天还差</Text>
@@ -216,12 +267,12 @@ function GuestView({ onLogin, onOpenStats, onAsk }: {
         <View className='pet-tab-meal'>
           <Text className='pet-tab-meal-line'>记下一餐，我就能告诉你下一顿怎么补。</Text>
           <View className='pet-tab-meal-btn' onClick={onLogin}>
-            <Text className='pet-tab-meal-btn-text'>登录领养小麦</Text>
+            <Text className='pet-tab-meal-btn-text'>登录开始</Text>
           </View>
         </View>
       </View>
       <PetWeekRow week={{ score: null, last_week: null, delta: null, enough_data: false, habits: [] }} onOpen={onOpenStats} />
-      <PetAskBar placeholder={`问问小麦：${ASK_FALLBACK}`} onAsk={onAsk} />
+      <PetAskBar placeholder={`问问${DEFAULT_PET_NAME}：${ASK_FALLBACK}`} onAsk={onAsk} />
     </>
   )
 }

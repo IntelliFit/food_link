@@ -1,5 +1,5 @@
 import type { NutritionFocusChoice, RiskCard } from '../../../utils/api'
-import { focusCardKey } from './nutrition-state-view'
+import { focusCardKey } from '../../../utils/nutrition-state-view'
 
 /**
  * 「我的关注」最多 3 项，以服务器为准（PUT /api/health/focus，读 nutrition-state.focus）；

@@ -1,6 +1,6 @@
 /**
  * 主包只放 TabBar 四页，其余页面在分包以降低主包体积（微信 2MB 限制）。
- * 小麦（pages/pet/index）替换了原来的「分析」格；完整分析不再是 Tab，在 packageStats 分包，从小麦页 navigateTo 进去。
+ * 伙伴（pages/pet/index）替换了原来的「分析」格；完整分析不再是 Tab，在 packageStats 分包，从伙伴页 navigateTo 进去。
  */
 const mainPages = [
   'pages/index/index',
@@ -93,7 +93,7 @@ export default defineAppConfig({
   darkmode: false,
   pages: mainPages,
   subpackages: [
-    // 完整分析（原分析 Tab）：从小麦页进入的二级页，挪出主包；小麦页打开时预下载。
+    // 完整分析（原分析 Tab）：从伙伴页进入的二级页，挪出主包；伙伴页打开时预下载。
     { root: 'packageStats', name: 'stats', pages: ['pages/stats/index'] },
     { root: 'packageMeal', name: 'meal', pages: ['pages/detail/index', 'pages/create/index', 'pages/mine/index', 'pages/room/index'] },
     { root: 'packageRecap', name: 'recap', pages: ['pages/recap/index'] },
@@ -160,7 +160,7 @@ export default defineAppConfig({
       },
       {
         pagePath: 'pages/pet/index',
-        text: '小麦',
+        text: '伙伴',
       },
       {
         pagePath: 'pages/community/index',

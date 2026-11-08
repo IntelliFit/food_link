@@ -13,7 +13,7 @@ export interface PetDailyReport {
   today: string
   facts: string[]
   source: '' | 'nutrition_state' | 'habit_review'
-  /** 昨天复盘的经验（只给经验，不给积分），打开小麦页时自动领取 */
+  /** 昨天复盘的经验（只给经验，不给积分），打开伙伴页时自动领取 */
   reward?: { exp: number; claimed_now: boolean } | null
 }
 

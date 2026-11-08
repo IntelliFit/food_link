@@ -55,6 +55,16 @@ export function openPetChat(input?: unknown): void {
   else openWithoutStacking(url)
 }
 
+/** 伙伴页「问问」：开一段新对话，聊天页一打开就把这句发出去（旧对话留在「最近」里） */
+export const PET_ASK_ENTRY = 'pet_tab_ask'
+
+export function askPetNow(question: string): void {
+  const text = question.trim()
+  if (!text) return
+  const query = `entry=${PET_ASK_ENTRY}&starter=${encodeURIComponent(text)}`
+  Taro.navigateTo({ url: `${extraPkgUrl('/pages/pet-chat/index')}?${query}` })
+}
+
 export function openPetSettings(): void {
   openWithoutStacking(extraPkgUrl('/pages/pet-home/index'))
 }
