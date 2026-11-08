@@ -1,0 +1,100 @@
+// 「宠物思考中」：伙伴聊天和首页推荐卡片共用。宠物轻轻上下动，文字是真实的步骤。
+.pet-thinking {
+  --pt-text: #1e2939;
+  --pt-muted: #6a7282;
+  --pt-accent: #2f8f6f;
+
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  min-height: 72rpx;
+}
+
+.pet-thinking--dark {
+  --pt-text: #e5efe9;
+  --pt-muted: #9aa8a1;
+  --pt-accent: #7dd3b0;
+}
+
+.pet-thinking__avatar {
+  flex-shrink: 0;
+  animation: pet-thinking-bob 1.4s ease-in-out infinite;
+}
+
+.pet-thinking__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.pet-thinking__done {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.pet-thinking__tick {
+  font-size: 22rpx;
+  color: var(--pt-accent);
+}
+
+.pet-thinking__done-text {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: var(--pt-muted);
+}
+
+.pet-thinking__current {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.pet-thinking__current-text {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: var(--pt-text);
+}
+
+.pet-thinking--card .pet-thinking__current-text {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.pet-thinking--inline .pet-thinking__current-text {
+  font-size: 24rpx;
+  color: var(--pt-muted);
+}
+
+.pet-thinking__dots {
+  display: flex;
+  gap: 6rpx;
+}
+
+.pet-thinking__dot {
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: var(--pt-accent);
+  animation: pet-thinking-dot 1s ease-in-out infinite;
+
+  &:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+
+  &:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+}
+
+@keyframes pet-thinking-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6rpx); }
+}
+
+@keyframes pet-thinking-dot {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}

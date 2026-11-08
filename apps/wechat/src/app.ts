@@ -16,7 +16,7 @@ import { ProductUpdatePrompt, PRODUCT_UPDATE_AUTH_EVENT } from './utils/product-
 import { experiments } from './utils/experiments'
 import { bindPendingPromoCode, parsePromoCodeFromLaunchOptions, writePendingPromoCode } from './utils/promoter-api'
 import { installAppUpdateCheck } from './utils/app-update'
-import { handleClientError, recheckBlankPageAfterError } from './utils/client-error'
+import { errorText, handleClientError, recheckBlankPageAfterError } from './utils/client-error'
 
 import './app.scss'
 
@@ -221,7 +221,7 @@ function App({ children }: PropsWithChildren<any>) {
       const reason = event?.reason
       console.error('[app-unhandled-rejection]', {
         route: getCurrentRoute(),
-        message: reason instanceof Error ? reason.message : String(reason || '').slice(0, 1200),
+        message: errorText(reason).slice(0, 1200),
       })
       handleClientError('rejection', reason)
     }

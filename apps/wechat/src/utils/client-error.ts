@@ -19,9 +19,30 @@ let sawError = false
 let recoveryPrompts = 0
 let recoveryOpen = false
 
-function errorText(raw: unknown): string {
-  const text = raw instanceof Error ? `${raw.message}\n${raw.stack || ''}` : String(raw || '')
-  return text.slice(0, MAX_MESSAGE_LENGTH)
+/**
+ * 上报的错误文字。微信接口失败时 reject 的是 { errMsg } 这样的普通对象，String() 只会得到
+ * "[object Object]"，所以先取 errMsg / message，再退到 JSON。
+ */
+export function errorText(raw: unknown): string {
+  return describeError(raw).slice(0, MAX_MESSAGE_LENGTH)
+}
+
+function describeError(raw: unknown): string {
+  if (raw instanceof Error) return `${raw.message}\n${raw.stack || ''}`
+  if (raw && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>
+    const message = [record.errMsg, record.message, record.msg, record.detail].find((value) => typeof value === 'string' && value)
+    if (typeof message === 'string') {
+      const code = record.errno ?? record.errCode ?? record.statusCode
+      return code !== undefined ? `${message} (${String(code)})` : message
+    }
+    try {
+      return JSON.stringify(raw)
+    } catch {
+      return Object.prototype.toString.call(raw)
+    }
+  }
+  return String(raw || '')
 }
 
 function currentPage(): { route?: string; $taroPath?: string } | undefined {

@@ -2408,6 +2408,8 @@ export interface CampusDietAgentResult {
   agent_used: boolean
   tool_count: number
   fallback_reason?: string
+  /** 规则先挑出的几份，模型选好后同一轮的最终结果会替换它（不扣积分、不保存） */
+  provisional?: boolean
 }
 
 // 更新用户信息请求接口
@@ -5151,6 +5153,9 @@ export function streamGeneratePetChat(
         if (!settled) reportError(new Error('连接已结束，但未收到完整结果，请重试'))
       },
     })
+
+    // Taro.request 还返回一个 Promise：失败已由 fail 回调处理，这里接住它，免得变成未处理的 rejection
+    ;(requestTask as unknown as Promise<unknown>)?.catch?.(() => undefined)
 
     requestTask.onChunkReceived?.((res: any) => {
       if (settled) return

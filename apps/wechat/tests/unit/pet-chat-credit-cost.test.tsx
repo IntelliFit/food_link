@@ -214,8 +214,9 @@ describe('pet chat credit cost', () => {
     await act(async () => {
       callbacks.onProgress?.({ label: '正在搜索清华食堂', status: 'running' })
     })
-    expect(screen.queryByText('正在搜索清华食堂')).not.toBeInTheDocument()
-    expect(container.querySelector('.pet-chat-thinking-bubble')).toBeInTheDocument()
+    // 等待时显示宠物此刻真正在做的事，而不是三个点
+    expect(screen.getByText('正在搜索清华食堂')).toBeInTheDocument()
+    expect(container.querySelector('.pet-thinking')).toBeInTheDocument()
 
     await act(async () => {
       callbacks.onDietResult({
