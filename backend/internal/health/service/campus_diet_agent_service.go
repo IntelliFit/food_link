@@ -94,8 +94,11 @@ type campusDietAgentMealContext struct {
 
 type campusDietAgentRunState struct {
 	// NutritionFacts is the daily nutrition state as the Agent reads it (meal_nutrition_state.go).
-	NutritionFacts    map[string]any
-	PlanningCatalog   map[string][]DietRecommendationCandidate
+	NutritionFacts  map[string]any
+	PlanningCatalog map[string][]DietRecommendationCandidate
+	// planKeys caches each candidate's fingerprint and venue for day-plan scoring,
+	// which compares every pair of steps in thousands of candidate plans.
+	planKeys          map[string][2]string
 	CatalogCoverage   []MealCatalogCoverage
 	AllowReplayJudge  bool
 	EngineVersion     string

@@ -82,7 +82,17 @@ func mealPlanAggregate(steps []MealDayPlanStep) DietRecommendationCandidate {
 }
 
 func mealPlanLoss(state *campusDietAgentRunState, steps []MealDayPlanStep) float64 {
-	c := mealPlanAggregate(steps)
+	// Only the macros and the rule nutrients are scored; combining every nutrient
+	// for each of thousands of candidate plans dominated a home preview.
+	c := DietRecommendationCandidate{}
+	vectors := make([]nutritionagg.Vector, 0, len(steps))
+	for _, step := range steps {
+		c.Calories += step.Candidate.Calories
+		c.Protein += step.Candidate.Protein
+		c.Carbs += step.Candidate.Carbs
+		c.Fat += step.Candidate.Fat
+		vectors = append(vectors, step.Candidate.Nutrients)
+	}
 	share := 0.0
 	for _, step := range steps {
 		share += dietDecisionMealRatio(step.MealType)
@@ -92,7 +102,7 @@ func mealPlanLoss(state *campusDietAgentRunState, steps []MealDayPlanStep) float
 	micro, n := 0.0, 0
 	if b := state.MealContext.DecisionBasis; b != nil && b.NutrientState != nil {
 		for _, rule := range b.NutrientState.Rules {
-			amount := c.Nutrients[rule.Key]
+			amount := nutritionagg.CombineKey(rule.Key, vectors...)
 			if amount.TotalItems == 0 {
 				continue
 			}
@@ -121,17 +131,35 @@ func mealPlanLoss(state *campusDietAgentRunState, steps []MealDayPlanStep) float
 		micro /= float64(n)
 	}
 	repeat := 0.0
-	for i, a := range steps {
-		for _, b := range steps[:i] {
-			if mealFingerprint(a.Candidate) == mealFingerprint(b.Candidate) {
+	keys := make([][2]string, len(steps))
+	for i, step := range steps {
+		keys[i] = state.mealPlanKey(step.Candidate)
+	}
+	for i, a := range keys {
+		for _, b := range keys[:i] {
+			if a[0] == b[0] {
 				repeat += .15
 			}
-			if mealSelectionVenue(a.Candidate) != "" && mealSelectionVenue(a.Candidate) == mealSelectionVenue(b.Candidate) {
+			if a[1] != "" && a[1] == b[1] {
 				repeat += .025
 			}
 		}
 	}
 	return .6*macro + .4*micro + repeat
+}
+
+// mealPlanKey returns the candidate's fingerprint and venue, cached per request.
+func (s *campusDietAgentRunState) mealPlanKey(c DietRecommendationCandidate) [2]string {
+	id := c.Source + "|" + c.SourceID + "|" + c.Title
+	if key, ok := s.planKeys[id]; ok {
+		return key
+	}
+	key := [2]string{mealFingerprint(c), mealSelectionVenue(c)}
+	if s.planKeys == nil {
+		s.planKeys = map[string][2]string{}
+	}
+	s.planKeys[id] = key
+	return key
 }
 
 func buildConditionalMealDayPlan(ctx context.Context, state *campusDietAgentRunState, first DietRecommendationCandidate, catalog []groundedMeal) *MealDayPlan {
@@ -158,16 +186,27 @@ func buildConditionalMealDayPlan(ctx context.Context, state *campusDietAgentRunS
 		future.Constraints.MealType = period
 		future.MealContext = state.MealContext
 		future.MealContext.MealType = period
-		next := []mealPlanBeam{}
+		// Score every extension in one scratch slice and keep only indexes: copying
+		// each candidate struct into thousands of short-lived plans was most of the
+		// remaining cost. Only the kept beams get their own steps.
+		type scored struct {
+			beam, candidate int
+			loss            float64
+		}
+		next := []scored{}
+		scratch := []MealDayPlanStep{}
 		futureCandidates := state.PlanningCatalog[period]
 		if state.PlanningCatalog == nil {
 			for _, row := range catalog {
 				futureCandidates = append(futureCandidates, row.candidate)
 			}
 		}
-		for _, beam := range beams {
-			for _, c := range futureCandidates {
-				if c.Source == "food_record" || !mealHasEvidenceStructure(c) || !groundedMealAllowed(&future, c) {
+		for bi, beam := range beams {
+			for ci, c := range futureCandidates {
+				// The prepared catalog was built with these same checks for this
+				// future meal; repeating them per beam made a breakfast preview spend
+				// seconds re-running regexes (2026-11-09).
+				if state.PlanningCatalog == nil && (c.Source == "food_record" || !mealHasEvidenceStructure(c) || !groundedMealAllowed(&future, c)) {
 					continue
 				}
 				// The prepared catalog already passed this same future context's
@@ -178,8 +217,8 @@ func buildConditionalMealDayPlan(ctx context.Context, state *campusDietAgentRunS
 						continue
 					}
 				}
-				steps := append(append([]MealDayPlanStep(nil), beam.steps...), MealDayPlanStep{MealType: period, Candidate: c})
-				next = append(next, mealPlanBeam{steps: steps, loss: mealPlanLoss(state, steps)})
+				scratch = append(append(scratch[:0], beam.steps...), MealDayPlanStep{MealType: period, Candidate: c})
+				next = append(next, scored{beam: bi, candidate: ci, loss: mealPlanLoss(state, scratch)})
 			}
 		}
 		if len(next) == 0 {
@@ -188,14 +227,19 @@ func buildConditionalMealDayPlan(ctx context.Context, state *campusDietAgentRunS
 		}
 		sort.SliceStable(next, func(i, j int) bool {
 			if next[i].loss == next[j].loss {
-				return next[i].steps[len(next[i].steps)-1].Candidate.SourceID < next[j].steps[len(next[j].steps)-1].Candidate.SourceID
+				return futureCandidates[next[i].candidate].SourceID < futureCandidates[next[j].candidate].SourceID
 			}
 			return next[i].loss < next[j].loss
 		})
 		if len(next) > 4 {
 			next = next[:4]
 		}
-		beams = next
+		kept := make([]mealPlanBeam, 0, len(next))
+		for _, n := range next {
+			steps := append(append([]MealDayPlanStep(nil), beams[n.beam].steps...), MealDayPlanStep{MealType: period, Candidate: futureCandidates[n.candidate]})
+			kept = append(kept, mealPlanBeam{steps: steps, loss: n.loss})
+		}
+		beams = kept
 	}
 	plan.Steps = beams[0].steps
 	plan.ProjectedLoss = mealPlanLoss(state, plan.Steps)
