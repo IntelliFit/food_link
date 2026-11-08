@@ -259,6 +259,7 @@ export default function ResearchWeightRecordPage() {
               index={index}
               container={container}
               library={library}
+              precision={draft.precision}
               removable={draft.containers.length > 1}
               uploading={uploading}
               onChange={(patch) => updateContainer(container.id, patch)}

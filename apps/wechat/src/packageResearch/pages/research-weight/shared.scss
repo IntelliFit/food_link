@@ -80,7 +80,11 @@
 .rw-mine__name, .rw-mine__meta { display: block; }
 .rw-mine__name { font-size: 27px; }
 .rw-mine__meta { margin-top: 4px; overflow: hidden; color: #7a8782; font-size: 22px; white-space: nowrap; text-overflow: ellipsis; }
-.rw-status { padding: 6px 16px; border-radius: 999px; font-size: 22px; }
+.rw-mine__reward { color: #00a875; font-weight: 600; }
+/* 审核说明完整显示（最多三行），未通过时用户要能看清原因。 */
+.rw-mine__note { display: -webkit-box; margin-top: 6px; overflow: hidden; color: #7a8782; font-size: 22px; line-height: 1.45; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.rw-mine__note--rejected { color: #c4373c; }
+.rw-status { flex-shrink: 0; align-self: flex-start; margin-top: 4px; padding: 6px 16px; border-radius: 999px; font-size: 22px; }
 .rw-status--pending { background: #fff3d6; color: #a06a00; }
 .rw-status--approved { background: #eaf9f3; color: #00a875; }
 .rw-status--rejected { background: #fdecec; color: #c4373c; }

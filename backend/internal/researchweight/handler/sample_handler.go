@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -246,6 +247,21 @@ func (h *SampleHandler) AdminPromote(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"item": item, "message": "已加入评测集"})
+}
+
+// POST /api/admin/research-weight-samples/promote-batch
+func (h *SampleHandler) AdminPromoteBatch(c *gin.Context) {
+	var body service.BatchPromoteInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "批量加入的参数格式不正确", HTTPStatus: 400})
+		return
+	}
+	result, err := h.svc.PromoteBatch(c.Request.Context(), body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"result": result, "message": fmt.Sprintf("已加入 %d 条", result.Promoted)})
 }
 
 func positiveInt(raw string, fallback int) int {

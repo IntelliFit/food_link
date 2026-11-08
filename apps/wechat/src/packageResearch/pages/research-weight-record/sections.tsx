@@ -119,7 +119,7 @@ export function ItemizedSection({ draft, library, update, uploading, pickTarePho
         </View>
       ) : (
         <View className='rw-reading'>
-          <PhotoSlot label={draft.tareSource === 'zeroed' ? '归零读数' : '空容器读数'} required scale photo={draft.tarePhoto} uploading={uploading.tare} reading={uploading['tare:reading']} onPick={pickTarePhoto} onClear={() => update({ tarePhoto: undefined })} />
+          <PhotoSlot label={draft.tareSource === 'zeroed' ? '归零读数' : '空容器读数'} required scale photo={draft.tarePhoto} uploading={uploading.tare} reading={uploading['tare:reading']} typed={weighsEmpty ? { value: draft.tare, precision: draft.precision } : undefined} onPick={pickTarePhoto} onClear={() => update({ tarePhoto: undefined })} />
           {weighsEmpty ? (
             <View className='rw-reading__value'>
               <Input className='rw-input' type='digit' value={draft.tare} placeholder='空容器 g' onInput={(e) => update({ tare: e.detail.value })} />
@@ -136,7 +136,7 @@ export function ItemizedSection({ draft, library, update, uploading, pickTarePho
             {draft.items.length > 1 ? <Text className='rw-item__remove' onClick={() => update({ items: draft.items.filter((_, i) => i !== index) })}>删除</Text> : null}
           </View>
           <View className='rw-reading'>
-            <PhotoSlot label='加入后读数' required scale photo={item.photo} uploading={uploading[`item_${item.id}`]} reading={uploading[`item_${item.id}:reading`]} onPick={() => pickItemPhoto(index)} onClear={() => updateItem(index, { photo: undefined })} />
+            <PhotoSlot label='加入后读数' required scale photo={item.photo} uploading={uploading[`item_${item.id}`]} reading={uploading[`item_${item.id}:reading`]} typed={{ value: item.reading, precision: draft.precision }} onPick={() => pickItemPhoto(index)} onClear={() => updateItem(index, { photo: undefined })} />
             <View className='rw-reading__value'>
               <Input className='rw-input' value={item.name} maxlength={30} placeholder='名称，如 米饭' onInput={(e) => updateItem(index, { name: e.detail.value })} />
               <Input className='rw-input rw-input--number' type='digit' value={item.reading} placeholder='秤上累计读数 g' onInput={(e) => updateItem(index, { reading: e.detail.value })} />

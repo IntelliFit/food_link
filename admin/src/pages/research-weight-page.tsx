@@ -74,6 +74,9 @@ const CHECK_LABELS: Record<string, string> = {
   album: '来自相册', unknown_source: '来源未知', stale: '拍摄早于提交两天以上', shows_scale_display: '照片里能看到秤的读数',
 }
 const SPOT_CHECK_SIZE = 50
+const STATUS_TEXT: Record<string, string> = { pending: '待审核', approved: '已通过', rejected: '已驳回' }
+/** styles.css 的全局 button 规则（居中、不换行、左右 13px）不在 Tailwind 图层里，会盖过类名，这里用行内样式让列表行正常排版。 */
+const LIST_ROW_STYLE = { display: 'block', whiteSpace: 'normal', height: 'auto', padding: 16 } as const
 
 type ListResponse = { items: Sample[]; total: number; page: number; limit: number }
 
@@ -206,6 +209,29 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
     }
   }
 
+  /** 把已通过、还没进评测集的样本一次性加入：等级用当前筛选（没选就 A+B），渠道用当前筛选。「测试」开头的样本服务端会跳过。 */
+  async function promoteBatch() {
+    const tiers = tierFilter ? [tierFilter] : ['A', 'B']
+    const scope = `${channel ? CHANNEL_LABELS[channel] || channel : '全部渠道'}、${tiers.join('+')} 级`
+    const batch = window.prompt(`把${scope}里已通过、还没加入的样本加入评测集。批次名（留空用 research-YYYYMM）：`, batchName)
+    if (batch === null) return
+    setBatchName(batch.trim())
+    setActing(true)
+    try {
+      const data = await adminRequest<{ result: { promoted: number; skipped_test: number; failed: number } }>('/api/admin/research-weight-samples/promote-batch', {
+        method: 'POST', body: JSON.stringify({ batch_name: batch.trim(), quality_tiers: tiers, collection_channel: channel }),
+      })
+      const { promoted, skipped_test: skippedTest, failed } = data.result
+      const extra = [skippedTest ? `跳过测试样本 ${skippedTest} 条` : '', failed ? `失败 ${failed} 条` : ''].filter(Boolean).join('，')
+      toast.success(`已加入 ${promoted} 条${extra ? `（${extra}）` : ''}`)
+      await loadList(page)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '批量加入失败')
+    } finally {
+      setActing(false)
+    }
+  }
+
   async function exportApproved() {
     try {
       const rows: Sample[] = []
@@ -242,6 +268,7 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
           </div>
           <div className='flex gap-3'>
             <button className='h-10 rounded-xl border px-4 text-sm font-medium' onClick={() => void startSpotCheck()}>抽查 {SPOT_CHECK_SIZE} 条自动通过</button>
+            <button className='h-10 rounded-xl border px-4 text-sm font-medium disabled:opacity-50' disabled={acting} onClick={() => void promoteBatch()}>批量加入评测集</button>
             <button className='h-10 rounded-xl border px-4 text-sm font-medium' onClick={() => void exportApproved()}>导出已通过 JSON</button>
           </div>
         </section>
@@ -270,14 +297,14 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
         <section className='grid min-h-[640px] gap-6 lg:grid-cols-[340px_minmax(0,1fr)]'>
           <div className='space-y-3 rounded-2xl border bg-card/90 p-3 shadow-sm'>
             {items.map((item) => (
-              <button key={item.id} type='button' onClick={() => setSelected(item)}
+              <button key={item.id} type='button' onClick={() => setSelected(item)} style={LIST_ROW_STYLE}
                 className={`w-full rounded-2xl border p-4 text-left transition ${selected?.id === item.id ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent/50'}`}>
                 <div className='flex items-center justify-between gap-3'>
-                  <span className='truncate text-sm font-semibold'>{item.dish_name}</span>
-                  <span className='text-xs text-muted-foreground'>{item.total_net_grams}g</span>
+                  <span className='min-w-0 truncate text-sm font-semibold'>{item.dish_name}</span>
+                  <span className='shrink-0 text-xs text-muted-foreground'>{item.total_net_grams}g</span>
                 </div>
                 <div className='mt-1 text-xs text-muted-foreground'>
-                  {SCENE_LABELS[item.scene] || item.scene} · {modeLabel(item)} · {item.status}{item.flags?.length ? ' · 需核对' : ''}{item.quality_tier ? ` ${item.quality_tier}` : ''}
+                  {SCENE_LABELS[item.scene] || item.scene} · {modeLabel(item)} · {STATUS_TEXT[item.status] || item.status}{item.flags?.length ? ' · 需核对' : ''}{item.quality_tier ? ` ${item.quality_tier}` : ''}
                   {item.review_mode === 'auto' ? ' · 自动' : ''}{item.collection_channel && item.collection_channel !== 'personal' ? ` · ${CHANNEL_LABELS[item.collection_channel] || item.collection_channel}` : ''}
                 </div>
               </button>

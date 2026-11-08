@@ -9,6 +9,8 @@ interface ContainerCardProps {
   index: number
   container: DraftContainer
   library: Library
+  /** 秤的精度：填的读数和照片对不上时的容差。 */
+  precision: number
   removable: boolean
   uploading: Record<string, boolean>
   onChange: (patch: Partial<DraftContainer>) => void
@@ -18,7 +20,7 @@ interface ContainerCardProps {
 }
 
 /** 一个外卖盒或一只碗：连盒读数，加上一种皮重来源。 */
-export function ContainerCard({ index, container, library, removable, uploading, onChange, onPickGross, onPickTare, onRemove }: ContainerCardProps) {
+export function ContainerCard({ index, container, library, precision, removable, uploading, onChange, onPickGross, onPickTare, onRemove }: ContainerCardProps) {
   const saved = Object.values(library)
   const pickSource = (tareSource: ResearchTareSource) => {
     if (tareSource === 'library' && saved.length === 0) {
@@ -42,7 +44,7 @@ export function ContainerCard({ index, container, library, removable, uploading,
       </View>
       <Input className='rw-input rw-input--number' value={container.name} maxlength={30} placeholder='这一盒是什么，如 米饭' onInput={(e) => onChange({ name: e.detail.value })} />
       <View className='rw-reading'>
-        <PhotoSlot label='连盒读数' required scale photo={container.grossPhoto} uploading={uploading[`${container.id}:gross`]} reading={uploading[`${container.id}:gross:reading`]} onPick={onPickGross} onClear={() => onChange({ grossPhoto: undefined })} />
+        <PhotoSlot label='连盒读数' required scale photo={container.grossPhoto} uploading={uploading[`${container.id}:gross`]} reading={uploading[`${container.id}:gross:reading`]} typed={{ value: container.gross, precision }} onPick={onPickGross} onClear={() => onChange({ grossPhoto: undefined })} />
         <View className='rw-reading__value'>
           <Input className='rw-input' type='digit' value={container.gross} placeholder='连盒放上秤的读数 g' onInput={(e) => onChange({ gross: e.detail.value })} />
           <Text className='rw-tip'>盖子拿掉再称</Text>
@@ -56,7 +58,7 @@ export function ContainerCard({ index, container, library, removable, uploading,
         <View>
           {source === 'after_meal' && !container.tarePhoto ? <Text className='rw-box__waiting'>吃完或倒掉剩菜后，把空盒放上秤再拍</Text> : null}
           <View className='rw-reading'>
-            <PhotoSlot label='空盒读数' required scale photo={container.tarePhoto} uploading={uploading[`${container.id}:tare`]} reading={uploading[`${container.id}:tare:reading`]} onPick={onPickTare} onClear={() => onChange({ tarePhoto: undefined })} />
+            <PhotoSlot label='空盒读数' required scale photo={container.tarePhoto} uploading={uploading[`${container.id}:tare`]} reading={uploading[`${container.id}:tare:reading`]} typed={{ value: container.tare, precision }} onPick={onPickTare} onClear={() => onChange({ tarePhoto: undefined })} />
             <View className='rw-reading__value'>
               <Input className='rw-input' type='digit' value={container.tare} placeholder='空盒读数 g' onInput={(e) => onChange({ tare: e.detail.value })} />
               <Check checked={container.saveToLibrary} label='存为常用容器' onChange={(saveToLibrary) => onChange({ saveToLibrary })} />
