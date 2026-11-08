@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LANDSCAPE_PHOTO_FRAME_RATIO, PORTRAIT_PHOTO_FRAME_RATIO } from '@food-link/core'
 
 import { IconAlbum } from '../../../components/iconfont'
+import { saveFoodCameraResult } from '../../../utils/food-camera'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   chooseImageWithPrivacy,
@@ -39,6 +40,9 @@ function readStoredOrientation(): ShotOrientation {
 export default function FoodCameraPage() {
   const router = useRouter()
   const recordDate = String(router.params?.date || '')
+  // return=1：同一顿饭里「添加 / 再拍一张」打开的相机，拍完把照片交回上一页。
+  const returnToOpener = router.params?.return === '1'
+  const maxCount = Math.min(5, Math.max(1, Number(router.params?.max) || 5))
   const [orientation, setOrientation] = useState<ShotOrientation>(readStoredOrientation)
   const [cameraState, setCameraState] = useState<CameraState>('preparing')
   const [shooting, setShooting] = useState(false)
@@ -53,7 +57,12 @@ export default function FoodCameraPage() {
       })
   }, [])
 
-  const openAnalyze = (paths: string[]) => {
+  const finishWithPhotos = (paths: string[]) => {
+    if (returnToOpener) {
+      saveFoodCameraResult(paths.slice(0, maxCount))
+      void Taro.navigateBack()
+      return
+    }
     Taro.setStorageSync('analyzeImagePath', paths[0])
     Taro.setStorageSync('analyzeImagePaths', paths)
     const query = recordDate ? `?date=${encodeURIComponent(recordDate)}` : ''
@@ -84,7 +93,7 @@ export default function FoodCameraPage() {
             console.error('[food-camera] crop failed, using the original photo', error)
             return res.tempImagePath
           })
-          .then(path => openAnalyze([path]))
+          .then(path => finishWithPhotos([path]))
           .finally(() => {
             busyRef.current = false
             setShooting(false)
@@ -103,9 +112,9 @@ export default function FoodCameraPage() {
     if (busyRef.current) return
     busyRef.current = true
     try {
-      const res = await chooseImageWithPrivacy({ count: 5, sizeType: ['compressed'], sourceType: ['album'] })
+      const res = await chooseImageWithPrivacy({ count: maxCount, sizeType: ['compressed'], sourceType: ['album'] })
       const paths = (res.tempFilePaths || []).filter(Boolean)
-      if (paths.length > 0) openAnalyze(paths)
+      if (paths.length > 0) finishWithPhotos(paths)
     } catch (error: any) {
       if (String(error?.errMsg || '').includes('cancel')) return
       if (isPrivacyAuthorizeError(error)) {

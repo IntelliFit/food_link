@@ -31,6 +31,7 @@ import {
   isPrivacyAuthorizeError,
   showPrivacyAuthorizeFailure,
 } from '../../../utils/weapp-privacy'
+import { FOOD_CAMERA_PAGE } from '../../../utils/food-camera'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import { DevNewUserOnboardingPreview } from '../../../components/DevNewUserOnboardingPreview'
 
@@ -123,7 +124,6 @@ const QUICK_ACCESS_ITEMS = [
 ] as const
 
 const MEMBERSHIP_PREFLIGHT_TIMEOUT_MS = 500
-const FOOD_CAMERA_PAGE = '/packageCamera/pages/shoot/index'
 
 function logRecordMenuStage(stage: string, details: Record<string, unknown> = {}) {
   console.info('[record-menu-debug]', stage, details)

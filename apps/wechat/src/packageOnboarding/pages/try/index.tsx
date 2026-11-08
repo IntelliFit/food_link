@@ -9,6 +9,7 @@ import {
 import { buildFoodRecordItemPayloadFromAnalyzeItem } from '../../../utils/food-record-item-payload'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { chooseImageWithPrivacy } from '../../../utils/weapp-privacy'
+import { openFoodCameraForResult, takeFoodCameraResult } from '../../../utils/food-camera'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { experiments } from '../../../utils/experiments'
 import {
@@ -55,6 +56,7 @@ export default function OnboardingTryPage() {
   const correctingRef = useRef(false)
   const loggingInRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const waitingCameraRef = useRef(false)
 
   useEffect(() => {
     experiments.track('onboarding_try_view', { from: router.params?.sheet || 'photo' })
@@ -66,6 +68,10 @@ export default function OnboardingTryPage() {
 
   useDidShow(() => {
     try { Taro.setStorageSync(WELCOME_DONE_KEY, '1') } catch { /* 只影响首屏是否再弹 */ }
+    if (!waitingCameraRef.current) return
+    waitingCameraRef.current = false
+    const [shotPath] = takeFoodCameraResult()
+    if (shotPath) void analyzePhoto(shotPath, 'camera')
   })
 
   const items = result?.items || []
@@ -97,10 +103,32 @@ export default function OnboardingTryPage() {
   }
 
   const pick = async (sourceType: 'camera' | 'album') => {
+    if (sourceType === 'camera') {
+      // 拍照走 3:4 / 4:3 取景相机，拍完回到本页（useDidShow）再识别。
+      waitingCameraRef.current = true
+      try {
+        await openFoodCameraForResult(1)
+      } catch (error) {
+        waitingCameraRef.current = false
+        console.error('[onboarding-try] open food camera failed', error)
+        Taro.showToast({ title: '打开相机失败，请重试', icon: 'none' })
+      }
+      return
+    }
     try {
-      const picked = await chooseImageWithPrivacy({ count: 1, sizeType: ['compressed'], sourceType: [sourceType] })
+      const picked = await chooseImageWithPrivacy({ count: 1, sizeType: ['compressed'], sourceType: ['album'] })
       const path = picked.tempFilePaths?.[0]
       if (!path) return
+      await analyzePhoto(path, 'album')
+    } catch (error) {
+      const msg = String((error as { errMsg?: string })?.errMsg || '')
+      if (msg.includes('cancel')) return
+      fail(error)
+    }
+  }
+
+  const analyzePhoto = async (path: string, sourceType: 'camera' | 'album') => {
+    try {
       experiments.track('onboarding_try_photo', { source: sourceType })
       setImagePath(path)
       setPhase('analyzing')
