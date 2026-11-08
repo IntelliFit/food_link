@@ -1496,6 +1496,7 @@ function AnalyzePage() {
           </View>
         ) : imagePaths.length > 0 ? (
           // 照片按拍摄时的 3:4 / 4:3 原比例排一行（高度固定、宽度随比例），不再裁成方块。
+          <View className='image-strip-row'>
           <ScrollView scrollX showScrollbar={false} className='image-strip'>
             <View className='image-strip__track'>
               {imagePaths.map((path, index) => (
@@ -1516,14 +1517,16 @@ function AnalyzePage() {
                   </View>
                 </View>
               ))}
-              {imagePaths.length < MAX_ANALYZE_IMAGES && (
-                <View className='image-strip__add' onClick={handleChooseImage}>
-                  <Text className='image-strip__add-icon'>+</Text>
-                  <Text className='image-strip__add-text'>再拍一张</Text>
-                </View>
-              )}
             </View>
           </ScrollView>
+          {/* 「再拍一张」放在滚动条外面：相册里比 4:3 更宽的照片也不会把它挤出屏幕 */}
+          {imagePaths.length < MAX_ANALYZE_IMAGES && (
+            <View className='image-strip__add' onClick={handleChooseImage}>
+              <Text className='image-strip__add-icon'>+</Text>
+              <Text className='image-strip__add-text'>再拍一张</Text>
+            </View>
+          )}
+          </View>
         ) : (
           <View className='no-image-placeholder' onClick={handleChooseImage}>
             <View className='placeholder-content'>
