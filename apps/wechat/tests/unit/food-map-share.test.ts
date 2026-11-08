@@ -4,8 +4,10 @@ import Taro from '@tarojs/taro'
 import {
   currentPageHasSharedSpot,
   findSharedMapSpot,
+  fitShareName,
   foodMapShareMessage,
   parseSharedSpot,
+  shareableFoodImage,
   sharedSpotFromMapSpot,
   sharedSpotOrigin,
   sharedSpotQuery,
@@ -21,6 +23,13 @@ function spot(key: string, latitude: number, longitude: number, overrides: Parti
     locationLevel: 'food', locationName: '街角小馆', address: '人民路 1 号', ...overrides,
   }
 }
+
+const CDN = 'https://cdn-food-images.coachlink.fit'
+
+jest.mock('../../src/utils/static-asset-cdn-url', () => ({
+  getFoodImagesCdnBaseUrl: () => 'https://cdn-food-images.coachlink.fit',
+  LOGIN_LOGO_URL: 'https://cdn-food-images.coachlink.fit/wechat/source-login-logo.png',
+}))
 
 function queryParams(query: string): Record<string, string> {
   return Object.fromEntries(query.split('&').map(part => part.split('=') as [string, string]))
@@ -52,21 +61,52 @@ describe('food map share links', () => {
     expect(findSharedMapSpot([far], { latitude: 31.2749, longitude: 121.5423, name: '店', address: '' })).toBeUndefined()
   })
 
-  it('turns a merchant upload into the spot it lands on, but not homemade food', () => {
+  it('turns a merchant upload into the spot it lands on, with its dish and photo, but not homemade food', () => {
     expect(uploadedSpotFromPayload({ merchant_name: '街角小馆', merchant_address: '人民路 1 号', latitude: 31.2, longitude: 121.5 }))
       .toEqual({ latitude: 31.2, longitude: 121.5, name: '街角小馆', address: '人民路 1 号' })
+    expect(uploadedSpotFromPayload({
+      merchant_name: '街角小馆', food_name: '牛肉面', latitude: 31.2, longitude: 121.5, image_paths: [`${CDN}/food/a.jpg`],
+    })).toEqual({ latitude: 31.2, longitude: 121.5, name: '街角小馆', address: '', dish: '牛肉面', image: `${CDN}/food/a.jpg` })
     expect(uploadedSpotFromPayload({ food_name: '家常菜' })).toBeNull()
   })
 
-  it('writes an inviting share message that opens the same spot', () => {
+  it('carries the dish, calories and photo so a guest sees them before logging in', () => {
+    const shared = sharedSpotFromMapSpot(spot('food:31.27490:121.54230', 31.2749, 121.5423, {
+      featuredItem: { id: 'x', food_name: '红豆面包', image_path: `${CDN}/food/b.jpg` } as PublicFoodLibraryItem,
+    }))
+    expect(shared).toMatchObject({ dish: '红豆面包', image: `${CDN}/food/b.jpg` })
+    const parsed = parseSharedSpot(queryParams(sharedSpotQuery({ ...shared, kcal: 320 })))
+    expect(parsed).toMatchObject({ name: '街角小馆', dish: '红豆面包', kcal: 320, image: `${CDN}/food/b.jpg` })
+  })
+
+  it('accepts only photos on the food image CDN, so a link cannot show any picture', () => {
+    expect(shareableFoodImage(`${CDN}/food/a.jpg`)).toBe(`${CDN}/food/a.jpg`)
+    expect(shareableFoodImage('http://cdn-food-images.coachlink.fit/food/a.jpg')).toBe(`${CDN}/food/a.jpg`)
+    expect(shareableFoodImage('https://evil.example.com/a.jpg')).toBe('')
+    expect(shareableFoodImage('https://cdn-food-images.coachlink.fit.evil.com/a.jpg')).toBe('')
+    expect(shareableFoodImage('http://tmp/abc.jpg')).toBe('')
+    expect(shareableFoodImage('food/a.jpg')).toBe('')
+    expect(parseSharedSpot({ lat: '31.2', lng: '121.5', name: '店', img: encodeURIComponent('https://evil.example.com/a.jpg') })?.image)
+      .toBeUndefined()
+    expect(parseSharedSpot({ lat: '31.2', lng: '121.5', name: '店', kcal: '-3' })?.kcal).toBeUndefined()
+    expect(parseSharedSpot({ lat: '31.2', lng: '121.5', name: '店', kcal: '99999' })?.kcal).toBeUndefined()
+  })
+
+  it('puts the place name first in a title short enough for a chat card', () => {
+    const shared = { latitude: 31.2, longitude: 121.5, name: 'GooddyBread&好好面包', address: '' }
+    expect(foodMapShareMessage(shared, 'share').title).toBe('GooddyBread&好好面包｜食探上发现的好吃的')
+    expect(foodMapShareMessage({ ...shared, name: '街角小馆' }, 'upload').title).toBe('街角小馆｜我刚在食探点亮了它')
+    expect(fitShareName('老北京炸酱面馆二十四小时营业总店分店')).toBe('老北京炸酱面馆二十四小时营业…')
+    expect(fitShareName('GooddyBread&好好面包')).toBe('GooddyBread&好好面包')
+  })
+
+  it('writes a share message that opens the same spot', () => {
     const shared = { latitude: 31.2, longitude: 121.5, name: '街角小馆', address: '' }
     const uploaded = foodMapShareMessage(shared, 'upload', 'https://img/1.jpg')
-    expect(uploaded.title).toContain('点亮了「街角小馆」')
     expect(uploaded.path).toMatch(/^\/packageExtra\/pages\/food-library\/index\?lat=31\.200000&lng=121\.500000&name=/)
     expect(uploaded.path).toMatch(/&from=share$/)
     expect(uploaded.imageUrl).toBe('https://img/1.jpg')
-    expect(foodMapShareMessage(shared, 'share').title).toContain('发现了「街角小馆」')
-    expect(foodMapShareMessage(null, 'share').path).toBe('/packageExtra/pages/food-library/index')
+    expect(foodMapShareMessage(null, 'share')).toEqual({ title: '食探美食图谱：一起点亮身边的好吃的', path: '/packageExtra/pages/food-library/index' })
     expect(sharedSpotOrigin({ from: 'upload' })).toBe('upload')
     expect(sharedSpotOrigin({})).toBe('share')
   })

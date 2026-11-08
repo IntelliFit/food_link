@@ -1114,6 +1114,82 @@ $food-library-font-meta: 24rpx;
   padding: 40rpx 36rpx;
   background: #fff;
   border-radius: 24rpx;
+  overflow: hidden;
+}
+
+// 第一屏先看到这家店的照片；没有照片时用和分享图一致的卡片
+.shared-spot-photo,
+.shared-spot-poster {
+  display: block;
+  width: calc(100% + 72rpx);
+  margin: -40rpx -36rpx 32rpx;
+}
+
+.shared-spot-photo {
+  height: 420rpx;
+}
+
+.shared-spot-poster {
+  height: 380rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  background: linear-gradient(160deg, #f7f3e8 0%, #e3f4ea 100%);
+}
+
+.shared-spot-plate {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  box-shadow: 0 0 0 20rpx #d3eedf;
+}
+
+.shared-spot-plate-initial {
+  font-size: 72rpx;
+  font-weight: 700;
+  color: #0a7a54;
+}
+
+.shared-spot-poster-kcal {
+  margin-top: 16rpx;
+  font-size: 56rpx;
+  font-weight: 700;
+  color: #0a7a54;
+}
+
+.shared-spot-poster-unit {
+  font-size: $food-library-font-body;
+  font-weight: 400;
+  color: #4a5a52;
+}
+
+.shared-spot-poster-note {
+  font-size: $food-library-font-meta;
+  color: #6a7282;
+}
+
+.shared-spot-dish {
+  display: block;
+  margin-top: 8rpx;
+  font-size: $food-library-font-body;
+  line-height: 40rpx;
+  font-weight: 600;
+  color: #28775e;
+}
+
+.food-map-share-canvas {
+  position: fixed;
+  left: -2000px;
+  top: 0;
+  width: 500px;
+  height: 400px;
+  pointer-events: none;
 }
 
 .shared-spot-eyebrow {
@@ -1618,6 +1694,13 @@ $food-library-font-meta: 24rpx;
   .map-share-invite-subtitle,
   .map-share-invite-close,
   .shared-spot-address,
-  .shared-spot-invite { color: #b7c4bd; }
+  .shared-spot-invite,
+  .shared-spot-poster-note,
+  .shared-spot-poster-unit { color: #b7c4bd; }
+  .shared-spot-poster { background: linear-gradient(160deg, #2c4236 0%, #1f332a 100%); }
+  .shared-spot-plate { background: #142a1e; box-shadow: 0 0 0 20rpx #344c3c; }
+  .shared-spot-plate-initial,
+  .shared-spot-poster-kcal,
+  .shared-spot-dish { color: #b3d9c1; }
   .map-share-invite-btn { background: #b3d9c1; color: #142a1e; }
 }

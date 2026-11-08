@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Image, Input, Button, Map } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Input, Button, Map, Canvas } from '@tarojs/components'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
 import { Ellipsis, Plus } from '@taroify/icons'
@@ -8,6 +8,7 @@ import { rememberMealLocation } from '../../../utils/meal-location'
 import {
   getAccessToken,
   getPublicFoodMapSpots,
+  getPublicFoodLibraryItem,
   getPublicFoodLibraryList,
   getPublicFoodLibraryCollections,
   getMyPublicFoodLibrary,
@@ -43,11 +44,11 @@ import {
 import {
   currentPageHasSharedSpot,
   findSharedMapSpot,
-  foodMapShareMessage,
   parseSharedSpot,
   sharedSpotFromMapSpot,
   sharedSpotOrigin,
 } from './food-map-share'
+import { FOOD_MAP_SHARE_CANVAS_ID, foodMapShareWithCover, prepareFoodMapShareCover } from './food-map-share-cover'
 
 // 缓存键名常量
 const CACHE_KEYS = {
@@ -68,6 +69,8 @@ const FOOD_MAP_ID = 'food-library-map'
 const FOOD_MAP_NEARBY_SCALE = 15
 const FOOD_MAP_SPOT_SCALE = 17
 const FOOD_MAP_ZOOM_AFTER_MARKERS_MS = 400
+// Wait for the tapping to settle before fetching a dish and drawing its share card.
+const FOOD_MAP_SHARE_PREPARE_MS = 600
 const FOOD_MAP_CLUSTER_STYLES = {
   small: { bgColor: '#ffffff', color: '#0a7a54', borderColor: '#0a7a54', fontSize: 12, padding: 4 },
   medium: { bgColor: '#0a7a54', color: '#ffffff', borderColor: '#ffffff', fontSize: 13, padding: 5 },
@@ -140,6 +143,10 @@ function hasDisplayableNutrition(item: PublicFoodLibraryItem): boolean {
   // 已完成分析的真实零热量（如水）仍保留；不猜测、也不生成营养值。
   return status === 'completed' || [item.total_calories, item.total_protein, item.total_carbs, item.total_fat]
     .some(value => Number.isFinite(value) && value > 0)
+}
+
+function displayableKcal(item: PublicFoodLibraryItem): number | undefined {
+  return hasDisplayableNutrition(item) && item.total_calories > 0 ? Math.round(item.total_calories) : undefined
 }
 
 const SPOT_DISH_PAGE_SIZE = 50
@@ -527,17 +534,31 @@ function FoodLibraryPage() {
     }
   }, [])
 
+  const shareTarget = useMemo(
+    () => (selectedMapSpot ? sharedSpotFromMapSpot(selectedMapSpot) : sharedSpot),
+    [selectedMapSpot, sharedSpot],
+  )
+  const shareItemId = selectedMapSpot?.featuredItem.id || ''
+  // The map payload leaves calories out, so the share card asks for the featured dish.
+  const loadShareKcal = useCallback(
+    () => (shareItemId && getAccessToken()
+      ? getPublicFoodLibraryItem(shareItemId).then(displayableKcal)
+      : Promise.resolve(undefined)),
+    [shareItemId],
+  )
+
+  useEffect(() => {
+    if (shareTarget?.image) return
+    const timer = setTimeout(() => {
+      void prepareFoodMapShareCover(shareTarget, loadShareKcal).catch(() => {})
+    }, FOOD_MAP_SHARE_PREPARE_MS)
+    return () => clearTimeout(timer)
+  }, [shareTarget, loadShareKcal])
+
   useShareAppMessage(() => {
-    if (selectedMapSpot) {
-      const isOwnUpload = sharedOrigin === 'upload' && !!sharedSpot
-        && findSharedMapSpot([selectedMapSpot], sharedSpot) === selectedMapSpot
-      return foodMapShareMessage(
-        sharedSpotFromMapSpot(selectedMapSpot),
-        isOwnUpload ? 'upload' : 'share',
-        foodMapImage(selectedMapSpot.featuredItem) || undefined,
-      )
-    }
-    return foodMapShareMessage(sharedSpot, sharedOrigin)
+    const isOwnUpload = sharedOrigin === 'upload' && !!sharedSpot
+      && (!selectedMapSpot || findSharedMapSpot([selectedMapSpot], sharedSpot) === selectedMapSpot)
+    return foodMapShareWithCover(shareTarget, isOwnUpload ? 'upload' : 'share', loadShareKcal)
   })
 
   const locateMapAroundMe = useCallback(async () => {
@@ -1049,8 +1070,26 @@ function FoodLibraryPage() {
         )}
         {sharedSpot ? (
           <View className='shared-spot-card'>
+            {sharedSpot.image ? (
+              <Image className='shared-spot-photo' src={sharedSpot.image} mode='aspectFill' />
+            ) : (
+              <View className='shared-spot-poster'>
+                <View className='shared-spot-plate'>
+                  <Text className='shared-spot-plate-initial'>{Array.from(sharedSpot.name)[0]}</Text>
+                </View>
+                {sharedSpot.kcal ? (
+                  <Text className='shared-spot-poster-kcal'>{sharedSpot.kcal}<Text className='shared-spot-poster-unit'> 千卡</Text></Text>
+                ) : null}
+                <Text className='shared-spot-poster-note'>还没有照片，去吃的时候拍一张点亮它</Text>
+              </View>
+            )}
             <Text className='shared-spot-eyebrow'>朋友分享的美食地点</Text>
             <Text className='shared-spot-name'>{sharedSpot.name}</Text>
+            {sharedSpot.dish && (
+              <Text className='shared-spot-dish'>
+                {sharedSpot.dish}{sharedSpot.kcal ? ` · 约 ${sharedSpot.kcal} 千卡` : ''}
+              </Text>
+            )}
             {sharedSpot.address && <Text className='shared-spot-address'>{sharedSpot.address}</Text>}
             <View className='shared-spot-actions'>
               <Button className='shared-spot-btn shared-spot-btn--secondary' onClick={() => void openSharedSpotLocation()}>导航过去</Button>
@@ -1064,6 +1103,7 @@ function FoodLibraryPage() {
             <Button className='login-tip-btn' onClick={goLogin}>去登录</Button>
           </View>
         )}
+        <Canvas type='2d' id={FOOD_MAP_SHARE_CANVAS_ID} className='food-map-share-canvas' />
       </View>
       </FlPageThemeRoot>
     )
@@ -1545,6 +1585,7 @@ function FoodLibraryPage() {
       {(viewMode !== 'map' || tabMode !== 'all' || fromRecord) && (
         <Button className='fab-button' aria-label='补充餐食' onClick={goShare}><Plus /></Button>
       )}
+      <Canvas type='2d' id={FOOD_MAP_SHARE_CANVAS_ID} className='food-map-share-canvas' />
     </View>
     </FlPageThemeRoot>
   )
