@@ -26,7 +26,8 @@ export default function PetThinking({ pet, steps, size = 'card', hidePet = false
       <View className='pet-thinking__row'>
         {!hidePet && (
           <View className='pet-thinking__pet'>
-            <PetAvatar pet={pet || undefined} size={size === 'chat' ? 44 : 58} motion='companion' />
+            {/* Before the partner has loaded, PetAvatar draws nothing for an empty pet; {} gives the default 健文伙伴. */}
+            <PetAvatar pet={pet || {}} size={size === 'chat' ? 44 : 58} motion='companion' />
           </View>
         )}
         <View key={current} className={`pet-thinking__bubble${hidePet ? ' pet-thinking__bubble--plain' : ''}`}>

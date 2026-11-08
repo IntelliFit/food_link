@@ -13,7 +13,7 @@ const REFINE_TEXT: Record<MealRefineState, string> = { updating: '在帮你更�
 export default function MealRefineBadge({ pet, hidePet, state }: { pet?: PetThinkingPet | null; hidePet: boolean; state: MealRefineState }) {
   return (
     <View className={`meal-refine meal-refine--${state}`}>
-      {!hidePet && <View className='meal-refine__pet'><PetAvatar pet={pet || undefined} size={30} /></View>}
+      {!hidePet && <View className='meal-refine__pet'><PetAvatar pet={pet || {}} size={30} /></View>}
       <Text className='meal-refine__text'>{REFINE_TEXT[state]}</Text>
     </View>
   )
