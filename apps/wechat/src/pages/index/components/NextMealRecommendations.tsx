@@ -11,7 +11,10 @@ import { mealSource, mealTitle } from '../../../utils/meal-presentation'
 import { rememberRecommendedDish } from '../../../utils/meal-dish-recommended'
 import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
 import { mergeJudgedPreview, readMealPreviewCache, recentMealRecords, recordMealName, writeMealPreviewCache } from '../../../utils/meal-preview-cache'
-import { MealRefineBadge, MealWaitingPet, type MealPet, type MealRefineState, type MealWaitStage } from './MealWaitingPet'
+import PetThinking, { type PetThinkingPet } from '../../../components/PetThinking'
+import { petDisplayName } from '../../../utils/pet-name'
+import MealRefineBadge, { type MealRefineState } from './MealRefineBadge'
+import { mealWaitText, type MealWaitStage } from './meal-wait-steps'
 import './NextMealRecommendations.scss'
 
 /** The meal the server chose for the card, which late at night differs from the one asked for. */
@@ -23,7 +26,7 @@ type Props = {
   refreshKey: string
   onAdjust: (option?: DietRecommendationOption, meal?: NextMealCardMeal) => void
   /** The user's own partner, shown while the card waits; hidden when the user hid it. */
-  pet?: MealPet
+  pet?: PetThinkingPet | null
   petHidden?: boolean
 }
 
@@ -43,7 +46,8 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
   const [recent, setRecent] = useState<FoodRecord[]>([])
   const interacted = useRef(false)
   const selectedSourceId = useRef('')
-  const [waitStage, setWaitStage] = useState<MealWaitStage>('searching')
+  // Every step taken since this load started, newest last.
+  const [waitStages, setWaitStages] = useState<MealWaitStage[]>([])
   const waitTimers = useRef<Array<ReturnType<typeof setTimeout>>>([])
   // Shows 挑好了 for a moment after the model's pick replaced the rule pick.
   const [refineDone, setRefineDone] = useState(false)
@@ -82,6 +86,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
       return cached ? { owner: token, meal: mealType, date, result: cached, stale: true } : previous
     })
     setBusy(true)
+    setWaitStages([])
     setRefining(false)
     setRecent([])
     setError('')
@@ -97,6 +102,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
           // Only an explicit click may trigger a first-time permission prompt.
           if (requestLocation || settings.authSetting['scope.userLocation'] === true) {
             setLocating(true)
+            setWaitStages(['locating'])
             if (requestLocation) await ensureWeappPrivacyAuthorized()
             const fix = await requestMealLocation()
             if (token !== getAccessToken() || seq !== sequence.current) return
@@ -177,8 +183,8 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
 
   function startWaitStages() {
     stopWaitStages()
-    setWaitStage('searching')
-    waitTimers.current = WAIT_STAGE_STEPS.map(([stage, at]) => setTimeout(() => setWaitStage(stage), at))
+    setWaitStages(previous => [...previous.filter(stage => stage === 'locating'), 'searching'])
+    waitTimers.current = WAIT_STAGE_STEPS.map(([stage, at]) => setTimeout(() => setWaitStages(previous => [...previous, stage]), at))
   }
 
   function stopWaitStages() {
@@ -323,10 +329,10 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
       </View>
       {!!locationNotice && <View className='meal-picks__notice'><Text>{locationNotice}</Text>{locationSettings && <Text className='meal-picks__text-action' onClick={() => void openLocationSettings()}>去设置</Text>}</View>}
       {busy && !option ? (
-        <MealWaitingPet pet={pet} showPet={!petHidden} stage={locating ? 'locating' : waitStage} />
+        <PetThinking pet={pet} hidePet={!!petHidden} steps={(waitStages.length ? waitStages : ['searching' as MealWaitStage]).map(stage => mealWaitText(stage, petDisplayName(pet?.name)))} />
       ) : option ? (
         <View key={result?.recommendation_id || 'meal'} className={`meal-picks__served${stale ? ' is-stale' : ''}`}>
-          {refineState && <MealRefineBadge pet={pet} showPet={!petHidden} state={refineState} />}
+          {refineState && <MealRefineBadge pet={pet} hidePet={!!petHidden} state={refineState} />}
           <Swiper className={`meal-picks__swiper${selectedPhoto ? '' : ' meal-picks__swiper--no-photo'}`} current={selected} onChange={event => { if (event.detail.source === 'touch') interacted.current = true; setSelected(event.detail.current) }} duration={260}>
             {options.map(item => {
               const photo = failedPhotos[item.source_id || ''] ? '' : item.image_path || photos[item.source_id || '']

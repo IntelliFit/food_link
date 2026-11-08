@@ -1,4 +1,4 @@
-import { mealWaitText } from '../../src/pages/index/components/MealWaitingPet'
+import { mealWaitText } from '../../src/pages/index/components/meal-wait-steps'
 import { petDisplayName } from '../../src/utils/pet-name'
 
 describe('meal waiting partner', () => {
