@@ -31,6 +31,9 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { openPetSettings, PET_ASK_ENTRY } from '../../../utils/pet-navigation'
 import { DEFAULT_PET_NAME } from '../../../utils/pet-name'
 import { PetAvatar } from '../../../components/PetAvatar'
+import PetThinking from '../../../components/PetThinking'
+import { appendThinkingStep, chatThinkingSteps } from './thinking-steps'
+import { petChatFailureText, savedAnswerFor } from './chat-failure'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { PetMarkdown } from './pet-markdown'
 import { MealSuggestions } from './MealSuggestions'
@@ -56,6 +59,12 @@ type ChatMessage = {
   billingStatus?: string
   // A question that failed before the server stored it.
   unsent?: boolean
+  /** 等回答时宠物真实在做的步骤（后端进度） */
+  steps?: string[]
+  /** 规则先挑出的几份，模型还在细看 */
+  provisional?: boolean
+  /** 这条是失败提示：点「重试」重新问这一句 */
+  retryQuestion?: string
 }
 
 type PendingChatImage = {
@@ -598,14 +607,19 @@ function PetChatPage() {
       onStart: () => {
         // first chunk will arrive soon
       },
-      // Keep the visual thinking animation until answer text arrives.
-      // Internal retrieval steps are not assistant replies.
+      // 进度只是等待时显示的步骤，不是回答
+      onProgress: (progress) => {
+        updateMessage(streamingMessageID, (message) => ({ ...message, steps: appendThinkingStep(message.steps, progress.label) }))
+      },
+      // 规则先挑的几份马上给用户看；模型选好后同一轮的最终结果替换它
       onDietResult: (result) => {
         streamingDietRecommendationRef.current = result.recommendation
         updateMessage(streamingMessageID, (message) => ({
           ...message,
           kind: 'diet_recommendation',
           recommendation: result.recommendation,
+          provisional: Boolean(result.provisional),
+          text: result.provisional ? result.answer : message.text,
         }))
       },
       onChunk: (text) => {
@@ -646,14 +660,25 @@ function PetChatPage() {
         }
       },
       onError: async (error) => {
-        await showUnifiedApiError(error, `${petName}分析失败`)
+        console.warn('[pet-chat] 回答失败', error?.message || error)
+        // 连接断了，服务端可能已经答完并存好：先去取，取到就直接显示
+        const saved = await getLatestPetChatSession().catch(() => null)
+        if (saved && savedAnswerFor(saved.messages || [], question)) {
+          applyHistory(saved)
+          finish()
+          return
+        }
+        const mealTurn = Boolean(streamingDietRecommendationRef.current) || Boolean(homeMealContextRef.current) ||
+          Boolean(classifyDietRecommendationIntent(question, false))
+        const kept = streamingDietRecommendationRef.current
         updateMessage(userMessageID, (current) => ({ ...current, unsent: true }))
         updateMessage(streamingMessageID, () => ({
           id: nextID('pet'),
           role: 'pet',
-          kind: 'local',
-          text: `${petName}这次没能顺利读完记录。你可以稍后再试，或者先换成最近 7 天的小范围分析。`,
-          actions: ['换最近 7 天', '稍后再试'],
+          kind: kept ? 'diet_recommendation' : 'local',
+          recommendation: kept || undefined,
+          text: petChatFailureText({ petName, mealTurn, keptOptions: Boolean(kept) }),
+          retryQuestion: question,
         }))
         finish()
       },
@@ -661,7 +686,7 @@ function PetChatPage() {
     const location = currentMealLocation(getAccessToken() || '')
     if (mealLocation && !location) setMealLocation(undefined)
     streamGeneratePetChat(question, range, sessionID, !sessionID, callbacks, enableThinking, imageUrls, homeMealContext || undefined, location)
-  }, [appendMessage, enableThinking, homeMealContext, mealLocation, petName, sessionID, summary, updateMessage])
+  }, [appendMessage, applyHistory, enableThinking, homeMealContext, mealLocation, petName, sessionID, summary, updateMessage])
 
   const locateForMeal = useCallback(async () => {
     if (busyRef.current || locatingMeal) return
@@ -800,6 +825,19 @@ function PetChatPage() {
 
   const canSend = Boolean(draftQuestion) && !busy && !imageUploading && !estimatingCredits && estimatedCredits !== null
 
+  /** 失败提示上的「重试」：去掉这条提示和没发出去的那句，再问一次 */
+  const retryQuestion = useCallback((failedMessageID: string, question: string) => {
+    if (!question || busyRef.current) return
+    setMessages((prev) => {
+      const index = prev.findIndex((item) => item.id === failedMessageID)
+      if (index < 0) return prev
+      const before = prev[index - 1]
+      const dropUser = before && before.role === 'user' && before.unsent && before.text === question
+      return prev.filter((_, i) => i !== index && !(dropUser && i === index - 1))
+    })
+    void runAnalysis(question, questionRange(question, activeRange), [])
+  }, [activeRange, runAnalysis])
+
   // 伙伴页带来的问题：估算好积分后替用户按一次发送；估算失败就留在输入框里让用户自己发
   useEffect(() => {
     if (!autoSendRef.current || !canSend || draftQuestion !== autoSendRef.current) return
@@ -845,17 +883,23 @@ function PetChatPage() {
                   message.text ? (
                     <PetMarkdown text={message.recommendation?.generated_by === 'foodlink-grounded-meals-v1' && message.recommendation.recommendations?.length ? '这几份可以参考。想换口味，还是调整份量？' : message.text} />
                   ) : (
-                    <View className='pet-chat-thinking-bubble'>
-                      <View className='pet-chat-thinking-dot' />
-                      <View className='pet-chat-thinking-dot' />
-                      <View className='pet-chat-thinking-dot' />
-                    </View>
+                    <PetThinking pet={petSummary?.pet} steps={chatThinkingSteps(message.steps)} size='chat' dark={scheme === 'dark'} />
                   )
                 ) : (
                   <Text className='pet-chat-message-text'>{message.text}</Text>
                 )}
                 {message.role === 'pet' && message.recommendation ? (
                   <MealSuggestions result={message.recommendation} onOpen={openRecommendationDetail} onSaveSchool={result => void saveCampusPreference(result)} savedSchoolIDs={savedSchoolIDs} />
+                ) : null}
+                {message.role === 'pet' && message.provisional ? (
+                  <View className='pet-chat-provisional'>
+                    <PetThinking steps={chatThinkingSteps(message.steps, '在比哪份最适合你…').slice(-1)} size='chat' hidePet dark={scheme === 'dark'} />
+                  </View>
+                ) : null}
+                {message.role === 'pet' && message.retryQuestion ? (
+                  <View className='pet-chat-retry' aria-role='button' onClick={() => retryQuestion(message.id, message.retryQuestion || '')}>
+                    <Text className='pet-chat-retry-text'>重试</Text>
+                  </View>
                 ) : null}
               </View>
             </View>

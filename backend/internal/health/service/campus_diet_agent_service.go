@@ -25,7 +25,7 @@ import (
 
 const (
 	campusDietAgentModel             = "qwen3.8-flash"
-	campusDietAgentMaxRounds         = 6
+	campusDietAgentMaxRounds         = 5
 	campusDietAgentMaxToolCalls      = 10
 	campusDietAgentDefaultResultSize = 3
 	campusDietAgentSearchLimit       = 20
@@ -34,8 +34,10 @@ const (
 )
 
 // campusDietAgentModelTimeout is a turn's whole budget. A var only so a replay over a slow
-// link to the live database can lengthen it; production never changes it.
-var campusDietAgentModelTimeout = 45 * time.Second
+// link to the live database can lengthen it; production never changes it. 30s, not more:
+// the rule-picked options reach the user within seconds (see Provisional) and the model
+// only refines them; a slow or failing model channel must not keep the user waiting.
+var campusDietAgentModelTimeout = 30 * time.Second
 
 type CampusDietAgentProgress struct {
 	AgentRunID  string `json:"agent_run_id"`
@@ -75,7 +77,10 @@ type CampusDietAgentResult struct {
 	AgentUsed      bool                       `json:"agent_used"`
 	ToolCount      int                        `json:"tool_count"`
 	FallbackReason string                     `json:"fallback_reason,omitempty"`
-	Usage          billing.TokenUsage         `json:"-"`
+	// Provisional marks the rule-picked options sent before the model has chosen; the final
+	// diet_result of the same turn replaces them. Only the final one is saved and charged.
+	Provisional bool               `json:"provisional,omitempty"`
+	Usage       billing.TokenUsage `json:"-"`
 }
 
 type campusDietAgentMealContext struct {
@@ -151,6 +156,8 @@ type campusDietAgentRunState struct {
 	SourceChoices          map[string]string
 	ChoiceSources          map[string]string
 	Progress               func(CampusDietAgentProgress)
+	// Provisional receives the rule-picked options as soon as the first search is back.
+	Provisional func(*CampusDietAgentResult)
 }
 
 type campusDietAgentToolCall struct {
@@ -616,6 +623,9 @@ func (s *StatsService) GenerateCampusDietAgentStream(ctx context.Context, userID
 	chunkChan := make(chan PetChatStreamChunk, 40)
 	go func() {
 		defer close(chunkChan)
+		// The answer is worked out and saved even if the user leaves the page: they find it in
+		// the conversation when they come back. The handler keeps draining the channel.
+		ctx := context.WithoutCancel(ctx)
 		chunkChan <- PetChatStreamChunk{Type: "start"}
 		startedAt := time.Now()
 		runID := uuid.NewString()
@@ -631,6 +641,9 @@ func (s *StatsService) GenerateCampusDietAgentStream(ctx context.Context, userID
 			ExcludedSourceIDs: allIDs, Candidates: map[string]DietRecommendationCandidate{},
 			Progress: func(progress CampusDietAgentProgress) {
 				chunkChan <- PetChatStreamChunk{Type: "progress", Progress: &progress}
+			},
+			Provisional: func(result *CampusDietAgentResult) {
+				chunkChan <- PetChatStreamChunk{Type: "diet_result", DietResult: result}
 			},
 		}
 		initializeMealAccess(state)
@@ -650,7 +663,7 @@ func (s *StatsService) GenerateCampusDietAgentStream(ctx context.Context, userID
 		if state.Constraints.Scene == "takeout" && state.Location == nil {
 			state.School = domain.DietRecommendationSchool{}
 		}
-		state.emitProgress("正在整理本餐需求", "", "running", 0)
+		state.emitProgress("在看这一餐你想要什么…", "", "running", 0)
 		agentCtx, cancel := context.WithTimeout(ctx, campusDietAgentModelTimeout)
 		defer cancel()
 		result := s.runCampusDietAgent(agentCtx, state)
@@ -763,6 +776,20 @@ func (s *StatsService) runCampusDietAgent(ctx context.Context, state *campusDiet
 				map[string]any{"role": "tool", "tool_call_id": call.ID, "name": call.Function.Name, "content": string(encoded)})
 		}
 	}
+	if state.MealContextLoaded && !state.SearchAttempted && campusDietAgentIsSearchIntent(state.Intent) && !mealQuestionNeedsModelPreferences(state.Question) &&
+		(state.Location != nil || state.School.ID != "" || state.Constraints.CanteenName != "") {
+		// Run this turn's own search before the first model round, like the context above:
+		// the model starts from real options (one round fewer), and the user sees the
+		// rule-picked ones within seconds instead of waiting for the whole Agent.
+		call := newCampusDietAgentToolCall("preloaded-search", mealAgentSearchTool(state), "{}")
+		if output, err := s.executeCampusDietAgentTool(ctx, state, call); err == nil {
+			encoded, _ := json.Marshal(output)
+			messages = append(messages,
+				map[string]any{"role": "assistant", "content": "", "tool_calls": []campusDietAgentToolCall{call}},
+				map[string]any{"role": "tool", "tool_call_id": call.ID, "name": call.Function.Name, "content": string(encoded)})
+			emitProvisionalMeals(state)
+		}
+	}
 	tools := campusDietAgentToolDefinitions()
 	var usage billing.TokenUsage
 	var final campusDietAgentFinal
@@ -792,6 +819,9 @@ func (s *StatsService) runCampusDietAgent(ctx context.Context, state *campusDiet
 				}
 				choice = map[string]any{"type": "function", "function": map[string]any{"name": name}}
 			}
+		}
+		if len(state.Candidates) > 0 {
+			state.emitProgress("在比哪份最适合你…", "", "running", len(state.Candidates))
 		}
 		modelStarted := time.Now()
 		modelCtx := ctx
@@ -2360,39 +2390,45 @@ func (state *campusDietAgentRunState) recordTool(name, status string, resultCoun
 }
 
 func campusDietAgentProgressLabel(toolName string, done bool) string {
+	// Shown to the user while they wait, so say what is really being done in plain words.
 	switch toolName {
 	case "get_meal_context":
 		if done {
-			return "已读取近期饮食和个人目标"
+			return "看完了你今天还差什么"
 		}
-		return "正在核对近期饮食和个人目标"
+		return "在看你今天还差什么…"
 	case "set_meal_preferences":
 		if done {
-			return "已合并本餐的新需求"
+			return "记下了你这餐的要求"
 		}
-		return "正在合并本餐需求"
+		return "在记下你这餐的要求…"
 	case "search_nearby_foods":
 		if done {
-			return "已检索附近已收录餐食"
+			return "找到了附近开着的店"
 		}
-		return "正在查询附近餐食"
+		return "在找附近开着的店…"
 	case "search_campus_foods":
 		if done {
-			return "已完成校园菜品检索"
+			return "翻完了食堂今天的菜"
 		}
-		return "正在搜索真实校园菜品"
+		return "在翻食堂今天的菜…"
+	case "search_history_meals":
+		if done {
+			return "翻完了你以前吃过的"
+		}
+		return "在翻你以前吃过的…"
 	case "get_campus_food_details":
 		if done {
-			return "已核对菜品热量和位置"
+			return "核对完热量和位置"
 		}
-		return "正在核对菜品详情"
+		return "在核对热量和位置…"
 	case "compare_campus_foods":
 		if done {
-			return "已完成营养比较"
+			return "比完了营养"
 		}
-		return "正在比较菜品营养"
+		return "在比这几份的营养…"
 	default:
-		return "正在查询餐食数据"
+		return "在查餐食数据…"
 	}
 }
 

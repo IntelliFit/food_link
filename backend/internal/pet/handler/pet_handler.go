@@ -377,18 +377,50 @@ func (h *PetHandler) ChatStream(c *gin.Context) {
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
+	writeSSEStream(c.Request.Context(), c.Writer, flusher, chunkChan, userID, petChatHeartbeatInterval)
+}
 
-	for chunk := range chunkChan {
-		data, _ := json.Marshal(chunk)
-		_, writeErr := io.WriteString(c.Writer, "data: "+string(data)+"\n\n")
-		if writeErr != nil {
-			logger.Warn(c.Request.Context(), "宠物对话 SSE 写入失败",
-				slog.String("user_id", userID),
-				logger.Err(writeErr),
-			)
+// petChatHeartbeatInterval keeps a slow answer's connection alive: proxies and the
+// mini program drop a stream that stays silent too long while the meal Agent works.
+const petChatHeartbeatInterval = 5 * time.Second
+
+// writeSSEStream relays chunks as SSE, with a comment line as heartbeat while nothing
+// comes. When the client is gone it keeps draining the channel, so the producer still
+// finishes and saves the answer (the user sees it on coming back) instead of blocking.
+func writeSSEStream[T any](ctx context.Context, w io.Writer, flusher http.Flusher, chunks <-chan T, userID string, heartbeat time.Duration) {
+	ticker := time.NewTicker(heartbeat)
+	defer ticker.Stop()
+	drain := func() {
+		go func() {
+			for range chunks {
+			}
+		}()
+	}
+	for {
+		select {
+		case chunk, ok := <-chunks:
+			if !ok {
+				return
+			}
+			data, _ := json.Marshal(chunk)
+			if _, err := io.WriteString(w, "data: "+string(data)+"\n\n"); err != nil {
+				logger.Warn(ctx, "宠物对话 SSE 写入失败，后台继续生成并保存", slog.String("user_id", userID), logger.Err(err))
+				drain()
+				return
+			}
+			flusher.Flush()
+		case <-ctx.Done():
+			logger.Warn(ctx, "宠物对话客户端已断开，后台继续生成并保存", slog.String("user_id", userID))
+			drain()
 			return
+		case <-ticker.C:
+			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
+				logger.Warn(ctx, "宠物对话 SSE 心跳失败，后台继续生成并保存", slog.String("user_id", userID), logger.Err(err))
+				drain()
+				return
+			}
+			flusher.Flush()
 		}
-		flusher.Flush()
 	}
 }
 

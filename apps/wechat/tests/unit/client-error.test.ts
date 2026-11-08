@@ -114,6 +114,16 @@ describe('client error handling', () => {
     expect(Taro.showModal).not.toHaveBeenCalled()
   })
 
+  it('reports the message of a plain-object rejection instead of [object Object]', async () => {
+    const { Taro, client } = load()
+    mountPageRoot(1)
+    client.handleClientError('rejection', { errMsg: 'request:fail timeout', errno: 5 })
+    await wait()
+    expect(reports(Taro)[0].data.message).toBe('request:fail timeout (5)')
+    expect(client.errorText({ code: 7 })).toBe('{"code":7}')
+    expect(client.errorText('plain')).toBe('plain')
+  })
+
   it('skips repeats, caps reports per launch and truncates long messages', async () => {
     const { Taro, client } = load()
     mountPageRoot(1)

@@ -1,0 +1,96 @@
+.pet-thinking {
+  display: flex;
+  box-sizing: border-box;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20rpx;
+
+  &--card {
+    height: 292rpx;
+    padding: 0 34rpx;
+    border-radius: 36rpx;
+    background: rgb(255 253 246 / 82%);
+    box-shadow: 0 14rpx 34rpx rgb(46 79 65 / 8%);
+  }
+
+  &--chat { padding: 12rpx 0; }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 18rpx;
+  }
+
+  &__pet {
+    flex: 0 0 auto;
+    animation: pet-thinking-hop-in 0.62s cubic-bezier(0.22, 1.2, 0.36, 1) both, pet-thinking-bob 1.6s ease-in-out 0.7s infinite;
+  }
+
+  &__bubble {
+    position: relative;
+    padding: 18rpx 24rpx;
+    border-radius: 24rpx;
+    color: #26463a;
+    background: #eef6f0;
+    font-size: 26rpx;
+    line-height: 36rpx;
+    animation: pet-thinking-say 0.28s ease-out both;
+
+    &::before {
+      position: absolute;
+      top: 50%;
+      left: -10rpx;
+      width: 20rpx;
+      height: 20rpx;
+      background: #eef6f0;
+      content: '';
+      transform: translateY(-50%) rotate(45deg);
+    }
+  }
+
+  &--chat &__bubble { font-size: 25rpx; }
+  &__bubble--plain::before { display: none; }
+
+  &__done {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6rpx 22rpx;
+    padding-left: 8rpx;
+  }
+
+  &__done-step {
+    display: flex;
+    align-items: center;
+    gap: 6rpx;
+    color: #7f998a;
+    font-size: 20rpx;
+    animation: pet-thinking-say 0.28s ease-out both;
+  }
+
+  &__tick { color: #417653; font-weight: 700; }
+}
+
+.pet-thinking--dark,
+.home-page--dark .pet-thinking {
+  &.pet-thinking--card { background: #222f29; box-shadow: none; }
+  .pet-thinking__bubble,
+  .pet-thinking__bubble::before { color: #edf8f1; background: #2c3b33; }
+  .pet-thinking__done-step { color: #a4b5aa; }
+}
+
+@keyframes pet-thinking-hop-in {
+  0% { opacity: 0; transform: translate(-90rpx, 0); }
+  45% { opacity: 1; transform: translate(-20rpx, -26rpx); }
+  75% { transform: translate(0, 0) scale(1.04, 0.94); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes pet-thinking-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6rpx); }
+}
+
+@keyframes pet-thinking-say {
+  from { opacity: 0; transform: translateY(8rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
