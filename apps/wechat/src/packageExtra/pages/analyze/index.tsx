@@ -65,6 +65,7 @@ import {
   normalizeAnalysisEngine,
 } from '../../../utils/analysis-engine'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { openFoodCameraForResult, takeFoodCameraResult } from '../../../utils/food-camera'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 import OnboardingGuide from '../../../components/OnboardingGuide'
@@ -126,6 +127,8 @@ const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const ANALYZE_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 5
 const PRECISION_CAPTURE_ROLES = ['top_down', 'oblique_45'] as const
+type PrecisionCaptureRole = typeof PRECISION_CAPTURE_ROLES[number]
+type FoodCameraTarget = { kind: 'append' } | { kind: 'precision'; role: PrecisionCaptureRole }
 const MAX_ANALYZE_VIDEO_SIZE_BYTES = 8 * 1024 * 1024
 const MAX_ANALYZE_VIDEO_DURATION_SECONDS = 12
 
@@ -508,6 +511,8 @@ function AnalyzePage() {
   }, [])
 
   const imagePathsRef = useRef<string[]>([])
+  // 打开取景相机时记下照片要放到哪里，回到本页时（useDidShow）取回照片。
+  const foodCameraTargetRef = useRef<FoodCameraTarget | null>(null)
   const routeSessionSignatureRef = useRef('')
   const analyzeSubmitDebounceRef = useRef(0)
   imagePathsRef.current = imagePaths.filter(Boolean)
@@ -698,6 +703,16 @@ function AnalyzePage() {
     // 2. 从本地存储获取图片路径 (用于拍照/相册后的跳转)
     const initStoredImagePath = async () => {
       try {
+        // 从取景相机返回：只把拍到的照片放回原位置，不用存储里的旧图覆盖当前这一顿。
+        const cameraTarget = foodCameraTargetRef.current
+        if (cameraTarget) {
+          foodCameraTargetRef.current = null
+          const shotPaths = takeFoodCameraResult()
+          if (shotPaths.length === 0) return
+          if (cameraTarget.kind === 'append') await appendImagePaths(shotPaths)
+          else await placePrecisionImage(cameraTarget.role, shotPaths[0])
+          return
+        }
         if (nextSessionId) {
           if (requestedCaptureMode === 'video') {
             setImagePaths([])
@@ -842,16 +857,21 @@ function AnalyzePage() {
       Taro.showToast({ title: `最多支持 ${MAX_ANALYZE_IMAGES} 张图片`, icon: 'none' })
       return
     }
+    const source = await askPhotoSource()
+    if (!source) return
+    if (source === 'camera') {
+      await openFoodCamera({ kind: 'append' }, remain)
+      return
+    }
     try {
       // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
       const res = await chooseImageWithPrivacy({
         count: remain,
         sizeType: ['original'],
-        sourceType: ['album', 'camera'],
+        sourceType: ['album'],
       })
       const rawPaths = (res.tempFilePaths || []).map(p => String(p || '').trim()).filter(Boolean)
-      const newPaths = await persistImagePathsImmediately(rawPaths)
-      setImagePaths(prev => [...prev, ...newPaths])
+      await appendImagePaths(rawPaths)
     } catch (e) {
       if ((e as any)?.errMsg?.includes('cancel')) return
       if (isPrivacyAuthorizeError(e)) {
@@ -862,28 +882,68 @@ function AnalyzePage() {
     }
   }
 
-  const handleChoosePrecisionImage = async (role: 'top_down' | 'oblique_45') => {
+  /** 追加到本顿已有照片后面，并同步到存储，避免回到本页时被旧图覆盖。 */
+  const appendImagePaths = async (rawPaths: string[]) => {
+    if (rawPaths.length === 0) return
+    const newPaths = await persistImagePathsImmediately(rawPaths)
+    const nextPaths = [...imagePathsRef.current, ...newPaths].slice(0, MAX_ANALYZE_IMAGES)
+    setImagePaths(nextPaths)
+    Taro.setStorageSync('analyzeImagePaths', nextPaths)
+  }
+
+  const placePrecisionImage = async (role: PrecisionCaptureRole, rawPath: string) => {
     const slotIndex = role === 'top_down' ? 0 : 1
+    const [stablePath] = await persistImagePathsImmediately([rawPath])
+    const nextPath = stablePath || rawPath
+    setImagePaths(prev => {
+      const next = [prev[0] || '', prev[1] || '']
+      const otherIndex = slotIndex === 0 ? 1 : 0
+      if (next[otherIndex] && next[otherIndex] === nextPath) {
+        Taro.showToast({ title: '两个角度不能使用同一张图片', icon: 'none' })
+        return next
+      }
+      next[slotIndex] = nextPath
+      return next
+    })
+  }
+
+  /** 拍照走 3:4 / 4:3 取景相机，相册照旧用系统选图。 */
+  const askPhotoSource = async (): Promise<'camera' | 'album' | null> => {
+    try {
+      const { tapIndex } = await Taro.showActionSheet({ itemList: ['拍照', '从相册选择'] })
+      return tapIndex === 0 ? 'camera' : 'album'
+    } catch {
+      return null
+    }
+  }
+
+  const openFoodCamera = async (target: FoodCameraTarget, maxCount: number) => {
+    foodCameraTargetRef.current = target
+    try {
+      await openFoodCameraForResult(maxCount)
+    } catch (e) {
+      foodCameraTargetRef.current = null
+      console.error('[analyze] open food camera failed', e)
+      Taro.showToast({ title: '打开相机失败，请重试', icon: 'none' })
+    }
+  }
+
+  const handleChoosePrecisionImage = async (role: PrecisionCaptureRole) => {
+    const source = await askPhotoSource()
+    if (!source) return
+    if (source === 'camera') {
+      await openFoodCamera({ kind: 'precision', role }, 1)
+      return
+    }
     try {
       const res = await chooseImageWithPrivacy({
         count: 1,
         sizeType: ['original'],
-        sourceType: ['album', 'camera'],
+        sourceType: ['album'],
       })
       const rawPath = String(res.tempFilePaths?.[0] || '').trim()
       if (!rawPath) return
-      const [stablePath] = await persistImagePathsImmediately([rawPath])
-      const nextPath = stablePath || rawPath
-      setImagePaths(prev => {
-        const next = [prev[0] || '', prev[1] || '']
-        const otherIndex = slotIndex === 0 ? 1 : 0
-        if (next[otherIndex] && next[otherIndex] === nextPath) {
-          Taro.showToast({ title: '两个角度不能使用同一张图片', icon: 'none' })
-          return next
-        }
-        next[slotIndex] = nextPath
-        return next
-      })
+      await placePrecisionImage(role, rawPath)
     } catch (e) {
       if ((e as any)?.errMsg?.includes('cancel')) return
       if (isPrivacyAuthorizeError(e)) {
