@@ -21,6 +21,7 @@ import {
   commissionLine,
   formatCents,
   formatRate,
+  attributionLines,
   ruleLines,
   sharePath,
   statusCopy,
@@ -164,7 +165,7 @@ function PromoterCenterPage() {
         <View className='promo-card promo-hero'>
           <Text className='promo-hero-title'>推荐食探，赚推广佣金</Text>
           <Text className='promo-hero-body'>
-            好友通过你的推广码开通会员，你可获得实付金额 {formatRate(current.rate_bps)} 的佣金。
+            新朋友从你分享的链接注册，之后开通会员，你可获得实付金额 {formatRate(current.rate_bps)} 的佣金。
           </Text>
         </View>
         {renderRules(current)}
@@ -240,6 +241,14 @@ function PromoterCenterPage() {
             </View>
             <Text className='promo-meta'>佣金比例 {formatRate(current.rate_bps)} · 分享链接打开即自动记录</Text>
             <Button className='promo-primary promo-share' openType='share'>分享给好友</Button>
+          </View>
+        )}
+        {code && (
+          <View className='promo-card'>
+            <Text className='promo-title'>怎么算你的推广</Text>
+            {attributionLines(current).map((line, index) => (
+              <Text key={line} className='promo-line'>{index + 1}. {line}</Text>
+            ))}
           </View>
         )}
         {summary && (
