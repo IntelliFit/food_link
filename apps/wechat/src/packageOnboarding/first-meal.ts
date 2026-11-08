@@ -1,5 +1,5 @@
 /**
- * 注册新流程（pet_flow）建档存好后，小麦说的两句：从第一餐看到了什么、今天的第一个任务。
+ * 注册新流程（pet_flow）建档存好后，伙伴说的两句：从第一餐看到了什么、今天的第一个任务。
  * 只让 pages/profile/index.tsx 引用，免得 Taro 把它打进主包 common.js。
  */
 import { getMealImpact, getPetDailyBrief } from '../utils/api'

@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Input, Switch, Checkbox, Image } from '@tarojs/components'
+import { View, Text, ScrollView, Switch, Image } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../../utils/stats-page-cache'
@@ -6,19 +6,15 @@ import { showDietDecisionEvidence } from '../../../utils/diet-decision-evidence'
 import {
   getStatsSummary,
   getBodyMetricsSummary,
-  addHealthFocus,
-  removeHealthFocus,
   generateCustomFocusCard,
   getAnalyzeTask,
   getNutritionState,
-  getPetSummary,
   saveHealthFocusKeys,
   showUnifiedApiError,
   type StatsSummary,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type DailyNutritionState,
-  type PetSummary,
   type RiskCard,
   type RiskOption,
 } from '../../../utils/api'
@@ -27,42 +23,32 @@ import {
   coverageLines,
   evidenceGapViews,
   evidenceRoute,
-  nextMealView,
   normalizeNutritionState,
-  observationHeadline,
-  observationMetaText,
   overallDelta,
-  petChatStarter,
-  planLineText,
   scoreToTone,
   splitWeekDeltas,
-  todayMetaText,
-  todayRowView,
   weekCountText,
   weekDayLabels,
   weekHabitRows,
   type EvidenceGapView,
-} from './nutrition-state-view'
+} from '../../../utils/nutrition-state-view'
 import {
-  addFocusKeyIfRoom,
   localFocusKeys,
   MAX_HEALTH_FOCUS,
   resolveFocusKeys,
   sameKeys,
   splitFocusCards,
-  toggleFocusKey,
 } from './focus-selection'
 import {
   EvidenceGapsCard,
   FocusSpotlightCard,
-  PetObservationStrip,
-  TodayGapsCard,
   WeekHabitsCard,
   type FocusSpotlightItem,
 } from '../../../components/StatsNutritionState'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { FocusSheet } from '../../../components/FocusSheet'
+import { builtinFocusLabel } from '../../../components/FocusSheet/focus-options'
 import { experiments } from '../../../utils/experiments'
-import { openPetChat } from '../../../utils/pet-navigation'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   customFocusCardFromTask,
@@ -102,13 +88,16 @@ type HeatmapCell = {
   state: 'none' | 'surplus' | 'deficit'
 }
 
-// 「饮食解读」（AI 风险解读）已去掉，由宠物每天那句话和宠物聊天替代
+// 「饮食解读」（AI 风险解读）已去掉，由宠物每天那句话和宠物聊天替代。
+// 分析页只管回头看：今天还差什么、宠物那句话都在底栏「伙伴」页，这里不再重复。
 type AnalysisPanelKey = 'health' | 'structure'
 
-const ANALYSIS_PANEL_TABS: Array<{ key: AnalysisPanelKey; label: string }> = [
-  { key: 'health', label: '健康关注' },
-  { key: 'structure', label: '趋势' },
-]
+function analysisPanelTabs(range: 'week' | 'month'): Array<{ key: AnalysisPanelKey; label: string }> {
+  return [
+    { key: 'health', label: range === 'week' ? '本周' : '本月' },
+    { key: 'structure', label: '趋势' },
+  ]
+}
 
 /** 关注以服务器为准；这两个本地键只做离线兜底和“还没传上去”的标记 */
 const RISK_PREF_STORAGE_KEY = 'stats_risk_focus_keys'
@@ -224,15 +213,6 @@ function customRiskCardToOption(card: RiskCard): RiskOption {
     key: card.key,
     title: card.focus_label || card.title,
     short: card.focus_label || card.title,
-    is_custom: true,
-  }
-}
-
-function customFocusToOption(focus: { id: string; label: string }): RiskOption {
-  return {
-    key: `custom:${focus.id}`,
-    title: focus.label,
-    short: focus.label,
     is_custom: true,
   }
 }
@@ -366,7 +346,6 @@ function StatsPage() {
   const [overviewExpanded, setOverviewExpanded] = useState(false)
   const [actionsExpanded, setActionsExpanded] = useState(false)
   const [issuesExpanded, setIssuesExpanded] = useState(false)
-  const [customFocusFormVisible, setCustomFocusFormVisible] = useState(false)
   const [othersExpanded, setOthersExpanded] = useState(false)
   const [mealValuesInCalories, setMealValuesInCalories] = useState(false)
 
@@ -423,8 +402,6 @@ function StatsPage() {
   /** 未登录：可进入分析 Tab 浏览引导，不拉取需登录接口 */
   const [guestBrowse, setGuestBrowse] = useState(() => !hasAuthToken())
   const [showCalories, setShowCalories] = useState(false)
-  const [customFocusInput, setCustomFocusInput] = useState('')
-  const [customFocusAdding, setCustomFocusAdding] = useState(false)
   const [customFocusRefreshingKey, setCustomFocusRefreshingKey] = useState<string | null>(null)
 
   const fetchIdRef = useRef(0)
@@ -433,7 +410,6 @@ function StatsPage() {
   const statsPageVisibleRef = useRef(true)
   const customFocusPollingTaskIdsRef = useRef<Set<string>>(new Set())
   const [nutritionState, setNutritionState] = useState<DailyNutritionState | null>(null)
-  const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const nutritionSeqRef = useRef(0)
   const nutritionShownOnceRef = useRef(false)
   const [statsShowCount, setStatsShowCount] = useState(0)
@@ -478,19 +454,7 @@ function StatsPage() {
     box.saving = false
   }, [])
 
-  /** 用户改了关注：界面和本机马上变，再写服务器 */
-  const commitFocusKeys = useCallback((next: string[]) => {
-    focusEditSeqRef.current += 1
-    selectedRiskKeysRef.current = next
-    setSelectedRiskKeys(next)
-    writeStoredFocus(next)
-    experiments.track('stats_focus_save', { count: next.length })
-    if (devNutritionMock()) return
-    writeFocusPending(true)
-    void pushFocusToServer(next)
-  }, [pushFocusToServer])
-
-  /** 引擎的当天营养状态和宠物；和统计接口互不影响，失败（含旧后端 404）时新模块整块不显示 */
+  /** 引擎的每日营养状态；和统计接口互不影响，失败（含旧后端 404）时新模块整块不显示 */
   const refreshNutritionState = useCallback(async () => {
     if (!hasAuthToken()) {
       setNutritionState(null)
@@ -498,16 +462,12 @@ function StatsPage() {
     }
     const seq = ++nutritionSeqRef.current
     const editSeqAtStart = focusEditSeqRef.current
-    const [state, pet] = await Promise.all([
-      loadNutritionState().catch((e: unknown) => {
-        console.warn('[stats] nutrition state unavailable:', e)
-        return null
-      }),
-      getPetSummary().catch(() => null),
-    ])
+    const state = await loadNutritionState().catch((e: unknown) => {
+      console.warn('[stats] nutrition state unavailable:', e)
+      return null
+    })
     if (seq !== nutritionSeqRef.current) return
     setNutritionState(state)
-    if (pet) setPetSummary(pet)
     // 拉取期间用户改过关注，以用户刚改的为准
     if (focusEditSeqRef.current !== editSeqAtStart) return
     const resolution = resolveFocusKeys({
@@ -684,6 +644,18 @@ function StatsPage() {
     }
   }, [])
 
+  /** 「我在意的」弹窗已经写好服务器：这里只同步页面和本机，再拉一次新的分数和自定义关注 */
+  const handleFocusSheetSaved = useCallback((next: string[]) => {
+    setRiskPickerVisible(false)
+    focusEditSeqRef.current += 1
+    selectedRiskKeysRef.current = next
+    setSelectedRiskKeys(next)
+    writeStoredFocus(next)
+    writeFocusPending(false)
+    void refreshFromNetwork(rangeRef.current, true)
+    void refreshNutritionState()
+  }, [refreshFromNetwork, refreshNutritionState])
+
   useEffect(() => {
     if (!hasAuthToken()) {
       setGuestBrowse(true)
@@ -783,137 +755,6 @@ function StatsPage() {
       void pollCustomFocusTask(task)
     })
   })
-
-  const mergeCustomFocusOptions = useCallback((focuses: Array<{ id: string; label: string }>) => {
-    setData(prev => {
-      if (!prev?.health_index) return prev
-      const existingOptions = prev.health_index.all_risk_options ?? []
-      const nextOptions = [...existingOptions]
-      focuses.forEach(focus => {
-        if (!focus.id || !focus.label) return
-        const option = customFocusToOption(focus)
-        const index = nextOptions.findIndex(item => item.key === option.key)
-        if (index >= 0) {
-          nextOptions[index] = { ...nextOptions[index], ...option }
-        } else {
-          nextOptions.push(option)
-        }
-      })
-      const next: StatsSummary = {
-        ...prev,
-        health_index: {
-          ...prev.health_index,
-          all_risk_options: nextOptions,
-        },
-      }
-      writeStatsPageCache(range, next)
-      return next
-    })
-  }, [range])
-
-  const handleAddCustomFocus = useCallback(async () => {
-    const label = customFocusInput.trim()
-    if (!label || customFocusAdding) return
-    if (!(data?.health_index?.has_enough_data ?? false)) {
-      Taro.showToast({ title: '先连续记录两天', icon: 'none' })
-      return
-    }
-    setCustomFocusAdding(true)
-    let focusSaved = false
-    try {
-      const addRes = await addHealthFocus(label)
-      mergeCustomFocusOptions(addRes.focuses)
-      const focusId = addRes.focus_id || addRes.focuses.find(item => item.label === label)?.id
-      if (!focusId) throw new Error('添加关注失败')
-      focusSaved = true
-      setCustomFocusInput('')
-      const customKey = `custom:${focusId}`
-      // 关注没满就直接设为关注；满了它留在「其他方面」，用户可在管理里替换
-      const showCustomFocus = () => {
-        const result = addFocusKeyIfRoom(selectedRiskKeysRef.current, customKey)
-        if (!result.rejected && !sameKeys(result.keys, selectedRiskKeysRef.current)) commitFocusKeys(result.keys)
-      }
-      if (addRes.already_exists) {
-        showCustomFocus()
-        Taro.showToast({ title: '该关注已存在，已显示', icon: 'none' })
-        return
-      }
-      if (data?.health_index?.custom_focus_meta?.remaining_today === 0) {
-        Taro.showToast({ title: '关注已保存，明天可生成卡片', icon: 'none' })
-        return
-      }
-      const genRes = await generateCustomFocusCard(range, focusId)
-      if (genRes.status === 'done' && genRes.card) {
-        showCustomFocus()
-        mergeCustomFocusCard(genRes.card)
-        Taro.showToast({ title: 'AI 关注已添加', icon: 'success' })
-        return
-      }
-      if (!genRes.task_id) throw new Error('服务器未返回后台任务编号')
-      showCustomFocus()
-      const pendingTask: PendingCustomFocusTask = {
-        taskId: genRes.task_id,
-        range,
-        focusId,
-        focusKey: customKey,
-        createdAt: Date.now(),
-      }
-      savePendingCustomFocusTask(pendingTask)
-      Taro.showToast({
-        title: '已开始生成，可离开此页',
-        icon: 'none',
-      })
-      void pollCustomFocusTask(pendingTask)
-    } catch (e: unknown) {
-      await showUnifiedApiError(e, focusSaved ? '关注已保存，卡片生成失败' : '添加 AI 关注失败')
-    } finally {
-      setCustomFocusAdding(false)
-    }
-  }, [commitFocusKeys, customFocusAdding, customFocusInput, data, mergeCustomFocusCard, mergeCustomFocusOptions, pollCustomFocusTask, range])
-
-  const handleRemoveCustomFocus = useCallback(async (focusId: string) => {
-    if (!focusId) return
-    try {
-      await removeHealthFocus(focusId)
-      readPendingCustomFocusTasks()
-        .filter(task => task.focusId === focusId)
-        .forEach(task => removePendingCustomFocusTask(task.taskId))
-      const customKey = `custom:${focusId}`
-      if (selectedRiskKeysRef.current.includes(customKey)) {
-        commitFocusKeys(selectedRiskKeysRef.current.filter(key => key !== customKey))
-      }
-      setData(prev => {
-        if (!prev?.health_index) return prev
-        const next: StatsSummary = {
-          ...prev,
-          health_index: {
-            ...prev.health_index,
-            custom_risk_cards: (prev.health_index.custom_risk_cards ?? []).filter(
-              card => card.key !== customKey,
-            ),
-            all_risk_options: prev.health_index.all_risk_options.filter(
-              item => item.key !== customKey,
-            ),
-          },
-        }
-        writeStatsPageCache(range, next)
-        return next
-      })
-      Taro.showToast({ title: '已移除', icon: 'success' })
-    } catch (e: unknown) {
-      await showUnifiedApiError(e, '移除关注失败')
-    }
-  }, [commitFocusKeys, range])
-
-  const confirmRemoveCustomFocus = useCallback((focusId: string, title: string) => {
-    Taro.showModal({
-      title: '移除自定义关注',
-      content: `移除「${title}」后会释放一个名额，确定继续吗？`,
-      success: (res) => {
-        if (res.confirm) void handleRemoveCustomFocus(focusId)
-      },
-    })
-  }, [handleRemoveCustomFocus])
 
   const handleRefreshCustomFocus = useCallback(async (card: RiskCard) => {
     if (!card.is_custom || customFocusRefreshingKey) return
@@ -1079,42 +920,12 @@ function StatsPage() {
   const signalChips = healthIndex?.signal_chips ?? []
   const engineFocus = engineWeek?.scores.focus ?? []
   const riskCards = applyEngineFocus(healthIndex?.risk_cards ?? [], engineFocus)
-  const petName = String(petSummary?.pet?.name || '').trim() || '伙伴'
-  const petMood = petSummary?.status?.mood
-  const petState = petSummary?.status?.state || petMood
-  const observation = ns ? observationHeadline(ns) : ''
-  const todayRows = ns ? ns.today.map(todayRowView) : []
-  const nextMeal = ns ? nextMealView(ns.next_meal) : null
   const weekRows = ns ? weekHabitRows(ns.week) : []
   const weekCounts = ns ? ns.week.counts.map(weekCountText) : []
   const weekDeltas = ns ? splitWeekDeltas(ns.week.vs_last_week) : { headline: null, rest: [] }
   const showWeekCard = weekRows.length > 0 || weekCounts.length > 0 || weekDeltas.headline !== null
   const evidenceGaps = ns ? evidenceGapViews(ns.evidence_gaps) : []
 
-  const askPetFromObservation = () => {
-    experiments.track('stats_pet_ask')
-    openPetChat(petChatStarter(observation))
-  }
-  const openNextMealWithPet = () => {
-    if (!ns || !nextMeal) return
-    experiments.track('stats_next_meal_click', { target: 'pet' })
-    if (nextMeal.petMealType) {
-      openPetChat({
-        source: 'home_next_meal',
-        date: ns.date,
-        mealType: nextMeal.petMealType,
-        mealLabel: nextMeal.mealLabel,
-        basicAdvice: nextMeal.advice,
-        starterQuestion: '',
-      })
-      return
-    }
-    openPetChat(`${nextMeal.title}：${nextMeal.advice}。帮我挑一份`)
-  }
-  const openNextMealOnHome = () => {
-    experiments.track('stats_next_meal_click', { target: 'home' })
-    void Taro.switchTab({ url: '/pages/index/index' })
-  }
   const openEvidenceGap = (gap: EvidenceGapView) => {
     experiments.track('stats_evidence_click', { action: gap.action })
     const route = evidenceRoute(gap.action, ns?.date || formatLocalDate())
@@ -1146,15 +957,6 @@ function StatsPage() {
     })
     return merged
   })()
-  const addedCustomFocusCount = allRiskOptions.filter(item => item.is_custom).length
-
-  const selectedRiskItems = selectedRiskKeys
-    .map(key => allRiskOptions.find(item => item.key === key))
-    .filter((item): item is RiskOption => Boolean(item))
-  const orderedRiskOptions = [
-    ...selectedRiskItems,
-    ...allRiskOptions.filter(item => !selectedRiskKeys.includes(item.key)),
-  ]
   // 选了但还没生成卡片的自定义关注，先放一张待生成的卡
   const pendingFocusCards = selectedRiskKeys
     .filter(key => isCustomRiskKey(key) && !allDisplayRiskCards.some(card => card.key === key))
@@ -1167,7 +969,7 @@ function StatsPage() {
   const hasVisibleCustomFocus = focusCards.some(card => card.is_custom)
   const focusItems: FocusSpotlightItem[] = focusCards.map(card => ({
     key: card.key,
-    title: card.title,
+    title: builtinFocusLabel(card.key) || card.title,
     iconClass: `icon-${riskCardIcon(card.key)}`,
     scoreText: hasRiskScore(card) ? String(card.score) : '—',
     tone: hasRiskScore(card) ? scoreToTone(card.score) : 'pending',
@@ -1208,14 +1010,6 @@ function StatsPage() {
     })
   }
 
-  const toggleRiskPreference = (riskKey: string) => {
-    const result = toggleFocusKey(selectedRiskKeys, riskKey)
-    if (result.rejected) {
-      Taro.showToast({ title: `最多关注 ${MAX_HEALTH_FOCUS} 项，先取消一项`, icon: 'none' })
-      return
-    }
-    commitFocusKeys(result.keys)
-  }
   const openFocusItem = (key: string) => {
     const card = focusCards.find(item => item.key === key)
     if (card) openRiskDetail(card)
@@ -1233,7 +1027,7 @@ function StatsPage() {
           <Text className='iconfont icon-right-arrow stats-range-dropdown__arrow' />
         </View>
         <View className={`segmented-control analysis-panel-control ${loading ? 'is-loading' : ''}`}>
-          {ANALYSIS_PANEL_TABS.map(item => (
+          {analysisPanelTabs(range).map(item => (
             <View
               key={item.key}
               className={`segment-item ${analysisPanel === item.key ? 'active' : ''}`}
@@ -1250,74 +1044,12 @@ function StatsPage() {
       <ScrollView className='scroll-wrap' scrollY={!riskPickerVisible && !riskDetailModal.visible} enhanced showScrollbar={false}>
         {error && data ? <View className='analysis-error'><Text>{error}</Text></View> : null}
         {analysisPanel === 'health' && hasEnoughHealthIndexData ? (
-          <>
-            <FocusSpotlightCard
-              items={focusItems}
-              maxCount={MAX_HEALTH_FOCUS}
-              footnote={engineFocus.length > 0 ? '分数按钠、糖、纤维等营养素和你的目标算，点开能看到全部依据。' : ''}
-              onOpen={openFocusItem}
-              onManage={() => setRiskPickerVisible(true)}
-            />
-            {otherCards.length > 0 ? (
-              <View
-                className='stats-ns-others-toggle'
-                aria-role='button'
-                aria-label={othersExpanded ? '收起其他方面' : '展开其他方面'}
-                onClick={() => setOthersExpanded(value => !value)}
-              >
-                <Text>其他方面</Text>
-                <View className='stats-ns-others-toggle__meta'>
-                  <Text>{otherCards.length} 项</Text>
-                  {othersExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}
-                </View>
-              </View>
-            ) : null}
-            {othersExpanded && otherCards.length > 0 ? (
-              <View className='risk-card-grid'>
-                {otherCards.map((card) => (
-                  <View
-                    key={card.key}
-                    className='stats-card risk-card'
-                    aria-role='button'
-                    aria-label={`查看${card.title}的饮食参考依据`}
-                    onClick={() => openRiskDetail(card)}
-                  >
-                    <View className='risk-card-icon-circle'><Text className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`} /></View>
-                    <View className='risk-card-copy'>
-                    <Text className='risk-card-title'>{card.title}</Text>
-                    {card.is_custom ? (
-                      <View className='risk-card-ai-badge-row'>
-                        <Text className='risk-card-ai-badge'>{card.score_available === false ? '支持建议' : '支持参考'}</Text>
-                        <Text className='risk-card-ai-confidence'>{customFocusConfidenceLabel(card.confidence)}</Text>
-                        {customFocusRefreshingKey === card.key ? (
-                          <Text className='iconfont icon-jiazaixiao risk-card-ai-refresh-spinner' />
-                        ) : card.needs_refresh ? (
-                          <Text className='risk-card-ai-refresh-hint'>待更新</Text>
-                        ) : null}
-                      </View>
-                    ) : null}
-                    <Text className='risk-card-summary'>{card.brief}</Text>
-                    </View>
-                    <View className={`risk-card-score-wrap tone-${hasRiskScore(card) ? scoreToTone(card.score) : 'pending'}`}>
-                      <Text className='risk-card-score'>{hasRiskScore(card) ? card.score : '—'}</Text>
-                      {hasRiskScore(card) ? <Text className='risk-card-score-unit'>分</Text> : null}
-                    </View>
-                    <Text className='iconfont icon-right-arrow risk-card-chevron' />
-                  </View>
-                ))}
-              </View>
-            ) : null}
-          </>
-        ) : null}
-        {analysisPanel === 'health' && ns && observation ? (
-          <PetObservationStrip
-            pet={petSummary?.pet}
-            mood={petMood}
-            state={petState}
-            petName={petName}
-            metaText={observationMetaText(petName, ns.generated_at)}
-            headline={observation}
-            onAsk={askPetFromObservation}
+          <FocusSpotlightCard
+            items={focusItems}
+            maxCount={MAX_HEALTH_FOCUS}
+            footnote={engineFocus.length > 0 ? '分数按钠、糖、纤维等营养素和你的目标算，点开能看到全部依据。' : ''}
+            onOpen={openFocusItem}
+            onManage={() => setRiskPickerVisible(true)}
           />
         ) : null}
         {analysisPanel === 'health' && !hasEnoughHealthIndexData ? (
@@ -1393,18 +1125,15 @@ function StatsPage() {
           </>
         ) : null}
 
-        {analysisPanel === 'health' && ns && (todayRows.length > 0 || nextMeal) ? (
-          <TodayGapsCard
-            metaText={todayMetaText(ns)}
-            planText={planLineText(ns.plan)}
-            rows={todayRows}
-            nextMeal={nextMeal}
-            petName={petName}
-            onAskPet={openNextMealWithPet}
-            onOpenNextMeal={openNextMealOnHome}
-          />
+        {analysisPanel === 'health' && ns && showWeekCard ? (
+        <WeekHabitsCard
+          dayLabels={weekDayLabels(ns.week.days, ns.date)}
+          rows={weekRows}
+          countTexts={weekCounts}
+          headlineDelta={weekDeltas.headline}
+          otherDeltas={weekDeltas.rest}
+        />
         ) : null}
-
         {analysisPanel === 'health' && hasEnoughHealthIndexData ? (
           <>
         <View className='stats-card stats-actions-card'>
@@ -1428,90 +1157,59 @@ function StatsPage() {
             <View className='stats-text-action' onClick={() => void Taro.switchTab({ url: '/pages/index/index' })}><Text>看看下一餐</Text><Text className='iconfont icon-right-arrow' /></View>
           </View> : null}
         </View>
-        {ns && showWeekCard ? (
-          <WeekHabitsCard
-            dayLabels={weekDayLabels(ns.week.days, ns.date)}
-            rows={weekRows}
-            countTexts={weekCounts}
-            headlineDelta={weekDeltas.headline}
-            otherDeltas={weekDeltas.rest}
-          />
-        ) : null}
-        {riskPickerVisible ? (
-          <View
-            className='risk-focus-modal'
-            onClick={() => setRiskPickerVisible(false)}
-          >
-            <View className='risk-focus-modal-mask' />
-            <View
-              className='risk-focus-modal-content'
-              onClick={(e) => e.stopPropagation()}
-            >
-              <View className='risk-focus-modal-handle' />
-              <View className='risk-focus-modal-header'>
-                <View className='risk-focus-modal-title-wrap'>
-                  <Text className='risk-focus-modal-title'>我的关注</Text>
-                  <Text className='risk-focus-modal-subtitle'>最多选 {MAX_HEALTH_FOCUS} 项，分析和推荐都会先看它们</Text>
-                </View>
-                <View className='risk-focus-modal-count'>
-                  <Text className='risk-focus-modal-count-text'>已选 {selectedRiskItems.length}/{MAX_HEALTH_FOCUS}</Text>
-                </View>
-              </View>
-              <ScrollView className='risk-focus-options-scroll' scrollY showScrollbar={false}>
-              <View className='risk-picker-grid risk-picker-grid--modal'>
-                {orderedRiskOptions.map((item) => {
-                  const active = selectedRiskKeys.includes(item.key)
-                  const focusId = isCustomRiskKey(item.key) ? item.key.replace(/^custom:/, '') : ''
-                  return (
-                    <View key={item.key} className={`risk-picker-chip ${active ? 'active' : ''} ${item.is_custom ? 'is-custom' : ''}`}>
-                      <View className='risk-picker-option-toggle' aria-role='button' aria-label={`${item.title}${active ? '，已显示' : '，已隐藏'}`} onClick={() => toggleRiskPreference(item.key)}>
-                        <View className='risk-picker-checkbox' style={{ pointerEvents: 'none' }}><Checkbox value={item.key} checked={active} color='#214f3c' /></View>
-                        <Text className='risk-picker-chip__title'>{item.title}</Text>
-                      </View>
-                      {item.is_custom ? <View className='risk-picker-chip__remove' aria-role='button' aria-label={`永久移除${item.title}`} onClick={() => { if (focusId) confirmRemoveCustomFocus(focusId, item.title) }}><Text>移除</Text></View> : null}
-                    </View>
-                  )
-                })}
-              </View>
-              <View className='stats-custom-focus-toggle' onClick={() => setCustomFocusFormVisible(value => !value)}><Text>新增自定义关注</Text>{customFocusFormVisible ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}</View>
-              {customFocusFormVisible ? <>
-              <View className='risk-custom-focus-add'>
-                <Input
-                  className='risk-custom-focus-input'
-                  value={customFocusInput}
-                  maxlength={12}
-                  placeholder='添加你关心的方向，如控尿酸'
-                  onInput={(e) => setCustomFocusInput(String(e.detail.value || ''))}
-                />
-                <View
-                  className={`risk-custom-focus-add-btn${customFocusAdding ? ' is-loading' : ''}`}
-                  onClick={() => {
-                    if (!customFocusAdding) void handleAddCustomFocus()
-                  }}
-                >
-                  {customFocusAdding ? (
-                    <Text className='iconfont icon-jiazaixiao risk-custom-focus-add-spinner' />
-                  ) : (
-                    <Text className='risk-custom-focus-add-btn-text'>{`添加 · ${customFocusCost} 积分`}</Text>
-                  )}
-                </View>
-              </View>
-              {customFocusMeta ? (
-                <Text className='risk-custom-focus-meta'>
-                  自定义关注 {addedCustomFocusCount}/{customFocusMeta.max_focuses} 个 · 今日可生成 {customFocusMeta.remaining_today}/{customFocusMeta.daily_limit} 次
-                </Text>
-              ) : null}
-              </> : null}
-              </ScrollView>
+            {otherCards.length > 0 ? (
               <View
-                className='risk-focus-modal-close'
-                onClick={() => setRiskPickerVisible(false)}
+                className='stats-ns-others-toggle'
+                aria-role='button'
+                aria-label={othersExpanded ? '收起其他方面' : '展开其他方面'}
+                onClick={() => setOthersExpanded(value => !value)}
               >
-                <Text className='risk-focus-modal-close-text'>完成</Text>
+                <Text>其他方面</Text>
+                <View className='stats-ns-others-toggle__meta'>
+                  <Text>{otherCards.length} 项</Text>
+                  {othersExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}
+                </View>
               </View>
-            </View>
-          </View>
-        ) : null}
+            ) : null}
+            {othersExpanded && otherCards.length > 0 ? (
+              <View className='risk-card-grid'>
+                {otherCards.map((card) => (
+                  <View
+                    key={card.key}
+                    className='stats-card risk-card'
+                    aria-role='button'
+                    aria-label={`查看${card.title}的饮食参考依据`}
+                    onClick={() => openRiskDetail(card)}
+                  >
+                    <View className='risk-card-icon-circle'><Text className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`} /></View>
+                    <View className='risk-card-copy'>
+                    <Text className='risk-card-title'>{card.title}</Text>
+                    {card.is_custom ? (
+                      <View className='risk-card-ai-badge-row'>
+                        <Text className='risk-card-ai-badge'>{card.score_available === false ? '支持建议' : '支持参考'}</Text>
+                        <Text className='risk-card-ai-confidence'>{customFocusConfidenceLabel(card.confidence)}</Text>
+                        {customFocusRefreshingKey === card.key ? (
+                          <Text className='iconfont icon-jiazaixiao risk-card-ai-refresh-spinner' />
+                        ) : card.needs_refresh ? (
+                          <Text className='risk-card-ai-refresh-hint'>待更新</Text>
+                        ) : null}
+                      </View>
+                    ) : null}
+                    <Text className='risk-card-summary'>{card.brief}</Text>
+                    </View>
+                    <View className={`risk-card-score-wrap tone-${hasRiskScore(card) ? scoreToTone(card.score) : 'pending'}`}>
+                      <Text className='risk-card-score'>{hasRiskScore(card) ? card.score : '—'}</Text>
+                      {hasRiskScore(card) ? <Text className='risk-card-score-unit'>分</Text> : null}
+                    </View>
+                    <Text className='iconfont icon-right-arrow risk-card-chevron' />
+                  </View>
+                ))}
+              </View>
+            ) : null}
+        {topIssues.length > 0 ? <View className='stats-card stats-issues-card'>
+          <View className='card-header card-header--collapsible' onClick={() => setIssuesExpanded(value => !value)}><Text className='card-title'>记录中值得留意的地方</Text>{issuesExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}</View>
+          {issuesExpanded ? topIssues.map((issue, index) => <View key={`${index}-${issue.title}`} className='stats-issue-item'><Text className='stats-issue-title'>{issue.title}</Text><Text className='stats-issue-detail'>{issue.detail}</Text></View>) : null}
+        </View> : null}
 
         {/* 友好度详情底部弹窗 */}
         {riskDetailModal.visible && riskDetailModal.card && (
@@ -1631,18 +1329,21 @@ function StatsPage() {
             </View>
           </View>
         )}
-
-        {topIssues.length > 0 ? <View className='stats-card stats-issues-card'>
-          <View className='card-header card-header--collapsible' onClick={() => setIssuesExpanded(value => !value)}><Text className='card-title'>记录中值得留意的地方</Text>{issuesExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}</View>
-          {issuesExpanded ? topIssues.map((issue, index) => <View key={`${index}-${issue.title}`} className='stats-issue-item'><Text className='stats-issue-title'>{issue.title}</Text><Text className='stats-issue-detail'>{issue.detail}</Text></View>) : null}
-        </View> : null}
-
           </>
         ) : null}
 
         {analysisPanel === 'health' && evidenceGaps.length > 0 ? (
           <EvidenceGapsCard gaps={evidenceGaps} onAction={openEvidenceGap} />
         ) : null}
+
+        <FocusSheet
+          visible={riskPickerVisible}
+          current={selectedRiskKeys}
+          dark={scheme === 'dark'}
+          source='stats'
+          onClose={() => setRiskPickerVisible(false)}
+          onSaved={handleFocusSheetSaved}
+        />
 
         {analysisPanel === 'structure' ? (
           hasAnyDietData ? (

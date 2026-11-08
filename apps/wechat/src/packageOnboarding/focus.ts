@@ -17,7 +17,7 @@ export type FocusKey = 'hypertension' | 'diabetes' | 'cardio' | 'weight' | 'colo
 
 /**
  * 注册时可选的关注。key 与分析页关注卡一致；watch 是引擎为这项关注优先看的东西
- * （backend nutrition_state_focus.go），小麦的回复只说这些，不多承诺。
+ * （backend nutrition_state_focus.go），伙伴的回复只说这些，不多承诺。
  */
 export const FOCUS_OPTIONS: ReadonlyArray<{ key: FocusKey; label: string; watch: readonly string[] }> = [
   { key: 'hypertension', label: '控血压', watch: ['盐'] },
@@ -54,7 +54,7 @@ export function normalizeCustomFocus(input: string): string {
 const joinZh = (words: readonly string[]) =>
   words.length <= 1 ? words.join('') : `${words.slice(0, -1).join('、')}和${words[words.length - 1]}`
 
-/** 选完关注后小麦回的一句话（固定文案，只说引擎真的会看的东西） */
+/** 选完关注后伙伴回的一句话（固定文案，只说引擎真的会看的东西） */
 export function focusReply(keys: readonly FocusKey[], customLabel = ''): string {
   const watch = Array.from(new Set(
     keys.flatMap((key) => FOCUS_OPTIONS.find((o) => o.key === key)?.watch || []),

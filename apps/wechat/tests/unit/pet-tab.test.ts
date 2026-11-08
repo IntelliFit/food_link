@@ -8,13 +8,21 @@ import {
   petWeekTitle,
   pickMealTarget,
 } from '../../src/pages/pet/pet-tools'
-import { PET_FOCUS_OPTIONS, petFocusOptions, petFocusSummary, togglePetFocus } from '../../src/pages/pet/pet-focus'
+import { petFocusLabels } from '../../src/pages/pet/pet-focus'
+import {
+  BUILTIN_FOCUS_OPTIONS,
+  builtinFocusLabel,
+  focusOptions,
+  keepKnownFocus,
+  toggleFocus,
+} from '../../src/components/FocusSheet/focus-options'
+import { DEFAULT_PET_NAME, PET_TAB_LABEL, petDisplayName } from '../../src/utils/pet-name'
 import { MAIN_PAGE_ROUTES, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../src/utils/subpackage-extra'
 
 const root = path.resolve(__dirname, '../..')
 const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8')
 
-describe('小麦 page actions', () => {
+describe('伙伴 page actions', () => {
   it('opens the full analysis as a sub-page and dressing in pet settings', () => {
     expect(petActionTarget('stats')).toEqual({ kind: 'navigateTo', url: '/packageStats/pages/stats/index' })
     expect(petActionTarget('dress')).toEqual({ kind: 'petSettings' })
@@ -37,9 +45,17 @@ describe('小麦 page actions', () => {
     expect(pickMealTarget(null, '')).toEqual({ kind: 'petChat', starter: '下一餐吃什么？' })
   })
 
-  it('asks what the user typed, or the placeholder question', () => {
-    expect(askTarget(' 奶茶能喝吗 ', '晚上吃什么好？')).toEqual({ kind: 'petChat', starter: '奶茶能喝吗' })
-    expect(askTarget('  ', '晚上吃什么好？')).toEqual({ kind: 'petChat', starter: '晚上吃什么好？' })
+  it('asks what the user typed, or the placeholder question, in a new conversation', () => {
+    expect(askTarget(' 奶茶能喝吗 ', '晚上吃什么好？')).toEqual({ kind: 'petAsk', question: '奶茶能喝吗' })
+    expect(askTarget('  ', '晚上吃什么好？')).toEqual({ kind: 'petAsk', question: '晚上吃什么好？' })
+  })
+
+  it('makes the chat page start fresh and send the question by itself', () => {
+    const chat = read('src/packageExtra/pages/pet-chat/index.tsx')
+    expect(read('src/utils/pet-navigation.ts')).toContain("export const PET_ASK_ENTRY = 'pet_tab_ask'")
+    expect(chat).toContain('options?.entry === PET_ASK_ENTRY')
+    expect(chat).toContain('if (homeMealContextRef.current || freshAskRef.current) return')
+    expect(chat).toMatch(/autoSendRef\.current = ''\s*handleSend\(\)/)
   })
 
   it('lets guests open the full analysis and gates personal actions', () => {
@@ -58,37 +74,84 @@ describe('小麦 page actions', () => {
 })
 
 describe('我在意的', () => {
-  const current = [
-    { key: 'hypertension', title: '控血压', custom: false },
-    { key: 'custom:abc', title: '少喝奶茶', custom: true },
-  ]
+  const custom = [{ id: 'abc', label: '少喝奶茶', created_at: '2026-11-01' }]
 
-  it('offers the seven focus cards plus the custom focuses already chosen', () => {
-    const options = petFocusOptions(current)
-    expect(options.map((option) => option.key)).toEqual([...PET_FOCUS_OPTIONS.map((option) => option.key), 'custom:abc'])
-    expect(options[options.length - 1]).toEqual({ key: 'custom:abc', label: '少喝奶茶', custom: true })
+  it('offers the seven built-ins plus the custom focuses the user added', () => {
+    const options = focusOptions(custom)
+    expect(options.map((option) => option.key)).toEqual([...BUILTIN_FOCUS_OPTIONS.map((option) => option.key), 'custom:abc'])
+    expect(options[options.length - 1]).toEqual({ key: 'custom:abc', label: '少喝奶茶', customId: 'abc' })
+  })
+
+  it('uses the same short names as sign-up', () => {
+    const onboarding = read('src/packageOnboarding/focus.ts')
+    for (const option of BUILTIN_FOCUS_OPTIONS) expect(onboarding).toContain(`label: '${option.label}'`)
+    expect(builtinFocusLabel('hypertension')).toBe('控血压')
+    expect(builtinFocusLabel('custom:abc')).toBe('')
   })
 
   it('keeps at most three and says when the list is full', () => {
-    expect(togglePetFocus(['hypertension'], 'weight')).toEqual({ keys: ['hypertension', 'weight'], blocked: false })
-    expect(togglePetFocus(['hypertension', 'weight'], 'hypertension')).toEqual({ keys: ['weight'], blocked: false })
-    expect(togglePetFocus(['a', 'b', 'c'], 'd')).toEqual({ keys: ['a', 'b', 'c'], blocked: true })
+    expect(toggleFocus(['hypertension'], 'weight')).toEqual({ keys: ['hypertension', 'weight'], blocked: false })
+    expect(toggleFocus(['hypertension', 'weight'], 'hypertension')).toEqual({ keys: ['weight'], blocked: false })
+    expect(toggleFocus(['a', 'b', 'c'], 'd')).toEqual({ keys: ['a', 'b', 'c'], blocked: true })
   })
 
-  it('summarises the choice on the entry', () => {
-    expect(petFocusSummary(current)).toBe('控血压·少喝奶茶')
-    expect(petFocusSummary([])).toBe('选一选')
+  it('drops a removed custom focus before saving', () => {
+    expect(keepKnownFocus(['custom:gone', 'weight', 'custom:abc'], focusOptions(custom))).toEqual(['weight', 'custom:abc'])
+  })
+
+  it('shows short names on the 伙伴 page row', () => {
+    expect(petFocusLabels([
+      { key: 'hypertension', title: '血压管理友好度', custom: false },
+      { key: 'custom:abc', title: '少喝奶茶', custom: true },
+    ])).toEqual(['控血压', '少喝奶茶'])
+    expect(petFocusLabels([])).toEqual([])
+  })
+
+  it('is edited in one sheet on both the 伙伴 page and the full analysis', () => {
+    expect(read('src/pages/pet/index.tsx')).toContain("<FocusSheet")
+    expect(read('src/packageStats/pages/stats/index.tsx')).toContain("<FocusSheet")
+    expect(read('src/packageStats/pages/stats/index.tsx')).not.toContain('risk-focus-modal')
+    expect(read('src/components/StatsNutritionState/FocusSpotlightCard.tsx')).toContain('我在意的')
   })
 })
 
-describe('小麦 replaces the 分析 slot', () => {
-  it('keeps five slots with the camera centred: 首页 · 小麦 · 拍照 · 圈子 · 我的', () => {
+describe('the pet is called by its own name', () => {
+  it('falls back to 健文伙伴 and labels the slot 伙伴', () => {
+    expect(petDisplayName(' 豆豆 ')).toBe('豆豆')
+    expect(petDisplayName('')).toBe(DEFAULT_PET_NAME)
+    expect(DEFAULT_PET_NAME).toBe('健文伙伴')
+    expect(PET_TAB_LABEL).toBe('伙伴')
+  })
+
+  it('never hard-codes 小麦 in the mini program copy', () => {
+    for (const file of [
+      'src/pages/pet/index.tsx',
+      'src/pages/pet/PetDailyCards.tsx',
+      'src/components/FirstBriefSheet/index.tsx',
+      'src/components/OnboardingWelcome/index.tsx',
+      'src/packageExtra/pages/pet-chat/index.tsx',
+      'custom-tab-bar/index.js',
+      'src/app.config.ts',
+    ]) {
+      expect(read(file)).not.toContain('小麦')
+    }
+  })
+
+  it('sends a tap on the home pet to the 伙伴 tab', () => {
+    const home = read('src/pages/index/index.tsx')
+    expect(home).toContain("onPetPress={openPetTab}")
+    expect(home).toContain("void Taro.switchTab({ url: '/pages/pet/index' })")
+  })
+})
+
+describe('伙伴 replaces the 分析 slot', () => {
+  it('keeps five slots with the camera centred: 首页 · 伙伴 · 拍照 · 圈子 · 我的', () => {
     const tabBar = read('custom-tab-bar/index.js')
     const items = Array.from(tabBar.matchAll(/id: '([a-z]+)',\s*\n\s*pagePath: '([^']+)',?\s*\n\s*text: '([^']*)'/g))
       .map((match) => [match[1], match[2], match[3]])
     expect(items).toEqual([
       ['home', '/pages/index/index', '首页'],
-      ['pet', '/pages/pet/index', '小麦'],
+      ['pet', '/pages/pet/index', '伙伴'],
       ['record', '/pages/index/index', ''],
       ['community', '/pages/community/index', '圈子'],
       ['profile', '/pages/profile/index', '我的'],
@@ -127,7 +190,7 @@ describe('小麦 replaces the 分析 slot', () => {
     }
   })
 
-  it('opens the 小麦 page for guests', () => {
+  it('opens the 伙伴 page for guests', () => {
     expect(read('src/pages/pet/index.tsx')).toContain('withAuth(PetTabPage, { public: true })')
   })
 })

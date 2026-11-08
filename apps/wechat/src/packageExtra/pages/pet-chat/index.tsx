@@ -28,7 +28,8 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
-import { openPetSettings } from '../../../utils/pet-navigation'
+import { openPetSettings, PET_ASK_ENTRY } from '../../../utils/pet-navigation'
+import { DEFAULT_PET_NAME } from '../../../utils/pet-name'
 import { PetAvatar } from '../../../components/PetAvatar'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { PetMarkdown } from './pet-markdown'
@@ -369,8 +370,11 @@ function PetChatPage() {
   const [homeMealContext, setHomeMealContext] = useState<HomeMealChatContext | null>(null)
   const [mealUnlocked, setMealUnlocked] = useState(false)
   const homeMealContextRef = useRef<HomeMealChatContext | null>(null)
-  const petName = petSummary?.pet?.name || '你的宠物'
-  const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage('你的宠物')])
+  const petName = petSummary?.pet?.name || DEFAULT_PET_NAME
+  const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage(DEFAULT_PET_NAME)])
+  /** 从伙伴页「问问」进来：新对话，不恢复上一段；问题等积分估算好就自动发出 */
+  const freshAskRef = useRef(false)
+  const autoSendRef = useRef('')
   const streamingTextRef = useRef('')
   const streamingDietRecommendationRef = useRef<DietRecommendationResult | null>(null)
   const activeDietContext = useMemo(
@@ -392,6 +396,10 @@ function PetChatPage() {
     if (routeLoadedRef.current) return
     routeLoadedRef.current = true
     const starter = decodeRouteValue(options?.starter)
+    if (options?.entry === PET_ASK_ENTRY && starter) {
+      freshAskRef.current = true
+      autoSendRef.current = starter
+    }
     if (options?.entry === 'home_next_meal') {
       const mealType = decodeRouteValue(options?.meal_type)
       if (mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner' || mealType === 'evening_snack') {
@@ -431,7 +439,7 @@ function PetChatPage() {
         // Restoring a session by date/type can replace this meal with an old
         // recommendation or failure. Keep old sessions available in Recent;
         // follow-ups in this page still reuse the session created on first send.
-        if (homeMealContextRef.current) return
+        if (homeMealContextRef.current || freshAskRef.current) return
         const history = await getLatestPetChatSession().catch(() => null)
         if (!history?.messages?.length) return
         const restored = history.messages.map(mapHistoryMessage).filter((item) => item.text.trim() || item.imageUrls?.length)
@@ -791,6 +799,13 @@ function PetChatPage() {
   }, [])
 
   const canSend = Boolean(draftQuestion) && !busy && !imageUploading && !estimatingCredits && estimatedCredits !== null
+
+  // 伙伴页带来的问题：估算好积分后替用户按一次发送；估算失败就留在输入框里让用户自己发
+  useEffect(() => {
+    if (!autoSendRef.current || !canSend || draftQuestion !== autoSendRef.current) return
+    autoSendRef.current = ''
+    handleSend()
+  }, [canSend, draftQuestion, handleSend])
 
   return (
     <View className={`pet-chat-page ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>

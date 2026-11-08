@@ -441,7 +441,7 @@ export default function LoginPage() {
             console.log('[invite-debug][login] 未完成健康档案，先跳转 health-profile，好友申请已在资料就绪后处理', {
                 inviteCode,
             })
-            // onboarding_v2 实验组、且看过小麦首屏的人，用 3 句话建档代替 13 步健康档案；
+            // onboarding_v2 实验组、且看过伙伴首屏的人，用 3 句话建档代替 13 步健康档案；
             // 邀请进来的等没进实验的人照旧
             const petFlow = experiments.get(ONBOARDING_EXPERIMENT, ONBOARDING_CONTROL).variant === ONBOARDING_PET_FLOW
                 && Taro.getStorageSync(WELCOME_DONE_KEY) === '1'

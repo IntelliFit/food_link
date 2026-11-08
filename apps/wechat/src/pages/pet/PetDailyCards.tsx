@@ -2,6 +2,7 @@ import { View, Text, Input } from '@tarojs/components'
 import { useState } from 'react'
 import { PetAvatar } from '../../components/PetAvatar'
 import type { PetProfile, PetStatus } from '../../utils/api'
+import type { TodayRowView } from '../../utils/nutrition-state-view'
 import type { PetDailyGapRow, PetDailyTask, PetDailyWeek, PetMood } from './pet-daily-api'
 import { petTaskHint, petWeekTitle } from './pet-tools'
 
@@ -18,32 +19,10 @@ const TASK_ICONS: Record<string, string> = {
   energy: 'icon-rice',
 }
 
-/** 第一行：等级经验 + 「我在意的」入口 */
-export function PetLevelRow({ pet, focusText, onOpenFocus }: {
+/** 宠物 + 名字和等级 + 今天的一句话 */
+export function PetHero({ pet, name, status, mood, line, onOpenPet }: {
   pet?: PetProfile | null
-  focusText: string
-  onOpenFocus: () => void
-}) {
-  return (
-    <View className='pet-tab-level'>
-      <View className='pet-tab-level-main'>
-        <Text className='pet-tab-level-badge'>Lv.{pet?.level || 1}</Text>
-        <View className='pet-tab-exp-track'>
-          <View className='pet-tab-exp-fill' style={{ width: `${pet?.level_progress ?? 0}%` }} />
-        </View>
-        <Text className='pet-tab-exp-text'>{pet?.level_exp ?? 0}/{pet?.next_level_exp || 100}</Text>
-      </View>
-      <View className='pet-tab-focus-entry' onClick={onOpenFocus}>
-        <Text className='pet-tab-focus-entry-label'>我在意的</Text>
-        <Text className='pet-tab-focus-entry-value'>{focusText}</Text>
-        <Text className='iconfont icon-right pet-tab-focus-entry-arrow' />
-      </View>
-    </View>
-  )
-}
-
-export function PetHero({ pet, status, mood, line, onOpenPet }: {
-  pet?: PetProfile | null
+  name: string
   status?: PetStatus | null
   mood: PetMood
   line: string
@@ -62,26 +41,94 @@ export function PetHero({ pet, status, mood, line, onOpenPet }: {
         />
       </View>
       <View className='pet-tab-hero-copy'>
+        <View className='pet-tab-hero-name-line'>
+          <Text className='pet-tab-hero-name'>{name}</Text>
+          {pet?.level ? <Text className='pet-tab-hero-level'>Lv.{pet.level}</Text> : null}
+          {mood.label ? <Text className={`pet-tab-mood pet-tab-mood--${mood.key || 'calm'}`}>{mood.label}</Text> : null}
+        </View>
         <Text className='pet-tab-hero-line'>{line}</Text>
-        <Text className={`pet-tab-mood pet-tab-mood--${mood.key || 'calm'}`}>{mood.label}</Text>
       </View>
     </View>
   )
 }
 
-export function PetGapsCard({ gaps, mealsToday, mealLine, onPickMeal }: {
+/** 「我在意的」一整行：左边名字，右边选了哪几项，点开是关注弹窗 */
+export function PetFocusRow({ labels, onOpen }: { labels: string[]; onOpen: () => void }) {
+  return (
+    <View className='pet-tab-card pet-tab-focus-row' onClick={onOpen}>
+      <Text className='pet-tab-focus-row-title'>我在意的</Text>
+      <View className='pet-tab-focus-row-chips'>
+        {labels.length ? labels.map((label) => (
+          <Text key={label} className='pet-tab-focus-row-chip'>{label}</Text>
+        )) : <Text className='pet-tab-focus-row-empty'>选 1–3 项，今天还差什么就按它排</Text>}
+      </View>
+      <Text className='iconfont icon-right pet-tab-focus-row-arrow' />
+    </View>
+  )
+}
+
+function DetailRow({ row }: { row: TodayRowView }) {
+  if (!row.known) {
+    return (
+      <View className='pet-tab-gap'>
+        <View className='pet-tab-gap-head'>
+          <Text className='pet-tab-gap-label'>{row.label}</Text>
+          <Text className='pet-tab-gap-text'>还不知道</Text>
+        </View>
+        {row.note ? <Text className='pet-tab-muted'>{row.note}</Text> : null}
+      </View>
+    )
+  }
+  const warn = row.tone === 'warn' || row.tone === 'over'
+  return (
+    <View className='pet-tab-gap'>
+      <View className='pet-tab-gap-head'>
+        <Text className='pet-tab-gap-label'>{row.label}{row.badge ? ` · ${row.badge}` : ''}</Text>
+        <Text className={`pet-tab-gap-text ${warn ? 'is-warn' : ''}`}>
+          {row.valueText} {row.targetText}{row.gapText ? ` · ${row.gapText}` : ''}
+        </Text>
+      </View>
+      <View className='pet-tab-gap-track'>
+        <View className={`pet-tab-gap-fill ${warn ? 'is-warn' : ''}`} style={{ width: `${row.percent}%` }} />
+      </View>
+      {row.note ? <Text className='pet-tab-muted'>{row.note}</Text> : null}
+    </View>
+  )
+}
+
+/** 今天还差：默认按关注排的前 3 行；「看全部」展开今天每一项营养素和计划 */
+export function PetGapsCard({ gaps, mealsToday, mealLine, petName, details, detailsOpen, detailsLoading, planText, onToggleDetails, onPickMeal }: {
   gaps: PetDailyGapRow[]
   mealsToday: number
   mealLine: string
+  petName: string
+  details: TodayRowView[]
+  detailsOpen: boolean
+  detailsLoading: boolean
+  planText: string
+  onToggleDetails: () => void
   onPickMeal: () => void
 }) {
+  const showDetails = detailsOpen && details.length > 0
   return (
     <View className='pet-tab-card'>
       <View className='pet-tab-card-head'>
         <Text className='pet-tab-card-title'>今天还差</Text>
-        <Text className='pet-tab-card-side'>已记 {mealsToday} 餐</Text>
+        <View className='pet-tab-card-side-wrap'>
+          <Text className='pet-tab-card-side'>已记 {mealsToday} 餐</Text>
+          {mealsToday > 0 ? (
+            <View className='pet-tab-more' onClick={onToggleDetails}>
+              {detailsLoading ? <View className='pet-tab-spinner' /> : <Text className='pet-tab-more-text'>{detailsOpen ? '收起' : '看全部'}</Text>}
+            </View>
+          ) : null}
+        </View>
       </View>
-      {gaps.length ? gaps.map((row) => (
+      {showDetails ? (
+        <>
+          {planText ? <Text className='pet-tab-muted'>{planText}</Text> : null}
+          {details.map((row) => <DetailRow key={row.key} row={row} />)}
+        </>
+      ) : gaps.length ? gaps.map((row) => (
         <View key={row.key} className='pet-tab-gap'>
           <View className='pet-tab-gap-head'>
             <Text className='pet-tab-gap-label'>{row.label}</Text>
@@ -99,7 +146,7 @@ export function PetGapsCard({ gaps, mealsToday, mealLine, onPickMeal }: {
       <View className='pet-tab-meal'>
         <Text className='pet-tab-meal-line'>{mealLine}</Text>
         <View className='pet-tab-meal-btn' onClick={onPickMeal}>
-          <Text className='pet-tab-meal-btn-text'>让小麦挑一份</Text>
+          <Text className='pet-tab-meal-btn-text'>让{petName}挑一份</Text>
         </View>
       </View>
     </View>

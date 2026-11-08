@@ -12,7 +12,8 @@ import type {
   NutritionWeekDelta,
   RiskCard,
   RiskTone,
-} from '../../../utils/api'
+} from './api'
+import { DEFAULT_PET_NAME } from './pet-name'
 
 /**
  * 把引擎的「每日营养状态」转成分析页展示数据。
@@ -193,10 +194,10 @@ function beijingClock(iso: string): string {
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
 }
 
-/** "小麦 · 今天 07:30 的观察" */
+/** "健文伙伴 · 今天 07:30 的观察" */
 export function observationMetaText(petName: string, generatedAt: string): string {
   const clock = beijingClock(generatedAt)
-  return `${petName || '小伙伴'} · ${clock ? `今天 ${clock} ` : '今天'}的观察`
+  return `${petName || DEFAULT_PET_NAME} · ${clock ? `今天 ${clock} ` : '今天'}的观察`
 }
 
 /** 引擎的一句话；没有时退到第一条事实，都没有就不显示观察条 */

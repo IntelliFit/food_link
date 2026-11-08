@@ -16,7 +16,7 @@ import {
   weekCountText,
   weekDayLabels,
   weekHabitRows,
-} from '../../src/packageStats/pages/stats/nutrition-state-view'
+} from '../../src/utils/nutrition-state-view'
 import type { NutrientReading, RiskCard } from '../../src/utils/api'
 
 /** docs/algorithms/daily-nutrition-state.md 里的示例 */
@@ -245,7 +245,7 @@ describe('宠物观察条', () => {
     expect(observationHeadline(state)).toBe(contractExample.headline)
     expect(observationHeadline({ headline: '', findings: state.findings })).toBe('6 天里 4 天钠超过 2000 毫克')
     expect(observationHeadline({ headline: '', findings: [] })).toBe('')
-    expect(observationMetaText('小麦', '2026-11-03T23:30:00Z')).toBe('小麦 · 今天 07:30 的观察')
-    expect(observationMetaText('', 'not a date')).toBe('小伙伴 · 今天的观察')
+    expect(observationMetaText('豆豆', '2026-11-03T23:30:00Z')).toBe('豆豆 · 今天 07:30 的观察')
+    expect(observationMetaText('', 'not a date')).toBe('健文伙伴 · 今天的观察')
   })
 })

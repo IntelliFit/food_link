@@ -1,4 +1,4 @@
-// 小麦 Tab：照画布「宠物 Tab 一屏」画板，暖米底、浅绿主卡、奶白卡片，一屏不滚动。
+// 伙伴 Tab：照画布「宠物 Tab 一屏」画板，暖米底、浅绿主卡、奶白卡片，一屏不滚动。
 .pet-tab-page {
   --pet-bg: #f7f4ec;
   --pet-hero: #eef6f1;
@@ -51,77 +51,47 @@
   padding: 0 32rpx calc(160rpx + env(safe-area-inset-bottom));
 }
 
-.pet-tab-level {
-  display: flex;
+.pet-tab-card.pet-tab-focus-row {
+  flex-direction: row;
   align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
+  gap: 20rpx;
+  padding: 22rpx 28rpx;
 }
 
-.pet-tab-level-main {
+.pet-tab-focus-row-title {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--pet-text);
+  white-space: nowrap;
+}
+
+.pet-tab-focus-row-chips {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 12rpx;
+  flex-wrap: wrap;
+  gap: 10rpx;
 }
 
-.pet-tab-level-badge {
-  font-size: 26rpx;
-  font-weight: 700;
-  color: var(--pet-link);
-}
-
-.pet-tab-exp-track {
-  flex: 1;
-  max-width: 180rpx;
-  height: 12rpx;
-  border-radius: 6rpx;
-  background: var(--pet-track);
-  overflow: hidden;
-}
-
-.pet-tab-exp-fill {
-  height: 12rpx;
-  border-radius: 6rpx;
-  background: var(--pet-exp);
-  transition: width 0.4s ease;
-}
-
-.pet-tab-exp-text {
-  font-size: 22rpx;
-  color: var(--pet-muted);
-}
-
-.pet-tab-focus-entry {
-  flex-shrink: 0;
-  max-width: 60%;
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  min-height: 64rpx;
-  padding: 0 20rpx;
-  box-sizing: border-box;
-  border-radius: 32rpx;
-  background: var(--pet-card);
-  border: 2rpx solid var(--pet-border);
-}
-
-.pet-tab-focus-entry-label {
-  font-size: 24rpx;
-  color: var(--pet-muted);
-}
-
-.pet-tab-focus-entry-value {
+.pet-tab-focus-row-chip {
+  padding: 4rpx 18rpx;
+  border-radius: 22rpx;
+  background: var(--pet-hero);
+  color: var(--pet-deep);
   font-size: 24rpx;
   font-weight: 600;
-  color: var(--pet-deep);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  line-height: 36rpx;
 }
 
-.pet-tab-focus-entry-arrow {
+.pet-tab-focus-row-empty {
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: var(--pet-muted);
+}
+
+.pet-tab-focus-row-arrow {
+  flex-shrink: 0;
   font-size: 22rpx;
   color: var(--pet-muted);
 }
@@ -152,6 +122,25 @@
   gap: 12rpx;
 }
 
+.pet-tab-hero-name-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.pet-tab-hero-name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--pet-deep);
+}
+
+.pet-tab-hero-level {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--pet-link);
+}
+
 .pet-tab-hero-line {
   font-size: 30rpx;
   line-height: 44rpx;
@@ -159,8 +148,7 @@
 }
 
 .pet-tab-mood {
-  align-self: flex-start;
-  padding: 6rpx 20rpx;
+  padding: 4rpx 18rpx;
   border-radius: 24rpx;
   background: var(--pet-mood-bg);
   color: var(--pet-mood-text);
@@ -200,6 +188,26 @@
   font-size: 32rpx;
   font-weight: 700;
   color: var(--pet-text);
+}
+
+.pet-tab-card-side-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.pet-tab-more {
+  min-width: 72rpx;
+  min-height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.pet-tab-more-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--pet-link);
 }
 
 .pet-tab-card-side,
@@ -507,118 +515,4 @@
 @keyframes pet-tab-shimmer {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
-}
-
-.pet-focus-sheet {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
-.pet-focus-mask {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  background: rgba(15, 26, 22, 0.45);
-}
-
-.pet-focus-panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-  padding: 36rpx 32rpx calc(36rpx + env(safe-area-inset-bottom));
-  border-radius: 36rpx 36rpx 0 0;
-  background: var(--pet-card);
-}
-
-.pet-focus-title {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: var(--pet-text);
-}
-
-.pet-focus-desc {
-  font-size: 26rpx;
-  line-height: 38rpx;
-  color: var(--pet-muted);
-}
-
-.pet-focus-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
-}
-
-.pet-focus-option {
-  display: flex;
-  align-items: center;
-  gap: 10rpx;
-  min-height: 80rpx;
-  padding: 0 28rpx;
-  box-sizing: border-box;
-  border-radius: 40rpx;
-  border: 2rpx solid var(--pet-border);
-  background: var(--pet-bg);
-}
-
-.pet-focus-option.is-on {
-  border-color: var(--pet-exp);
-  background: var(--pet-hero);
-}
-
-.pet-focus-option-order {
-  width: 36rpx;
-  height: 36rpx;
-  border-radius: 18rpx;
-  background: var(--pet-deep);
-  color: var(--pet-on-deep);
-  font-size: 22rpx;
-  font-weight: 700;
-  line-height: 36rpx;
-  text-align: center;
-}
-
-.pet-focus-option-label {
-  font-size: 28rpx;
-  color: var(--pet-text);
-}
-
-.pet-focus-actions {
-  display: flex;
-  gap: 20rpx;
-  padding-top: 8rpx;
-}
-
-.pet-focus-btn {
-  flex: 1;
-  height: 88rpx;
-  border-radius: 44rpx;
-  border: 2rpx solid var(--pet-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.pet-focus-btn--primary {
-  border-color: var(--pet-deep);
-  background: var(--pet-deep);
-}
-
-.pet-focus-btn-text {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: var(--pet-text);
-}
-
-.pet-focus-btn--primary .pet-focus-btn-text {
-  color: var(--pet-on-deep);
 }

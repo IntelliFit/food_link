@@ -1,6 +1,6 @@
 import type { PetChatHomeMealEntry } from '../../utils/pet-navigation'
 
-/** 小麦页上的跳转：都去现有页面，小麦页本身只放一屏摘要。 */
+/** 伙伴页上的跳转：都去现有页面，伙伴页本身只放一屏摘要。 */
 export type PetActionId = 'pick_meal' | 'ask' | 'stats' | 'dress'
 
 export const STATS_DETAIL_URL = '/packageStats/pages/stats/index'
@@ -17,10 +17,11 @@ export interface PetNextMealInput {
 export type PetActionTarget =
   | { kind: 'navigateTo'; url: string }
   | { kind: 'petChat'; starter: string }
+  | { kind: 'petAsk'; question: string }
   | { kind: 'petChatMeal'; entry: PetChatHomeMealEntry }
   | { kind: 'petSettings' }
 
-/** 「让小麦挑一份」：有餐次就按首页下一餐的格式带进聊天，小麦直接给这一餐的推荐 */
+/** 「让 X 挑一份」：有餐次就按首页下一餐的格式带进聊天，宠物直接给这一餐的推荐 */
 export function pickMealTarget(meal: PetNextMealInput | null | undefined, date: string): PetActionTarget {
   const mealType = CHAT_MEAL_TYPES.find((type) => type === meal?.meal_type)
   const starter = String(meal?.starter_question || '').trim() || '下一餐吃什么？'
@@ -38,16 +39,16 @@ export function pickMealTarget(meal: PetNextMealInput | null | undefined, date: 
   }
 }
 
-/** 输入框：用户写了就问写的，没写就问占位里的那句 */
+/** 输入框：用户写了就问写的，没写就问占位里的那句；开一段新对话直接发出去 */
 export function askTarget(question: string, fallback: string): PetActionTarget {
-  return { kind: 'petChat', starter: question.trim() || fallback }
+  return { kind: 'petAsk', question: question.trim() || fallback }
 }
 
 export function petActionTarget(id: 'stats' | 'dress'): PetActionTarget {
   return id === 'stats' ? { kind: 'navigateTo', url: STATS_DETAIL_URL } : { kind: 'petSettings' }
 }
 
-/** 游客能先看小麦页和完整分析；聊天、换装、改关注要读写个人数据，点了再登录。 */
+/** 游客能先看伙伴页和完整分析；聊天、换装、改关注要读写个人数据，点了再登录。 */
 export function petActionNeedsLogin(id: PetActionId): boolean {
   return id !== 'stats'
 }
