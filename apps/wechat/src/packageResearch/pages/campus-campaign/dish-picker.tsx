@@ -56,6 +56,9 @@ export function DishPicker({ campaignId, onPick, onClose }: DishPickerProps) {
       {!loading && !failed && items.length === 0 ? (
         <Text className='rw-tip'>{keyword.trim() ? '食堂菜单里没有这道菜，换个叫法试试；还没采的窗口可以让社团的采集同学先采上来。' : '输入菜名开始搜'}</Text>
       ) : null}
+      {!loading && !failed && items[0]?.close ? (
+        <Text className='rw-tip'>{`菜单里没有叫「${keyword.trim()}」的菜，下面是名字相近的，选最接近的一道。`}</Text>
+      ) : null}
       {items.map((dish) => (
         <View key={dish.id} className='cc-dish' onClick={() => onPick({ catalogItemId: dish.id, name: dish.name })}>
           <Text className='cc-dish__name'>{dish.name}</Text>

@@ -49,6 +49,7 @@ type Repository interface {
 	GetStation(ctx context.Context, id string) (*domain.Station, error)
 	ListStations(ctx context.Context, campaignID, fromDate string) ([]domain.Station, error)
 	CreateRecord(ctx context.Context, record *domain.Record) (bool, error)
+	LinkedRecords(ctx context.Context, campaignID, userID string, limit int) ([]domain.LinkedRecord, error)
 	FoodRecordForUser(ctx context.Context, recordID, userID string) (*repo.FoodRecordRef, error)
 	CatalogItem(ctx context.Context, id string) (*repo.CatalogItemRef, error)
 	SearchDishes(ctx context.Context, schoolID, query string, limit int) ([]domain.DishOption, error)
@@ -130,7 +131,7 @@ func (s *CampaignService) Join(ctx context.Context, userID, code string, input J
 func (s *CampaignService) Mine(ctx context.Context, userID string) (*domain.MineView, error) {
 	member, campaign, err := s.repo.ActiveMembership(ctx, userID, s.now())
 	if err != nil || campaign == nil {
-		return &domain.MineView{Stations: []domain.Station{}}, err
+		return &domain.MineView{Stations: []domain.Station{}, Linked: []domain.LinkedRecord{}}, err
 	}
 	view, err := s.view(ctx, campaign)
 	if err != nil {
@@ -150,7 +151,11 @@ func (s *CampaignService) Mine(ctx context.Context, userID string) (*domain.Mine
 	if err != nil {
 		return nil, err
 	}
-	return &domain.MineView{Campaign: view, Role: member.Role, HasScale: member.HasScale, Stats: mine, Stations: stations}, nil
+	linked, err := s.repo.LinkedRecords(ctx, campaign.ID, userID, linkedRecordsShown)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.MineView{Campaign: view, Role: member.Role, HasScale: member.HasScale, Stats: mine, Stations: stations, Linked: linked}, nil
 }
 
 // MembersBoard ranks a campaign's members by approved weighed samples.
@@ -401,7 +406,8 @@ func (s *CampaignService) LinkRecord(ctx context.Context, userID string, input R
 		return false, err
 	}
 	if campaign == nil {
-		return false, nil
+		// A page left open past the end must not read as "already counted".
+		return false, badRequest("活动已经结束或你还没加入，这一餐没有计入")
 	}
 	recordID := strings.TrimSpace(input.FoodRecordID)
 	if uuid.Validate(recordID) != nil {
@@ -458,7 +464,7 @@ func (s *CampaignService) SearchDishes(ctx context.Context, userID, campaignID, 
 		return nil, err
 	}
 	if member == nil || member.Status != domain.MemberActive {
-		return nil, &commonerrors.AppError{Code: 20003, Message: "加入活动后才能选食堂的菜", HTTPStatus: 403}
+		return nil, notAllowed("加入活动后才能选食堂的菜")
 	}
 	return s.repo.SearchDishes(ctx, campaign.SchoolID, truncate(strings.TrimSpace(query), 30), 30)
 }
@@ -822,17 +828,23 @@ func (s *CampaignService) open(campaign *domain.Campaign) bool {
 	return campaign.Status == domain.CampaignActive && !now.Before(campaign.StartsAt) && now.Before(campaign.EndsAt)
 }
 
+// linkedRecordsShown covers a few days of meals on the member page.
+const linkedRecordsShown = 30
+
+// codeNotFound tells a student what to do about a mistyped join code.
+const codeNotFound = "没有这个加入码，核对一下或问社团负责人"
+
 func (s *CampaignService) campaignByCode(ctx context.Context, code string) (*domain.Campaign, error) {
 	code = strings.ToUpper(strings.TrimSpace(code))
 	if code == "" || len(code) > 16 {
-		return nil, notFound("活动不存在")
+		return nil, notFound(codeNotFound)
 	}
 	campaign, err := s.repo.GetCampaignByCode(ctx, code)
 	if err != nil {
 		return nil, err
 	}
 	if campaign == nil || campaign.Status == domain.CampaignDraft {
-		return nil, notFound("活动不存在")
+		return nil, notFound(codeNotFound)
 	}
 	return campaign, nil
 }
@@ -853,7 +865,7 @@ func (s *CampaignService) leaderCampaign(ctx context.Context, leaderID, campaign
 		return nil, err
 	}
 	if member == nil || member.Status != domain.MemberActive || member.Role != domain.RoleLeader {
-		return nil, &commonerrors.AppError{Code: 20003, Message: "只有活动负责人可以操作", HTTPStatus: 403}
+		return nil, notAllowed("只有活动负责人可以操作")
 	}
 	return campaign, nil
 }
@@ -951,6 +963,12 @@ func isUniqueViolation(err error) bool {
 
 func badRequest(message string) error {
 	return &commonerrors.AppError{Code: 10002, Message: message, HTTPStatus: 400}
+}
+
+// notAllowed refuses an action without HTTP 403: the mini program reads every
+// 403 as an expired login and would log the member out.
+func notAllowed(message string) error {
+	return &commonerrors.AppError{Code: 20003, Message: message, HTTPStatus: 400}
 }
 
 func notFound(message string) error {

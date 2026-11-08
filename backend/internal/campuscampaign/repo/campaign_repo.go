@@ -308,6 +308,18 @@ func (r *CampaignRepo) ListStations(ctx context.Context, campaignID, fromDate st
 // --- photo-estimated meals --------------------------------------------------------
 
 // CreateRecord links a food record once; a repeated link is a no-op.
+// LinkedRecords lists the member's latest photo records counted in a campaign.
+func (r *CampaignRepo) LinkedRecords(ctx context.Context, campaignID, userID string, limit int) ([]domain.LinkedRecord, error) {
+	rows := []domain.LinkedRecord{}
+	err := r.db.WithContext(ctx).Raw(`
+SELECT food_record_id::text AS food_record_id, dish_name
+FROM campus_campaign_records
+WHERE campaign_id = ?::uuid AND user_id = ?::uuid
+ORDER BY created_at DESC
+LIMIT ?`, campaignID, userID, limit).Scan(&rows).Error
+	return rows, err
+}
+
 func (r *CampaignRepo) CreateRecord(ctx context.Context, record *domain.Record) (bool, error) {
 	result := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(record)
 	return result.RowsAffected > 0, result.Error
@@ -338,16 +350,68 @@ WHERE f.id = ?::uuid AND f.user_id = ?::uuid`, recordID, userID).Scan(&rows).Err
 
 // SearchDishes lists a school's published canteen dishes whose name contains
 // the query (all of them, by name, when the query is empty).
+// SearchDishes finds dishes whose name contains the query. When none does
+// (students type 水煮牛肉, the menu says 牛肉), it returns the dishes sharing
+// the most two-character pieces of the query, marked Close.
 func (r *CampaignRepo) SearchDishes(ctx context.Context, schoolID, query string, limit int) ([]domain.DishOption, error) {
-	var rows []domain.DishOption
-	like := "%" + strings.ReplaceAll(strings.ReplaceAll(query, "%", ""), "_", "") + "%"
-	err := r.db.WithContext(ctx).Raw(`SELECT id, coalesce(name, '') AS name, coalesce(canteen_name, '') AS canteen_name,
-  coalesce(floor, '') AS floor, coalesce(window_name, '') AS window_name
-FROM campus_food_catalog_items
-WHERE school_id = ?::uuid AND status = 'published' AND coalesce(name, '') <> '' AND name ILIKE ?
-ORDER BY (name = ?) DESC, length(name), name
-LIMIT ?`, schoolID, like, query, limit).Scan(&rows).Error
+	query = likeSafe(query)
+	rows, err := r.searchDishes(ctx, schoolID, []string{query}, query, limit)
+	if err != nil || len(rows) > 0 {
+		return rows, err
+	}
+	pieces := DishQueryPieces(query)
+	if len(pieces) == 0 {
+		return rows, nil
+	}
+	rows, err = r.searchDishes(ctx, schoolID, pieces, query, limit)
+	for i := range rows {
+		rows[i].Close = true
+	}
 	return rows, err
+}
+
+// searchDishes ranks the school's dishes by how many patterns their name contains.
+func (r *CampaignRepo) searchDishes(ctx context.Context, schoolID string, patterns []string, query string, limit int) ([]domain.DishOption, error) {
+	rows := []domain.DishOption{}
+	hits := strings.TrimSuffix(strings.Repeat("(name ILIKE ?)::int + ", len(patterns)), " + ")
+	args := make([]any, 0, len(patterns)+3)
+	for _, pattern := range patterns {
+		args = append(args, "%"+pattern+"%")
+	}
+	args = append(args, schoolID, query, limit)
+	err := r.db.WithContext(ctx).Raw(`SELECT id, name, canteen_name, floor, window_name FROM (
+  SELECT id::text AS id, coalesce(name, '') AS name, coalesce(canteen_name, '') AS canteen_name,
+    coalesce(floor, '') AS floor, coalesce(window_name, '') AS window_name, `+hits+` AS hits
+  FROM campus_food_catalog_items
+  WHERE school_id = ?::uuid AND status = 'published' AND coalesce(name, '') <> ''
+) dishes
+WHERE hits > 0
+ORDER BY hits DESC, (name = ?) DESC, length(name), name
+LIMIT ?`, args...).Scan(&rows).Error
+	return rows, err
+}
+
+// DishQueryPieces splits a dish query into its two-character pieces
+// (水煮牛肉 → 水煮, 煮牛, 牛肉); queries of two characters or fewer have none.
+func DishQueryPieces(query string) []string {
+	runes := []rune(strings.Join(strings.Fields(likeSafe(query)), ""))
+	if len(runes) <= 2 {
+		return nil
+	}
+	seen := map[string]bool{}
+	pieces := []string{}
+	for i := 0; i+1 < len(runes); i++ {
+		piece := string(runes[i : i+2])
+		if !seen[piece] {
+			seen[piece] = true
+			pieces = append(pieces, piece)
+		}
+	}
+	return pieces
+}
+
+func likeSafe(value string) string {
+	return strings.NewReplacer("%", "", "_", "", "\\", "").Replace(strings.TrimSpace(value))
 }
 
 // CatalogItemRef is the location of a canteen dish in the directory.

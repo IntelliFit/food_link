@@ -11,7 +11,7 @@ import {
 import { Chips, Field } from '../research-weight/controls'
 import { PRECISIONS } from '../research-weight/model'
 import { DishPicker, type PickedDish } from './dish-picker'
-import { MEAL_LABELS, ROLE_LABELS, chinaToday } from './labels'
+import { MEAL_LABELS, ROLE_LABELS, chinaDayOf, chinaToday } from './labels'
 import { HowTo, LEADER_STEPS } from './how-to'
 
 interface LeaderPanelProps {
@@ -93,7 +93,7 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
           <View key={member.user_id} className='cc-member'>
             <View className='cc-member__copy'>
               <Text className='cc-member__name'>{member.nickname || '匿名同学'}</Text>
-              <Text className='cc-member__meta'>{ROLE_LABELS[member.role]}{member.has_scale ? ' · 有秤' : ''} · 称重 {member.approved}/{member.submitted} · 拍照 {member.photo_records}</Text>
+              <Text className='cc-member__meta'>{`${ROLE_LABELS[member.role]}${member.has_scale ? ' · 有秤' : ''} · 称重 ${member.approved}/${member.submitted} · 拍照 ${member.photo_records}`}</Text>
             </View>
             {member.role === 'leader' ? null : (
               <Text
@@ -110,7 +110,7 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
       <View className='rw-card'>
         <Text className='rw-card__title'>建一个称重日</Text>
         <Field label='日期'>
-          <Picker mode='date' value={date} start={campaign.starts_at.slice(0, 10)} end={campaign.ends_at.slice(0, 10)} onChange={(e) => setDate(e.detail.value)}>
+          <Picker mode='date' value={date} start={chinaDayOf(campaign.starts_at)} end={chinaDayOf(campaign.ends_at)} onChange={(e) => setDate(e.detail.value)}>
             <View className='rw-input cc-picker'><Text>{date}</Text></View>
           </Picker>
         </Field>
@@ -138,7 +138,7 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
           <Text className='rw-card__title'>已建的称重日</Text>
           {leader.stations.map((station) => (
             <Text key={station.id} className='cc-later'>
-              {station.session_date} {MEAL_LABELS[station.meal_period]} · {station.location_text}{station.kind === 'same_dish' ? ' · 同菜多份' : ''}
+              {`${station.session_date} ${MEAL_LABELS[station.meal_period]} · ${station.location_text}${station.kind === 'same_dish' ? ' · 同菜多份' : ''}`}
             </Text>
           ))}
         </View>

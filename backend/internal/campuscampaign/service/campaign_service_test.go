@@ -150,7 +150,7 @@ func TestJoinAttributesSamplesToTheActiveCampaign(t *testing.T) {
 	require.Equal(t, dish, *attribution.CatalogItemID)
 
 	_, err = f.svc.CreateStation(ctx, member, campaign.ID, StationInput{SessionDate: today, MealPeriod: "lunch", LocationText: "x", ScalePrecisionGrams: 1})
-	requireStatus(t, err, 403)
+	requireStatus(t, err, 400)
 	_, err = f.svc.AttributeSample(ctx, member, SampleAttributionInput{CatalogItemID: f.dish(t, f.otherID, "北大的菜")})
 	require.ErrorContains(t, err, "本校")
 
@@ -165,6 +165,17 @@ func TestJoinAttributesSamplesToTheActiveCampaign(t *testing.T) {
 	require.ErrorContains(t, err, "已经过了")
 	_, err = f.svc.AttributeSample(ctx, member, SampleAttributionInput{StationSessionID: "not-a-uuid"})
 	requireStatus(t, err, 400)
+
+	// Once the campaign ends, new samples stay personal, tagging says why it
+	// did not count, and nobody else can join.
+	require.NoError(t, f.db.Exec(`UPDATE campus_campaigns SET ends_at = now() - interval '1 minute' WHERE id = ?`, campaign.ID).Error)
+	ended, err := f.svc.AttributeSample(ctx, member, SampleAttributionInput{})
+	require.NoError(t, err)
+	require.Nil(t, ended, "samples after the end stay personal")
+	_, err = f.svc.LinkRecord(ctx, member, RecordLinkInput{FoodRecordID: uuid.NewString()})
+	require.ErrorContains(t, err, "结束")
+	_, err = f.svc.Join(ctx, f.user(t, "迟到"), campaign.JoinCode, joinInput(false))
+	require.ErrorContains(t, err, "不在进行中")
 }
 
 func TestSetCoreRespectsTheCapAndGrantsMembershipOnce(t *testing.T) {
@@ -187,7 +198,7 @@ func TestSetCoreRespectsTheCapAndGrantsMembershipOnce(t *testing.T) {
 	_, err = f.svc.SetCore(ctx, leader, campaign.ID, b, true)
 	require.ErrorContains(t, err, "最多1人")
 	_, err = f.svc.SetCore(ctx, a, campaign.ID, b, true)
-	requireStatus(t, err, 403)
+	requireStatus(t, err, 400)
 
 	view, err = f.svc.SetCore(ctx, leader, campaign.ID, a, false)
 	require.NoError(t, err)
@@ -227,6 +238,9 @@ func TestLinkRecordAndBoardsCountOnlyTheirOwnData(t *testing.T) {
 	require.Equal(t, domain.LabelModelEstimate, saved.LabelSource)
 	require.InDelta(t, 420, *saved.EstimatedTotalGrams, 0.01)
 	require.Equal(t, "番茄炒蛋", saved.DishName)
+	mine, err := f.svc.Mine(ctx, member)
+	require.NoError(t, err)
+	require.Equal(t, []domain.LinkedRecord{{FoodRecordID: recordID, DishName: "番茄炒蛋"}}, mine.Linked, "the page marks counted meals after a reload")
 
 	_, err = f.svc.LinkRecord(ctx, leader, RecordLinkInput{FoodRecordID: recordID})
 	requireStatus(t, err, 404)
@@ -270,6 +284,32 @@ func TestLinkRecordAndBoardsCountOnlyTheirOwnData(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, leaderView.Members, 2)
 	require.EqualValues(t, 1, leaderView.Members[0].PhotoRecords)
+}
+
+func TestDishSearchFallsBackToCloseNamesForMembersOnly(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	leader, member, outsider := f.user(t, "社长"), f.user(t, "小王"), f.user(t, "路人")
+	campaign := f.activeCampaign(t, f.schoolID, 15, leader)
+	_, err := f.svc.Join(ctx, member, campaign.JoinCode, joinInput(false))
+	require.NoError(t, err)
+	tomato := f.dish(t, f.schoolID, "番茄炒蛋")
+	f.dish(t, f.schoolID, "红烧肉")
+
+	found, err := f.svc.SearchDishes(ctx, member, campaign.ID, "炒蛋")
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	require.Equal(t, tomato, found[0].ID)
+	require.False(t, found[0].Close)
+
+	found, err = f.svc.SearchDishes(ctx, member, campaign.ID, "西红柿炒蛋")
+	require.NoError(t, err)
+	require.Len(t, found, 1, "no name contains the query, so dishes sharing 炒蛋 come back")
+	require.Equal(t, tomato, found[0].ID)
+	require.True(t, found[0].Close)
+
+	_, err = f.svc.SearchDishes(ctx, outsider, campaign.ID, "炒蛋")
+	requireStatus(t, err, 400)
 }
 
 func TestDraftCampaignsAreNotPublic(t *testing.T) {
