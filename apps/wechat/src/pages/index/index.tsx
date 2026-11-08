@@ -3002,6 +3002,16 @@ function IndexPage() {
       url: extraPkgUrl('/pages/goose-duck-chicken/index'),
       bgImage: GOOSE_DUCK_CHICKEN_BG_URL,
     },
+    {
+      key: 'lifespan',
+      className: 'home-reward-hint--lifespan',
+      kicker: '寿命预测器 · 模拟估算，不用于诊断',
+      title: '同一个你，三种吃法，三条人生',
+      desc: '用你的饮食，算出活到各个年龄的概率',
+      actionText: '去算算',
+      url: '/packageLifespan/pages/predictor/index',
+      bgImage: undefined,
+    },
     ...(showRewardCreditHint ? [{
       key: 'reward',
       className: 'home-reward-hint--reward',
