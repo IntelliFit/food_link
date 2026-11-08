@@ -85,6 +85,14 @@ export interface StationInput {
   notes?: string
 }
 
+export interface CampaignDish {
+  id: string
+  name: string
+  canteen_name: string
+  floor: string
+  window_name: string
+}
+
 export interface RecordLinkInput {
   food_record_id: string
   catalog_item_id?: string
@@ -125,6 +133,12 @@ export async function getMyCampaign(): Promise<CampaignMine> {
 export async function linkCampaignRecord(input: RecordLinkInput): Promise<boolean> {
   const response = await authenticatedRequest(`${BASE}/records`, { method: 'POST', data: input, timeout: 15000 })
   return Boolean((response.data as { linked?: boolean }).linked)
+}
+
+/** 本活动学校食堂里的菜，按菜名搜；只有活动成员能搜。 */
+export async function searchCampaignDishes(campaignId: string, keyword: string): Promise<CampaignDish[]> {
+  const query = encodeURIComponent(keyword.trim())
+  return (await get<{ items?: CampaignDish[] }>(`${BASE}/${encodeURIComponent(campaignId)}/dishes?q=${query}`)).items || []
 }
 
 export async function getCampaignLeader(campaignId: string): Promise<CampaignLeader> {

@@ -39,16 +39,30 @@ export function emptyCampaignForm(): CampaignForm {
   return { orgId: '', title: '', startsAt: '', endsAt: '', coreCap: '15', planCode: 'standard_monthly', leaders: '', rewardNote: '' }
 }
 
+/** 接口返回的时间（UTC）在北京时间是哪一天。 */
+export function beijingDay(iso: string): string {
+  const ms = Date.parse(iso)
+  return Number.isNaN(ms) ? iso.slice(0, 10) : beijingDate(ms)
+}
+
 /** 北京时间的日期（YYYY-MM-DD）。 */
 function beijingDate(ms: number): string {
   return new Date(ms + 8 * 3600 * 1000).toISOString().slice(0, 10)
 }
 
-/** 默认四周：今天 8 点开始，第 28 天晚上结束（北京时间）。 */
+/** 北京时间的整点（YYYY-MM-DDTHH:00），给 datetime-local 用。 */
+function beijingHour(ms: number): string {
+  return `${new Date(ms + 8 * 3600 * 1000).toISOString().slice(0, 13)}:00`
+}
+
+/**
+ * 默认四周：从现在这个整点开始（点「开始活动」后马上能加入，不用等到 8 点），
+ * 第 28 天晚上结束（北京时间）。
+ */
 export function defaultCampaignForm(now = Date.now(), orgId = ''): CampaignForm {
   return {
     ...emptyCampaignForm(), orgId, title: '食堂称重月',
-    startsAt: `${beijingDate(now)}T08:00`, endsAt: `${beijingDate(now + 27 * DAY_MS)}T23:59`,
+    startsAt: beijingHour(now), endsAt: `${beijingDate(now + 27 * DAY_MS)}T23:59`,
   }
 }
 
@@ -102,7 +116,7 @@ export function sharePath(joinCode: string): string {
 
 /** 复制给社团负责人的一段话：加入码、怎么进、负责人做什么。 */
 export function inviteText(campaign: InviteCampaign, coreCap: number): string {
-  const ends = campaign.ends_at.slice(0, 10)
+  const ends = beijingDay(campaign.ends_at)
   return [
     `【食探 · ${campaign.school_name}${campaign.org_name}「${campaign.title}」】`,
     `加入码：${campaign.join_code}（活动到 ${ends}）`,

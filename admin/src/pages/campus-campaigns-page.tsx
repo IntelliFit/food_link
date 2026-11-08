@@ -31,8 +31,11 @@ export function CampusCampaignsPage({ onLogout, onMenuChange }: PageProps) {
         adminRequest<{ items: ClubView[] }>('/api/admin/campus-orgs'),
         adminRequest<{ items: CampaignRow[] }>('/api/admin/campus-campaigns'),
       ])
-      setClubs(clubData.items || [])
+      const loadedClubs = clubData.items || []
+      setClubs(loadedClubs)
       setCampaigns(campaignData.items || [])
+      // With a single club there is nothing to choose in step 2.
+      if (loadedClubs.length === 1) setForm((current) => (current.orgId ? current : { ...current, orgId: loadedClubs[0].id }))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '读取高校共建失败')
     }

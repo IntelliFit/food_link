@@ -125,7 +125,7 @@ export function MemberHome({ mine }: MemberHomeProps) {
         </View>
       ) : null}
 
-      {linking ? <DishPicker schoolId={campaign.school_id} onPick={(dish) => void pickDish(dish)} onClose={() => setLinking(null)} /> : null}
+      {linking ? <DishPicker campaignId={campaign.id} onPick={(dish) => void pickDish(dish)} onClose={() => setLinking(null)} /> : null}
     </View>
   )
 }

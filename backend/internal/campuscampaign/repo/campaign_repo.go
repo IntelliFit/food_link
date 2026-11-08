@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"food_link/backend/internal/campuscampaign/domain"
@@ -333,6 +334,20 @@ WHERE f.id = ?::uuid AND f.user_id = ?::uuid`, recordID, userID).Scan(&rows).Err
 		return nil, err
 	}
 	return &rows[0], nil
+}
+
+// SearchDishes lists a school's published canteen dishes whose name contains
+// the query (all of them, by name, when the query is empty).
+func (r *CampaignRepo) SearchDishes(ctx context.Context, schoolID, query string, limit int) ([]domain.DishOption, error) {
+	var rows []domain.DishOption
+	like := "%" + strings.ReplaceAll(strings.ReplaceAll(query, "%", ""), "_", "") + "%"
+	err := r.db.WithContext(ctx).Raw(`SELECT id, coalesce(name, '') AS name, coalesce(canteen_name, '') AS canteen_name,
+  coalesce(floor, '') AS floor, coalesce(window_name, '') AS window_name
+FROM campus_food_catalog_items
+WHERE school_id = ?::uuid AND status = 'published' AND coalesce(name, '') <> '' AND name ILIKE ?
+ORDER BY (name = ?) DESC, length(name), name
+LIMIT ?`, schoolID, like, query, limit).Scan(&rows).Error
+	return rows, err
 }
 
 // CatalogItemRef is the location of a canteen dish in the directory.

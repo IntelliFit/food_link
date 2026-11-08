@@ -51,6 +51,7 @@ type Repository interface {
 	CreateRecord(ctx context.Context, record *domain.Record) (bool, error)
 	FoodRecordForUser(ctx context.Context, recordID, userID string) (*repo.FoodRecordRef, error)
 	CatalogItem(ctx context.Context, id string) (*repo.CatalogItemRef, error)
+	SearchDishes(ctx context.Context, schoolID, query string, limit int) ([]domain.DishOption, error)
 }
 
 // MembershipGranter gives core members membership for the campaign.
@@ -437,6 +438,29 @@ func (s *CampaignService) LinkRecord(ctx context.Context, userID string, input R
 		record.CanteenID, record.WindowID = optionalUUID(input.CanteenID), optionalUUID(input.WindowID)
 	}
 	return s.repo.CreateRecord(ctx, record)
+}
+
+// SearchDishes finds canteen dishes of the campaign's school for a member
+// tagging a meal or a leader setting up a same-dish session.
+func (s *CampaignService) SearchDishes(ctx context.Context, userID, campaignID, query string) ([]domain.DishOption, error) {
+	if uuid.Validate(strings.TrimSpace(campaignID)) != nil {
+		return nil, notFound("活动不存在")
+	}
+	campaign, err := s.repo.GetCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if campaign == nil {
+		return nil, notFound("活动不存在")
+	}
+	member, err := s.repo.GetMember(ctx, campaign.ID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if member == nil || member.Status != domain.MemberActive {
+		return nil, &commonerrors.AppError{Code: 20003, Message: "加入活动后才能选食堂的菜", HTTPStatus: 403}
+	}
+	return s.repo.SearchDishes(ctx, campaign.SchoolID, truncate(strings.TrimSpace(query), 30), 30)
 }
 
 // --- research sample attribution ------------------------------------------------------

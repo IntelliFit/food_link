@@ -8,6 +8,7 @@ import {
   emptyCampaignForm,
   findSameClub,
   inviteText,
+  beijingDay,
   sharePath,
 } from '../src/lib/campus-campaign-form.ts'
 
@@ -33,11 +34,11 @@ test('rejects incomplete or wrong input', () => {
   assert.match(String((campaignInputFromForm({ ...filled(), leaders: 'not-an-id' }) as { error: string }).error), /负责人 ID 不正确/)
 })
 
-test('prefills four weeks starting today in Beijing time', () => {
-  // 2026-11-08 20:00 UTC is already the 9th in Beijing.
-  const form = defaultCampaignForm(Date.UTC(2026, 10, 8, 20, 0), 'org-9')
+test('prefills four weeks starting this hour in Beijing time', () => {
+  // 2026-11-08 20:35 UTC is 04:35 on the 9th in Beijing: the campaign starts at 04:00, not 08:00.
+  const form = defaultCampaignForm(Date.UTC(2026, 10, 8, 20, 35), 'org-9')
   assert.equal(form.orgId, 'org-9')
-  assert.equal(form.startsAt, '2026-11-09T08:00')
+  assert.equal(form.startsAt, '2026-11-09T04:00')
   assert.equal(form.endsAt, '2026-12-06T23:59')
   assert.ok(!('error' in campaignInputFromForm(form)))
 })
@@ -60,4 +61,9 @@ test('the invite text says how to join and what the leader does', () => {
 
 test('share path points at the campaign page', () => {
   assert.equal(sharePath('ABC234'), 'packageResearch/pages/campus-campaign/index?code=ABC234')
+})
+
+test('shows API times as Beijing dates', () => {
+  assert.equal(beijingDay('2026-11-08T21:00:00Z'), '2026-11-09')
+  assert.equal(beijingDay('2026-12-06T15:59:00Z'), '2026-12-06')
 })

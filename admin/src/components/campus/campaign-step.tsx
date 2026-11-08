@@ -74,7 +74,7 @@ export function CampaignStep({ clubs, form, onFormChange, onCreated }: CampaignS
         <summary className='cursor-pointer text-muted-foreground'>高级设置</summary>
         <label className='mt-2 block'>核心成员会员套餐编码<input className={inputClass} value={form.planCode} onChange={(event) => onFormChange({ planCode: event.target.value })} /></label>
       </details>
-      <button type='button' className='rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-40' disabled={busy || !form.orgId} onClick={() => void create()}>
+      <button type='button' className='primary px-4 text-sm font-medium disabled:opacity-40' disabled={busy || !form.orgId} onClick={() => void create()}>
         {busy ? '创建中…' : '建活动'}
       </button>
       {done ? <p className='rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'>✓ {done}</p> : null}

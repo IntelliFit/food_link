@@ -144,7 +144,7 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
         </View>
       ) : null}
 
-      {picking ? <DishPicker schoolId={campaign.school_id} onPick={(picked) => { setDish(picked); setPicking(false) }} onClose={() => setPicking(false)} /> : null}
+      {picking ? <DishPicker campaignId={campaign.id} onPick={(picked) => { setDish(picked); setPicking(false) }} onClose={() => setPicking(false)} /> : null}
     </View>
   )
 }

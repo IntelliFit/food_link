@@ -984,6 +984,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/campus-campaigns/by-code/:code", campusCampaignHandler.Landing)
 	engine.GET("/api/campus-campaigns/by-code/:code/board", authmw.OptionalJWT(jwtSvc), campusCampaignHandler.MembersBoard)
 	engine.POST("/api/campus-campaigns/by-code/:code/join", authmw.RequireJWT(jwtSvc), campusCampaignHandler.Join)
+	engine.GET("/api/campus-campaigns/:campaign_id/dishes", authmw.RequireJWT(jwtSvc), campusCampaignHandler.SearchDishes)
 	engine.GET("/api/campus-campaigns/:campaign_id/leader", authmw.RequireJWT(jwtSvc), campusCampaignHandler.Leader)
 	engine.PUT("/api/campus-campaigns/:campaign_id/members/:user_id/core", authmw.RequireJWT(jwtSvc), campusCampaignHandler.SetCore)
 	engine.POST("/api/campus-campaigns/:campaign_id/stations", authmw.RequireJWT(jwtSvc), campusCampaignHandler.CreateStation)

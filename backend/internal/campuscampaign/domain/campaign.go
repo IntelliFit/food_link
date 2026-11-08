@@ -89,6 +89,15 @@ type CampaignView struct {
 	ApprovedCount  int64          `json:"approved_count"`
 }
 
+// DishOption is one published canteen dish of the campaign's school.
+type DishOption struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	CanteenName string `json:"canteen_name"`
+	Floor       string `json:"floor"`
+	WindowName  string `json:"window_name"`
+}
+
 // OrgView is a club as the admin page lists it.
 type OrgView struct {
 	ID               string     `json:"id"`

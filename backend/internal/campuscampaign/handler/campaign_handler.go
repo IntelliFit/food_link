@@ -96,6 +96,16 @@ func (h *CampaignHandler) LinkRecord(c *gin.Context) {
 	response.Success(c, gin.H{"linked": linked})
 }
 
+// GET /api/campus-campaigns/:campaign_id/dishes?q=
+func (h *CampaignHandler) SearchDishes(c *gin.Context) {
+	items, err := h.svc.SearchDishes(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("campaign_id"), c.Query("q"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"items": items})
+}
+
 // GET /api/campus-campaigns/:campaign_id/leader
 func (h *CampaignHandler) Leader(c *gin.Context) {
 	view, err := h.svc.Leader(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("campaign_id"))

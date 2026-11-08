@@ -51,7 +51,7 @@ export function LeaderPicker({ picked, onChange, compact }: LeaderPickerProps) {
           {picked.map((user) => (
             <span key={user.user_id} className='inline-flex items-center gap-2 rounded-full border border-primary bg-primary/10 px-3 py-1 text-xs'>
               ✓ {user.nickname}{user.telephone ? ` · ${maskPhone(user.telephone)}` : ''}
-              <button type='button' className='text-muted-foreground hover:text-foreground' onClick={() => onChange(picked.filter((item) => item.user_id !== user.user_id))}>×</button>
+              <span role='button' tabIndex={0} className='cursor-pointer px-1 text-muted-foreground hover:text-foreground' onClick={() => onChange(picked.filter((item) => item.user_id !== user.user_id))}>×</span>
             </span>
           ))}
         </div>
@@ -64,17 +64,19 @@ export function LeaderPicker({ picked, onChange, compact }: LeaderPickerProps) {
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => { if (event.key === 'Enter') void search() }}
         />
-        <button type='button' className={`${compact ? 'h-8 text-xs' : 'h-10 text-sm'} shrink-0 rounded-xl border px-3 disabled:opacity-50`} disabled={searching} onClick={() => void search()}>
+        <button type='button' className={`primary ${compact ? 'text-xs' : 'text-sm'} shrink-0 px-3 disabled:opacity-50`} disabled={searching} onClick={() => void search()}>
           {searching ? '搜索中' : '搜索'}
         </button>
       </div>
       {results.length ? (
-        <div className='divide-y rounded-xl border'>
+        <div className='space-y-2'>
+          <p className='text-xs text-muted-foreground'>点一下选为负责人：</p>
           {results.map((user) => (
-            <button key={user.user_id} type='button' className='flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-accent/50' onClick={() => add(user)}>
-              <span>{user.nickname || '未设置昵称'}<span className='ml-2 text-xs text-muted-foreground'>{maskPhone(user.telephone || '')}</span></span>
-              <span className='text-xs text-primary'>选这个人</span>
-            </button>
+            <div key={user.user_id} role='button' tabIndex={0} className='flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition hover:border-primary hover:bg-primary/5'
+              onClick={() => add(user)} onKeyDown={(event) => { if (event.key === 'Enter') add(user) }}>
+              <span className='font-medium'>{user.nickname || '未设置昵称'}<span className='ml-2 text-xs font-normal text-muted-foreground'>{maskPhone(user.telephone || '')}</span></span>
+              <span className='rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground'>选这个人</span>
+            </div>
           ))}
         </div>
       ) : null}
