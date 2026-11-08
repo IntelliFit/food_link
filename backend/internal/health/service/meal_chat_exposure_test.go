@@ -37,9 +37,17 @@ func (r *memoryTestRepo) RecordMealRecommendationFeedback(context.Context, strin
 	return nil
 }
 
-// The first assembled meal the search offered, read back from the tool message the model received.
+// The first assembled meal the search offered, read back from the tool messages the model received.
 func assembledMealIDFromToolMessage(t *testing.T, body map[string]any) string {
 	t.Helper()
+	if id := findAssembledMealID(body); id != "" {
+		return id
+	}
+	t.Fatalf("no assembled meal was sent back to the model")
+	return ""
+}
+
+func findAssembledMealID(body map[string]any) string {
 	messages, _ := body["messages"].([]any)
 	for i := len(messages) - 1; i >= 0; i-- {
 		message, _ := messages[i].(map[string]any)
@@ -58,7 +66,6 @@ func assembledMealIDFromToolMessage(t *testing.T, body map[string]any) string {
 			}
 		}
 	}
-	t.Fatalf("no assembled meal was sent back to the model")
 	return ""
 }
 
@@ -70,7 +77,15 @@ func runWholeMealChatTurn(t *testing.T, repo StatsRepo, pool []DietRecommendatio
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		call++
-		// The server has already read the context; the model re-reads it once with updates.
+		// The server has already read the context and run this turn's search, so a model that
+		// sees an assembled meal takes it at once. Otherwise it re-reads the context and searches.
+		if id := findAssembledMealID(body); id != "" {
+			writeCampusDietAgentTestFinal(t, w, map[string]any{
+				"answer":     "搭配好了",
+				"selections": []map[string]any{{"source_id": id, "reason": "营养均衡"}},
+			})
+			return
+		}
 		switch call {
 		case 1:
 			writeCampusDietAgentTestToolCall(t, w, "ctx-again", "get_meal_context", `{"updates":[]}`)
