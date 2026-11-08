@@ -1,47 +1,48 @@
-import { View, Text } from '@tarojs/components'
-import type { PetProfile, PetStatus } from '../../utils/api'
+import React from 'react'
+import { Text, View } from '@tarojs/components'
 import { PetAvatar } from '../PetAvatar'
-import { petThinkingView } from './pet-thinking-view'
 import './index.scss'
 
-/**
- * 「宠物思考中」：宠物在动，下面一行是它此刻真正在做的事（来自后端的进度），做完的步骤打勾。
- * 伙伴聊天等回答、首页「吃这个」卡片等推荐，都用这一个，不再只显示三个点。
- */
-export function PetThinking({ pet, status, steps, size = 'chat', dark, fallback }: {
-  pet?: PetProfile | null
-  status?: PetStatus | null
-  /** 已经发生的步骤，最新的在最后 */
-  steps: readonly string[]
-  size?: 'chat' | 'card' | 'inline'
+export type PetThinkingPet = React.ComponentProps<typeof PetAvatar>['pet']
+
+type Props = {
+  /** The user's own partner; PetAvatar falls back to the default look. */
+  pet?: PetThinkingPet | null
+  /** Real progress labels, newest last. The newest is said in the bubble, earlier ones show as done. */
+  steps: string[]
+  size?: 'card' | 'chat'
+  /** The user hid the partner: show the words only. */
+  hidePet?: boolean
   dark?: boolean
-  /** 还没有任何步骤时显示的话 */
-  fallback?: string
-}) {
-  const view = petThinkingView(steps, fallback)
+}
+
+// "宠物思考中": the shared wait state for the home meal card and the partner chat.
+// It only reports what is really happening; it never delays an answer.
+export default function PetThinking({ pet, steps, size = 'card', hidePet = false, dark = false }: Props) {
+  const current = steps[steps.length - 1] || ''
+  const done = steps.slice(0, -1)
   return (
-    <View className={`pet-thinking pet-thinking--${size} ${dark ? 'pet-thinking--dark' : ''}`} aria-role='status' aria-label={view.current}>
-      {size === 'inline' ? null : (
-        <View className='pet-thinking__avatar'>
-          <PetAvatar pet={pet} size={size === 'card' ? 56 : 44} mood={status?.mood} state={status?.state} motion='companion' />
-        </View>
-      )}
-      <View className='pet-thinking__copy'>
-        {view.done.map((step) => (
-          <View key={step} className='pet-thinking__done'>
-            <Text className='pet-thinking__tick'>✓</Text>
-            <Text className='pet-thinking__done-text'>{step}</Text>
+    <View className={`pet-thinking pet-thinking--${size}${dark ? ' pet-thinking--dark' : ''}`} aria-label={current}>
+      <View className='pet-thinking__row'>
+        {!hidePet && (
+          <View className='pet-thinking__pet'>
+            <PetAvatar pet={pet || undefined} size={size === 'chat' ? 44 : 58} motion='companion' />
           </View>
-        ))}
-        <View className='pet-thinking__current'>
-          <Text className='pet-thinking__current-text'>{view.current}</Text>
-          <View className='pet-thinking__dots'>
-            <View className='pet-thinking__dot' />
-            <View className='pet-thinking__dot' />
-            <View className='pet-thinking__dot' />
-          </View>
+        )}
+        <View key={current} className={`pet-thinking__bubble${hidePet ? ' pet-thinking__bubble--plain' : ''}`}>
+          <Text>{current}</Text>
         </View>
       </View>
+      {done.length > 0 && (
+        <View className='pet-thinking__done'>
+          {done.map(step => (
+            <View key={step} className='pet-thinking__done-step'>
+              <Text className='pet-thinking__tick'>✓</Text>
+              <Text>{step.replace(/[…。.]+$/, '')}</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   )
 }

@@ -1,20 +1,12 @@
-import { appendThinkingStep, petThinkingView } from '../../src/components/PetThinking/pet-thinking-view'
+import { appendThinkingStep, chatThinkingSteps } from '../../src/packageExtra/pages/pet-chat/thinking-steps'
 import { petChatFailureText, savedAnswerFor } from '../../src/packageExtra/pages/pet-chat/chat-failure'
 import type { PetChatHistoryMessage } from '../../src/utils/api'
 
-describe('宠物思考中', () => {
-  it('shows what the pet is doing now and the last steps it finished', () => {
-    const steps = ['在看这一餐你想要什么…', '在看你今天还差什么…', '看完了你今天还差什么', '在找附近开着的店…', '找到了附近开着的店', '挑了 3 个，正在比…']
-    expect(petThinkingView(steps)).toEqual({ current: '挑了 3 个，正在比', done: ['看完了你今天还差什么', '找到了附近开着的店'] })
-  })
-
-  it('says it is wrapping up when the last step is a finished one', () => {
-    expect(petThinkingView(['在找附近开着的店…', '找到了附近开着的店'])).toEqual({ current: '在整理回答', done: ['找到了附近开着的店'] })
-  })
-
-  it('falls back to a plain line before any step arrives', () => {
-    expect(petThinkingView([])).toEqual({ current: '在想', done: [] })
-    expect(petThinkingView([], '在比哪份最适合你…')).toEqual({ current: '在比哪份最适合你', done: [] })
+describe('伙伴聊天等回答时的步骤', () => {
+  it('says something before the first step arrives and keeps only the last three', () => {
+    expect(chatThinkingSteps(undefined)).toEqual(['在想…'])
+    expect(chatThinkingSteps([], '在比哪份最适合你…')).toEqual(['在比哪份最适合你…'])
+    expect(chatThinkingSteps(['a', 'b', 'c', 'd'])).toEqual(['b', 'c', 'd'])
   })
 
   it('does not repeat the same step and keeps the list short', () => {

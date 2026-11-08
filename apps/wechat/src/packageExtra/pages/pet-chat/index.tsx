@@ -31,8 +31,8 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { openPetSettings, PET_ASK_ENTRY } from '../../../utils/pet-navigation'
 import { DEFAULT_PET_NAME } from '../../../utils/pet-name'
 import { PetAvatar } from '../../../components/PetAvatar'
-import { PetThinking } from '../../../components/PetThinking'
-import { appendThinkingStep } from '../../../components/PetThinking/pet-thinking-view'
+import PetThinking from '../../../components/PetThinking'
+import { appendThinkingStep, chatThinkingSteps } from './thinking-steps'
 import { petChatFailureText, savedAnswerFor } from './chat-failure'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { PetMarkdown } from './pet-markdown'
@@ -883,7 +883,7 @@ function PetChatPage() {
                   message.text ? (
                     <PetMarkdown text={message.recommendation?.generated_by === 'foodlink-grounded-meals-v1' && message.recommendation.recommendations?.length ? '这几份可以参考。想换口味，还是调整份量？' : message.text} />
                   ) : (
-                    <PetThinking pet={petSummary?.pet} status={petSummary?.status} steps={message.steps || []} dark={scheme === 'dark'} />
+                    <PetThinking pet={petSummary?.pet} steps={chatThinkingSteps(message.steps)} size='chat' dark={scheme === 'dark'} />
                   )
                 ) : (
                   <Text className='pet-chat-message-text'>{message.text}</Text>
@@ -893,7 +893,7 @@ function PetChatPage() {
                 ) : null}
                 {message.role === 'pet' && message.provisional ? (
                   <View className='pet-chat-provisional'>
-                    <PetThinking steps={message.steps || []} size='inline' dark={scheme === 'dark'} fallback='在比哪份最适合你…' />
+                    <PetThinking steps={chatThinkingSteps(message.steps, '在比哪份最适合你…').slice(-1)} size='chat' hidePet dark={scheme === 'dark'} />
                   </View>
                 ) : null}
                 {message.role === 'pet' && message.retryQuestion ? (
