@@ -3160,7 +3160,7 @@ function IndexPage() {
 
         <HomeModule id='nextMeal' layout={moduleLayout} locks={moduleLocks}>
         {showNextMealGuidance && (
-          <NextMealRecommendations mealType={nextMealType} mealName={nextMealName} refreshKey={`${selectedDate}:${totalCurrent}:${proteinCur}:${carbsCur}:${fatCur}:${planRefresh}`} onAdjust={openNextMealGuidance} />
+          <NextMealRecommendations mealType={nextMealType} mealName={nextMealName} refreshKey={`${selectedDate}:${totalCurrent}:${proteinCur}:${carbsCur}:${fatCur}:${planRefresh}`} onAdjust={openNextMealGuidance} pet={petSummary?.pet} petHidden={petHidden} />
         )}
 
         </HomeModule>

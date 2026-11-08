@@ -471,10 +471,10 @@ func normalizedDietDecisionCandidateText(candidate domain.DietRecommendationCand
 	return normalizeDietDecisionToken(strings.Join(parts, " "))
 }
 
+var dietDecisionTokenReplacer = strings.NewReplacer(" ", "", "　", "", "-", "", "_", "")
+
 func normalizeDietDecisionToken(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = strings.NewReplacer(" ", "", "　", "", "-", "", "_", "").Replace(value)
-	return value
+	return dietDecisionTokenReplacer.Replace(strings.ToLower(strings.TrimSpace(value)))
 }
 
 func dietDecisionRoleScore(role string, scores DietDecisionScorecard) float64 {

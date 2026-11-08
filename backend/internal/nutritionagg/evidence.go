@@ -124,32 +124,53 @@ func exceedsServing(item map[string]any, unit string, value float64) bool {
 func Combine(vectors ...Vector) Vector {
 	out := Vector{}
 	for _, def := range Definitions {
-		a := Amount{Unit: def.Unit, Status: "missing"}
-		estimated := false
-		for _, vector := range vectors {
-			v, exists := vector[def.Key]
-			if !exists || v.TotalItems == 0 {
-				a.TotalItems++
-				continue
-			}
-			a.TotalItems += v.TotalItems
-			if v.Unit != def.Unit || v.KnownItems < 0 || v.KnownItems > v.TotalItems || v.Value < 0 || math.IsNaN(v.Value) || math.IsInf(v.Value, 0) {
-				continue
-			}
-			a.KnownItems += v.KnownItems
-			a.Value += v.Value
-			estimated = estimated || v.Status == "estimated"
-		}
-		if a.KnownItems > 0 {
-			a.Status = "partial"
-			if a.KnownItems == a.TotalItems {
-				a.Status = "recorded"
-				if estimated {
-					a.Status = "estimated"
-				}
-			}
-		}
-		out[def.Key] = a
+		out[def.Key] = combineDefinition(def, vectors)
 	}
 	return out
+}
+
+var definitionIndex = func() map[string]int {
+	index := make(map[string]int, len(Definitions))
+	for i, def := range Definitions {
+		index[def.Key] = i
+	}
+	return index
+}()
+
+// CombineKey is Combine(vectors...)[key] without combining every other nutrient.
+func CombineKey(key string, vectors ...Vector) Amount {
+	i, ok := definitionIndex[key]
+	if !ok {
+		return Amount{}
+	}
+	return combineDefinition(Definitions[i], vectors)
+}
+
+func combineDefinition(def Definition, vectors []Vector) Amount {
+	a := Amount{Unit: def.Unit, Status: "missing"}
+	estimated := false
+	for _, vector := range vectors {
+		v, exists := vector[def.Key]
+		if !exists || v.TotalItems == 0 {
+			a.TotalItems++
+			continue
+		}
+		a.TotalItems += v.TotalItems
+		if v.Unit != def.Unit || v.KnownItems < 0 || v.KnownItems > v.TotalItems || v.Value < 0 || math.IsNaN(v.Value) || math.IsInf(v.Value, 0) {
+			continue
+		}
+		a.KnownItems += v.KnownItems
+		a.Value += v.Value
+		estimated = estimated || v.Status == "estimated"
+	}
+	if a.KnownItems > 0 {
+		a.Status = "partial"
+		if a.KnownItems == a.TotalItems {
+			a.Status = "recorded"
+			if estimated {
+				a.Status = "estimated"
+			}
+		}
+	}
+	return a
 }

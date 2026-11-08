@@ -24,16 +24,21 @@ type mealOrderingCheck struct {
 // This is a conservative catalog-evidence guard, not an exhaustive menu ontology.
 // The model must still use ordinary ordering knowledge for unmarked dependencies.
 // A saved intake is evidence of eating, not an offer to buy again at that price.
+var (
+	mealPerPieceDishPattern  = regexp.MustCompile(`饺|包子|生煎|烧麦|烧卖`)
+	mealPieceCountPattern    = regexp.MustCompile(`(?:[0-9一二三四五六七八九十]+\s*(?:只|个)|套餐|套饭|单人餐)`)
+	mealNoExtraOrderReplacer = strings.NewReplacer("无需另点", "", "无需另购", "", "无需另付", "", "不需要另点", "", "不需要另购", "", "不需要另付", "")
+)
+
 func mealOrderingRisk(c DietRecommendationCandidate) string {
 	if c.Source == "food_record" {
 		return ""
 	}
-	if regexp.MustCompile(`饺|包子|生煎|烧麦|烧卖`).MatchString(c.Title) && !mealKnownServing(c) &&
-		!regexp.MustCompile(`(?:[0-9一二三四五六七八九十]+\s*(?:只|个)|套餐|套饭|单人餐)`).MatchString(c.Title) {
+	if mealPerPieceDishPattern.MatchString(c.Title) && !mealKnownServing(c) && !mealPieceCountPattern.MatchString(c.Title) {
 		return "单个或整份的计价与份量未注明，不能把参考营养的一份当作实际售卖的一餐"
 	}
 	food := c.Title + " " + c.Description
-	dependencyText := strings.NewReplacer("无需另点", "", "无需另购", "", "无需另付", "", "不需要另点", "", "不需要另购", "", "不需要另付", "").Replace(food)
+	dependencyText := mealNoExtraOrderReplacer.Replace(food)
 	if mealRequiredOrderPattern.MatchString(dependencyText) {
 		return "记录提示需要额外点单或付费，当前标价不是完整一餐总价"
 	}

@@ -11,6 +11,10 @@ import { mealSource, mealTitle } from '../../../utils/meal-presentation'
 import { rememberRecommendedDish } from '../../../utils/meal-dish-recommended'
 import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
 import { mergeJudgedPreview, readMealPreviewCache, recentMealRecords, recordMealName, writeMealPreviewCache } from '../../../utils/meal-preview-cache'
+import PetThinking, { type PetThinkingPet } from '../../../components/PetThinking'
+import { petDisplayName } from '../../../utils/pet-name'
+import MealRefineBadge, { type MealRefineState } from './MealRefineBadge'
+import { mealWaitText, type MealWaitStage } from './meal-wait-steps'
 import './NextMealRecommendations.scss'
 
 /** The meal the server chose for the card, which late at night differs from the one asked for. */
@@ -21,9 +25,19 @@ type Props = {
   mealName: string
   refreshKey: string
   onAdjust: (option?: DietRecommendationOption, meal?: NextMealCardMeal) => void
+  /** The user's own partner, shown while the card waits; hidden when the user hid it. */
+  pet?: PetThinkingPet | null
+  petHidden?: boolean
 }
 
-export default function NextMealRecommendations({ mealType, mealName, refreshKey, onAdjust }: Props) {
+// The home page settles its nutrition totals a moment after opening, which
+// changes refreshKey; waiting this long sends one preview instead of two.
+const LOAD_SETTLE_MS = 350
+// The server finds open venues, then scores today's gaps, then compares dishes.
+// These only advance the words while the answer is still on its way.
+const WAIT_STAGE_STEPS: Array<[MealWaitStage, number]> = [['scoring', 700], ['comparing', 1800]]
+
+export default function NextMealRecommendations({ mealType, mealName, refreshKey, onAdjust, pet, petHidden }: Props) {
   // stale: last answer read from the phone, shown until a fresh one arrives.
   const [snapshot, setSnapshot] = useState<{ owner: string; meal: string; date: string; result: DietRecommendationResult; stale?: boolean }>()
   const [busy, setBusy] = useState(true)
@@ -32,6 +46,13 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
   const [recent, setRecent] = useState<FoodRecord[]>([])
   const interacted = useRef(false)
   const selectedSourceId = useRef('')
+  // Every step taken since this load started, newest last.
+  const [waitStages, setWaitStages] = useState<MealWaitStage[]>([])
+  const waitTimers = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  // Shows 挑好了 for a moment after the model's pick replaced the rule pick.
+  const [refineDone, setRefineDone] = useState(false)
+  const refineDoneTimer = useRef<ReturnType<typeof setTimeout>>()
+  const loadTimer = useRef<ReturnType<typeof setTimeout>>()
   const [locating, setLocating] = useState(false)
   const [error, setError] = useState('')
   const [locationNotice, setLocationNotice] = useState('')
@@ -65,6 +86,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
       return cached ? { owner: token, meal: mealType, date, result: cached, stale: true } : previous
     })
     setBusy(true)
+    setWaitStages([])
     setRefining(false)
     setRecent([])
     setError('')
@@ -80,6 +102,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
           // Only an explicit click may trigger a first-time permission prompt.
           if (requestLocation || settings.authSetting['scope.userLocation'] === true) {
             setLocating(true)
+            setWaitStages(['locating'])
             if (requestLocation) await ensureWeappPrivacyAuthorized()
             const fix = await requestMealLocation()
             if (token !== getAccessToken() || seq !== sequence.current) return
@@ -110,7 +133,13 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
       const current = () => token === getAccessToken() && seq === sequence.current && visible.current
       const request = { meal_type: mealType, location, radius_km: 5, exclude_source_ids: excluded.current.ids }
       // Step 1: the rule pick comes back at once, so the card is never blank for long.
-      const data = await previewMeals({ ...request, judge_mode: 'skip' })
+      startWaitStages()
+      let data: DietRecommendationResult
+      try {
+        data = await previewMeals({ ...request, judge_mode: 'skip' })
+      } finally {
+        stopWaitStages()
+      }
       if (!current()) return
       if (!Array.isArray(data?.recommendations)) throw new Error('餐食推荐响应不完整')
       setSnapshot({ owner: token, meal: mealType, date, result: data })
@@ -136,6 +165,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
         setSelected(merged.selected)
         loadPhotos(merged.result, current)
         writeMealPreviewCache(token, mealType, date, merged.result)
+        showRefineDone()
       } catch {
         // The rule pick already on screen stays; this step is only a refinement.
       } finally {
@@ -150,6 +180,28 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
       if (loading.current?.seq === seq) loading.current = undefined
     }
   }, [mealType, refreshKey])
+
+  function startWaitStages() {
+    stopWaitStages()
+    setWaitStages(previous => [...previous.filter(stage => stage === 'locating'), 'searching'])
+    waitTimers.current = WAIT_STAGE_STEPS.map(([stage, at]) => setTimeout(() => setWaitStages(previous => [...previous, stage]), at))
+  }
+
+  function stopWaitStages() {
+    waitTimers.current.forEach(clearTimeout)
+    waitTimers.current = []
+  }
+
+  function showRefineDone() {
+    if (refineDoneTimer.current) clearTimeout(refineDoneTimer.current)
+    setRefineDone(true)
+    refineDoneTimer.current = setTimeout(() => setRefineDone(false), 2000)
+  }
+
+  const scheduleLoad = useCallback(() => {
+    if (loadTimer.current) clearTimeout(loadTimer.current)
+    loadTimer.current = setTimeout(() => { loadTimer.current = undefined; void load() }, LOAD_SETTLE_MS)
+  }, [load])
 
   // Existing source details contain real photos that the lightweight preview may omit.
   function loadPhotos(data: DietRecommendationResult, current: () => boolean) {
@@ -175,13 +227,30 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
     if (current()) setRecent(recentMealRecords(records, mealType))
   }
 
-  useEffect(() => { void load(); return () => { sequence.current += 1 } }, [load, refreshKey, owner])
-  useDidShow(() => { visible.current = true; setPageVisible(true); void load() })
-  useDidHide(() => { visible.current = false; setPageVisible(false); setInViewport(false); sequence.current += 1; loading.current = undefined })
+  // The saved answer needs no network, so it shows at once, before the settled load.
+  useEffect(() => {
+    const date = refreshKey.split(':')[0]
+    if (!owner) return
+    const cached = readMealPreviewCache(owner, mealType, date)
+    if (!cached) return
+    setSnapshot(previous => (previous?.owner === owner && previous.meal === mealType && previous.date === date ? previous : { owner, meal: mealType, date, result: cached, stale: true }))
+  }, [owner, mealType, refreshKey])
+  useEffect(() => { scheduleLoad(); return () => { sequence.current += 1 } }, [scheduleLoad, refreshKey, owner])
+  useEffect(() => () => {
+    if (loadTimer.current) clearTimeout(loadTimer.current)
+    if (refineDoneTimer.current) clearTimeout(refineDoneTimer.current)
+    stopWaitStages()
+  }, [])
+  useDidShow(() => { visible.current = true; setPageVisible(true); scheduleLoad() })
+  useDidHide(() => {
+    visible.current = false; setPageVisible(false); setInViewport(false); sequence.current += 1; loading.current = undefined
+    if (loadTimer.current) { clearTimeout(loadTimer.current); loadTimer.current = undefined }
+  })
   const options = (result?.recommendations || []).slice(0, 3)
   const option = options[selected] || options[0]
   const selectedPhoto = option && !failedPhotos[option.source_id || ''] && (option.image_path || photos[option.source_id || ''])
   const stale = !!result && !!snapshot?.stale
+  const refineState: MealRefineState | undefined = refineDone ? 'done' : refining ? 'refining' : busy && stale ? 'updating' : undefined
   selectedSourceId.current = option?.source_id || ''
 
   useEffect(() => {
@@ -260,11 +329,10 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
       </View>
       {!!locationNotice && <View className='meal-picks__notice'><Text>{locationNotice}</Text>{locationSettings && <Text className='meal-picks__text-action' onClick={() => void openLocationSettings()}>去设置</Text>}</View>}
       {busy && !option ? (
-        <View className='meal-picks__skeleton' aria-label='正在检索真实餐食'>
-          <View /><View />
-        </View>
+        <PetThinking pet={pet} hidePet={!!petHidden} steps={(waitStages.length ? waitStages : ['searching' as MealWaitStage]).map(stage => mealWaitText(stage, petDisplayName(pet?.name)))} />
       ) : option ? (
-        <>
+        <View key={result?.recommendation_id || 'meal'} className={`meal-picks__served${stale ? ' is-stale' : ''}`}>
+          {refineState && <MealRefineBadge pet={pet} hidePet={!!petHidden} state={refineState} />}
           <Swiper className={`meal-picks__swiper${selectedPhoto ? '' : ' meal-picks__swiper--no-photo'}`} current={selected} onChange={event => { if (event.detail.source === 'touch') interacted.current = true; setSelected(event.detail.current) }} duration={260}>
             {options.map(item => {
               const photo = failedPhotos[item.source_id || ''] ? '' : item.image_path || photos[item.source_id || '']
@@ -289,7 +357,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
               </SwiperItem>
             )})}
           </Swiper>
-        </>
+        </View>
       ) : (
         <View className='meal-picks__empty'>
           <Text onClick={() => void load()}>{error || '暂时没找到合适的餐食'}</Text>
