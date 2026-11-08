@@ -26,7 +26,8 @@ import (
 type Repository interface {
 	CreateOrg(ctx context.Context, org *domain.Org) error
 	GetOrg(ctx context.Context, id string) (*domain.Org, error)
-	ListOrgs(ctx context.Context) ([]domain.Org, error)
+	ListOrgs(ctx context.Context, schoolID string) ([]domain.OrgView, error)
+	DeleteOrg(ctx context.Context, id string) (bool, error)
 	CreateCampaign(ctx context.Context, campaign *domain.Campaign) error
 	UpdateCampaign(ctx context.Context, id string, updates map[string]any) error
 	GetCampaign(ctx context.Context, id string) (*domain.Campaign, error)
@@ -48,8 +49,10 @@ type Repository interface {
 	GetStation(ctx context.Context, id string) (*domain.Station, error)
 	ListStations(ctx context.Context, campaignID, fromDate string) ([]domain.Station, error)
 	CreateRecord(ctx context.Context, record *domain.Record) (bool, error)
+	LinkedRecords(ctx context.Context, campaignID, userID string, limit int) ([]domain.LinkedRecord, error)
 	FoodRecordForUser(ctx context.Context, recordID, userID string) (*repo.FoodRecordRef, error)
 	CatalogItem(ctx context.Context, id string) (*repo.CatalogItemRef, error)
+	SearchDishes(ctx context.Context, schoolID, query string, limit int) ([]domain.DishOption, error)
 }
 
 // MembershipGranter gives core members membership for the campaign.
@@ -128,7 +131,7 @@ func (s *CampaignService) Join(ctx context.Context, userID, code string, input J
 func (s *CampaignService) Mine(ctx context.Context, userID string) (*domain.MineView, error) {
 	member, campaign, err := s.repo.ActiveMembership(ctx, userID, s.now())
 	if err != nil || campaign == nil {
-		return &domain.MineView{Stations: []domain.Station{}}, err
+		return &domain.MineView{Stations: []domain.Station{}, Linked: []domain.LinkedRecord{}}, err
 	}
 	view, err := s.view(ctx, campaign)
 	if err != nil {
@@ -148,7 +151,11 @@ func (s *CampaignService) Mine(ctx context.Context, userID string) (*domain.Mine
 	if err != nil {
 		return nil, err
 	}
-	return &domain.MineView{Campaign: view, Role: member.Role, HasScale: member.HasScale, Stats: mine, Stations: stations}, nil
+	linked, err := s.repo.LinkedRecords(ctx, campaign.ID, userID, linkedRecordsShown)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.MineView{Campaign: view, Role: member.Role, HasScale: member.HasScale, Stats: mine, Stations: stations, Linked: linked}, nil
 }
 
 // MembersBoard ranks a campaign's members by approved weighed samples.
@@ -399,7 +406,8 @@ func (s *CampaignService) LinkRecord(ctx context.Context, userID string, input R
 		return false, err
 	}
 	if campaign == nil {
-		return false, nil
+		// A page left open past the end must not read as "already counted".
+		return false, badRequest("活动已经结束或你还没加入，这一餐没有计入")
 	}
 	recordID := strings.TrimSpace(input.FoodRecordID)
 	if uuid.Validate(recordID) != nil {
@@ -436,6 +444,29 @@ func (s *CampaignService) LinkRecord(ctx context.Context, userID string, input R
 		record.CanteenID, record.WindowID = optionalUUID(input.CanteenID), optionalUUID(input.WindowID)
 	}
 	return s.repo.CreateRecord(ctx, record)
+}
+
+// SearchDishes finds canteen dishes of the campaign's school for a member
+// tagging a meal or a leader setting up a same-dish session.
+func (s *CampaignService) SearchDishes(ctx context.Context, userID, campaignID, query string) ([]domain.DishOption, error) {
+	if uuid.Validate(strings.TrimSpace(campaignID)) != nil {
+		return nil, notFound("活动不存在")
+	}
+	campaign, err := s.repo.GetCampaign(ctx, campaignID)
+	if err != nil {
+		return nil, err
+	}
+	if campaign == nil {
+		return nil, notFound("活动不存在")
+	}
+	member, err := s.repo.GetMember(ctx, campaign.ID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if member == nil || member.Status != domain.MemberActive {
+		return nil, notAllowed("加入活动后才能选食堂的菜")
+	}
+	return s.repo.SearchDishes(ctx, campaign.SchoolID, truncate(strings.TrimSpace(query), 30), 30)
 }
 
 // --- research sample attribution ------------------------------------------------------
@@ -517,7 +548,7 @@ type OrgInput struct {
 }
 
 func (s *CampaignService) CreateOrg(ctx context.Context, adminID string, input OrgInput) (*domain.Org, error) {
-	name := strings.TrimSpace(input.Name)
+	name := strings.Join(strings.Fields(input.Name), " ")
 	if name == "" || len([]rune(name)) > 40 {
 		return nil, badRequest("请填写不超过40字的社团名称")
 	}
@@ -531,6 +562,15 @@ func (s *CampaignService) CreateOrg(ctx context.Context, adminID string, input O
 	}
 	if schoolName == "" {
 		return nil, badRequest("学校不存在")
+	}
+	existing, err := s.repo.ListOrgs(ctx, school)
+	if err != nil {
+		return nil, err
+	}
+	for _, other := range existing {
+		if clubKey(other.Name, schoolName) == clubKey(name, schoolName) {
+			return nil, badRequest(fmt.Sprintf("%s已经有社团「%s」，不用再建，直接在第 2 步选它", schoolName, other.Name))
+		}
 	}
 	org := &domain.Org{
 		ID: uuid.NewString(), SchoolID: school, CampusID: optionalUUID(input.CampusID), Name: name, OrgType: domain.OrgFitnessClub,
@@ -550,8 +590,35 @@ func (s *CampaignService) CreateOrg(ctx context.Context, adminID string, input O
 	return org, nil
 }
 
-func (s *CampaignService) ListOrgs(ctx context.Context) ([]domain.Org, error) {
-	return s.repo.ListOrgs(ctx)
+func (s *CampaignService) ListOrgs(ctx context.Context) ([]domain.OrgView, error) {
+	return s.repo.ListOrgs(ctx, "")
+}
+
+// DeleteOrg removes a club created by mistake; clubs that ran a campaign
+// stay, their data belongs to the campaign.
+func (s *CampaignService) DeleteOrg(ctx context.Context, id string) error {
+	if uuid.Validate(strings.TrimSpace(id)) != nil {
+		return notFound("社团不存在")
+	}
+	deleted, err := s.repo.DeleteOrg(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return badRequest("社团不存在，或已经建过活动（建过活动的社团不能删）")
+	}
+	return nil
+}
+
+// clubKey compares club names the way people write them: "清华大学健身协会"
+// and "健身 协会" at 清华大学 are the same club.
+func clubKey(name, schoolName string) string {
+	key := strings.ToLower(strings.Join(strings.Fields(name), ""))
+	school := strings.ToLower(strings.Join(strings.Fields(schoolName), ""))
+	if school != "" && strings.HasPrefix(key, school) && key != school {
+		key = strings.TrimPrefix(key, school)
+	}
+	return key
 }
 
 type CampaignInput struct {
@@ -761,17 +828,23 @@ func (s *CampaignService) open(campaign *domain.Campaign) bool {
 	return campaign.Status == domain.CampaignActive && !now.Before(campaign.StartsAt) && now.Before(campaign.EndsAt)
 }
 
+// linkedRecordsShown covers a few days of meals on the member page.
+const linkedRecordsShown = 30
+
+// codeNotFound tells a student what to do about a mistyped join code.
+const codeNotFound = "没有这个加入码，核对一下或问社团负责人"
+
 func (s *CampaignService) campaignByCode(ctx context.Context, code string) (*domain.Campaign, error) {
 	code = strings.ToUpper(strings.TrimSpace(code))
 	if code == "" || len(code) > 16 {
-		return nil, notFound("活动不存在")
+		return nil, notFound(codeNotFound)
 	}
 	campaign, err := s.repo.GetCampaignByCode(ctx, code)
 	if err != nil {
 		return nil, err
 	}
 	if campaign == nil || campaign.Status == domain.CampaignDraft {
-		return nil, notFound("活动不存在")
+		return nil, notFound(codeNotFound)
 	}
 	return campaign, nil
 }
@@ -792,7 +865,7 @@ func (s *CampaignService) leaderCampaign(ctx context.Context, leaderID, campaign
 		return nil, err
 	}
 	if member == nil || member.Status != domain.MemberActive || member.Role != domain.RoleLeader {
-		return nil, &commonerrors.AppError{Code: 20003, Message: "只有活动负责人可以操作", HTTPStatus: 403}
+		return nil, notAllowed("只有活动负责人可以操作")
 	}
 	return campaign, nil
 }
@@ -828,7 +901,7 @@ func (s *CampaignService) view(ctx context.Context, campaign *domain.Campaign) (
 	view := &domain.CampaignView{
 		ID: campaign.ID, Title: campaign.Title, JoinCode: campaign.JoinCode, Status: campaign.Status, Open: s.open(campaign),
 		StartsAt: campaign.StartsAt, EndsAt: campaign.EndsAt, SchoolID: campaign.SchoolID, SchoolName: schoolName,
-		Goals: campaign.Goals, ClubRewardNote: campaign.ClubRewardNote,
+		Goals: campaign.Goals, ClubRewardNote: campaign.ClubRewardNote, CoreMemberCap: campaign.CoreMemberCap,
 		MemberCount: counts[campaign.ID][0], ApprovedCount: counts[campaign.ID][1],
 	}
 	if view.Goals == nil {
@@ -890,6 +963,12 @@ func isUniqueViolation(err error) bool {
 
 func badRequest(message string) error {
 	return &commonerrors.AppError{Code: 10002, Message: message, HTTPStatus: 400}
+}
+
+// notAllowed refuses an action without HTTP 403: the mini program reads every
+// 403 as an expired login and would log the member out.
+func notAllowed(message string) error {
+	return &commonerrors.AppError{Code: 20003, Message: message, HTTPStatus: 400}
 }
 
 func notFound(message string) error {

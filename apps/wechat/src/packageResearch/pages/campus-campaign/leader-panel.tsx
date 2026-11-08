@@ -1,4 +1,4 @@
-import { Input, Picker, Text, View } from '@tarojs/components'
+import { Button, Input, Picker, Text, View } from '@tarojs/components'
 import { useState } from 'react'
 import Taro from '@tarojs/taro'
 import { showUnifiedApiError } from '../../../utils/api'
@@ -11,7 +11,8 @@ import {
 import { Chips, Field } from '../research-weight/controls'
 import { PRECISIONS } from '../research-weight/model'
 import { DishPicker, type PickedDish } from './dish-picker'
-import { MEAL_LABELS, ROLE_LABELS, chinaToday } from './labels'
+import { MEAL_LABELS, ROLE_LABELS, chinaDayOf, chinaToday } from './labels'
+import { HowTo, LEADER_STEPS } from './how-to'
 
 interface LeaderPanelProps {
   leader: CampaignLeader
@@ -78,6 +79,13 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
 
   return (
     <View>
+      <HowTo title='负责人要做的三件事' steps={LEADER_STEPS} />
+      <View className='rw-card'>
+        <Text className='rw-card__title'>邀请成员</Text>
+        <Text className='cc-code-big'>加入码 {campaign.join_code}</Text>
+        <Text className='rw-tip'>成员在「我的 → 科研共建 → 高校共建」输入加入码，或点你转发的卡片加入。</Text>
+        <Button className='rw-submit cc-share' openType='share'>转发活动卡片给成员</Button>
+      </View>
       <View className='rw-card'>
         <Text className='rw-card__title'>核心成员 {leader.core_count}/{leader.core_cap}</Text>
         <Text className='rw-tip'>核心成员活动期间免费使用标准版（含精准模式），到活动结束自动到期。</Text>
@@ -85,7 +93,7 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
           <View key={member.user_id} className='cc-member'>
             <View className='cc-member__copy'>
               <Text className='cc-member__name'>{member.nickname || '匿名同学'}</Text>
-              <Text className='cc-member__meta'>{ROLE_LABELS[member.role]}{member.has_scale ? ' · 有秤' : ''} · 称重 {member.approved}/{member.submitted} · 拍照 {member.photo_records}</Text>
+              <Text className='cc-member__meta'>{`${ROLE_LABELS[member.role]}${member.has_scale ? ' · 有秤' : ''} · 称重 ${member.approved}/${member.submitted} · 拍照 ${member.photo_records}`}</Text>
             </View>
             {member.role === 'leader' ? null : (
               <Text
@@ -102,7 +110,7 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
       <View className='rw-card'>
         <Text className='rw-card__title'>建一个称重日</Text>
         <Field label='日期'>
-          <Picker mode='date' value={date} start={campaign.starts_at.slice(0, 10)} end={campaign.ends_at.slice(0, 10)} onChange={(e) => setDate(e.detail.value)}>
+          <Picker mode='date' value={date} start={chinaDayOf(campaign.starts_at)} end={chinaDayOf(campaign.ends_at)} onChange={(e) => setDate(e.detail.value)}>
             <View className='rw-input cc-picker'><Text>{date}</Text></View>
           </Picker>
         </Field>
@@ -130,13 +138,13 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
           <Text className='rw-card__title'>已建的称重日</Text>
           {leader.stations.map((station) => (
             <Text key={station.id} className='cc-later'>
-              {station.session_date} {MEAL_LABELS[station.meal_period]} · {station.location_text}{station.kind === 'same_dish' ? ' · 同菜多份' : ''}
+              {`${station.session_date} ${MEAL_LABELS[station.meal_period]} · ${station.location_text}${station.kind === 'same_dish' ? ' · 同菜多份' : ''}`}
             </Text>
           ))}
         </View>
       ) : null}
 
-      {picking ? <DishPicker schoolId={campaign.school_id} onPick={(picked) => { setDish(picked); setPicking(false) }} onClose={() => setPicking(false)} /> : null}
+      {picking ? <DishPicker campaignId={campaign.id} onPick={(picked) => { setDish(picked); setPicking(false) }} onClose={() => setPicking(false)} /> : null}
     </View>
   )
 }

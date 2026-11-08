@@ -21,12 +21,12 @@ import { ensureLoggedIn } from '../research-weight/media'
 import { JoinCard } from './join-card'
 import { LeaderPanel } from './leader-panel'
 import { MemberHome } from './member-home'
-import { joinCodeFrom } from './labels'
+import { closedNote, formatChinaDay, joinCodeFrom } from './labels'
+import { HowTo, JOIN_STEPS } from './how-to'
 import './index.scss'
 
 type Tab = 'home' | 'board' | 'leader'
 
-const formatDay = (iso: string) => iso.slice(5, 10).replace('-', '月') + '日'
 
 function Board({ title, entries, showSchool }: { title: string; entries: BoardEntry[]; showSchool?: boolean }) {
   return (
@@ -40,7 +40,7 @@ function Board({ title, entries, showSchool }: { title: string; entries: BoardEn
             <Text className='cc-board__name'>{entry.name}</Text>
             {showSchool && entry.school_name ? <Text className='cc-board__meta'>{entry.school_name} · {entry.members ?? 0} 人 · 人均 {entry.per_member ?? 0}</Text> : null}
           </View>
-          <Text className='cc-board__value'>{entry.approved} 份{entry.dishes ? ` · ${entry.dishes} 道菜` : ''}</Text>
+          <Text className='cc-board__value'>{`${entry.approved} 份${entry.dishes ? ` · ${entry.dishes} 道菜` : ''}`}</Text>
         </View>
       ))}
     </View>
@@ -138,10 +138,10 @@ export default function CampusCampaignPage() {
           <Text className='rw-hero__eyebrow'>{campaign.school_name} · {campaign.org_name}</Text>
           <Text className='rw-hero__title'>{campaign.title}</Text>
           <Text className='rw-hero__desc'>
-            {formatDay(campaign.starts_at)}–{formatDay(campaign.ends_at)} · {campaign.member_count} 人参加 · 已通过 {campaign.approved_count} 份称重
+            {formatChinaDay(campaign.starts_at)}–{formatChinaDay(campaign.ends_at)} · {campaign.member_count} 人参加 · 已通过 {campaign.approved_count} 份称重
           </Text>
           {campaign.club_reward_note ? <Text className='rw-hero__reward'>社团奖励：{campaign.club_reward_note}</Text> : null}
-          {!campaign.open ? <Text className='rw-hero__reward'>活动已结束</Text> : null}
+          {!campaign.open ? <Text className='rw-hero__reward'>{closedNote(campaign)}</Text> : null}
         </View>
       ) : (
         <View className='rw-hero'>
@@ -163,7 +163,18 @@ export default function CampusCampaignPage() {
         </View>
       ) : null}
 
-      {tab === 'home' && campaign && memberOfShown && mine ? <MemberHome mine={mine} /> : null}
+      {tab === 'home' && campaign && memberOfShown && mine ? <MemberHome mine={mine} onChanged={() => void load(campaign.join_code)} /> : null}
+      {!campaign ? <HowTo title='怎么参加' steps={JOIN_STEPS} /> : null}
+      {tab === 'home' && campaign && !campaign.open ? (
+        <View className='rw-card'>
+          <Text className='rw-tip'>
+            {closedNote(campaign) === '活动已结束'
+              ? '这期活动已经结束，之后的称重和拍照不再计入（称重仍算你自己的科研样本）。最终排行在「排行」里，下一期等社团通知。'
+              : '活动开始后就能在这里加入，先看看「排行」和怎么参加。'}
+          </Text>
+        </View>
+      ) : null}
+      {tab === 'home' && campaign && !memberOfShown && campaign.open ? <HowTo title='怎么参加' steps={JOIN_STEPS.slice(1)} /> : null}
       {tab === 'home' && campaign && !memberOfShown && campaign.open ? (
         mine?.campaign ? (
           <View className='rw-card'><Text className='rw-tip'>你已加入「{mine.campaign.title}」，同一时间只能参加一个活动。</Text></View>

@@ -1,4 +1,4 @@
-import { authenticatedRequest } from './api'
+import { authenticatedRequest, publicRequest } from './api'
 
 /** 高校共建：健身社团发起的校园饮食数据采集活动。 */
 export type CampaignRole = 'leader' | 'core' | 'member'
@@ -48,6 +48,8 @@ export interface CampaignMine {
   has_scale: boolean
   stats: CampaignMemberStats
   stations: CampaignStation[]
+  /** 已计入活动的拍照记录（最近的几十条），刷新后也能标出来。 */
+  linked?: Array<{ food_record_id: string; dish_name: string }>
 }
 
 export interface CampaignLeader {
@@ -85,6 +87,16 @@ export interface StationInput {
   notes?: string
 }
 
+export interface CampaignDish {
+  id: string
+  name: string
+  canteen_name: string
+  floor: string
+  window_name: string
+  /** 菜名里没有完整的搜索词，只是名字相近。 */
+  close?: boolean
+}
+
 export interface RecordLinkInput {
   food_record_id: string
   catalog_item_id?: string
@@ -100,17 +112,23 @@ async function get<T>(url: string): Promise<T> {
   return response.data as T
 }
 
+/** 游客能看的接口：不登录也不会被带去登录页；登录了会带上身份（排行榜显示昵称）。 */
+async function getPublic<T>(url: string): Promise<T> {
+  const response = await publicRequest(url, { method: 'GET', timeout: 15000 })
+  return response.data as T
+}
+
 /** 游客也能看活动介绍和排行榜。 */
 export async function getCampaignByCode(joinCode: string): Promise<CampusCampaign> {
-  return (await get<{ campaign: CampusCampaign }>(`${BASE}/by-code/${code(joinCode)}`)).campaign
+  return (await getPublic<{ campaign: CampusCampaign }>(`${BASE}/by-code/${code(joinCode)}`)).campaign
 }
 
 export async function getCampaignMembersBoard(joinCode: string): Promise<BoardEntry[]> {
-  return (await get<{ items?: BoardEntry[] }>(`${BASE}/by-code/${code(joinCode)}/board`)).items || []
+  return (await getPublic<{ items?: BoardEntry[] }>(`${BASE}/by-code/${code(joinCode)}/board`)).items || []
 }
 
 export async function getCampaignsBoard(): Promise<BoardEntry[]> {
-  return (await get<{ items?: BoardEntry[] }>(`${BASE}/board`)).items || []
+  return (await getPublic<{ items?: BoardEntry[] }>(`${BASE}/board`)).items || []
 }
 
 export async function joinCampaign(joinCode: string, input: JoinInput): Promise<CampaignMine> {
@@ -125,6 +143,12 @@ export async function getMyCampaign(): Promise<CampaignMine> {
 export async function linkCampaignRecord(input: RecordLinkInput): Promise<boolean> {
   const response = await authenticatedRequest(`${BASE}/records`, { method: 'POST', data: input, timeout: 15000 })
   return Boolean((response.data as { linked?: boolean }).linked)
+}
+
+/** 本活动学校食堂里的菜，按菜名搜；只有活动成员能搜。 */
+export async function searchCampaignDishes(campaignId: string, keyword: string): Promise<CampaignDish[]> {
+  const query = encodeURIComponent(keyword.trim())
+  return (await get<{ items?: CampaignDish[] }>(`${BASE}/${encodeURIComponent(campaignId)}/dishes?q=${query}`)).items || []
 }
 
 export async function getCampaignLeader(campaignId: string): Promise<CampaignLeader> {

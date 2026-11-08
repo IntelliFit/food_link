@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"food_link/backend/internal/campuscampaign/domain"
@@ -30,10 +31,28 @@ func (r *CampaignRepo) GetOrg(ctx context.Context, id string) (*domain.Org, erro
 	return &org, err
 }
 
-func (r *CampaignRepo) ListOrgs(ctx context.Context) ([]domain.Org, error) {
-	var orgs []domain.Org
-	err := r.db.WithContext(ctx).Order("created_at DESC").Limit(500).Find(&orgs).Error
+// ListOrgs lists clubs with their school and how many campaigns they ran,
+// optionally for one school.
+func (r *CampaignRepo) ListOrgs(ctx context.Context, schoolID string) ([]domain.OrgView, error) {
+	query := `SELECT o.id, o.school_id, coalesce(s.name, '') AS school_name, o.name, o.status, o.agreement_version, o.created_at,
+  (SELECT count(*) FROM campus_campaigns c WHERE c.org_id = o.id) AS campaign_count
+FROM campus_orgs o LEFT JOIN schools s ON s.id = o.school_id`
+	args := []any{}
+	if schoolID != "" {
+		query += ` WHERE o.school_id = ?::uuid`
+		args = append(args, schoolID)
+	}
+	var orgs []domain.OrgView
+	err := r.db.WithContext(ctx).Raw(query+` ORDER BY o.created_at DESC LIMIT 500`, args...).Scan(&orgs).Error
 	return orgs, err
+}
+
+// DeleteOrg removes a club that never ran a campaign; it reports whether a
+// row was deleted.
+func (r *CampaignRepo) DeleteOrg(ctx context.Context, id string) (bool, error) {
+	result := r.db.WithContext(ctx).Exec(`DELETE FROM campus_orgs o WHERE o.id = ?::uuid
+AND NOT EXISTS (SELECT 1 FROM campus_campaigns c WHERE c.org_id = o.id)`, id)
+	return result.RowsAffected > 0, result.Error
 }
 
 func (r *CampaignRepo) CreateCampaign(ctx context.Context, campaign *domain.Campaign) error {
@@ -289,6 +308,18 @@ func (r *CampaignRepo) ListStations(ctx context.Context, campaignID, fromDate st
 // --- photo-estimated meals --------------------------------------------------------
 
 // CreateRecord links a food record once; a repeated link is a no-op.
+// LinkedRecords lists the member's latest photo records counted in a campaign.
+func (r *CampaignRepo) LinkedRecords(ctx context.Context, campaignID, userID string, limit int) ([]domain.LinkedRecord, error) {
+	rows := []domain.LinkedRecord{}
+	err := r.db.WithContext(ctx).Raw(`
+SELECT food_record_id::text AS food_record_id, dish_name
+FROM campus_campaign_records
+WHERE campaign_id = ?::uuid AND user_id = ?::uuid
+ORDER BY created_at DESC
+LIMIT ?`, campaignID, userID, limit).Scan(&rows).Error
+	return rows, err
+}
+
 func (r *CampaignRepo) CreateRecord(ctx context.Context, record *domain.Record) (bool, error) {
 	result := r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(record)
 	return result.RowsAffected > 0, result.Error
@@ -315,6 +346,72 @@ WHERE f.id = ?::uuid AND f.user_id = ?::uuid`, recordID, userID).Scan(&rows).Err
 		return nil, err
 	}
 	return &rows[0], nil
+}
+
+// SearchDishes lists a school's published canteen dishes whose name contains
+// the query (all of them, by name, when the query is empty).
+// SearchDishes finds dishes whose name contains the query. When none does
+// (students type 水煮牛肉, the menu says 牛肉), it returns the dishes sharing
+// the most two-character pieces of the query, marked Close.
+func (r *CampaignRepo) SearchDishes(ctx context.Context, schoolID, query string, limit int) ([]domain.DishOption, error) {
+	query = likeSafe(query)
+	rows, err := r.searchDishes(ctx, schoolID, []string{query}, query, limit)
+	if err != nil || len(rows) > 0 {
+		return rows, err
+	}
+	pieces := DishQueryPieces(query)
+	if len(pieces) == 0 {
+		return rows, nil
+	}
+	rows, err = r.searchDishes(ctx, schoolID, pieces, query, limit)
+	for i := range rows {
+		rows[i].Close = true
+	}
+	return rows, err
+}
+
+// searchDishes ranks the school's dishes by how many patterns their name contains.
+func (r *CampaignRepo) searchDishes(ctx context.Context, schoolID string, patterns []string, query string, limit int) ([]domain.DishOption, error) {
+	rows := []domain.DishOption{}
+	hits := strings.TrimSuffix(strings.Repeat("(name ILIKE ?)::int + ", len(patterns)), " + ")
+	args := make([]any, 0, len(patterns)+3)
+	for _, pattern := range patterns {
+		args = append(args, "%"+pattern+"%")
+	}
+	args = append(args, schoolID, query, limit)
+	err := r.db.WithContext(ctx).Raw(`SELECT id, name, canteen_name, floor, window_name FROM (
+  SELECT id::text AS id, coalesce(name, '') AS name, coalesce(canteen_name, '') AS canteen_name,
+    coalesce(floor, '') AS floor, coalesce(window_name, '') AS window_name, `+hits+` AS hits
+  FROM campus_food_catalog_items
+  WHERE school_id = ?::uuid AND status = 'published' AND coalesce(name, '') <> ''
+) dishes
+WHERE hits > 0
+ORDER BY hits DESC, (name = ?) DESC, length(name), name
+LIMIT ?`, args...).Scan(&rows).Error
+	return rows, err
+}
+
+// DishQueryPieces splits a dish query into its two-character pieces
+// (水煮牛肉 → 水煮, 煮牛, 牛肉); queries of two characters or fewer have none.
+func DishQueryPieces(query string) []string {
+	runes := []rune(strings.Join(strings.Fields(likeSafe(query)), ""))
+	if len(runes) <= 2 {
+		return nil
+	}
+	seen := map[string]bool{}
+	pieces := []string{}
+	for i := 0; i+1 < len(runes); i++ {
+		piece := string(runes[i : i+2])
+		if !seen[piece] {
+			seen[piece] = true
+			pieces = append(pieces, piece)
+		}
+	}
+	return pieces
+}
+
+func likeSafe(value string) string {
+	return strings.NewReplacer("%", "", "_", "", "\\", "").Replace(strings.TrimSpace(value))
 }
 
 // CatalogItemRef is the location of a canteen dish in the directory.

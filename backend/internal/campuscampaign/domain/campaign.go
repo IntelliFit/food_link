@@ -84,8 +84,32 @@ type CampaignView struct {
 	OrgName        string         `json:"org_name"`
 	Goals          map[string]any `json:"goals"`
 	ClubRewardNote string         `json:"club_reward_note"`
+	CoreMemberCap  int            `json:"core_member_cap"`
 	MemberCount    int64          `json:"member_count"`
 	ApprovedCount  int64          `json:"approved_count"`
+}
+
+// DishOption is one published canteen dish of the campaign's school.
+type DishOption struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	CanteenName string `json:"canteen_name"`
+	Floor       string `json:"floor"`
+	WindowName  string `json:"window_name"`
+	// Close marks a near match: no dish name contains the whole query.
+	Close bool `json:"close,omitempty"`
+}
+
+// OrgView is a club as the admin page lists it.
+type OrgView struct {
+	ID               string     `json:"id"`
+	SchoolID         string     `json:"school_id"`
+	SchoolName       string     `json:"school_name"`
+	Name             string     `json:"name"`
+	Status           string     `json:"status"`
+	AgreementVersion string     `json:"agreement_version"`
+	CampaignCount    int64      `json:"campaign_count"`
+	CreatedAt        *time.Time `json:"created_at,omitempty"`
 }
 
 // MemberStats counts one member's contributions in a campaign.
@@ -114,11 +138,19 @@ type BoardEntry struct {
 
 // MineView is the member's own campaign home.
 type MineView struct {
-	Campaign *CampaignView `json:"campaign"`
-	Role     string        `json:"role"`
-	HasScale bool          `json:"has_scale"`
-	Stats    MemberStats   `json:"stats"`
-	Stations []Station     `json:"stations"`
+	Campaign *CampaignView  `json:"campaign"`
+	Role     string         `json:"role"`
+	HasScale bool           `json:"has_scale"`
+	Stats    MemberStats    `json:"stats"`
+	Stations []Station      `json:"stations"`
+	Linked   []LinkedRecord `json:"linked"`
+}
+
+// LinkedRecord is one of the member's photo records already counted in the
+// campaign, so the page can mark it after a reload.
+type LinkedRecord struct {
+	FoodRecordID string `json:"food_record_id"`
+	DishName     string `json:"dish_name"`
 }
 
 // LeaderView is what a club leader manages.
