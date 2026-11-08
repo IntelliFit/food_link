@@ -155,6 +155,13 @@ type ListFilter struct {
 	Offset            int
 }
 
+// PromotableFilter selects approved samples not yet in the benchmark.
+type PromotableFilter struct {
+	QualityTiers      []string
+	CollectionChannel string
+	Limit             int
+}
+
 type ListResult struct {
 	Items []Sample
 	Total int64

@@ -1190,6 +1190,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/research-weight-samples/:sample_id", adminAuth, researchWeightHandler.AdminGet)
 	adminAPI.POST("/research-weight-samples/:sample_id/review", adminAuth, researchWeightHandler.AdminReview)
 	adminAPI.POST("/research-weight-samples/:sample_id/promote", adminAuth, researchWeightHandler.AdminPromote)
+	adminAPI.POST("/research-weight-samples/promote-batch", adminAuth, researchWeightHandler.AdminPromoteBatch)
 	adminAPI.POST("/research-weight-samples/:sample_id/auto-review", adminAuth, researchWeightHandler.AdminAutoReview)
 	adminAPI.GET("/campus-orgs", adminAuth, campusCampaignHandler.AdminListOrgs)
 	adminAPI.POST("/campus-orgs", adminAuth, campusCampaignHandler.AdminCreateOrg)

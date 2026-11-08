@@ -211,6 +211,19 @@ func (r *SampleRepo) Promote(ctx context.Context, id string, build func(*domain.
 }
 
 // ListContainers returns the user's active saved containers, newest first.
+// ListPromotable returns approved samples of the given tiers that are not in
+// the benchmark yet, oldest first.
+func (r *SampleRepo) ListPromotable(ctx context.Context, filter domain.PromotableFilter) ([]domain.Sample, error) {
+	query := r.db.WithContext(ctx).Model(&domain.Sample{}).
+		Where("status = ? AND benchmark_sample_id IS NULL AND quality_tier IN ?", domain.StatusApproved, filter.QualityTiers)
+	if channel := strings.TrimSpace(filter.CollectionChannel); channel != "" {
+		query = query.Where("collection_channel = ?", channel)
+	}
+	var samples []domain.Sample
+	err := query.Order("created_at ASC").Limit(filter.Limit).Find(&samples).Error
+	return samples, err
+}
+
 func (r *SampleRepo) ListContainers(ctx context.Context, userID string) ([]domain.Container, error) {
 	var containers []domain.Container
 	err := r.db.WithContext(ctx).Where("user_id = ? AND status = ?", userID, domain.ContainerActive).

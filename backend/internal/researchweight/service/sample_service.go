@@ -41,6 +41,7 @@ type Repository interface {
 	Review(ctx context.Context, id string, updates map[string]any) (*domain.Sample, error)
 	MarkRewarded(ctx context.Context, id string) error
 	Promote(ctx context.Context, id string, build func(*domain.Sample) *do.FoodWeightLabeledSampleDO) (*domain.Sample, error)
+	ListPromotable(ctx context.Context, filter domain.PromotableFilter) ([]domain.Sample, error)
 	ListContainers(ctx context.Context, userID string) ([]domain.Container, error)
 	CreateContainer(ctx context.Context, container *domain.Container) error
 	ArchiveContainer(ctx context.Context, userID, id string) error
@@ -421,12 +422,16 @@ func reviewUpdates(input ReviewInput, reviewerID string, now time.Time) (map[str
 }
 
 func (s *SampleService) Promote(ctx context.Context, id string, input PromoteInput) (*domain.SampleView, error) {
-	batch := strings.TrimSpace(input.BatchName)
-	if batch == "" {
-		batch = "research-" + s.now().Format("200601")
+	batch, err := s.batchName(input.BatchName)
+	if err != nil {
+		return nil, err
 	}
-	if !batchNamePattern.MatchString(batch) {
-		return nil, badRequest("批次名只能包含字母、数字、下划线和短横线")
+	current, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if isTestSample(current) {
+		return nil, badRequest("「测试」开头的样本不能加入评测集")
 	}
 	sample, err := s.repo.Promote(ctx, id, func(sample *domain.Sample) *do.FoodWeightLabeledSampleDO {
 		return s.toLabeledSample(sample, batch)
@@ -437,6 +442,92 @@ func (s *SampleService) Promote(ctx context.Context, id string, input PromoteInp
 	logger.Info(ctx, "称重科研样本加入评测集", slog.String("sample_id", sample.ID), slog.String("batch_name", batch))
 	view := s.toView(sample)
 	return &view, nil
+}
+
+func (s *SampleService) batchName(raw string) (string, error) {
+	batch := strings.TrimSpace(raw)
+	if batch == "" {
+		batch = "research-" + s.now().Format("200601")
+	}
+	if !batchNamePattern.MatchString(batch) {
+		return "", badRequest("批次名只能包含字母、数字、下划线和短横线")
+	}
+	return batch, nil
+}
+
+// isTestSample keeps rehearsal data ("测试" dish names, the team's convention
+// for anything submitted while testing) out of the benchmark.
+func isTestSample(sample *domain.Sample) bool {
+	return strings.HasPrefix(strings.TrimSpace(sample.DishName), "测试")
+}
+
+// BatchPromoteInput adds every approved, not yet promoted sample of the given
+// tiers (A and B by default) and channel to one benchmark batch.
+type BatchPromoteInput struct {
+	BatchName         string   `json:"batch_name"`
+	QualityTiers      []string `json:"quality_tiers"`
+	CollectionChannel string   `json:"collection_channel"`
+	Limit             int      `json:"limit"`
+}
+
+type BatchPromoteResult struct {
+	BatchName   string `json:"batch_name"`
+	Promoted    int    `json:"promoted"`
+	SkippedTest int    `json:"skipped_test"`
+	Failed      int    `json:"failed"`
+}
+
+func (s *SampleService) PromoteBatch(ctx context.Context, input BatchPromoteInput) (*BatchPromoteResult, error) {
+	batch, err := s.batchName(input.BatchName)
+	if err != nil {
+		return nil, err
+	}
+	tiers := []string{}
+	for _, tier := range input.QualityTiers {
+		tier = strings.ToUpper(strings.TrimSpace(tier))
+		if !slices.Contains(domain.QualityTiers, tier) {
+			return nil, badRequest("等级只能是 A、B、C")
+		}
+		tiers = append(tiers, tier)
+	}
+	if len(tiers) == 0 {
+		tiers = []string{tierA, tierB}
+	}
+	limit := input.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 500
+	}
+	samples, err := s.repo.ListPromotable(ctx, domain.PromotableFilter{QualityTiers: tiers, CollectionChannel: strings.TrimSpace(input.CollectionChannel), Limit: limit})
+	if err != nil {
+		return nil, err
+	}
+	result := &BatchPromoteResult{BatchName: batch}
+	for index := range samples {
+		if isTestSample(&samples[index]) {
+			result.SkippedTest++
+			continue
+		}
+		if _, err := s.repo.Promote(ctx, samples[index].ID, func(sample *domain.Sample) *do.FoodWeightLabeledSampleDO {
+			return s.toLabeledSample(sample, batch)
+		}); err != nil {
+			result.Failed++
+			logger.Warn(ctx, "称重科研样本批量加入评测集失败", slog.String("sample_id", samples[index].ID), slog.String("error", err.Error()))
+			continue
+		}
+		result.Promoted++
+	}
+	logger.Info(ctx, "称重科研样本批量加入评测集", slog.String("batch_name", batch), slog.Int("promoted", result.Promoted),
+		slog.Int("skipped_test", result.SkippedTest), slog.Int("failed", result.Failed))
+	return result, nil
+}
+
+// reviewVersion names the rules that decided a sample, so benchmark rows can
+// be split by how their labels were checked.
+func reviewVersion(sample *domain.Sample) string {
+	if sample.ReviewMode == domain.ReviewModeAuto && sample.AutoReview != nil {
+		return sample.AutoReview.Version
+	}
+	return domain.ReviewModeManual
 }
 
 // toLabeledSample maps a sample onto the benchmark dataset row: the top view
@@ -455,6 +546,15 @@ func (s *SampleService) toLabeledSample(sample *domain.Sample, batch string) *do
 			"reference_object": sample.ReferenceObject, "photos": sample.Photos, "video_object_key": sample.VideoObjectKey,
 			"device": sample.Device, "consent_version": sample.ConsentVersion, "promoted_at": s.now().UTC().Format(time.RFC3339),
 			"items": sample.Items, "flags": sampleFlags(sample),
+			// Provenance: where the sample came from and how its label was
+			// checked, so a benchmark can be split by channel, campaign,
+			// contributor (no one in both train and test) and review rules.
+			"contributor_id": sample.UserID, "collection_channel": sample.CollectionChannel, "campaign_id": sample.CampaignID,
+			"station_session_id": sample.StationSessionID, "catalog_item_id": sample.CatalogItemID,
+			"paired_food_record_id": sample.PairedFoodRecordID, "review_mode": sample.ReviewMode,
+			"review_version": reviewVersion(sample), "reviewed_by": sample.ReviewedBy, "reviewed_at": sample.ReviewedAt,
+			"auto_review": sample.AutoReview, "tare_mode": sample.TareMode, "scale_precision_grams": sample.ScalePrecisionGrams,
+			"submitted_at": sample.CreatedAt,
 		},
 	}
 	if topKey != "" {

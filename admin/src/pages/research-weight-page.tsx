@@ -206,6 +206,29 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
     }
   }
 
+  /** 把已通过、还没进评测集的样本一次性加入：等级用当前筛选（没选就 A+B），渠道用当前筛选。「测试」开头的样本服务端会跳过。 */
+  async function promoteBatch() {
+    const tiers = tierFilter ? [tierFilter] : ['A', 'B']
+    const scope = `${channel ? CHANNEL_LABELS[channel] || channel : '全部渠道'}、${tiers.join('+')} 级`
+    const batch = window.prompt(`把${scope}里已通过、还没加入的样本加入评测集。批次名（留空用 research-YYYYMM）：`, batchName)
+    if (batch === null) return
+    setBatchName(batch.trim())
+    setActing(true)
+    try {
+      const data = await adminRequest<{ result: { promoted: number; skipped_test: number; failed: number } }>('/api/admin/research-weight-samples/promote-batch', {
+        method: 'POST', body: JSON.stringify({ batch_name: batch.trim(), quality_tiers: tiers, collection_channel: channel }),
+      })
+      const { promoted, skipped_test: skippedTest, failed } = data.result
+      const extra = [skippedTest ? `跳过测试样本 ${skippedTest} 条` : '', failed ? `失败 ${failed} 条` : ''].filter(Boolean).join('，')
+      toast.success(`已加入 ${promoted} 条${extra ? `（${extra}）` : ''}`)
+      await loadList(page)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '批量加入失败')
+    } finally {
+      setActing(false)
+    }
+  }
+
   async function exportApproved() {
     try {
       const rows: Sample[] = []
@@ -242,6 +265,7 @@ export function ResearchWeightPage({ onLogout, onMenuChange }: ResearchWeightPag
           </div>
           <div className='flex gap-3'>
             <button className='h-10 rounded-xl border px-4 text-sm font-medium' onClick={() => void startSpotCheck()}>抽查 {SPOT_CHECK_SIZE} 条自动通过</button>
+            <button className='h-10 rounded-xl border px-4 text-sm font-medium disabled:opacity-50' disabled={acting} onClick={() => void promoteBatch()}>批量加入评测集</button>
             <button className='h-10 rounded-xl border px-4 text-sm font-medium' onClick={() => void exportApproved()}>导出已通过 JSON</button>
           </div>
         </section>
