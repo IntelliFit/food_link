@@ -2,7 +2,7 @@ import { render } from '@testing-library/react'
 import PetThinking from '../../src/components/PetThinking'
 
 jest.mock('../../src/components/PetAvatar', () => ({
-  PetAvatar: ({ pet }: { pet?: { name?: string } }) => <div data-testid='pet-avatar'>{pet?.name || 'default'}</div>,
+  PetAvatar: ({ pet }: { pet?: { name?: string } }) => (pet ? <div data-testid='pet-avatar'>{pet.name || 'default'}</div> : null),
 }))
 
 describe('PetThinking', () => {
@@ -12,6 +12,11 @@ describe('PetThinking', () => {
     expect(container.querySelector('.pet-thinking__done')?.textContent).toContain('在找你附近开着的店')
     expect(container.querySelector('.pet-thinking__done')?.textContent).not.toContain('…')
     expect(getByTestId('pet-avatar').textContent).toBe('团子')
+  })
+
+  it('shows the default partner before the user’s partner has loaded', () => {
+    const { getByTestId } = render(<PetThinking pet={null} steps={['在找你附近开着的店…']} />)
+    expect(getByTestId('pet-avatar').textContent).toBe('default')
   })
 
   it('shows only the words when the user hid the partner', () => {
