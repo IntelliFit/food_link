@@ -1,4 +1,4 @@
-import { View, Text } from '@tarojs/components'
+import { View, Text, Image } from '@tarojs/components'
 import { useCallback, useRef, useState } from 'react'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
 import CustomNavBar from '../../components/CustomNavBar'
@@ -8,16 +8,28 @@ import { addBodyWaterLog, getNutritionState, showUnifiedApiError } from '../../u
 import { experiments } from '../../utils/experiments'
 import { requestHomeRecordMenu } from '../../utils/home-record-menu'
 import { normalizeNutritionState, planLineText, todayRowView, type TodayRowView } from '../../utils/nutrition-state-view'
-import { askPetNow, openPetChat, openPetSettings } from '../../utils/pet-navigation'
+import { askPetNow, openPetChat, openPetSettings, takePetFocusSheetRequest } from '../../utils/pet-navigation'
 import { DEFAULT_PET_NAME, petDisplayName } from '../../utils/pet-name'
+import { HOME_BOTANICAL_BG_URL } from '../../utils/static-asset-cdn-url'
 import { checkIsLoggedIn, redirectToLogin, withAuth } from '../../utils/withAuth'
-import { getPetDaily, type PetDaily, type PetDailyTask, type PetMood } from './pet-daily-api'
+import { getPetDaily, type PetDaily, type PetDailyTask } from './pet-daily-api'
 import { petFocusLabels } from './pet-focus'
-import { askTarget, petActionNeedsLogin, petActionTarget, pickMealTarget, type PetActionId, type PetActionTarget } from './pet-tools'
-import { PetAskBar, PetDailySkeleton, PetFocusRow, PetGapsCard, PetHero, PetTaskRow, PetWeekRow } from './PetDailyCards'
+import {
+  askTarget,
+  petActionNeedsLogin,
+  petActionTarget,
+  petDayLabel,
+  petMealLines,
+  petMealReward,
+  petTodayLine,
+  petWeekChip,
+  pickMealTarget,
+  type PetActionId,
+  type PetActionTarget,
+} from './pet-tools'
+import { PetAskBar, PetBrief, PetDailySkeleton, PetMealCard, PetTaskRow } from './PetDailyCards'
 import './index.scss'
 
-const GUEST_MOOD: PetMood = { key: 'calm', label: '', reason: '', icon: 'sun' }
 const ASK_FALLBACK = '晚上吃什么好？'
 
 function openTarget(target: PetActionTarget) {
@@ -40,8 +52,9 @@ function openTarget(target: PetActionTarget) {
 }
 
 /**
- * 底栏「伙伴」：只管今天、现在该做什么，一屏看完——宠物和一句话、我在意的、今天还差（按关注排）、
- * 今天一个任务（记录后自动完成）、本周分数、问一句。回头看的完整分析是 packageStats/pages/stats/index 二级页。
+ * 底栏「伙伴」只做一件事：今天还差什么，下一顿怎么补。
+ * 第一眼是深绿简报卡（宠物、今天一句话、今天还差、我在意的），第二眼是下一顿怎么补，
+ * 再往下是今天的任务和问一句。回头看的分析在完整分析页，从简报卡右上角的本周分数进去。
  */
 function PetTabPage() {
   const { scheme } = useAppColorScheme()
@@ -89,6 +102,11 @@ function PetTabPage() {
   useDidShow(() => {
     experiments.track('pet_tab_view', { logged_in: checkIsLoggedIn() })
     void loadDaily()
+    // 完整分析页的「在伙伴页改」：切过来后直接打开「我在意的」
+    if (takePetFocusSheetRequest()) {
+      if (checkIsLoggedIn()) setFocusOpen(true)
+      else redirectToLogin()
+    }
   })
 
   usePullDownRefresh(() => {
@@ -134,6 +152,11 @@ function PetTabPage() {
     setFocusOpen(false)
     void loadDaily()
   }, [loadDaily])
+
+  const handleFirstMeal = useCallback(() => {
+    experiments.track('pet_tool_click', { tool: 'first_meal' })
+    requestHomeRecordMenu()
+  }, [])
 
   /** 「看全部」：今天每一项营养素都摊开（数据来自同一份每日营养状态） */
   const handleToggleDetails = useCallback(async () => {
@@ -182,52 +205,70 @@ function PetTabPage() {
   const isDark = scheme === 'dark'
   const petName = petDisplayName(daily?.pet?.name)
   const meal = daily?.next_meal
-  const mealLine = meal?.advice ? `${meal.label}：${meal.advice}` : `${meal?.label || '下一餐'}吃什么，让${petName}看看`
+  const mealLines = petMealLines(meal?.advice || '')
+  const mealsToday = daily?.meals_today || 0
+  const mealReward = petMealReward(daily?.task)
+  const briefLine = daily
+    ? (mealsToday > 0
+      ? petTodayLine(daily.gaps || [], meal?.label || '')
+      : '今天还没记。拍下第一餐，我就知道今天还差什么')
+    : ''
 
   return (
     <View className={`pet-tab-page ${isDark ? 'pet-tab-page--dark' : ''}`}>
+      <Image className='pet-tab-bg' src={HOME_BOTANICAL_BG_URL} mode='aspectFill' />
+      <View className='pet-tab-bg-fade' />
       <CustomNavBar
-        title={petName}
-        color={isDark ? '#e5efe9' : '#1f4d3a'}
-        background={isDark ? '#101716' : '#f7f4ec'}
+        title={loggedIn ? petName : DEFAULT_PET_NAME}
+        color={isDark ? '#e5efe9' : '#1b533e'}
+        background='transparent'
       />
       <View className='pet-tab-body'>
         {!loggedIn ? (
           <GuestView onLogin={() => redirectToLogin()} onOpenStats={handleOpenStats} onAsk={handleAsk} />
         ) : daily ? (
           <>
-            <PetHero
+            <PetBrief
               pet={daily.pet}
-              name={petName}
               status={daily.status}
-              mood={daily.mood}
-              line={daily.headline || daily.mood.reason || '记一餐，我来看看你今天吃得怎么样。'}
+              name={petName}
+              dayLabel={petDayLabel(daily.date)}
+              weekChip={petWeekChip(daily.week)}
+              line={briefLine}
+              today={{
+                gaps: daily.gaps || [],
+                mealsToday,
+                focusLabels: petFocusLabels(daily.focus || []),
+                details: details.rows,
+                detailsOpen,
+                detailsLoading,
+                planText: details.plan,
+              }}
+              onOpenWeek={handleOpenStats}
               onOpenPet={handleOpenPet}
-            />
-            <PetFocusRow labels={petFocusLabels(daily.focus || [])} onOpen={handleOpenFocus} />
-            <PetGapsCard
-              gaps={daily.gaps || []}
-              mealsToday={daily.meals_today}
-              mealLine={mealLine}
-              petName={petName}
-              details={details.rows}
-              detailsOpen={detailsOpen}
-              detailsLoading={detailsLoading}
-              planText={details.plan}
+              onOpenFocus={handleOpenFocus}
               onToggleDetails={() => void handleToggleDetails()}
-              onPickMeal={handlePickMeal}
+              onFirstMeal={handleFirstMeal}
             />
-            {daily.task ? (
+            <PetMealCard
+              label={`${meal?.label || '下一餐'}这样${mealsToday > 0 ? '补' : '吃'}`}
+              dish={mealLines.dish || `${meal?.label || '下一餐'}吃什么，让${petName}看看`}
+              note={mealLines.note}
+              buttonText={`让${petName}挑一份`}
+              reward={mealReward?.text}
+              rewardDone={mealReward?.done}
+              onPick={handlePickMeal}
+            />
+            {daily.task && !mealReward ? (
               <PetTaskRow task={daily.task} addingWater={addingWater} onAction={handleTaskAction} onAddWater={handleAddWater} />
             ) : null}
-            <PetWeekRow week={daily.week} onOpen={handleOpenStats} />
             <PetAskBar placeholder={`问问${petName}：${ASK_FALLBACK}`} onAsk={handleAsk} />
           </>
         ) : loadFailed && !loading ? (
-          <View className='pet-tab-card pet-tab-retry'>
-            <Text className='pet-tab-muted'>今天的情况没拿到，网络好一点再试试。</Text>
-            <View className='pet-tab-meal-btn' onClick={() => void loadDaily()}>
-              <Text className='pet-tab-meal-btn-text'>再试一次</Text>
+          <View className='pet-card pet-retry'>
+            <Text className='pet-meal__note'>今天的情况没拿到，网络好一点再试试。</Text>
+            <View className='pet-meal__btn' onClick={() => void loadDaily()}>
+              <Text className='pet-meal__btn-text'>再试一次</Text>
             </View>
           </View>
         ) : (
@@ -254,24 +295,24 @@ function GuestView({ onLogin, onOpenStats, onAsk }: {
 }) {
   return (
     <>
-      <PetHero
+      <PetBrief
         name={DEFAULT_PET_NAME}
-        mood={GUEST_MOOD}
-        line={`我是${DEFAULT_PET_NAME}。登录后我每天帮你看吃得怎么样、今天还差什么，再给你一个记了就自动完成的小任务。`}
+        dayLabel='今天'
+        weekChip='看看完整分析'
+        line={`我是${DEFAULT_PET_NAME}。登录后我每天帮你看今天还差什么，下一顿怎么补。`}
+        today={null}
+        onOpenWeek={onOpenStats}
+        onOpenFocus={onLogin}
+        onToggleDetails={onLogin}
+        onFirstMeal={onLogin}
       />
-      <View className='pet-tab-card'>
-        <View className='pet-tab-card-head'>
-          <Text className='pet-tab-card-title'>今天还差</Text>
-        </View>
-        <Text className='pet-tab-muted'>按你在意的排在前面，比如控血压就先看盐，控血糖就先看糖。</Text>
-        <View className='pet-tab-meal'>
-          <Text className='pet-tab-meal-line'>记下一餐，我就能告诉你下一顿怎么补。</Text>
-          <View className='pet-tab-meal-btn' onClick={onLogin}>
-            <Text className='pet-tab-meal-btn-text'>登录开始</Text>
-          </View>
-        </View>
-      </View>
-      <PetWeekRow week={{ score: null, last_week: null, delta: null, enough_data: false, habits: [] }} onOpen={onOpenStats} />
+      <PetMealCard
+        label='下一顿这样吃'
+        dish='按你在意的挑：控血压先看盐，控血糖先看糖'
+        note='记下一餐，我就能告诉你下一顿怎么补'
+        buttonText='登录开始'
+        onPick={onLogin}
+      />
       <PetAskBar placeholder={`问问${DEFAULT_PET_NAME}：${ASK_FALLBACK}`} onAsk={onAsk} />
     </>
   )

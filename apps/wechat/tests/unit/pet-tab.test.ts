@@ -107,11 +107,15 @@ describe('我在意的', () => {
     expect(petFocusLabels([])).toEqual([])
   })
 
-  it('is edited in one sheet on both the 伙伴 page and the full analysis', () => {
+  it('is edited only on the 伙伴 page; the full analysis links there', () => {
     expect(read('src/pages/pet/index.tsx')).toContain("<FocusSheet")
-    expect(read('src/packageStats/pages/stats/index.tsx')).toContain("<FocusSheet")
-    expect(read('src/packageStats/pages/stats/index.tsx')).not.toContain('risk-focus-modal')
-    expect(read('src/components/StatsNutritionState/FocusSpotlightCard.tsx')).toContain('我在意的')
+    const stats = read('src/packageStats/pages/stats/index.tsx')
+    expect(stats).not.toContain('<FocusSheet')
+    expect(stats).not.toContain('risk-focus-modal')
+    expect(stats).toContain('onEdit={openPetFocusSheet}')
+    const cards = read('src/packageStats/pages/stats/AnalysisCards.tsx')
+    expect(cards).toContain('我在意的')
+    expect(cards).toContain('在伙伴页改 ›')
   })
 })
 
