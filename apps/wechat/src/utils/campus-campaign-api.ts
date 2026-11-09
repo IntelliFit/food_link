@@ -1,6 +1,6 @@
 import { authenticatedRequest, publicRequest } from './api'
 
-/** 高校共建：健身社团发起的校园饮食数据采集活动。 */
+/** 高校伙伴计划：健身社团发起的校园饮食数据采集活动。 */
 export type CampaignRole = 'leader' | 'core' | 'member'
 
 export interface CampusCampaign {

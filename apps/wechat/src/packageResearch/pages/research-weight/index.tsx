@@ -80,6 +80,7 @@ export default function ResearchWeightPlanPage() {
         <Text className='rw-hero__eyebrow'>中餐称重 Benchmark 共建</Text>
         <Text className='rw-hero__title'>用食物秤，帮 AI 估得更准</Text>
         <Text className='rw-hero__desc'>称一顿饭、拍一张照片。审核通过的数据会进入公开评测集，用来检验各家 AI 估重到底准不准。</Text>
+        <Text className='rw-hero__relation'>个人参加；社团同学可以加入高校伙伴计划</Text>
         <Text className='rw-hero__reward'>审核通过奖励积分：一盒 2 分，每多一盒 +1（最多 6 分）；分项累加 4 分</Text>
         <View className='rw-steps'>
           {STEPS.map((step, index) => (

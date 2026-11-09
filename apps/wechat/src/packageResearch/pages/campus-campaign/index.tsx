@@ -47,7 +47,10 @@ function Board({ title, entries, showSchool }: { title: string; entries: BoardEn
   )
 }
 
-/** 高校共建活动页：游客能看活动和排行，加入后是成员首页，负责人多一个管理页。 */
+/** 三个数据计划的关系，页面顶部一行小字。 */
+const PLAN_RELATION = '社团版的称重科研计划，称的菜来自食堂菜品共建'
+
+/** 高校伙伴计划活动页：游客能看活动和排行，加入后是成员首页，负责人多一个管理页。 */
 export default function CampusCampaignPage() {
   const { scheme } = useAppColorScheme()
   const router = useRouter()
@@ -98,7 +101,7 @@ export default function CampusCampaignPage() {
   useShareAppMessage(() => {
     const shown = mine?.campaign || campaign
     return {
-      title: shown ? `加入${shown.school_name}${shown.org_name}「${shown.title}」` : '高校共建：和社团一起称一称食堂的饭',
+      title: shown ? `加入${shown.school_name}${shown.org_name}「${shown.title}」` : '高校伙伴计划：和健身社团一起称食堂的饭',
       path: `/packageResearch/pages/campus-campaign/index${shown ? `?code=${shown.join_code}` : ''}`,
     }
   })
@@ -142,11 +145,13 @@ export default function CampusCampaignPage() {
           </Text>
           {campaign.club_reward_note ? <Text className='rw-hero__reward'>社团奖励：{campaign.club_reward_note}</Text> : null}
           {!campaign.open ? <Text className='rw-hero__reward'>{closedNote(campaign)}</Text> : null}
+          <Text className='rw-hero__relation'>{PLAN_RELATION}</Text>
         </View>
       ) : (
         <View className='rw-hero'>
-          <Text className='rw-hero__eyebrow'>高校共建</Text>
-          <Text className='rw-hero__title'>和健身社团一起，称一称食堂的饭</Text>
+          <Text className='rw-hero__eyebrow'>高校伙伴计划</Text>
+          <Text className='rw-hero__title'>和健身社团一起称食堂的饭</Text>
+          <Text className='rw-hero__relation'>{PLAN_RELATION}</Text>
           <Text className='rw-hero__desc'>有秤的用秤称，没秤的拍照记录。称出来的克重会进入中餐克重评测集，也会变成本校食堂每道菜的份量和营养数据。</Text>
           <View className='cc-code'>
             <Input className='rw-input cc-code__input' value={codeInput} maxlength={8} placeholder='输入社团给的加入码' onInput={(e) => setCodeInput(e.detail.value)} />

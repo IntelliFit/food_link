@@ -303,3 +303,7 @@
     background: #303a37;
   }
 }
+
+/* 三个数据计划的关系：一行小字 */
+.campus-share-hero__relation { display: block; margin-top: 12rpx; color: #8a9792; font-size: 22rpx; line-height: 34rpx; }
+.campus-share-page--dark .campus-share-hero__relation { color: rgb(222 239 231 / 50%); }

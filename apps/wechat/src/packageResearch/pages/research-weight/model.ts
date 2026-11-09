@@ -61,7 +61,7 @@ export interface DraftPhoto {
   reading?: PhotoReading
 }
 
-/** 从高校共建活动页进入时带上的称重日和菜品；只在当天有效。 */
+/** 从高校伙伴计划活动页进入时带上的称重日和菜品；只在当天有效。 */
 export interface CampusContext {
   stationSessionId?: string
   catalogItemId?: string

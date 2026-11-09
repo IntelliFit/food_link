@@ -228,7 +228,7 @@ export function HomeScreen() {
     {
       key: 'campus',
       kicker: '食探校园活动',
-      title: '食探校园食堂计划',
+      title: '食堂菜品共建',
       desc: '一起补全食堂菜品、价格、窗口和营养信息',
       actionText: '去看看',
       tone: 'campus',

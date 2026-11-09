@@ -287,8 +287,9 @@ function CampusFoodCollectorPage() {
   return (
       <View className={`collector-page ${isDark ? 'collector-page--dark' : ''}`}>
         <View className='collector-hero'>
-          <Text className='collector-title'>食堂批量上传</Text>
+          <Text className='collector-title'>食堂菜品共建 · 批量上传</Text>
           <Text className='collector-subtitle'>地点只填一次，连续拍照或多选上传。菜名和照片必填，价格与份量可以后补。</Text>
+          <Text className='collector-relation'>只记菜和价格，称克重请去称重科研计划</Text>
         </View>
         <View className='collector-venue-types'>
           {VENUE_OPTIONS.map(option => (
