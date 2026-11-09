@@ -1,4 +1,4 @@
-/** 后台高校共建页用到的接口数据。 */
+/** 后台高校伙伴计划页用到的接口数据。 */
 export type ClubView = {
   id: string
   school_id: string

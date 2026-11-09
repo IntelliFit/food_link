@@ -2862,7 +2862,7 @@ export function CampusCanteenScreen() {
           <View style={styles.campusHeroOverlay} />
           <View style={styles.campusHeroCopy}>
             <Text style={styles.campusHeroEyebrow}>食探校园活动</Text>
-            <Text style={styles.campusHeroTitle}>食探校园食堂计划</Text>
+            <Text style={styles.campusHeroTitle}>食堂菜品共建</Text>
             <Text style={styles.campusHeroSubtitle} numberOfLines={3}>
               按你所在省份选择高校，一起补全食堂菜品价格、位置和营养信息
             </Text>

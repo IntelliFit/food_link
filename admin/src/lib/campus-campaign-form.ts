@@ -1,4 +1,4 @@
-/** 后台高校共建：建活动表单的校验、同一社团判重、发给社团的说明文字。 */
+/** 后台高校伙伴计划：建活动表单的校验、同一社团判重、发给社团的说明文字。 */
 export type CampaignForm = {
   orgId: string
   title: string
@@ -120,7 +120,7 @@ export function inviteText(campaign: InviteCampaign, coreCap: number): string {
   return [
     `【食探 · ${campaign.school_name}${campaign.org_name}「${campaign.title}」】`,
     `加入码：${campaign.join_code}（活动到 ${ends}）`,
-    '成员怎么加入：微信里打开「食探」小程序 → 我的 → 科研共建 → 高校共建 → 输入加入码；也可以直接点社团群里转发的小程序卡片。',
+    '成员怎么加入：微信里打开「食探」小程序 → 我的 → 科研共建 → 高校伙伴计划 → 输入加入码；也可以直接点社团群里转发的小程序卡片。',
     '怎么记：有食物秤的用「用秤记一顿」；没秤的用「拍照记一顿」，记完回到活动页，把这一餐挂到食堂的那道菜上。',
     `负责人：在活动页的「管理」里勾核心成员（最多 ${coreCap} 人，勾上自动开通标准版会员）、建称重日；点右上角转发就能把活动卡片发到群里。`,
   ].join('\n')

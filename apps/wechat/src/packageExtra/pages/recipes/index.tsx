@@ -1,5 +1,5 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { getUserRecipes, deleteUserRecipe, applyUserRecipe, updateUserRecipe, showUnifiedApiError, type UserRecipe } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
@@ -242,6 +242,17 @@ function RecipesPage() {
   const [recordDate, setRecordDate] = useRecordDate(String(Taro.getCurrentInstance().router?.params?.date || getTodayRecordDateKey()))
   const useRecipeLock = useRef(false)
   const [recipes, setRecipes] = useState<UserRecipe[]>([])
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const normalizedSearchKeyword = searchKeyword.trim().toLowerCase()
+  const filteredRecipes = useMemo(() => {
+    if (!normalizedSearchKeyword) return recipes
+    return recipes.filter((recipe) => [
+      recipe.recipe_name,
+      recipe.description,
+      ...(recipe.tags || []),
+      ...(recipe.items || []).map((item) => item.name)
+    ].some((value) => formatRecipeDisplayText(value).toLowerCase().includes(normalizedSearchKeyword)))
+  }, [recipes, normalizedSearchKeyword])
   const [loading, setLoading] = useState(false)
   const [editingRecipe, setEditingRecipe] = useState<UserRecipe | null>(null)
   const [nutritionDraft, setNutritionDraft] = useState<NutritionDraft>({
@@ -465,6 +476,22 @@ function RecipesPage() {
         <Text className='page-title'>我的收藏</Text>
         <Text className='page-subtitle'>这里会显示你收藏过的餐食，方便之后快速记录。</Text>
         <RecordDateField date={recordDate} onChange={setRecordDate} />
+        <View className='recipe-search'>
+          <Text className='iconfont icon-sousuo recipe-search-icon' />
+          <Input
+            className='recipe-search-input'
+            type='text'
+            placeholder='搜索收藏名称、食物、标签'
+            value={searchKeyword}
+            onInput={(event) => setSearchKeyword(event.detail.value)}
+            confirmType='search'
+          />
+          {searchKeyword.length > 0 && (
+            <View className='recipe-search-clear' aria-label='清除搜索' onClick={() => setSearchKeyword('')}>
+              <Text className='iconfont icon-guanbi' />
+            </View>
+          )}
+        </View>
       </View>
 
       <ScrollView className='recipe-list' scrollY>
@@ -472,9 +499,9 @@ function RecipesPage() {
           <View className='empty-state'>
             <View className='loading-spinner-md' />
           </View>
-        ) : recipes.length > 0 ? (
+        ) : filteredRecipes.length > 0 ? (
           <View className='recipes-grid'>
-            {recipes.map((recipe) => (
+            {filteredRecipes.map((recipe) => (
               <View key={recipe.id} className='recipe-card' onClick={() => handleGoDetail(recipe)}>
                 {/* 食谱图片 */}
                 <View className='recipe-image-wrapper'>
@@ -614,6 +641,12 @@ function RecipesPage() {
                 </View>
               </View>
             ))}
+          </View>
+        ) : normalizedSearchKeyword ? (
+          <View className='empty-state'>
+            <Text className='iconfont icon-sousuo empty-icon' />
+            <Text className='empty-text'>没有找到匹配的收藏</Text>
+            <Text className='empty-hint'>试试其他名称或标签</Text>
           </View>
         ) : (
           <View className='empty-state'>

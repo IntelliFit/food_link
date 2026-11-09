@@ -1,8 +1,5 @@
 import {
   applyEngineFocus,
-  coverageLines,
-  evidenceGapViews,
-  evidenceRoute,
   focusCardKey,
   nextMealView,
   normalizeNutritionState,
@@ -13,7 +10,6 @@ import {
   splitWeekDeltas,
   todayMetaText,
   todayRowView,
-  weekCountText,
   weekDayLabels,
   weekHabitRows,
 } from '../../src/utils/nutrition-state-view'
@@ -103,11 +99,6 @@ describe('score card additions', () => {
     expect(overallDelta({ overall: null, overall_last_week: 58 })).toBeNull()
   })
 
-  it('shows recorded days, meals and completeness', () => {
-    const state = normalizeNutritionState(contractExample)!
-    expect(coverageLines(state.coverage)).toEqual(['已记录 6 天 · 15 餐', '营养数据完整 72%'])
-    expect(coverageLines({ ...state.coverage, recorded_days: 0, meals: 0 })).toEqual(['已记录 0 天 · 0 餐'])
-  })
 })
 
 describe('今天还差什么', () => {
@@ -181,15 +172,15 @@ describe('本周规律', () => {
     expect(rows[1]).toMatchObject({ cells: ['hit', 'hit', 'today'], countText: '2/2', warn: false })
   })
 
-  it('formats counts and week-over-week changes', () => {
-    expect(weekCountText({ key: 'fish_soy', label: '鱼或豆制品', value: 2, target: 3, unit: '次' })).toBe('鱼或豆制品 2/3 次')
-    expect(weekCountText({ key: 'x', label: '全谷物', value: 1, target: 0, unit: '次' })).toBe('全谷物 1 次')
+  it('puts the week-over-week change that got better in the header', () => {
     const split = splitWeekDeltas([
       { key: 'sodium', label: '钠超标', last: 3, this: 4, unit: '天', better: false },
       { key: 'vegetables', label: '蔬菜够量', last: 3, this: 5, unit: '天', better: true },
     ])
-    expect(split.headline).toEqual({ key: 'vegetables', text: '比上周：蔬菜够量 +2 天', better: true })
-    expect(split.rest).toEqual([{ key: 'sodium', text: '比上周：钠超标 +1 天', better: false }])
+    expect(split.headline).toEqual({ key: 'vegetables', text: '蔬菜够量比上周多 2 天', better: true })
+    expect(split.rest).toEqual([{ key: 'sodium', text: '钠超标比上周多 1 天', better: false }])
+    expect(splitWeekDeltas([{ key: 'fish', label: '吃鱼', last: 3, this: 1, unit: '次', better: false }]).headline?.text).toBe('吃鱼比上周少 2 次')
+    expect(splitWeekDeltas([{ key: 'fish', label: '吃鱼', last: 2, this: 2, unit: '次', better: false }]).headline?.text).toBe('吃鱼和上周一样')
     expect(splitWeekDeltas([]).headline).toBeNull()
   })
 })
@@ -218,24 +209,6 @@ describe('我的关注', () => {
   it('keeps the old score when the engine has no score for a card', () => {
     const next = applyEngineFocus([riskCard({})], [{ key: 'blood_pressure', title: '', score: null, reason: '还缺钠的数据', evidence: [] }])
     expect(next[0]).toMatchObject({ score: 70, tone: 'neutral', brief: '还缺钠的数据' })
-  })
-})
-
-describe('这些还看不准', () => {
-  it('routes each action to its record page', () => {
-    expect(evidenceRoute('record', '2026-11-04')).toEqual({ kind: 'tab', url: '/pages/record/index' })
-    expect(evidenceRoute('weight', '2026-11-04')).toEqual({ kind: 'page', url: '/pages/weight-record/index' })
-    expect(evidenceRoute('water', '2026-11-04')).toEqual({ kind: 'page', url: '/pages/water-record/index' })
-    expect(evidenceRoute('sleep', '2026-11-04')).toEqual({ kind: 'page', url: '/pages/sleep-record/index?date=2026-11-04' })
-    expect(evidenceRoute('none', '2026-11-04')).toBeNull()
-  })
-
-  it('names the button after the action and drops it for none', () => {
-    const views = evidenceGapViews([
-      { key: 'a', text: '这周还没记体重', hint: '', action: 'weight' },
-      { key: 'b', text: '没有睡眠数据', hint: '', action: 'none' },
-    ])
-    expect(views.map(view => view.buttonText)).toEqual(['记体重', ''])
   })
 })
 

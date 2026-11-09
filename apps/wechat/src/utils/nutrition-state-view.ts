@@ -1,8 +1,6 @@
 import type {
   DailyNutritionState,
   NutrientReading,
-  NutritionCount,
-  NutritionEvidenceGap,
   NutritionFocusScore,
   NutritionHabitMark,
   NutritionNextMeal,
@@ -219,16 +217,6 @@ export function overallDelta(scores: Pick<NutritionScores, 'overall' | 'overall_
   return { text: `比上周 ${diff > 0 ? '+' : ''}${diff}`, direction: diff > 0 ? 'up' : 'down' }
 }
 
-/** ["已记录 6 天 · 15 餐", "营养数据完整 72%"] */
-export function coverageLines(coverage: DailyNutritionState['coverage']): string[] {
-  const lines = [`已记录 ${coverage.recorded_days} 天 · ${coverage.meals} 餐`]
-  if (coverage.meals > 0) {
-    const pct = Math.round(Math.max(0, Math.min(1, coverage.nutrient_completeness)) * 100)
-    lines.push(`营养数据完整 ${pct}%`)
-  }
-  return lines
-}
-
 /** "按你的减脂计划：每天 1650 千卡，蛋白质 95g" */
 export function planLineText(plan: NutritionPlanSummary): string {
   const parts: string[] = []
@@ -377,23 +365,15 @@ export function weekHabitRows(week: Pick<NutritionWeek, 'days' | 'habits'>): Wee
   })
 }
 
-/** "鱼或豆制品 2/3 次" */
-export function weekCountText(count: NutritionCount): string {
-  const value = formatAmount(count.value)
-  return count.target > 0
-    ? `${count.label} ${withUnit(`${value}/${formatAmount(count.target)}`, count.unit)}`
-    : `${count.label} ${withUnit(value, count.unit)}`
-}
-
 export type WeekDeltaView = { key: string; text: string; better: boolean }
 
-/** "比上周：蔬菜够量 +2 天" */
+/** "蔬菜够量比上周多 2 天" */
 export function weekDeltaView(delta: NutritionWeekDelta): WeekDeltaView {
   const diff = delta.this - delta.last
-  const body = diff === 0
+  const text = diff === 0
     ? `${delta.label}和上周一样`
-    : `${delta.label} ${withUnit(`${diff > 0 ? '+' : '-'}${formatAmount(Math.abs(diff))}`, delta.unit)}`
-  return { key: delta.key || delta.label, text: `比上周：${body}`, better: delta.better }
+    : `${delta.label}比上周${diff > 0 ? '多' : '少'} ${withUnit(formatAmount(Math.abs(diff)), delta.unit)}`
+  return { key: delta.key || delta.label, text, better: delta.better }
 }
 
 /** 标题旁只放一条：优先放变好的那条，其余跟在计数后面 */
@@ -441,28 +421,3 @@ export function applyEngineFocus(cards: RiskCard[], focus: NutritionFocusScore[]
   })
 }
 
-export type EvidenceRoute = { kind: 'tab' | 'page'; url: string }
-
-/** evidence_gaps[].action → 记录页；页面里的分包路径由调用方补 extraPkgUrl */
-export function evidenceRoute(action: string, today: string): EvidenceRoute | null {
-  switch (action) {
-    case 'record': return { kind: 'tab', url: '/pages/record/index' }
-    case 'weight': return { kind: 'page', url: '/pages/weight-record/index' }
-    case 'water': return { kind: 'page', url: '/pages/water-record/index' }
-    case 'sleep': return { kind: 'page', url: `/pages/sleep-record/index?date=${today}` }
-    default: return null
-  }
-}
-
-const EVIDENCE_BUTTON_TEXT: Record<string, string> = {
-  record: '去补充',
-  weight: '记体重',
-  water: '记喝水',
-  sleep: '记睡眠',
-}
-
-export type EvidenceGapView = NutritionEvidenceGap & { buttonText: string }
-
-export function evidenceGapViews(gaps: NutritionEvidenceGap[]): EvidenceGapView[] {
-  return gaps.map(gap => ({ ...gap, buttonText: EVIDENCE_BUTTON_TEXT[gap.action] || '' }))
-}

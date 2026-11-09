@@ -27,6 +27,43 @@
   color: #5b6b7f;
 }
 
+.recipe-search {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 24rpx;
+  padding: 12rpx 20rpx;
+  background: #f5f7fa;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 16rpx;
+}
+
+.recipe-search-icon {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  color: #94a3b8;
+}
+
+.recipe-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 48rpx;
+  line-height: 48rpx;
+  font-size: 28rpx;
+  color: #1e293b;
+}
+
+.recipe-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 48rpx;
+  height: 48rpx;
+  color: #94a3b8;
+  font-size: 24rpx;
+}
+
 // 食谱列表
 .recipe-list {
   flex: 1;

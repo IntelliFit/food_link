@@ -1,4 +1,5 @@
 import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from './food-display-image'
+import type { Nutrients } from './api'
 
 export type ManualFoodSourceType = 'public_library' | 'nutrition_library' | 'packaged_food'
 
@@ -10,7 +11,11 @@ export type ManualFoodSourceItem = {
   source_label?: string | null
   image_path?: string | null
   image_paths?: string[] | null
-  nutrients?: { calories?: number }
+  weight?: number
+  intake?: number
+  ratio?: number
+  manual_portion_label?: string | null
+  nutrients?: Partial<Nutrients>
   /** 从结果页保存时可能只带了库 ID，需要兜底识别为食物库来源 */
   packaged_food_id?: string | null
   matched_food_id?: string | null

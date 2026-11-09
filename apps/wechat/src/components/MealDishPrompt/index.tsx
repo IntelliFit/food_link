@@ -31,6 +31,8 @@ interface MealDishPromptProps {
   photoUrl?: string
   onBusyChange?: (busy: boolean) => void
   onVisibleChange?: (visible: boolean) => void
+  /** 卡片底色：默认等待页用深色玻璃、结果页用浅色；浅色等待页传 light。 */
+  tone?: 'glass' | 'light'
 }
 
 interface Located {
@@ -55,7 +57,7 @@ async function silentLocation(): Promise<{ status: LocationStatus; located?: Loc
   }
 }
 
-export default function MealDishPrompt({ taskId, surface, recognitionReady, photoUrl, onBusyChange, onVisibleChange }: MealDishPromptProps) {
+export default function MealDishPrompt({ taskId, surface, recognitionReady, photoUrl, onBusyChange, onVisibleChange, tone }: MealDishPromptProps) {
   const { scheme } = useAppColorScheme()
   const [view, setView] = useState<MealDishView | null>(null)
   const [offerLocation, setOfferLocation] = useState(false)
@@ -253,7 +255,8 @@ export default function MealDishPrompt({ taskId, surface, recognitionReady, phot
 
   if (step === 'hidden') return null
   const isDark = scheme === 'dark'
-  const rootClass = `meal-dish-card meal-dish-card--${surface === 'wait' ? 'glass' : 'light'}${isDark ? ' meal-dish-card--dark' : ''}`
+  const cardTone = tone ?? (surface === 'wait' ? 'glass' : 'light')
+  const rootClass = `meal-dish-card meal-dish-card--${cardTone}${isDark ? ' meal-dish-card--dark' : ''}`
   // 结果页兜底：直接给出识别最像的 3 道，选菜时后端顺带确认食堂。
   const showCandidates = surface === 'result' && !changingCanteen && !dishes
     && (step === 'canteen' || step === 'dish') && (view?.candidates?.length || 0) > 0

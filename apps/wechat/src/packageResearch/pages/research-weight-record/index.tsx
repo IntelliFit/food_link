@@ -66,7 +66,7 @@ export default function ResearchWeightRecordPage() {
 
   useEffect(() => saveDraft(draft), [draft])
 
-  // 从高校共建活动页进入：带上称重日或菜品，提交时由服务端按本人参加的活动校验。
+  // 从高校伙伴计划活动页进入：带上称重日或菜品，提交时由服务端按本人参加的活动校验。
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params || {}
     const stationSessionId = String(params.station || '').trim()
@@ -76,7 +76,7 @@ export default function ResearchWeightRecordPage() {
       setDraft((current) => (current.campus && !freshCampus(current.campus) ? { ...current, campus: undefined } : current))
       return
     }
-    let label = '高校共建活动'
+    let label = '高校伙伴计划'
     try {
       label = decodeURIComponent(String(params.label || '')).slice(0, 40) || label
     } catch {

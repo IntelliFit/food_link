@@ -17,7 +17,7 @@ const GUIDE = [
   { title: '开始并发给社团', desc: '点「开始活动」，再点「复制给社团的说明」发给社长。' },
 ]
 
-/** 高校共建：三步建好一个社团活动，之后社团在小程序里自己跑。 */
+/** 高校伙伴计划：三步建好一个社团活动，之后社团在小程序里自己跑。 */
 export function CampusCampaignsPage({ onLogout, onMenuChange }: PageProps) {
   const [clubs, setClubs] = useState<ClubView[]>([])
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([])
@@ -37,7 +37,7 @@ export function CampusCampaignsPage({ onLogout, onMenuChange }: PageProps) {
       // With a single club there is nothing to choose in step 2.
       if (loadedClubs.length === 1) setForm((current) => (current.orgId ? current : { ...current, orgId: loadedClubs[0].id }))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '读取高校共建失败')
+      toast.error(error instanceof Error ? error.message : '读取高校伙伴计划失败')
     }
   }
 
@@ -55,7 +55,7 @@ export function CampusCampaignsPage({ onLogout, onMenuChange }: PageProps) {
       <main className='min-w-0 space-y-6 pb-8'>
         <section className='space-y-3'>
           <p className='text-xs uppercase tracking-[0.2em] text-muted-foreground'>Campus Channel</p>
-          <h1 className='text-2xl font-semibold tracking-tight'>高校共建</h1>
+          <h1 className='text-2xl font-semibold tracking-tight'>高校伙伴计划</h1>
           <p className='text-sm text-muted-foreground'>我们只做这三步；之后核心成员、称重日由社团负责人在小程序里自己管，称重样本自动审核。</p>
           <ol className='grid gap-3 md:grid-cols-3'>
             {GUIDE.map((step, index) => (

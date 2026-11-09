@@ -1,4 +1,4 @@
-import { View, Text, Image, Textarea, PageMeta, Video } from '@tarojs/components'
+import { View, Text, Image, Textarea, PageMeta, Video, ScrollView } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import {
@@ -1495,31 +1495,37 @@ function AnalyzePage() {
             <Text className='precision-capture-note'>两张必须是同一餐，且不能重复使用同一图片。</Text>
           </View>
         ) : imagePaths.length > 0 ? (
-          <View className='image-grid'>
-            {imagePaths.map((path, index) => (
-              <View key={index} className='grid-item'>
-                <Image
-                  src={path}
-                  mode='aspectFill'
-                  className='grid-image'
-                  onClick={() => handlePreviewImage(path)}
-                />
+          // 照片按拍摄时的 3:4 / 4:3 原比例排一行（高度固定、宽度随比例），不再裁成方块。
+          <View className='image-strip-row'>
+          <ScrollView scrollX showScrollbar={false} className='image-strip'>
+            <View className='image-strip__track'>
+              {imagePaths.map((path, index) => (
+                <View key={index} className='image-strip__item'>
+                  <Image
+                    src={path}
+                    mode='heightFix'
+                    className='image-strip__image'
+                    onClick={() => handlePreviewImage(path)}
+                  />
 
-                <View className='remove-btn' onClick={(e) => {
-                  e.stopPropagation()
-                  handleRemoveImage(index)
-                }}
-                >
-                  <Text className='close-icon'>×</Text>
+                  <View className='remove-btn' onClick={(e) => {
+                    e.stopPropagation()
+                    handleRemoveImage(index)
+                  }}
+                  >
+                    <Text className='close-icon'>×</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
-            {imagePaths.length < MAX_ANALYZE_IMAGES && (
-              <View className='grid-item add-btn' onClick={handleChooseImage}>
-                <Text className='add-icon'>+</Text>
-                <Text className='add-text'>添加</Text>
-              </View>
-            )}
+              ))}
+            </View>
+          </ScrollView>
+          {/* 「再拍一张」放在滚动条外面：相册里比 4:3 更宽的照片也不会把它挤出屏幕 */}
+          {imagePaths.length < MAX_ANALYZE_IMAGES && (
+            <View className='image-strip__add' onClick={handleChooseImage}>
+              <Text className='image-strip__add-icon'>+</Text>
+              <Text className='image-strip__add-text'>再拍一张</Text>
+            </View>
+          )}
           </View>
         ) : (
           <View className='no-image-placeholder' onClick={handleChooseImage}>
@@ -1834,8 +1840,8 @@ function AnalyzePage() {
                     : isStrictBaseModeSelected && !precisionCaptureComplete
                       ? (isVideoCaptureSelected ? '请重新录制有效视频' : '请补齐两个拍摄角度')
                       : isVideoCaptureSelected
-                        ? `分析 ${selectedImagePaths.length} 个关键帧 · 消耗 ${creditCost} 积分`
-                        : `分析 ${selectedImagePaths.length} 张 · 消耗 ${creditCost} 积分`}
+                        ? `开始识别 ${selectedImagePaths.length} 个关键帧 · 消耗 ${creditCost} 积分`
+                        : `开始识别 ${selectedImagePaths.length} 张 · 消耗 ${creditCost} 积分`}
             </Text>
           )}
         </View>

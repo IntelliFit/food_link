@@ -1,1 +1,1 @@
-export default definePageConfig({ navigationBarTitleText: '高校共建', enableShareAppMessage: true })
+export default definePageConfig({ navigationBarTitleText: '高校伙伴计划', enableShareAppMessage: true })

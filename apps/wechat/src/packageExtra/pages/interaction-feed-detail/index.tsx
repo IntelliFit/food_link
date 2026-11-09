@@ -194,7 +194,7 @@ const MICRO_COLOR_MAP: Record<MicroNutrientKey, string> = {
   vitaminB12Mcg: '#9ecae1',
 }
 
-function resolveRecordItemRatio(item: CommunityFeedRecord['items'][number]): number {
+function resolveRecordItemRatio(item: Pick<ManualFoodSourceItem, 'ratio' | 'intake' | 'weight'>): number {
   const ratio = Number(item.ratio)
   if (Number.isFinite(ratio) && ratio > 0) return Math.min(100, ratio)
   const intake = Number(item.intake)
@@ -261,6 +261,7 @@ export function InteractionFeedDetailPage() {
   const [feedTextExpanded, setFeedTextExpanded] = useState<Record<string, boolean>>({})
   const [microsExpanded, setMicrosExpanded] = useState(false)
   const [manualFoodsExpanded, setManualFoodsExpanded] = useState(false)
+  const [manualFoodDetail, setManualFoodDetail] = useState<ReturnType<typeof extractManualFoodDisplayItems>[number] | null>(null)
   const [deletingCommentIds, setDeletingCommentIds] = useState<Set<string>>(() => new Set())
   const [isGuest, setIsGuest] = useState(() => !getAccessToken())
   const likePendingRef = useRef(false)
@@ -294,6 +295,7 @@ export function InteractionFeedDetailPage() {
     const seq = ++loadSeqRef.current
     const startedAt = Date.now()
     clearDetailCommitTimer()
+    setManualFoodDetail(null)
     if (!nextRecordId) {
       setFeedItem(null)
       setDetailCommitPending(false)
@@ -548,15 +550,18 @@ export function InteractionFeedDetailPage() {
   }, [targetType, feedItem, isGuest])
 
   const handleManualFoodCardClick = useCallback((row: ManualFoodSourceItem & { displayName: string; sourceLabel: string; imageUrl: string }) => {
-    const manualSourceId = (row as any).manual_source_id as string | undefined
-    const manualSource = String(row.manual_source || '')
-    if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
-      if (isGuest) {
-        Taro.showToast({ title: '登录后可查看食物详情', icon: 'none' })
-        return
-      }
-      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
+    if (isGuest) {
+      Taro.showToast({ title: '登录后可查看食物详情', icon: 'none' })
+      return
     }
+    const manualSourceId = String(row.manual_source_id || '').trim()
+    // 只有公共餐食的 ID 属于公共食物库；包装食品和常用食物展示记录快照，
+    // 不把不同库的 ID 混用，也不因原库条目更新/删除而丢失本次摄入明细。
+    if (manualSourceId && row.manual_source === 'public_library') {
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
+      return
+    }
+    setManualFoodDetail(row)
   }, [isGuest])
 
   const handleDeleteFeedItem = useCallback(async () => {
@@ -668,6 +673,21 @@ export function InteractionFeedDetailPage() {
       </View>
     )
   }, [feedTextExpanded, toggleFeedTextExpanded])
+
+  const manualFoodRatio = manualFoodDetail ? resolveRecordItemRatio(manualFoodDetail) : 100
+  const manualFoodNutrients = manualFoodDetail?.nutrients
+  const manualFoodNutrientRows = [
+    { key: 'calories' as const, label: '热量', unit: 'kcal' },
+    { key: 'protein' as const, label: '蛋白质', unit: 'g' },
+    { key: 'carbs' as const, label: '碳水', unit: 'g' },
+    { key: 'fat' as const, label: '脂肪', unit: 'g' },
+    ...MICRO_NUTRIENT_META,
+  ].flatMap((meta) => {
+    const raw = manualFoodNutrients?.[meta.key]
+      ?? (meta.key === 'sodiumMg' ? manualFoodNutrients?.sodium_mg : undefined)
+    if (raw == null || !Number.isFinite(Number(raw))) return []
+    return [{ ...meta, value: Number(raw) * manualFoodRatio / 100 }]
+  })
 
   return (
     <>
@@ -1017,6 +1037,37 @@ export function InteractionFeedDetailPage() {
       </View>
 
     </View>
+      {manualFoodDetail && (
+        <View className='manual-food-detail-mask' onClick={() => setManualFoodDetail(null)}>
+          <View className='manual-food-detail-sheet' onClick={(event) => event.stopPropagation()}>
+            <View className='manual-food-detail-header'>
+              <Text className='manual-food-detail-heading'>食物明细</Text>
+              <View className='manual-food-detail-close' onClick={() => setManualFoodDetail(null)}>
+                <Text>关闭</Text>
+              </View>
+            </View>
+            <ScrollView scrollY className='manual-food-detail-scroll'>
+              {manualFoodDetail.imageUrl && <Image className='manual-food-detail-image' src={manualFoodDetail.imageUrl} mode='aspectFit' />}
+              <Text className='manual-food-detail-title'>{manualFoodDetail.displayName}</Text>
+              <Text className='manual-food-detail-meta'>{[manualFoodDetail.sourceLabel, '本次记录'].filter(Boolean).join(' · ')}</Text>
+              {manualFoodDetail.manual_portion_label && <Text className='manual-food-detail-meta'>{manualFoodDetail.manual_portion_label}</Text>}
+              {manualFoodDetail.weight != null && (
+                <Text className='manual-food-detail-meta'>
+                  摄入 {formatMicroValue(manualFoodDetail.weight * manualFoodRatio / 100)}g
+                </Text>
+              )}
+              <View className='manual-food-detail-nutrients'>
+                {manualFoodNutrientRows.map((row) => (
+                  <View className='manual-food-detail-nutrient' key={row.key}>
+                    <Text>{row.label}</Text>
+                    <Text className='manual-food-detail-value'>{formatMicroValue(row.value)} {row.unit}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      )}
       <CommunityFoodRecordEditSheet
         visible={editSheetVisible}
         record={feedItem?.record}
