@@ -183,10 +183,8 @@ export const executionModeLabels: Record<ExecutionMode, string> = {
 }
 
 export const executionModeOptions: ExecutionMode[] = [
-  'fast',
   'standard',
   'strict',
-  'fast_web_search',
   'standard_web_search',
   'strict_web_search',
   'gemini35_flash_grouped',

@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 )
 
 // History and catalog candidates share the selection contract, but not their
@@ -59,7 +58,7 @@ func searchMealHistoryTool(state *campusDietAgentRunState, raw string) (map[stri
 func mealHistoryCandidates(state *campusDietAgentRunState) []DietRecommendationCandidate {
 	pool := []DietRecommendationCandidate{}
 	for _, record := range state.HistoryRecords {
-		if record.UserID != state.UserID || record.RecordTime == nil || record.RecordTime.After(time.Now()) {
+		if record.UserID != state.UserID || record.RecordTime == nil || record.RecordTime.After(mealDecisionNow(state)) {
 			continue
 		}
 		if c, ok := mealFromHistory(record); ok {

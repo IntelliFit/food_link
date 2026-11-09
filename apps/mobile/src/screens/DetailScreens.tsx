@@ -334,8 +334,10 @@ function useFoodRecordShareSheet(dialog: AppDialog) {
     current.resolve(shared)
   }, [])
 
-  const shareFoodRecord = useCallback((record: FoodRecord) => {
-    const shareUrl = apiClient.buildFoodRecordShareUrl(record.id)
+  const shareFoodRecord = useCallback(async (record: FoodRecord) => {
+    // 取不到凭证时仍可分享，对方按圈子可见范围查看。
+    const shareToken = await apiClient.getFoodRecordShareToken(record.id).catch(() => '')
+    const shareUrl = apiClient.buildFoodRecordShareUrl(record.id, shareToken)
     const title = buildRecordShareTitle(record)
     const description = buildRecordShareDescription(record)
     return new Promise<boolean>((resolve) => {

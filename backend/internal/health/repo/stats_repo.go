@@ -262,7 +262,7 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 	if filter.SchoolID == "" && domain.DiningVenueKey(filter.CanteenName) == "" {
 		return nil, 0, fmt.Errorf("school_id or dining venue required")
 	}
-	if filter.Limit <= 0 || filter.Limit > 100 {
+	if filter.Limit <= 0 || filter.Limit > 100 && !filter.ScanCatalog || filter.Limit > domain.CatalogScanMaxPage {
 		filter.Limit = 20
 	}
 	if filter.Offset < 0 {
@@ -274,7 +274,8 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 
 	base := r.db.WithContext(ctx).
 		Table("public_food_library").
-		Where(`status = ? AND COALESCE(food_name, '') !~* '(餐盒|打包盒|包装盒|纸袋|塑料袋|餐具|筷子|勺子|吸管|杯盖|餐巾)'`, "published")
+		// A collected dish whose supply is still unverified is offered once its nutrition is known.
+		Where(`status = ? AND (COALESCE(availability_status, '') <> 'unknown' OR total_calories > 0) AND COALESCE(food_name, '') !~* '(餐盒|打包盒|包装盒|纸袋|塑料袋|餐具|筷子|勺子|吸管|杯盖|餐巾)'`, "published")
 	if filter.SchoolID != "" {
 		base = base.Where("COALESCE(is_campus_food, false) = true AND school_id = ?", filter.SchoolID)
 	} else if filter.CampusOnly {

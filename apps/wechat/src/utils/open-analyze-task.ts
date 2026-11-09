@@ -1,6 +1,7 @@
 import Taro from '@tarojs/taro'
 import { getAnalyzeTask, markAnalyzeHistorySeen, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type MealType } from './api'
 import { normalizeAnalysisEngine } from './analysis-engine'
+import { persistEatingMoodFromPayload } from './eating-mood'
 import { needsPrecisionUserAction } from './precision-mode'
 import { extraPkgUrl } from './subpackage-extra'
 import { getTaskRecordTargetDate } from './record-date'
@@ -86,6 +87,7 @@ const persistTaskResultContext = (task: AnalysisTask, result: AnalyzeResponse) =
   Taro.setStorageSync('analyzeMealType', normalizeMealType(taskPayloadString(task, 'auto_record_meal_type', 'meal_type', 'mealType')))
   Taro.setStorageSync('analyzeDietGoal', taskPayloadString(task, 'diet_goal', 'dietGoal') || 'none')
   Taro.setStorageSync('analyzeActivityTiming', taskPayloadString(task, 'activity_timing', 'activityTiming') || 'none')
+  persistEatingMoodFromPayload(task.payload)
   Taro.setStorageSync('analyzeExecutionMode', mode)
   Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(result.analysis_engine || taskPayloadString(task, 'analysis_engine'), mode))
   Taro.setStorageSync('analyzeSourceTaskId', task.id)

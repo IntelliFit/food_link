@@ -77,6 +77,9 @@ func updateProfileFieldCount(input service.UpdateProfileInput) int {
 	if input.PublicRecords != nil {
 		count++
 	}
+	if input.FriendsCanViewRecords != nil {
+		count++
+	}
 	if input.Motto != nil {
 		count++
 	}

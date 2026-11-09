@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"food_link/backend/internal/recipe/domain"
+	"food_link/backend/pkg/feedprivacy"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -113,6 +114,7 @@ func (r *RecipeRepo) InsertFoodRecord(ctx context.Context, record *domain.FoodRe
 		now := time.Now()
 		record.RecordTime = &now
 	}
+	record.HiddenFromFeed = feedprivacy.ResolveHidden(ctx, r.db, record.UserID, nil)
 	return r.db.WithContext(ctx).Create(record).Error
 }
 

@@ -29,6 +29,7 @@ import (
 	"food_link/backend/internal/taskqueue"
 	userdomain "food_link/backend/internal/user/domain"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/llmrelay"
 	"food_link/backend/pkg/logger"
 
 	"log/slog"
@@ -86,6 +87,7 @@ type StatsService struct {
 	nutritionPlans interface {
 		ResolveRange(context.Context, string, string, string) (map[string]userdomain.NutritionDay, error)
 	}
+	sleep SleepReader
 }
 
 func (s *StatsService) ConfigureNutritionPlans(provider interface {
@@ -165,7 +167,7 @@ func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg
 func newStatsInsightHTTPClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSHandshakeTimeout = statsInsightTLSHandshakeTimeout
-	return &http.Client{Transport: transport, Timeout: statsInsightHTTPTimeout}
+	return &http.Client{Transport: llmrelay.Wrap(transport), Timeout: statsInsightHTTPTimeout}
 }
 
 func configuredDeepSeekBaseURL(cfg *config.Config) string {
@@ -1009,6 +1011,9 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 	}
 	if reply, ok := s.petChatAcknowledgementReply(ctx, userID, input); ok {
 		return s.streamPetChatAcknowledgement(ctx, userID, input, reply)
+	}
+	if reply, ok := s.petChatHoursReply(ctx, userID, input); ok {
+		return s.streamPetChatFreeReply(ctx, userID, input, reply, false)
 	}
 	if s.shouldUseCampusDietAgent(ctx, userID, input) && !s.petChatHasHistoricalImageQuestion(ctx, userID, input) {
 		return s.GenerateCampusDietAgentStream(ctx, userID, input)

@@ -156,6 +156,8 @@ export default function OnboardingGuide({
             <Text className='onboarding-guide__skip' onClick={handleAction}>
               {currentStep.action.label}
             </Text>
+          ) : isLast ? (
+            <View />
           ) : (
             <Text className='onboarding-guide__skip' onClick={handleSkip}>
               跳过全部

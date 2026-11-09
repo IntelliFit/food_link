@@ -1,8 +1,7 @@
 import { View, Text, Image, Input, Button } from '@tarojs/components'
 import Taro, { useRouter } from '@tarojs/taro'
 import * as React from 'react'
-import { Button as TaroifyButton } from '@taroify/core'
-import '@taroify/core/button/style'
+import { AppButton } from '../../../components/AppButton'
 import {
     login,
     LoginResponse,
@@ -26,6 +25,8 @@ import { resolveRegistrationNickname, buildDefaultWechatNickname } from '../../.
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import { clearPendingFriendInviteCode, readPendingFriendInviteCode } from '../../../utils/pending-friend-invite'
 import { loginWithFreshWechatCodeRetry } from '../../../utils/wechat-login-retry'
+import { experiments } from '../../../utils/experiments'
+import { ONBOARDING_CONTROL, ONBOARDING_EXPERIMENT, ONBOARDING_PET_FLOW, WELCOME_DONE_KEY } from '../../../utils/onboarding-v2'
 import './index.scss'
 
 const { useEffect, useRef, useState } = React
@@ -440,7 +441,11 @@ export default function LoginPage() {
             console.log('[invite-debug][login] 未完成健康档案，先跳转 health-profile，好友申请已在资料就绪后处理', {
                 inviteCode,
             })
-            Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
+            // onboarding_v2 实验组、且看过伙伴首屏的人，用 3 句话建档代替 13 步健康档案；
+            // 邀请进来的等没进实验的人照旧
+            const petFlow = experiments.get(ONBOARDING_EXPERIMENT, ONBOARDING_CONTROL).variant === ONBOARDING_PET_FLOW
+                && Taro.getStorageSync(WELCOME_DONE_KEY) === '1'
+            Taro.navigateTo({ url: petFlow ? '/packageOnboarding/pages/profile/index' : extraPkgUrl('/pages/health-profile/index') })
             return
         }
         await finishLoginFlow()
@@ -755,21 +760,21 @@ export default function LoginPage() {
                 >
                     手机号快捷登录
                 </Button>
-                <TaroifyButton
+                <AppButton
                   className='skip-login-btn'
                   variant='text'
                   onClick={handleSkip}
                 >
                     暂不登录，随便看看
-                </TaroifyButton>
+                </AppButton>
                 {isDev && (
-                    <TaroifyButton
+                    <AppButton
                       className='debug-login-btn'
                       variant='text'
                       onClick={() => setShowDebugLoginPanel(true)}
                     >
                         调试代登录
-                    </TaroifyButton>
+                    </AppButton>
                 )}
             </View>
 
@@ -862,7 +867,7 @@ export default function LoginPage() {
                             />
                         </View>
                         <View className='phone-bind-actions'>
-                            <TaroifyButton
+                            <AppButton
                               className='save-btn'
                               block
                               shape='round'
@@ -870,14 +875,14 @@ export default function LoginPage() {
                               loading={loading}
                             >
                                 进入该用户
-                            </TaroifyButton>
-                            <TaroifyButton
+                            </AppButton>
+                            <AppButton
                               className='skip-phone-btn'
                               variant='text'
                               onClick={() => setShowDebugLoginPanel(false)}
                             >
                                 取消
-                            </TaroifyButton>
+                            </AppButton>
                         </View>
                     </View>
                 </View>
@@ -910,7 +915,7 @@ export default function LoginPage() {
                             />
                         </View>
                         <View className='phone-bind-actions'>
-                            <TaroifyButton
+                            <AppButton
                               className='save-btn'
                               block
                               shape='round'
@@ -918,14 +923,14 @@ export default function LoginPage() {
                               loading={loading}
                             >
                                 注册并登录
-                            </TaroifyButton>
-                            <TaroifyButton
+                            </AppButton>
+                            <AppButton
                               className='skip-phone-btn'
                               variant='text'
                               onClick={() => setShowDebugRegisterModal(false)}
                             >
                                 取消
-                            </TaroifyButton>
+                            </AppButton>
                         </View>
                     </View>
                 </View>

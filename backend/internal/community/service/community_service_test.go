@@ -528,7 +528,7 @@ func TestCheckinLeaderboardUsesAllWeeklyParticipantsAndKeepsHealthScopeIndepende
 		profiles: map[string]*repo.UserProfile{
 			"u1": {ID: "u1", Nickname: "Alice"},
 			"u2": {ID: "u2", Nickname: "Bob"},
-			"u3": {ID: "u3", Nickname: "非好友用户"},
+			"u3": {ID: "u3", Nickname: "非好友用户", PublicRecords: boolPtr(true)},
 		},
 	}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
@@ -538,6 +538,105 @@ func TestCheckinLeaderboardUsesAllWeeklyParticipantsAndKeepsHealthScopeIndepende
 	assert.Len(t, result.List, 3)
 	assert.Equal(t, 1, result.List[0].Rank)
 	assert.Equal(t, "u3", result.List[0].UserID)
+}
+
+func TestFriendFeedSkipsFriendWhoTurnedOffSharing(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		profile repo.UserProfile
+		want    int
+	}{
+		{"sharing friend", repo.UserProfile{ID: "u2", FriendsCanViewRecords: boolPtr(true), PublicRecords: boolPtr(false)}, 1},
+		{"friend turned it off", repo.UserProfile{ID: "u2", FriendsCanViewRecords: boolPtr(false), PublicRecords: boolPtr(false)}, 0},
+		{"public friend stays visible", repo.UserProfile{ID: "u2", FriendsCanViewRecords: boolPtr(false), PublicRecords: boolPtr(true)}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			profile := tc.profile
+			mockFeed := &mockFeedRepo{
+				listFriendFeed: []repo.FeedRecord{{ID: "r1", UserID: "u2", MealType: "lunch"}},
+				friendIDs:      []string{"u2"},
+				likesMap:       map[string]*repo.LikeInfo{},
+				profiles:       map[string]*repo.UserProfile{"u2": &profile},
+			}
+			svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+			items, err := svc.FriendFeed(context.Background(), "u1", FeedParams{Limit: 10, AuthorID: "u2"})
+			assert.NoError(t, err)
+			assert.Len(t, items, tc.want)
+		})
+	}
+}
+
+func TestLeaderboardsSkipFriendWhoTurnedOffSharing(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		friendIDs:     []string{"sharing-friend", "closed-friend"},
+		checkinCounts: map[string]int{"leaderboard-viewer": 1, "sharing-friend": 2, "closed-friend": 3},
+		profiles: map[string]*repo.UserProfile{
+			"leaderboard-viewer": {ID: "leaderboard-viewer", FriendsCanViewRecords: boolPtr(false)},
+			"sharing-friend":     {ID: "sharing-friend", FriendsCanViewRecords: boolPtr(true)},
+			"closed-friend":      {ID: "closed-friend", FriendsCanViewRecords: boolPtr(false)},
+		},
+	}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+	provider := &mockHealthScoreProvider{scores: map[string]mockHealthScore{
+		"leaderboard-viewer": {score: 80, recordedDays: 5, eligible: true},
+		"sharing-friend":     {score: 81, recordedDays: 5, eligible: true},
+		"closed-friend":      {score: 82, recordedDays: 5, eligible: true},
+	}}
+	svc.ConfigureHealthScoreProvider(provider)
+
+	checkins, err := svc.CheckinLeaderboard(context.Background(), "leaderboard-viewer")
+	assert.NoError(t, err)
+	checkinIDs := make([]string, 0, len(checkins.List))
+	for _, item := range checkins.List {
+		checkinIDs = append(checkinIDs, item.UserID)
+	}
+	assert.ElementsMatch(t, []string{"leaderboard-viewer", "sharing-friend"}, checkinIDs, "the viewer always sees themselves")
+
+	_, err = svc.HealthLeaderboard(context.Background(), "leaderboard-viewer")
+	assert.NoError(t, err)
+	provider.mu.Lock()
+	assert.ElementsMatch(t, []string{"leaderboard-viewer", "sharing-friend"}, provider.requestedUserIDs)
+	provider.mu.Unlock()
+}
+
+func TestFeedContextForbidsFriendWhenOwnerTurnedOffSharing(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		getFeedRecord: &repo.FeedRecord{ID: "r1", UserID: "u2"},
+		isFriend:      true,
+		profiles:      map[string]*repo.UserProfile{"u2": {ID: "u2", Nickname: "Bob"}},
+	}
+	mockUser := &mockUserRepo{findByIDUser: &authrepo.User{ID: "u2", PublicRecords: boolPtr(false), FriendsCanViewRecords: boolPtr(false)}}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, mockUser)
+
+	result, err := svc.FeedContext(context.Background(), "u1", "r1")
+
+	assert.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, "forbidden", result.Reason)
+}
+
+func TestCheckinLeaderboardHidesPrivateStrangers(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		friendIDs:     []string{"friend-viewer-only"},
+		checkinCounts: map[string]int{"viewer-only": 2, "friend-viewer-only": 3, "stranger-viewer-only": 8, "unset-viewer-only": 9, "public-viewer-only": 1},
+		profiles: map[string]*repo.UserProfile{
+			"viewer-only":          {ID: "viewer-only", PublicRecords: boolPtr(false)},
+			"friend-viewer-only":   {ID: "friend-viewer-only", PublicRecords: boolPtr(false)},
+			"stranger-viewer-only": {ID: "stranger-viewer-only", PublicRecords: boolPtr(false)},
+			"unset-viewer-only":    {ID: "unset-viewer-only"},
+			"public-viewer-only":   {ID: "public-viewer-only", PublicRecords: boolPtr(true)},
+		},
+	}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+
+	result, err := svc.CheckinLeaderboard(context.Background(), "viewer-only")
+
+	assert.NoError(t, err)
+	ids := make([]string, 0, len(result.List))
+	for _, item := range result.List {
+		ids = append(ids, item.UserID)
+	}
+	assert.ElementsMatch(t, []string{"viewer-only", "friend-viewer-only", "public-viewer-only"}, ids)
 }
 
 func TestHealthLeaderboardUsesCalibratedWeeklyScoreAndSkipsInsufficientData(t *testing.T) {
@@ -724,6 +823,63 @@ func TestFeedTargetContextGuestCanViewPublicPost(t *testing.T) {
 	assert.Equal(t, "public", result.Reason)
 	assert.False(t, result.IsMine)
 	assert.False(t, result.Liked)
+}
+
+func TestFeedTargetContextUnsetPublicRecordsCountsAsPrivate(t *testing.T) {
+	mockFeed := &mockFeedRepo{getFeedRecord: &repo.FeedRecord{ID: "r1", UserID: "u2"}}
+	mockUser := &mockUserRepo{findByIDUser: &authrepo.User{ID: "u2"}}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, mockUser)
+
+	result, err := svc.FeedTargetContext(context.Background(), "", "food_record", "r1")
+
+	assert.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, "forbidden", result.Reason)
+}
+
+func TestPublicFeedShowsPrivateViewerTheirOwnRecords(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		listPublicFeed: []repo.FeedRecord{{ID: "public-1", UserID: "u2", FeedType: "food_record"}},
+		listFriendFeed: []repo.FeedRecord{{ID: "own-1", UserID: "viewer", FeedType: "food_record"}},
+		profiles:       map[string]*repo.UserProfile{"u2": {ID: "u2"}, "viewer": {ID: "viewer"}},
+	}
+	mockUser := &mockUserRepo{findByIDUser: &authrepo.User{ID: "viewer", PublicRecords: boolPtr(false)}}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, mockUser)
+
+	items, err := svc.PublicFeed(context.Background(), FeedParams{ViewerUserID: "viewer", SortBy: "latest", Limit: 10})
+
+	assert.NoError(t, err)
+	assert.True(t, mockFeed.listFriendFeedCalled)
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.Record.ID)
+	}
+	assert.ElementsMatch(t, []string{"public-1", "own-1"}, ids)
+}
+
+func TestPublicFeedDoesNotAddRecordsForGuestsOrPublicViewers(t *testing.T) {
+	cases := []struct {
+		name     string
+		viewerID string
+		viewer   *authrepo.User
+	}{
+		{"guest", "", nil},
+		{"public viewer", "viewer", &authrepo.User{ID: "viewer", PublicRecords: boolPtr(true)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockFeed := &mockFeedRepo{
+				listPublicFeed: []repo.FeedRecord{{ID: "public-1", UserID: "u2", FeedType: "food_record"}},
+				profiles:       map[string]*repo.UserProfile{"u2": {ID: "u2"}},
+			}
+			svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{findByIDUser: tc.viewer})
+
+			_, err := svc.PublicFeed(context.Background(), FeedParams{ViewerUserID: tc.viewerID, SortBy: "latest", Limit: 10})
+
+			assert.NoError(t, err)
+			assert.False(t, mockFeed.listFriendFeedCalled)
+		})
+	}
 }
 
 func TestFeedTargetContextGuestCannotViewFriendsOnlyPost(t *testing.T) {

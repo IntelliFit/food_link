@@ -23,7 +23,7 @@ export type PetChatHomeMealEntry = {
   selectedSourceID?: string
   source: 'home_next_meal'
   date: string
-  mealType: 'breakfast' | 'lunch' | 'dinner'
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'evening_snack'
   mealLabel: string
   basicAdvice: string
   starterQuestion: string
@@ -53,6 +53,16 @@ export function openPetChat(input?: unknown): void {
   // A newly selected meal must reach onLoad; navigating back discards its context.
   if (context?.source === 'home_next_meal') Taro.navigateTo({ url })
   else openWithoutStacking(url)
+}
+
+/** 伙伴页「问问」：开一段新对话，聊天页一打开就把这句发出去（旧对话留在「最近」里） */
+export const PET_ASK_ENTRY = 'pet_tab_ask'
+
+export function askPetNow(question: string): void {
+  const text = question.trim()
+  if (!text) return
+  const query = `entry=${PET_ASK_ENTRY}&starter=${encodeURIComponent(text)}`
+  Taro.navigateTo({ url: `${extraPkgUrl('/pages/pet-chat/index')}?${query}` })
 }
 
 export function openPetSettings(): void {

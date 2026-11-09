@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type { AnalysisTask, ExecutionMode, MealType } from '@food-link/core'
+import { getPhotoFrameSize, type AnalysisTask, type ExecutionMode, type MealType } from '@food-link/core'
 import { apiClient } from '../api'
 import { useAppDialog } from '../providers/DialogProvider'
 import type { RootStackParamList } from '../navigation/types'
@@ -97,10 +97,15 @@ export function AnalyzeLoadingScreen() {
   const autoRecordEnabledRef = useRef(false)
   const [autoRecordPreferenceReady, setAutoRecordPreferenceReady] = useState(false)
   const [autoRecordBusy, setAutoRecordBusy] = useState(false)
+  const [loadedPhoto, setLoadedPhoto] = useState<{ uri: string; ratio: number } | null>(null)
   const frameSize = Math.min(Math.max(width - 40, 260), 320)
+  // 照片框横图 4:3、竖图 3:4；照片加载出来前和运动、文字任务用方框。
+  const photoFrame = loadedPhoto && loadedPhoto.uri === previewImageUri && !isExerciseAnalysis && !isTextAnalysis
+    ? getPhotoFrameSize(loadedPhoto.ratio, frameSize)
+    : { width: frameSize, height: frameSize }
   const scanTranslateY = scanProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [Math.round(frameSize * 0.08), Math.round(frameSize * 0.86)],
+    outputRange: [Math.round(photoFrame.height * 0.08), Math.round(photoFrame.height * 0.86)],
   })
   const scanOpacity = scanProgress.interpolate({
     inputRange: [0, 0.12, 0.88, 1],
@@ -368,8 +373,6 @@ export function AnalyzeLoadingScreen() {
               <Text style={styles.textBgLabel} numberOfLines={4}>{textRecordPreview}</Text>
             </View>
           </View>
-        ) : previewImageUri ? (
-          <Image source={{ uri: previewImageUri }} style={styles.fullscreenImage} resizeMode="cover" />
         ) : (
           <View style={styles.fallbackBackground} />
         )}
@@ -393,7 +396,7 @@ export function AnalyzeLoadingScreen() {
         <Text style={styles.heroSubtitle}>{subtitle}</Text>
 
         <View style={styles.scannerFrameContainer}>
-          <View style={[styles.scannerFrame, { width: frameSize, height: frameSize, borderRadius: Math.round(frameSize * 0.125) }]}>
+          <View style={[styles.scannerFrame, { width: photoFrame.width, height: photoFrame.height, borderRadius: Math.round(frameSize * 0.125) }]}>
             {isExerciseAnalysis ? (
               <View style={styles.framePlaceholder}>
                 <Text style={styles.frameIcon}>动</Text>
@@ -405,7 +408,15 @@ export function AnalyzeLoadingScreen() {
                 <Text style={styles.frameLabel} numberOfLines={4}>{textRecordPreview}</Text>
               </View>
             ) : previewImageUri ? (
-              <Image source={{ uri: previewImageUri }} style={styles.frameImage} resizeMode="cover" />
+              <Image
+                source={{ uri: previewImageUri }}
+                style={styles.frameImage}
+                resizeMode="cover"
+                onLoad={(event) => {
+                  const { width: imageWidth, height: imageHeight } = event.nativeEvent.source
+                  if (imageWidth > 0 && imageHeight > 0) setLoadedPhoto({ uri: previewImageUri, ratio: imageWidth / imageHeight })
+                }}
+              />
             ) : (
               <View style={styles.framePlaceholder}>
                 <Text style={styles.frameIcon}>食</Text>
@@ -659,15 +670,6 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-  },
-  fullscreenImage: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
   },
   fallbackBackground: {
     position: 'absolute',

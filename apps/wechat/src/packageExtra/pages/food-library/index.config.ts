@@ -1,3 +1,4 @@
 export default definePageConfig({
-  navigationBarTitleText: '美食图谱'
+  navigationBarTitleText: '美食图谱',
+  enableShareAppMessage: true,
 })

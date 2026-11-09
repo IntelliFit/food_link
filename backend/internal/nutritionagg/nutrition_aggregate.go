@@ -32,6 +32,11 @@ func SumMetrics(items []map[string]any, metrics []Metric) map[string]float64 {
 	return totals
 }
 
+// IntakeFactor is the eaten share of an item's recorded serving (ratio, or intake/weight).
+func IntakeFactor(item map[string]any) float64 {
+	return intakeFactor(item)
+}
+
 func intakeFactor(item map[string]any) float64 {
 	if ratio, ok := numberFromAny(item["ratio"]); ok && ratio >= 0 {
 		if ratio > 100 {

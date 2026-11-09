@@ -24,6 +24,7 @@ import {
   writePendingPromoCode,
 } from '../../src/utils/promoter-api'
 import {
+  attributionLines,
   commissionLine,
   formatCents,
   formatRate,
@@ -106,6 +107,15 @@ describe('promoter center view helpers', () => {
     const lines = ruleLines({ rate_bps: 2000, settle_delay_days: 7 })
     expect(lines.join('\n')).toContain('按 20% 计算佣金')
     expect(lines.join('\n')).toContain('订单支付 7 天后')
+    expect(lines[0]).toContain('不需要手动填推广码')
+  })
+
+  it('tells promoters how a friend becomes theirs and when commission comes', () => {
+    const lines = attributionLines({ rate_bps: 2500, settle_delay_days: 7 })
+    expect(lines).toHaveLength(3)
+    expect(lines[0]).toContain('不用填推广码')
+    expect(lines[1]).toContain('48 小时内')
+    expect(lines[2]).toContain('实付金额 25% 的佣金，7 天后可提现')
   })
 
   it('explains each non-active state and shares the home page with the code', () => {

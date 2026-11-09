@@ -1,4 +1,4 @@
-import { restoreRiskFocusKeys } from '../../src/pages/stats/risk-focus-preference'
+import { restoreRiskFocusKeys } from '../../src/packageStats/pages/stats/risk-focus-preference'
 
 const defaults = ['hypertension', 'diabetes', 'cardio']
 

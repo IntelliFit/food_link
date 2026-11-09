@@ -45,11 +45,15 @@ type MealReplayResult struct {
 	Limitations      []string                  `json:"limitations"`
 }
 
+// mealClock is the meal pipeline's clock; tests pin it, since a canteen dish is only
+// offered while the canteen is open.
+var mealClock = time.Now
+
 func mealDecisionNow(state *campusDietAgentRunState) time.Time {
 	if state != nil && !state.AsOf.IsZero() {
 		return state.AsOf
 	}
-	return time.Now()
+	return mealClock()
 }
 
 func dietCandidatePoolHash(candidates []DietRecommendationCandidate) string {

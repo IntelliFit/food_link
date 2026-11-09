@@ -8,6 +8,7 @@ import (
 
 	"food_link/backend/internal/foodmedia"
 	"food_link/backend/internal/foodrecord/domain"
+	"food_link/backend/pkg/feedprivacy"
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -26,7 +27,24 @@ func (r *FoodRecordRepo) Create(ctx context.Context, record *domain.FoodRecord) 
 	if record.ID == "" {
 		record.ID = uuid.New().String()
 	}
+	record.HiddenFromFeed = feedprivacy.ResolveHidden(ctx, r.db, record.UserID, record.ShareToFeed)
 	return r.db.WithContext(ctx).Create(record).Error
+}
+
+// SetHiddenFromFeed updates the circle visibility of the user's own record.
+func (r *FoodRecordRepo) SetHiddenFromFeed(ctx context.Context, userID, recordID string, hidden bool) error {
+	return r.db.WithContext(ctx).Model(&domain.FoodRecord{}).
+		Where("id = ? AND user_id = ?", recordID, userID).
+		Update("hidden_from_feed", hidden).Error
+}
+
+// AreFriends reports whether two users have a friendship in either direction.
+func (r *FoodRecordRepo) AreFriends(ctx context.Context, userID, otherUserID string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Table("user_friends").
+		Where("(user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)", userID, otherUserID, otherUserID, userID).
+		Count(&count).Error
+	return count > 0, err
 }
 
 func (r *FoodRecordRepo) GetByUserSourceTaskID(ctx context.Context, userID, sourceTaskID string) (*domain.FoodRecord, error) {

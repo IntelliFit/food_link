@@ -47,6 +47,9 @@ type User struct {
 	ModeSwitchCount30d             *int           `gorm:"column:mode_switch_count_30d"`
 	Searchable                     *bool          `gorm:"column:searchable"`
 	PublicRecords                  *bool          `gorm:"column:public_records"`
+	PublicRecordsConsentedAt       *time.Time     `gorm:"column:public_records_consented_at"`
+	PublicRecordsReconfirmPending  bool           `gorm:"column:public_records_reconfirm_pending"`
+	FriendsCanViewRecords          *bool          `gorm:"column:friends_can_view_records;default:true"`
 	PublicFavoriteRecipes          *bool          `gorm:"column:public_favorite_recipes"`
 	LastSeenAnalyzeHistory         *time.Time     `gorm:"column:last_seen_analyze_history_at"`
 	RegistrationInviteCode         *string        `gorm:"column:registration_invite_code"`
@@ -314,9 +317,26 @@ func deleteAccountOwnedData(tx *gorm.DB, userID string) error {
 		{"user_circle_posts", "user_id = ?", []any{userID}},
 		{"user_food_records", "user_id = ?", []any{userID}},
 		{"user_trial_entitlements", "first_user_id = ?", []any{userID}},
+		{"app_events", "user_id = ?", []any{userID}},
 	}
 	for _, cleanup := range cleanups {
 		if err := deleteFromTableIfExists(tx, cleanup.table, cleanup.where, cleanup.args...); err != nil {
+			return err
+		}
+	}
+	return unlinkAccountExperimentData(tx, userID)
+}
+
+// unlinkAccountExperimentData removes the link to the person but keeps the
+// assignment in its arm, so deletions do not bias the comparison.
+func unlinkAccountExperimentData(tx *gorm.DB, userID string) error {
+	if tableExists(tx, "experiment_assignments") {
+		if err := tx.Exec("UPDATE experiment_assignments SET user_id = NULL WHERE user_id = ?", userID).Error; err != nil {
+			return err
+		}
+	}
+	if tableExists(tx, "app_visitors") {
+		if err := tx.Exec("UPDATE app_visitors SET user_id = NULL, bound_at = NULL WHERE user_id = ?", userID).Error; err != nil {
 			return err
 		}
 	}

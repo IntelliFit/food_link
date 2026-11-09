@@ -266,6 +266,20 @@ $food-library-font-meta: 24rpx;
   position: relative;
 }
 
+.spot-dish-bar-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.spot-dish-bar-back {
+  flex-shrink: 0;
+  margin-left: 24rpx;
+}
+
 .sort-left {
   display: flex;
   gap: 32rpx;
@@ -1094,6 +1108,237 @@ $food-library-font-meta: 24rpx;
   margin: 0 auto;
 }
 
+// 分享进来的地点：未登录也能先看到，并引导点亮新地点
+.shared-spot-card {
+  margin: 32rpx;
+  padding: 40rpx 36rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+
+// 第一屏先看到这家店的照片；没有照片时用和分享图一致的卡片
+.shared-spot-photo,
+.shared-spot-poster {
+  display: block;
+  width: calc(100% + 72rpx);
+  margin: -40rpx -36rpx 32rpx;
+}
+
+.shared-spot-photo {
+  height: 420rpx;
+}
+
+.shared-spot-poster {
+  height: 380rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  background: linear-gradient(160deg, #f7f3e8 0%, #e3f4ea 100%);
+}
+
+.shared-spot-plate {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  box-shadow: 0 0 0 20rpx #d3eedf;
+}
+
+.shared-spot-plate-initial {
+  font-size: 72rpx;
+  font-weight: 700;
+  color: #0a7a54;
+}
+
+.shared-spot-poster-kcal {
+  margin-top: 16rpx;
+  font-size: 56rpx;
+  font-weight: 700;
+  color: #0a7a54;
+}
+
+.shared-spot-poster-unit {
+  font-size: $food-library-font-body;
+  font-weight: 400;
+  color: #4a5a52;
+}
+
+.shared-spot-poster-note {
+  font-size: $food-library-font-meta;
+  color: #6a7282;
+}
+
+.shared-spot-dish {
+  display: block;
+  margin-top: 8rpx;
+  font-size: $food-library-font-body;
+  line-height: 40rpx;
+  font-weight: 600;
+  color: #28775e;
+}
+
+.food-map-share-canvas {
+  position: fixed;
+  left: -2000px;
+  top: 0;
+  width: 500px;
+  height: 400px;
+  pointer-events: none;
+}
+
+.shared-spot-eyebrow {
+  display: block;
+  font-size: $food-library-font-meta;
+  color: #28775e;
+}
+
+.shared-spot-name {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 36rpx;
+  line-height: 50rpx;
+  font-weight: 700;
+  color: #1f2d27;
+}
+
+.shared-spot-address {
+  display: block;
+  margin-top: 8rpx;
+  font-size: $food-library-font-body;
+  line-height: 38rpx;
+  color: #6a7282;
+}
+
+.shared-spot-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 32rpx;
+}
+
+.shared-spot-btn {
+  flex: 1;
+  margin: 0;
+  min-height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  font-size: $food-library-font-body;
+  font-weight: 600;
+
+  &::after {
+    border: 0;
+  }
+
+  &--secondary {
+    color: #28775e;
+    background: #eef8f4;
+  }
+
+  &--primary {
+    color: #fff;
+    background: #2f9e78;
+  }
+}
+
+.shared-spot-invite {
+  display: block;
+  margin-top: 20rpx;
+  font-size: $food-library-font-meta;
+  color: #6a7282;
+  text-align: center;
+}
+
+.map-share-invite {
+  position: absolute;
+  top: 24rpx;
+  left: 24rpx;
+  right: 132rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 16rpx 12rpx 16rpx 20rpx;
+  border-radius: 22rpx;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 8rpx 24rpx rgb(36 61 49 / 12%);
+}
+
+.map-share-invite-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-share-invite-title,
+.map-share-invite-subtitle {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-share-invite-title {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 650;
+  color: #243d31;
+}
+
+.map-share-invite-subtitle {
+  margin-top: 2rpx;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #626f65;
+}
+
+.map-share-invite-btn,
+.map-share-invite-close {
+  flex-shrink: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &::after {
+    border: 0;
+  }
+}
+
+.map-share-invite-btn {
+  min-height: 64rpx;
+  padding: 0 24rpx;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #fff;
+  background: #21543e;
+}
+
+.map-share-invite-close {
+  width: 52rpx;
+  height: 52rpx;
+  padding: 0;
+  font-size: 32rpx;
+  color: #626f65;
+  background: transparent;
+}
+
+.map-food-share {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 28rpx;
+  line-height: inherit;
+
+  &::after {
+    border: 0;
+  }
+}
+
 // 反馈入口
 .feedback-bar {
   padding: 32rpx 0 48rpx;
@@ -1442,4 +1687,20 @@ $food-library-font-meta: 24rpx;
   .map-food-action--secondary { background: #344c3c; color: #d7e9de; }
   .map-food-action--primary { background: #286749; color: #fffef9; }
   .pick-mode-tip { background: #25372f; }
+  .map-share-invite,
+  .shared-spot-card { background: #25372f; }
+  .map-share-invite-title,
+  .shared-spot-name { color: #e8ece9; }
+  .map-share-invite-subtitle,
+  .map-share-invite-close,
+  .shared-spot-address,
+  .shared-spot-invite,
+  .shared-spot-poster-note,
+  .shared-spot-poster-unit { color: #b7c4bd; }
+  .shared-spot-poster { background: linear-gradient(160deg, #2c4236 0%, #1f332a 100%); }
+  .shared-spot-plate { background: #142a1e; box-shadow: 0 0 0 20rpx #344c3c; }
+  .shared-spot-plate-initial,
+  .shared-spot-poster-kcal,
+  .shared-spot-dish { color: #b3d9c1; }
+  .map-share-invite-btn { background: #b3d9c1; color: #142a1e; }
 }

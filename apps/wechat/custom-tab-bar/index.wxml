@@ -12,8 +12,8 @@
       <block wx:if="{{item.id === 'home'}}">
         <text class="iconfont icon-shouye tab-icon"></text>
       </block>
-      <block wx:elif="{{item.id === 'stats'}}">
-        <text class="iconfont icon-weibiaoti1 tab-icon"></text>
+      <block wx:elif="{{item.id === 'pet'}}">
+        <view class="tab-icon-pet"></view>
       </block>
       <block wx:elif="{{item.id === 'community'}}">
         <text class="iconfont icon-quanzi tab-icon"></text>

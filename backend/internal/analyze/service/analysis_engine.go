@@ -8,13 +8,19 @@ const (
 	analysisEngineDBCandidates  = "db_candidates_ai"
 	analysisEngineLegacyDirect  = "legacy_direct"
 	analysisEngineLegacyDBFirst = "db_first"
+	// analysisEngineSmart looks every item up in the library that fits its kind
+	// (packaged, single food, or a dish split into ingredients) and keeps the
+	// model's own estimate whenever no unambiguous match exists.
+	analysisEngineSmart = "smart"
 )
 
 func normalizeAnalysisEngine(engine, executionMode string, textInput bool) string {
 	switch strings.ToLower(strings.TrimSpace(engine)) {
 	case analysisEngineAIDirect, analysisEngineAIThenDBExact, analysisEngineDBCandidates,
-		analysisEngineLegacyDirect, analysisEngineLegacyDBFirst:
+		analysisEngineLegacyDirect, analysisEngineLegacyDBFirst, analysisEngineSmart:
 		return strings.ToLower(strings.TrimSpace(engine))
+	case "auto", "hybrid":
+		return analysisEngineSmart
 	case "direct", "ai":
 		return analysisEngineAIDirect
 	case "calibrated", "exact_db":
@@ -23,7 +29,7 @@ func normalizeAnalysisEngine(engine, executionMode string, textInput bool) strin
 		return analysisEngineDBCandidates
 	}
 
-	if textInput || isFastExecutionMode(executionMode) {
+	if textInput {
 		return analysisEngineAIDirect
 	}
 	if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {
@@ -34,7 +40,7 @@ func normalizeAnalysisEngine(engine, executionMode string, textInput bool) strin
 
 func analysisEngineProducesNutrition(engine string) bool {
 	switch strings.ToLower(strings.TrimSpace(engine)) {
-	case analysisEngineAIDirect, analysisEngineAIThenDBExact, analysisEngineDBCandidates, analysisEngineLegacyDirect:
+	case analysisEngineAIDirect, analysisEngineAIThenDBExact, analysisEngineDBCandidates, analysisEngineLegacyDirect, analysisEngineSmart:
 		return true
 	default:
 		return false

@@ -24,6 +24,8 @@ export interface PromoterMe {
   rate_bps: number
   review_note?: string
   agreement_version: string
+  /** false 时同意协议即开通；旧后端不返回，按需要审核处理。 */
+  manual_review?: boolean
   settle_delay_days: number
   withdraw_min_cents: number
   withdraw_max_cents: number

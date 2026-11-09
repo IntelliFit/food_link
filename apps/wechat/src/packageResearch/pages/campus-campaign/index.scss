@@ -1,0 +1,65 @@
+@import '../research-weight/shared.scss';
+
+.cc-tabs { display: flex; gap: 40px; margin-top: 28px; padding: 0 8px; }
+.cc-tab { padding-bottom: 10px; color: #7b8a85; font-size: 29px; }
+.cc-tab--active { border-bottom: 4px solid #00bc7d; color: #1d2b27; font-weight: 600; }
+.cc-role { display: block; margin-top: 16px; color: #00875f; font-size: 24px; }
+.cc-actions { display: flex; gap: 20px; margin-top: 24px; }
+.cc-action { flex: 1; margin-top: 0; }
+.cc-action--ghost { border: 2px solid #00bc7d; background: #fff; color: #00a875; }
+.cc-consent { display: block; margin: 20px 0; font-size: 22px; }
+.cc-station { margin-top: 12px; }
+.cc-later { display: block; margin-top: 12px; color: #5f6f6a; font-size: 25px; }
+
+.cc-record { display: flex; align-items: center; gap: 18px; margin-top: 20px; }
+.cc-record__image { width: 96px; height: 96px; flex-shrink: 0; border-radius: 14px; }
+.cc-record__copy { flex: 1; min-width: 0; }
+.cc-record__name { display: block; overflow: hidden; font-size: 27px; text-overflow: ellipsis; white-space: nowrap; }
+.cc-record__meta { display: block; margin-top: 4px; color: #a4afab; font-size: 22px; }
+.cc-record__link { color: #00a875; font-size: 25px; }
+.cc-record__done { color: #a4afab; font-size: 25px; }
+
+.cc-member { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
+.cc-member__copy { flex: 1; min-width: 0; }
+.cc-member__name { display: block; font-size: 27px; }
+.cc-member__meta { display: block; margin-top: 4px; color: #a4afab; font-size: 22px; }
+.cc-member__toggle { padding: 10px 20px; border: 2px solid #cfd9d5; border-radius: 30px; color: #5f6f6a; font-size: 23px; }
+.cc-member__toggle--on { border-color: #00bc7d; color: #00a875; }
+.cc-picker { display: flex; align-items: center; }
+
+.cc-board { display: flex; align-items: center; gap: 18px; margin-top: 18px; }
+.cc-board__rank { width: 44px; color: #a4afab; font-size: 28px; font-weight: 600; text-align: center; }
+.cc-board__rank--top { color: #00a875; }
+.cc-board__copy { flex: 1; min-width: 0; }
+.cc-board__name { display: block; font-size: 27px; }
+.cc-board__meta { display: block; margin-top: 4px; color: #a4afab; font-size: 22px; }
+.cc-board__value { color: #1d2b27; font-size: 25px; }
+
+.cc-code { display: flex; gap: 16px; margin-top: 24px; }
+.cc-code__input { flex: 1; background: #fff; }
+.cc-code__button { display: flex; align-items: center; padding: 0 32px; border-radius: 16px; background: #00bc7d; color: #fff; font-size: 27px; }
+
+.cc-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; max-height: 75vh; overflow-y: auto; padding: 28px 28px 60px; border-radius: 28px 28px 0 0; background: #fff; box-shadow: 0 -8px 30px rgb(0 0 0 / 12%); }
+.cc-sheet__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.cc-sheet__title { font-size: 29px; font-weight: 600; }
+.cc-sheet__close { color: #7b8a85; font-size: 25px; }
+.cc-sheet__loading { display: flex; justify-content: center; padding: 30px 0; }
+.cc-dish { padding: 22px 0; border-bottom: 1px solid #edf1ef; }
+.cc-dish__name { display: block; font-size: 27px; }
+.cc-dish__place { display: block; margin-top: 4px; color: #a4afab; font-size: 22px; }
+
+.research-weight-page--dark .cc-tab--active, .research-weight-page--dark .cc-board__value { color: #e6efec; }
+.research-weight-page--dark .cc-action--ghost, .research-weight-page--dark .cc-sheet { background: #121d1a; }
+.research-weight-page--dark .cc-code__input { background: #16221f; }
+.research-weight-page--dark .cc-dish { border-color: #26342f; }
+
+.cc-howto__step { display: flex; gap: 18px; margin-top: 20px; }
+.cc-howto__index { display: flex; flex-shrink: 0; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: #e8f7f1; color: #00875f; font-size: 25px; font-weight: 600; }
+.cc-howto__copy { flex: 1; min-width: 0; }
+.cc-howto__title { display: block; font-size: 27px; font-weight: 600; }
+.cc-howto__desc { display: block; margin-top: 6px; color: #5f6f6a; font-size: 24px; line-height: 1.5; }
+.cc-code-big { display: block; margin: 12px 0; color: #00875f; font-size: 40px; font-weight: 700; letter-spacing: 4px; }
+.cc-share { margin-top: 20px; border: none; line-height: inherit; }
+.cc-share::after { border: none; }
+.research-weight-page--dark .cc-howto__index { background: #143128; color: #7fd8b5; }
+.research-weight-page--dark .cc-howto__desc { color: #a8b8b2; }

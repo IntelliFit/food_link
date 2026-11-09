@@ -49,7 +49,7 @@ func (s *StatsService) loadMealHarnessContext(ctx context.Context, state *campus
 		state.EngineVersion = s.defaultDietEngineVersion()
 	}
 	if state.AsOf.IsZero() {
-		state.AsOf = time.Now()
+		state.AsOf = mealClock()
 	}
 	now := mealDecisionNow(state).In(chinaTZ)
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, chinaTZ)
@@ -82,7 +82,13 @@ func (s *StatsService) loadMealHarnessContext(ctx context.Context, state *campus
 		}
 		personal.RecentExercise = append(personal.RecentExercise, map[string]any{"date": date, "activity": trimStatsRunes(log.ExerciseDesc, 160), "duration_min": log.DurationMin, "calories": log.CaloriesBurned})
 	}
-	meal := campusDietAgentMealContext{EngineVersion: state.EngineVersion, Date: start.Format("2006-01-02"), MealType: inferCampusDietMealType(state.Question, now)}
+	// A meal planned for tomorrow starts a fresh day: nothing eaten yet, today in the history.
+	mealDay, basisNow := start, now
+	if state.MealForTomorrow {
+		mealDay = start.AddDate(0, 0, 1)
+		basisNow = mealDay
+	}
+	meal := campusDietAgentMealContext{EngineVersion: state.EngineVersion, Date: mealDay.Format("2006-01-02"), MealType: inferCampusDietMealType(state.Question, now)}
 	if profile != nil {
 		if profile.DietGoal != nil {
 			meal.UserGoal = *profile.DietGoal
@@ -92,7 +98,7 @@ func (s *StatsService) loadMealHarnessContext(ctx context.Context, state *campus
 		meal.DietPreferences = stringSliceFromCampusDietAny(health["diet_preference"])
 	}
 	for _, record := range records {
-		if record.RecordTime == nil || record.RecordTime.Before(start) || record.RecordTime.After(now) {
+		if record.RecordTime == nil || record.RecordTime.Before(mealDay) || record.RecordTime.After(now) {
 			continue
 		}
 		meal.Current.Calories += record.TotalCalories
@@ -101,7 +107,7 @@ func (s *StatsService) loadMealHarnessContext(ctx context.Context, state *campus
 		meal.Current.Fat += record.TotalFat
 	}
 	meal.UserGoal = explicitCampusDietGoal(state.Question, meal.UserGoal)
-	meal.DecisionBasis = buildDietDecisionBasis(profile, records, now)
+	meal.DecisionBasis = buildDietDecisionBasis(profile, records, basisNow)
 	meal.Targets = meal.DecisionBasis.Targets
 	meal.CalorieTarget = meal.Targets.Calories
 	protein, carbs, fat := meal.Targets.Protein, meal.Targets.Carbs, meal.Targets.Fat

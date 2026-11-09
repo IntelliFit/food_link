@@ -9,6 +9,7 @@ import {
   type CanonicalMealType,
   type MembershipStatus,
   type AnalysisEngine,
+  type EatingMood,
   type ExecutionMode,
 } from '../../../utils/api'
 import {
@@ -24,7 +25,8 @@ import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
-import { ANALYSIS_ENGINE_OPTIONS } from '../../../utils/analysis-engine'
+import EatingMoodPicker from '../../../components/EatingMoodPicker'
+import { SUBMIT_ANALYSIS_ENGINE } from '../../../utils/analysis-engine'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -51,7 +53,6 @@ const ACTIVITY_TIMINGS = [
 ]
 
 const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
-const TEXT_MODE_STORAGE_KEY = 'textAnalyzeExecutionMode'
 
 const readSuggestRatioPreference = (): boolean => {
   const saved = Taro.getStorageSync(SUGGEST_RATIO_STORAGE_KEY)
@@ -67,8 +68,9 @@ function RecordTextPage() {
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
-  const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>('ai_direct')
-  const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => Taro.getStorageSync(TEXT_MODE_STORAGE_KEY) === 'standard' ? 'standard' : 'fast')
+  const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
+  const analysisEngine: AnalysisEngine = SUBMIT_ANALYSIS_ENGINE
+  const executionMode: ExecutionMode = 'standard'
   const [showAdvanced, setShowAdvanced] = useState(false)
   const submitLock = useRef(false)
   const [loading, setLoading] = useState(false)
@@ -160,6 +162,7 @@ function RecordTextPage() {
         meal_type: selectedMeal as any,
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any,
+        eating_mood: eatingMood || undefined,
         suggest_ratio_enabled: readSuggestRatioPreference(),
         analysis_engine: analysisEngine,
         precise_micronutrients: true,
@@ -247,21 +250,6 @@ function RecordTextPage() {
         </View>
       )}
       <ScrollView className='content-scroll' scrollY>
-        <View className='text-mode-section'>
-          <View className='text-mode-switch'>
-            {([{ value: 'fast', label: '快速', description: '快速模型 · 日常记录' }, { value: 'standard', label: '普通', description: '详细分析 · 复杂餐食' }] as const).map(mode => (
-              <View
-                key={mode.value}
-                className={`text-mode-option text-mode-option--${mode.value} ${executionMode === mode.value ? 'active' : ''}`}
-                onClick={() => { setExecutionMode(mode.value); Taro.setStorageSync(TEXT_MODE_STORAGE_KEY, mode.value) }}
-              >
-                <Text className='text-mode-label'>{mode.label}</Text>
-                <Text className='text-mode-description'>{mode.description}</Text>
-              </View>
-            ))}
-          </View>
-          <Text className='text-mode-note'>两种模式均包含基础营养与微量营养素估算</Text>
-        </View>
         {/* 输入区域 */}
         <View className='input-section'>
           <Text className='section-title'>吃了什么？</Text>
@@ -295,6 +283,11 @@ function RecordTextPage() {
           </View>
         </View>
 
+        <View className='input-section'>
+          <Text className='section-title'>此刻心情（可选）</Text>
+          <EatingMoodPicker value={eatingMood} onChange={setEatingMood} />
+        </View>
+
         <View className='text-advanced-toggle' onClick={() => setShowAdvanced(value => !value)}>
           <Text>{showAdvanced ? '收起更多选项' : '更多选项'}</Text>
           <Text>{showAdvanced ? '−' : '＋'}</Text>
@@ -316,23 +309,6 @@ function RecordTextPage() {
           </View>
         </View>
 
-        {/* 营养计算方式 */}
-        <View className='input-section'>
-          <Text className='section-title'>营养计算方式</Text>
-          <View className='text-engine-options'>
-            {ANALYSIS_ENGINE_OPTIONS.map(option => (
-              <View
-                key={option.value}
-                className={`text-engine-option ${analysisEngine === option.value ? 'active' : ''}`}
-                onClick={() => setAnalysisEngine(option.value)}
-              >
-                <Text className='text-engine-option__label'>{option.label}</Text>
-                <Text className='text-engine-option__description'>{option.description}</Text>
-              </View>
-            ))}
-          </View>
-          <Text className='text-engine-note'>AI 估算无需等待数据库校准；选择数据库校准可能增加等待时间。</Text>
-        </View>
         </View>}
 
         {/* 餐次选择 */}
@@ -395,7 +371,7 @@ function RecordTextPage() {
           className={`submit-btn ${!foodText.trim() || loading || isQuotaExhausted ? 'disabled' : ''}`}
           onClick={handleSubmit}
         >
-          {loading ? <View className='text-submit-spinner' /> : <Text>{isQuotaExhausted ? '积分不足，暂不可分析' : `${executionMode === 'fast' ? '快速分析' : '开始分析'} · 2 积分`}</Text>}
+          {loading ? <View className='text-submit-spinner' /> : <Text>{isQuotaExhausted ? '积分不足，暂不可分析' : '开始分析 · 2 积分'}</Text>}
         </View>
       </View>
       <CreditShortageSheet

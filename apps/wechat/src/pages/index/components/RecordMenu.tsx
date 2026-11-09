@@ -28,11 +28,10 @@ import { persistRecordTargetDate, getRecordDateLabel, requireAllowedRecordDate }
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import {
   chooseImageWithPrivacy,
-  isCameraAuthorizationError,
   isPrivacyAuthorizeError,
-  showCameraAuthorizationFailure,
   showPrivacyAuthorizeFailure,
 } from '../../../utils/weapp-privacy'
+import { FOOD_CAMERA_PAGE } from '../../../utils/food-camera'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import { DevNewUserOnboardingPreview } from '../../../components/DevNewUserOnboardingPreview'
 
@@ -255,15 +254,27 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
             // 会员接口失败时仍允许选图，由分析提交接口提示
           }
           setImagePreflightMode(null)
+          if (modeId === 'camera') {
+            // 拍照走自建相机页：取景框竖拍 3:4、横拍 4:3，不用微信相机的全屏取景。
+            await closeBeforeNativePicker()
+            try {
+              await Taro.navigateTo({ url: `${FOOD_CAMERA_PAGE}?date=${encodeURIComponent(recordDate)}` })
+              logRecordMenuStage('camera-page-navigate-success', { interaction_id: interactionId, mode: modeId })
+            } catch (err: any) {
+              logRecordMenuStage('camera-page-navigate-failed', { interaction_id: interactionId, message: String(err?.errMsg || err?.message || '') })
+              Taro.showToast({ title: '打开相机失败，请重试', icon: 'none' })
+            }
+            return
+          }
           setImagePickInProgress(true)
           await closeBeforeNativePicker()
           const pickerStartedAt = Date.now()
           logRecordMenuStage('native-picker-start', { interaction_id: interactionId, mode: modeId })
           try {
             const res = await chooseImageWithPrivacy({
-              count: modeId === 'album' ? 5 : 1,
+              count: 5,
               sizeType: ['compressed'],
-              sourceType: modeId === 'camera' ? ['camera'] : ['album'],
+              sourceType: ['album'],
             })
             const tempPaths = res.tempFilePaths || []
             logRecordMenuStage('native-picker-success', {
@@ -298,10 +309,6 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
             }
             if (isPrivacyAuthorizeError(err)) {
               showPrivacyAuthorizeFailure(err)
-              return
-            }
-            if (modeId === 'camera' && isCameraAuthorizationError(err)) {
-              showCameraAuthorizationFailure()
               return
             }
             void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')

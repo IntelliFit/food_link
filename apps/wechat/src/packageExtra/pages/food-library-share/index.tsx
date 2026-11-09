@@ -11,10 +11,6 @@ import {
 import { useState, useEffect } from "react";
 import Taro from "@tarojs/taro";
 import { useAppColorScheme } from "../../../components/AppColorSchemeContext";
-import { Popup, AreaPicker } from "@taroify/core";
-import "@taroify/core/popup/style";
-import "@taroify/core/picker/style";
-import { areaList } from "@vant/area-data";
 import {
   getFoodRecordList,
   getFoodRecordById,
@@ -22,7 +18,6 @@ import {
   getMyMembership,
   getPublicFoodLibraryItem,
   uploadAnalyzeImage,
-  analyzeFoodImage,
   imageToBase64,
   resolveCurrentGeoContext,
   showUnifiedApiError,
@@ -38,6 +33,7 @@ import {
 } from "../../../utils/api";
 import "./index.scss";
 import { extraPkgUrl } from "../../../utils/subpackage-extra";
+import { sharedSpotQuery, uploadedSpotFromPayload } from "../food-library/food-map-share";
 import {
   chooseImageWithPrivacy,
   isPrivacyAuthorizeError,
@@ -134,8 +130,21 @@ function FoodLibrarySharePage() {
   const [latitude, setLatitude] = useState<number | undefined>(undefined);
   const [longitude, setLongitude] = useState<number | undefined>(undefined);
 
-  // 城市选择器
-  const [showCityPicker, setShowCityPicker] = useState(false);
+  // 城市选择器：原生省市区选择器直接给名称。直辖市：省名=市名=直辖市名，区名在第三级。
+  const applyRegion = (names: string[]) => {
+    const [p = "", c = "", d = ""] = names;
+    if (["北京", "上海", "天津", "重庆"].some((name) => p.includes(name))) {
+      setProvince(p);
+      setCity("");
+      setDistrict(d || c);
+    } else {
+      setProvince(p);
+      setCity(c);
+      setDistrict(d);
+    }
+  };
+  const regionValue = province ? [province, city || province, district] : [];
+
   const [membershipStatus, setMembershipStatus] =
     useState<MembershipStatus | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(false);
@@ -467,46 +476,7 @@ function FoodLibrarySharePage() {
 
   const MAX_IMAGES = 5;
 
-  /** 把多角度图片作为同一餐食联合识别，避免逐图累加重复计算。 */
-  const analyzeCombinedImages = async (urls: string[]) => {
-    if (urls.length === 0) {
-      setDescription("");
-      setInsight("");
-      setItems([]);
-      setTotalCalories(0);
-      setTotalProtein(0);
-      setTotalCarbs(0);
-      setTotalFat(0);
-      return;
-    }
-    const result = await analyzeFoodImage({
-      image_url: urls[0],
-      image_urls: urls,
-      additionalContext: "这些图片是同一份餐食的不同角度，请合并判断一次，不要重复计算食物或热量。",
-    });
-    setDescription(result.description || "");
-    setInsight(result.insight || "");
-    const allItems = (result.items || []).map((it) => ({
-        name: it.name,
-        weight: it.estimatedWeightGrams,
-        nutrients: it.nutrients,
-      }));
-    setItems(allItems);
-    const cal = allItems.reduce((sum, item) => sum + (item.nutrients?.calories || 0), 0);
-    const pro = allItems.reduce((sum, item) => sum + (item.nutrients?.protein || 0), 0);
-    const carb = allItems.reduce((sum, item) => sum + (item.nutrients?.carbs || 0), 0);
-    const fat = allItems.reduce((sum, item) => sum + (item.nutrients?.fat || 0), 0);
-    setTotalCalories(cal);
-    setTotalProtein(pro);
-    setTotalCarbs(carb);
-    setTotalFat(fat);
-    const inferredName = inferFoodName(null, allItems, result.description || "");
-    if (inferredName) {
-      setFoodName((prev) => prev.trim() || inferredName);
-    }
-  };
-
-  // 选择图片：最多 5 张；每次以当前完整图片集重新做一次联合识别
+  // 选择图片：最多 5 张。只上传不识别，热量由后台在提交后自动补上，不让用户等。
   const handleChooseImage = async () => {
     const remain = MAX_IMAGES - imagePaths.length;
     if (remain <= 0) return;
@@ -523,31 +493,6 @@ function FoodLibrarySharePage() {
       const prevUrls = imageUrls;
       setImagePaths((p) => [...p, ...tempPaths]);
 
-      if (isEditMode) {
-        // 编辑模式：仅上传图片，不触发 AI 识别，保留原有营养数据
-        Taro.showLoading({ title: "上传中...", mask: true });
-        try {
-          const newUrls: string[] = [];
-          for (let i = 0; i < tempPaths.length; i++) {
-            const base64 = await imageToBase64(tempPaths[i]);
-            const uploadRes = await uploadAnalyzeImage(base64);
-            newUrls.push(uploadRes.imageUrl);
-          }
-          const allUrls = [...prevUrls, ...newUrls];
-          setImageUrls(allUrls);
-          setImageUrl(allUrls[0] || "");
-          Taro.showToast({ title: "图片已更新", icon: "success" });
-        } catch (e: any) {
-          setImagePaths(prevPaths);
-          setImageUrls(prevUrls);
-          setImageUrl(prevUrls[0] || "");
-          await showUnifiedApiError(e, "上传失败");
-        } finally {
-          Taro.hideLoading();
-        }
-        return;
-      }
-
       setAnalyzing(true);
       Taro.showLoading({ title: "上传中...", mask: true });
       try {
@@ -560,19 +505,11 @@ function FoodLibrarySharePage() {
         const allUrls = [...prevUrls, ...newUrls];
         setImageUrls(allUrls);
         setImageUrl(allUrls[0] || "");
-        Taro.hideLoading();
-
-        Taro.showLoading({ title: "识别中...", mask: true });
-        await analyzeCombinedImages(allUrls);
-        Taro.showToast({
-          title: allUrls.length > 1 ? `已联合识别 ${allUrls.length} 张` : "识别成功",
-          icon: "success",
-        });
       } catch (e: any) {
         setImagePaths(prevPaths);
         setImageUrls(prevUrls);
         setImageUrl(prevUrls[0] || "");
-        await showUnifiedApiError(e, "上传或识别失败");
+        await showUnifiedApiError(e, "上传失败");
       } finally {
         Taro.hideLoading();
         setAnalyzing(false);
@@ -606,21 +543,6 @@ function FoodLibrarySharePage() {
     setImageUrls(nextUrls);
     setImageUrl(nextUrls[0] || "");
     setSelectedRecord(null);
-    if (isEditMode) {
-      return;
-    }
-    if (nextUrls.length === 0) {
-      void analyzeCombinedImages([]);
-      return;
-    }
-    setAnalyzing(true);
-    Taro.showLoading({ title: "重新识别中...", mask: true });
-    void analyzeCombinedImages(nextUrls)
-      .catch((error) => showUnifiedApiError(error, "重新识别失败"))
-      .finally(() => {
-        Taro.hideLoading();
-        setAnalyzing(false);
-      });
   };
 
   type SelectedLocation = {
@@ -792,7 +714,8 @@ function FoodLibrarySharePage() {
     }
     const finalFoodName =
       foodName.trim() || inferFoodName(selectedRecord, items, description);
-    if (!finalFoodName) {
+    // 商家餐食不填名称时由后台按照片识别补上；校园菜品必须写明菜名。
+    if (!finalFoodName && isCampusFood) {
       Taro.showToast({ title: "请填写食物名称", icon: "none" });
       return;
     }
@@ -820,7 +743,7 @@ function FoodLibrarySharePage() {
         return;
       }
       if (!selectedCanteen?.id) {
-        Taro.showToast({ title: "请选择已审核食堂", icon: "none" });
+        Taro.showToast({ title: "请选择食堂", icon: "none" });
         return;
       }
       if (priceType === "range") {
@@ -847,9 +770,7 @@ function FoodLibrarySharePage() {
           ? "确定发布这份校园食堂菜品吗？提交后会自动出现在校园食堂分区。"
           : mapLightingMode
             ? "确定点亮这家美食吗？发布后，其他用户可以在美食地图上发现它。"
-          : quickUploadMode
-            ? "确定上传到美食图谱吗？审核通过后其他用户即可查看。"
-            : "确定要将该食物分享到美食图谱吗？提交后需经系统审核，通过后其他用户可查看。",
+            : "确定上传到美食图谱吗？发布后其他用户就能看到，热量会在后台自动识别。",
       confirmText: isEditMode ? "保存" : "确定提交",
       cancelText: "取消",
     });
@@ -947,22 +868,26 @@ function FoodLibrarySharePage() {
           Taro.navigateBack();
         }, 1200);
       } else {
-        await createPublicFoodLibraryItem(buildSubmitPayload());
-        Taro.showToast({
-          title: isCampusFood
-            ? "已发布到校园食堂"
-            : "提交成功，审核通过后将展示",
-          icon: "none",
-          duration: 2500,
-        });
+        const payload = buildSubmitPayload();
+        await createPublicFoodLibraryItem(payload);
         Taro.setStorageSync("food_library_need_refresh", "1");
+        if (isCampusFood) {
+          Taro.showToast({ title: "已发布到校园食堂", icon: "none", duration: 2500 });
+          setTimeout(() => {
+            Taro.redirectTo({ url: extraPkgUrl("/pages/campus-canteen/index") });
+          }, 2500);
+          return;
+        }
+        const uploaded = uploadedSpotFromPayload(payload);
+        if (uploaded) {
+          // 回到地图上刚点亮的位置，邀请用户把这个点位分享出去。
+          Taro.redirectTo({
+            url: `${extraPkgUrl("/pages/food-library/index")}?${sharedSpotQuery(uploaded)}&from=upload`,
+          });
+          return;
+        }
+        Taro.showToast({ title: "已上传，热量稍后自动补上", icon: "none", duration: 2500 });
         setTimeout(() => {
-          if (isCampusFood) {
-            Taro.redirectTo({
-              url: extraPkgUrl("/pages/campus-canteen/index"),
-            });
-            return;
-          }
           if (quickUploadMode) {
             Taro.redirectTo({ url: extraPkgUrl("/pages/food-library/index") });
             return;
@@ -1004,7 +929,7 @@ function FoodLibrarySharePage() {
       >
         <CampusMembershipGate
           title='校园食堂为会员专属'
-          subtitle='开通食探会员后，可以分享校园食堂菜品并绑定已审核食堂。普通美食图谱分享仍可继续使用。'
+          subtitle='开通食探会员后，可以分享校园食堂菜品并绑定食堂。普通美食图谱分享仍可继续使用。'
         />
       </View>
     );
@@ -1101,7 +1026,7 @@ function FoodLibrarySharePage() {
           <View className='image-upload-area' onClick={handleChooseImage}>
             <Text className='upload-icon iconfont icon-paizhao-xianxing' />
             <Text className='upload-text'>
-              点击上传食物图片（最多 5 张，多角度联合识别）
+              点击上传食物图片（最多 5 张，热量会在后台自动识别）
             </Text>
           </View>
         )}
@@ -1110,6 +1035,11 @@ function FoodLibrarySharePage() {
       {/* 营养信息 */}
       <View className='nutrition-section'>
         <Text className='section-title'>营养信息</Text>
+        {totalCalories <= 0 && items.length === 0 ? (
+          <Text className='nutrition-tip nutrition-tip--pending'>
+            上传后 AI 会在后台识别热量和营养，不用在这里等。
+          </Text>
+        ) : (
         <View className='nutrition-summary'>
           <View className='nutrition-item'>
             <Text className='nutrition-value'>{formatMacroNutrient(totalCalories)}</Text>
@@ -1128,14 +1058,15 @@ function FoodLibrarySharePage() {
             <Text className='nutrition-label'>脂肪 g</Text>
           </View>
         </View>
-        <Text className='nutrition-tip'>营养数据由 AI 自动识别</Text>
+        )}
+        {(totalCalories > 0 || items.length > 0) && <Text className='nutrition-tip'>营养数据由 AI 自动识别</Text>}
       </View>
 
       {/* 基础信息 */}
       <View className='merchant-section'>
         <Text className='section-title'>基础信息</Text>
         <View className='form-item'>
-          <Text className='form-label'>食物名称（已自动带入，可修改）</Text>
+          <Text className='form-label'>{foodName.trim() ? "食物名称（可修改）" : isCampusFood ? "食物名称" : "食物名称（选填，不填会自动识别）"}</Text>
           <Input
             className='form-input'
             placeholder='如：麻辣香锅、烤鸡腿饭等'
@@ -1267,7 +1198,7 @@ function FoodLibrarySharePage() {
                 <Text
                   className={canteenName ? "city-value" : "city-placeholder"}
                 >
-                  {selectedCanteen?.name || canteenName || "请选择已审核食堂"}
+                  {selectedCanteen?.name || canteenName || "请选择食堂"}
                 </Text>
               </View>
             </View>
@@ -1445,7 +1376,12 @@ function FoodLibrarySharePage() {
             </View>
           )}
         </View>
-        <View className='form-item' onClick={() => setShowCityPicker(true)}>
+        <Picker
+          mode='region'
+          value={regionValue}
+          onChange={(e) => applyRegion(e.detail.value as string[])}
+        >
+        <View className='form-item'>
           <Text className='form-label'>
             {isHomemade ? "省市（可选）" : "城市/区域（可选）"}
           </Text>
@@ -1463,6 +1399,7 @@ function FoodLibrarySharePage() {
             </Text>
           </View>
         </View>
+        </Picker>
         {isHomemade ? (
           <Text className='location-helper'>
             自制餐食不需要填写商家信息；所在地区可按需补充。
@@ -1510,46 +1447,6 @@ function FoodLibrarySharePage() {
         </View>
       </View>
 
-      {/* 城市选择弹窗 */}
-      <Popup
-        open={showCityPicker}
-        placement='bottom'
-        onClose={() => setShowCityPicker(false)}
-      >
-        <AreaPicker
-          title='选择城市/区域'
-          areaList={areaList}
-          onConfirm={(values: any[]) => {
-            // values 是 code 数组，如 ["110000", "110100", "110101"]
-            // 需要从 areaList 中查找对应的名称
-            const provinceCode = values[0] || "";
-            const cityCode = values[1] || "";
-            const districtCode = values[2] || "";
-
-            const p = areaList.province_list?.[provinceCode] || "";
-            const c = areaList.city_list?.[cityCode] || "";
-            const d = areaList.county_list?.[districtCode] || "";
-
-            // 直辖市处理：省名=市名=直辖市名，区名在第三级
-            if (
-              p.includes("北京") ||
-              p.includes("上海") ||
-              p.includes("天津") ||
-              p.includes("重庆")
-            ) {
-              setProvince(p);
-              setCity("");
-              setDistrict(d || c);
-            } else {
-              setProvince(p);
-              setCity(c);
-              setDistrict(d);
-            }
-            setShowCityPicker(false);
-          }}
-          onCancel={() => setShowCityPicker(false)}
-        />
-      </Popup>
 
       {/* 从记录选择弹窗 */}
       {showRecordModal && (

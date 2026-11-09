@@ -16,7 +16,35 @@ export interface FoodMapSpot extends FoodMapLocation {
   address: string
 }
 
+export type FoodMapMarkerItem =
+  | { kind: 'spot', key: string, latitude: number, longitude: number, spot: FoodMapSpot }
+  | {
+    kind: 'cluster'
+    key: string
+    latitude: number
+    longitude: number
+    focus: FoodMapLocation
+    spots: FoodMapSpot[]
+  }
+
+export type FoodMapClusterTier = 'small' | 'medium' | 'large'
+
 const EARTH_RADIUS_KM = 6371
+export const FOOD_MAP_MIN_SCALE = 3
+export const FOOD_MAP_MAX_CLUSTER_ZOOM_SCALE = 18
+// Below this zoom the clusters are few enough to keep them all on the map.
+const VIEW_CULLING_MIN_SCALE = 7
+// Half the visible span is about 0.7 x 360 / 2^scale on a phone; keep a margin so
+// a short drag does not reveal an empty area before the markers refresh.
+const VIEW_SPAN_FACTOR = 2
+// Web Mercator tiles: the fewest on-screen pixels per degree a device can show.
+// Devices that render larger only spread the bubbles further apart.
+const PIXELS_PER_DEGREE_AT_SCALE_ZERO = 256 / 360
+// From this scale on, every spot keeps its own marker so each one can be opened.
+const NO_CLUSTER_SCALE = 17
+// A count bubble with its pointer is about 44 x 40 px: seeds this far apart cannot overlap.
+const CLUSTER_RADIUS_X_PX = 48
+const CLUSTER_RADIUS_Y_PX = 44
 
 function degreesToRadians(value: number): number {
   return value * Math.PI / 180
@@ -66,6 +94,94 @@ function spotCoordinateKey(item: PublicFoodLibraryItem): string {
   return `${Number(item.latitude).toFixed(5)}:${Number(item.longitude).toFixed(5)}`
 }
 
+function spotMarkerItem(spot: FoodMapSpot): FoodMapMarkerItem {
+  return { kind: 'spot', key: spot.key, latitude: spot.latitude, longitude: spot.longitude, spot }
+}
+
+/**
+ * Greedy merge by on-screen distance: a spot joins the first seed within reach,
+ * otherwise it becomes a seed. Each cluster sits on its seed, a real shop position,
+ * so bubbles stay apart; tapping zooms to the members' centre instead.
+ */
+export function clusterFoodMapSpots(
+  spots: FoodMapSpot[],
+  scale: number,
+  selectedKey = '',
+): FoodMapMarkerItem[] {
+  if (scale >= NO_CLUSTER_SCALE) return spots.map(spotMarkerItem)
+  const pixelsPerDegree = PIXELS_PER_DEGREE_AT_SCALE_ZERO * 2 ** scale
+  const columnWidth = CLUSTER_RADIUS_X_PX / pixelsPerDegree
+  const seedsByColumn = new Map<number, { seed: FoodMapSpot, members: FoodMapSpot[] }[]>()
+  const groups: { seed: FoodMapSpot, members: FoodMapSpot[] }[] = []
+  const items: FoodMapMarkerItem[] = []
+  spots.forEach((spot) => {
+    // The open spot keeps its own marker, whatever the zoom level.
+    if (spot.key === selectedKey) {
+      items.push(spotMarkerItem(spot))
+      return
+    }
+    const column = Math.floor(spot.longitude / columnWidth)
+    // Latitude degrees stretch on screen away from the equator (Mercator).
+    const latitudePixels = pixelsPerDegree / Math.cos(degreesToRadians(spot.latitude))
+    const nearby = [column - 1, column, column + 1].flatMap(key => seedsByColumn.get(key) || [])
+    const group = nearby.find(candidate => (
+      Math.abs(candidate.seed.longitude - spot.longitude) * pixelsPerDegree <= CLUSTER_RADIUS_X_PX
+      && Math.abs(candidate.seed.latitude - spot.latitude) * latitudePixels <= CLUSTER_RADIUS_Y_PX
+    ))
+    if (group) {
+      group.members.push(spot)
+      return
+    }
+    const created = { seed: spot, members: [spot] }
+    groups.push(created)
+    seedsByColumn.set(column, [...(seedsByColumn.get(column) || []), created])
+  })
+  groups.forEach(({ seed, members }) => {
+    if (members.length === 1) {
+      items.push(spotMarkerItem(seed))
+      return
+    }
+    items.push({
+      kind: 'cluster',
+      key: `cluster:${seed.key}`,
+      latitude: seed.latitude,
+      longitude: seed.longitude,
+      focus: {
+        latitude: members.reduce((sum, spot) => sum + spot.latitude, 0) / members.length,
+        longitude: members.reduce((sum, spot) => sum + spot.longitude, 0) / members.length,
+      },
+      spots: members,
+    })
+  })
+  return items
+}
+
+export function foodMapMarkerItemsInView(
+  items: FoodMapMarkerItem[],
+  center: FoodMapLocation,
+  scale: number,
+  selectedKey = '',
+): FoodMapMarkerItem[] {
+  if (scale < VIEW_CULLING_MIN_SCALE) return items
+  const halfSpan = VIEW_SPAN_FACTOR * 360 / 2 ** scale
+  return items.filter(item => item.key === selectedKey || (
+    Math.abs(item.latitude - center.latitude) <= halfSpan
+    && Math.abs(item.longitude - center.longitude) <= halfSpan
+  ))
+}
+
+export function formatFoodMapClusterCount(count: number): string {
+  // Non-breaking spaces keep a one-digit bubble round rather than tall and thin.
+  if (count < 10) return `\u00A0${count}\u00A0`
+  if (count < 1000) return String(count)
+  return `${(Math.floor(count / 100) / 10).toFixed(1)}k`
+}
+
+export function foodMapClusterTier(count: number): FoodMapClusterTier {
+  if (count < 10) return 'small'
+  return count < 100 ? 'medium' : 'large'
+}
+
 export function buildFoodMapSpots(
   items: PublicFoodLibraryItem[],
   userLocation?: FoodMapLocation | null,
@@ -103,6 +219,15 @@ export function buildFoodMapSpots(
       }
       return foodMapPopularity(right.featuredItem) - foodMapPopularity(left.featuredItem)
     })
+}
+
+/** 只有一道菜的地点直接进详情，多道菜先看地点的餐食列表。 */
+export function mapSpotOpensDishList(spot: Pick<FoodMapSpot, 'foodCount'>): boolean {
+  return spot.foodCount > 1
+}
+
+export function mapSpotDishesLabel(foodCount: number): string {
+  return foodCount > 1 ? `查看 ${foodCount} 道餐食` : '查看餐食'
 }
 
 export function buildFoodMapSpotsFromPayload(

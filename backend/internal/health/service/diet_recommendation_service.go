@@ -63,37 +63,44 @@ type DietRecommendationMeal struct {
 }
 
 type DietRecommendationResult struct {
-	CandidateFunnel        []MealCandidateFunnel                `json:"candidate_funnel,omitempty"`
-	SelectionAudit         *MealSelectionAudit                  `json:"selection_audit,omitempty"`
-	CandidateSnapshotHash  string                               `json:"candidate_snapshot_hash,omitempty"`
-	CatalogCoverage        []MealCatalogCoverage                `json:"catalog_coverage,omitempty"`
-	SelectionPolicyVersion string                               `json:"selection_policy_version,omitempty"`
-	RecommendationID       string                               `json:"recommendation_id,omitempty"`
-	DecisionBasis          *DietDecisionBasis                   `json:"decision_basis,omitempty"`
-	LocationHint           *domain.MealArea                     `json:"location_hint,omitempty"`
-	HarnessVersion         string                               `json:"harness_version,omitempty"`
-	SearchScope            string                               `json:"search_scope,omitempty"`
-	ContextSummary         []string                             `json:"context_summary,omitempty"`
-	DataNotes              []string                             `json:"data_notes,omitempty"`
-	NeedsClarification     bool                                 `json:"needs_clarification,omitempty"`
-	Scene                  string                               `json:"scene"`
-	Title                  string                               `json:"title"`
-	Summary                string                               `json:"summary"`
-	CalorieRemaining       float64                              `json:"calorie_remaining"`
-	MacroGaps              DietRecommendationMacro              `json:"macro_gaps"`
-	Recommendations        []DietRecommendationOption           `json:"recommendations"`
-	GeneratedBy            string                               `json:"generated_by"`
-	ResolvedSchool         *domain.DietRecommendationSchool     `json:"resolved_school,omitempty"`
-	CampusID               string                               `json:"campus_id,omitempty"`
-	CampusName             string                               `json:"campus_name,omitempty"`
-	AIUsed                 bool                                 `json:"ai_used"`
-	CandidateCount         int                                  `json:"candidate_count,omitempty"`
-	AIRerankCount          int                                  `json:"ai_rerank_count,omitempty"`
-	SessionID              string                               `json:"session_id,omitempty"`
-	UserMessageID          string                               `json:"user_message_id,omitempty"`
-	AssistantMessageID     string                               `json:"assistant_message_id,omitempty"`
-	AgentConstraints       *CampusDietRecommendationConstraints `json:"agent_constraints,omitempty"`
-	DecisionEngineVersion  string                               `json:"decision_engine_version,omitempty"`
+	CandidateFunnel        []MealCandidateFunnel `json:"candidate_funnel,omitempty"`
+	SelectionAudit         *MealSelectionAudit   `json:"selection_audit,omitempty"`
+	CandidateSnapshotHash  string                `json:"candidate_snapshot_hash,omitempty"`
+	CatalogCoverage        []MealCatalogCoverage `json:"catalog_coverage,omitempty"`
+	SelectionPolicyVersion string                `json:"selection_policy_version,omitempty"`
+	RecommendationID       string                `json:"recommendation_id,omitempty"`
+	// JudgePending: the home preview skipped the model's final pick; ask again
+	// with judge_mode "background" to get it.
+	JudgePending          bool                                 `json:"judge_pending,omitempty"`
+	DecisionBasis         *DietDecisionBasis                   `json:"decision_basis,omitempty"`
+	LocationHint          *domain.MealArea                     `json:"location_hint,omitempty"`
+	HarnessVersion        string                               `json:"harness_version,omitempty"`
+	SearchScope           string                               `json:"search_scope,omitempty"`
+	ContextSummary        []string                             `json:"context_summary,omitempty"`
+	DataNotes             []string                             `json:"data_notes,omitempty"`
+	NeedsClarification    bool                                 `json:"needs_clarification,omitempty"`
+	Scene                 string                               `json:"scene"`
+	Title                 string                               `json:"title"`
+	Summary               string                               `json:"summary"`
+	CalorieRemaining      float64                              `json:"calorie_remaining"`
+	MacroGaps             DietRecommendationMacro              `json:"macro_gaps"`
+	Recommendations       []DietRecommendationOption           `json:"recommendations"`
+	GeneratedBy           string                               `json:"generated_by"`
+	ResolvedSchool        *domain.DietRecommendationSchool     `json:"resolved_school,omitempty"`
+	CampusID              string                               `json:"campus_id,omitempty"`
+	CampusName            string                               `json:"campus_name,omitempty"`
+	AIUsed                bool                                 `json:"ai_used"`
+	CandidateCount        int                                  `json:"candidate_count,omitempty"`
+	AIRerankCount         int                                  `json:"ai_rerank_count,omitempty"`
+	SessionID             string                               `json:"session_id,omitempty"`
+	UserMessageID         string                               `json:"user_message_id,omitempty"`
+	AssistantMessageID    string                               `json:"assistant_message_id,omitempty"`
+	AgentConstraints      *CampusDietRecommendationConstraints `json:"agent_constraints,omitempty"`
+	DecisionEngineVersion string                               `json:"decision_engine_version,omitempty"`
+	// The meal a home card is for, which may differ from the one asked for (late at night).
+	MealType  string `json:"meal_type,omitempty"`
+	MealDate  string `json:"meal_date,omitempty"`
+	MealLabel string `json:"meal_label,omitempty"`
 }
 
 type CampusDietRecommendationConstraints struct {
@@ -107,6 +114,7 @@ type CampusDietRecommendationConstraints struct {
 	PendingSchool      *domain.DietRecommendationSchool `json:"-"`
 	CampusAccessDenied bool                             `json:"-"`
 	CompleteMeal       bool                             `json:"complete_meal,omitempty"`
+	ItemKind           string                           `json:"item_kind,omitempty"` // dish/side/drink/snack: one item, not a whole meal
 	MealType           string                           `json:"meal_type,omitempty"`
 	AvoidFoods         []string                         `json:"avoid_foods,omitempty"`
 	PreferFoods        []string                         `json:"prefer_foods,omitempty"`
@@ -136,6 +144,7 @@ type DietRecommendationOption struct {
 	Latitude                         *float64                      `json:"latitude,omitempty"`
 	Longitude                        *float64                      `json:"longitude,omitempty"`
 	MerchantName                     string                        `json:"merchant_name,omitempty"`
+	OpeningHours                     string                        `json:"opening_hours,omitempty"` // the canteen's collected hours, for "还开着吗"
 	Address                          string                        `json:"address,omitempty"`
 	Title                            string                        `json:"title"`
 	Reason                           string                        `json:"reason"`
@@ -876,7 +885,7 @@ func campusDietRecommendationOption(candidate DietRecommendationCandidate, reaso
 		Price: candidate.Price, PriceUnit: candidate.PriceUnit, ImagePath: candidate.ImagePath,
 		NutritionBasis: candidate.NutritionBasis, NutritionSourceCategory: candidate.NutritionSourceCategory,
 		WeightMethod: candidate.WeightMethod, WeightConfidence: candidate.WeightConfidence,
-		UncertaintyLevel: candidate.UncertaintyLevel,
+		UncertaintyLevel: candidate.UncertaintyLevel, OpeningHours: candidate.OpeningHours,
 	}
 }
 

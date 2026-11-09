@@ -45,52 +45,89 @@ func TestCampusDietAgentFunctionCallingQueriesContextAndFiveRealFoods(t *testing
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		mu.Lock()
 		requests = append(requests, body)
-		call := len(requests)
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		switch call {
-		case 1:
-			writeCampusDietAgentTestToolCall(t, w, "call-context", "get_meal_context", `{}`)
-		case 2:
-			writeCampusDietAgentTestToolCall(t, w, "call-search", "search_campus_foods", `{"max_calories":400,"sort_by":"protein_density","limit":20}`)
-		default:
-			selections := make([]map[string]any, 0, 3)
-			for _, candidate := range candidates[:3] {
-				selections = append(selections, map[string]any{"source_id": candidate.SourceID, "reason": "高蛋白且适合本餐目标"})
-			}
-			writeCampusDietAgentTestFinal(t, w, map[string]any{"answer": "已核对真实数据", "selections": selections})
+		selections := make([]map[string]any, 0, 3)
+		for _, candidate := range candidates[:3] {
+			selections = append(selections, map[string]any{"source_id": candidate.SourceID, "reason": "高蛋白且适合本餐目标"})
 		}
+		writeCampusDietAgentTestFinal(t, w, map[string]any{"answer": "已核对真实数据", "selections": selections})
 	}))
 	defer server.Close()
 
 	svc := newCampusDietAgentTestService(repo, server.URL)
 	state := newCampusDietAgentTestState("initial", nil)
 	state.Question = "我是清华学生，今天减脂，推荐400卡以下的午餐"
+	applyCampusDietAgentQuestionConstraints(&state.Constraints, state.Question)
+	var provisional []*CampusDietAgentResult
+	state.Provisional = func(result *CampusDietAgentResult) { provisional = append(provisional, result) }
 	result := svc.runCampusDietAgent(context.Background(), state)
 
 	require.True(t, result.AgentUsed)
 	require.Len(t, result.Recommendation.Recommendations, 3)
 	assert.Equal(t, campusDietAgentModel, result.Recommendation.GeneratedBy)
+	assert.False(t, result.Provisional)
 	assert.Equal(t, 2, result.ToolCount)
 	for _, option := range result.Recommendation.Recommendations {
 		assert.LessOrEqual(t, option.Calories, 400.0)
 		assert.Equal(t, "school-tsinghua", option.SchoolID)
 	}
+	// The server runs this turn's search itself, with the conditions in the question.
 	require.Len(t, repo.campusSearchFilters, 1)
 	require.NotNil(t, repo.campusSearchFilters[0].MaxCalories)
 	assert.Equal(t, 400.0, *repo.campusSearchFilters[0].MaxCalories)
+	// The rule-picked options went out before the model chose.
+	require.Len(t, provisional, 1)
+	assert.True(t, provisional[0].Provisional)
+	assert.Len(t, provisional[0].Recommendation.Recommendations, 3)
+	assert.Contains(t, provisional[0].Answer, "先按你这餐的条件挑了 3 份")
 
 	mu.Lock()
 	defer mu.Unlock()
-	require.Len(t, requests, 3)
+	// The server reads the context and runs the search, so the model's first round can already choose.
+	require.Len(t, requests, 1)
 	assert.Equal(t, campusDietAgentModel, requests[0]["model"])
 	assert.Equal(t, false, requests[0]["enable_thinking"])
 	assert.Equal(t, false, requests[0]["preserve_thinking"])
-	forcedChoice := requests[0]["tool_choice"].(map[string]any)
-	assert.Equal(t, "get_meal_context", forcedChoice["function"].(map[string]any)["name"])
-	assert.Equal(t, "required", requests[1]["tool_choice"])
-	assert.True(t, campusDietAgentRequestHasToolResult(requests[1], "call-context"))
-	assert.True(t, campusDietAgentRequestHasToolResult(requests[2], "call-search"))
+	assert.Equal(t, "auto", requests[0]["tool_choice"])
+	assert.True(t, campusDietAgentRequestHasToolResult(requests[0], "preloaded-context"))
+	assert.True(t, campusDietAgentRequestHasToolResult(requests[0], "preloaded-search"))
+}
+
+func TestCampusDietAgentLeavesPreferenceWordsToTheModelBeforeSearching(t *testing.T) {
+	assert.True(t, mealQuestionNeedsModelPreferences("晚饭不吃辣，推荐一下"))
+	assert.True(t, mealQuestionNeedsModelPreferences("想吃点清淡的"))
+	assert.False(t, mealQuestionNeedsModelPreferences("晚上吃什么好？"))
+	assert.False(t, mealQuestionNeedsModelPreferences("推荐400卡以下的午餐"))
+}
+
+func TestCampusDietAgentKeepsRulePickedOptionsWhenTheModelFails(t *testing.T) {
+	candidates := campusDietAgentTestCandidates(6)
+	repo := &mockStatsRepo{candidates: candidates, resolvedSchool: &domain.DietRecommendationSchool{ID: "school-tsinghua", Name: "清华大学"}}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "upstream transport error", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	state := newCampusDietAgentTestState("initial", nil)
+	state.Question = "晚上吃什么好？"
+	var provisional []*CampusDietAgentResult
+	state.Provisional = func(result *CampusDietAgentResult) { provisional = append(provisional, result) }
+	result := newCampusDietAgentTestService(repo, server.URL).runCampusDietAgent(context.Background(), state)
+
+	require.Len(t, provisional, 1)
+	require.NotEmpty(t, result.Recommendation.Recommendations)
+	assert.False(t, result.AgentUsed)
+	assert.False(t, result.Provisional)
+	ids := func(r *CampusDietAgentResult) []string {
+		out := []string{}
+		for _, option := range r.Recommendation.Recommendations {
+			out = append(out, option.SourceID)
+		}
+		return out
+	}
+	// The final answer offers the same options the user already saw.
+	assert.Equal(t, ids(provisional[0]), ids(result))
 }
 
 func TestCampusDietAgentReservesLastRoundForFinalAnswer(t *testing.T) {
@@ -101,14 +138,14 @@ func TestCampusDietAgentReservesLastRoundForFinalAnswer(t *testing.T) {
 		call++
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		// The server has already read the context (one tool call). After three more tool calls
+		// with enough feasible options, the next round is the final answer without tools.
 		switch call {
 		case 1:
-			writeCampusDietAgentTestToolCall(t, w, "call-context", "get_meal_context", `{}`)
-		case 2:
 			writeCampusDietAgentTestToolCall(t, w, "call-search", "search_campus_foods", `{"limit":20}`)
-		case 3:
+		case 2:
 			writeCampusDietAgentTestToolCall(t, w, "call-details", "get_campus_food_details", `{"source_ids":["food-1","food-2","food-3","food-4","food-5"]}`)
-		case 4, 5:
+		case 3:
 			writeCampusDietAgentTestToolCall(t, w, fmt.Sprintf("call-compare-%d", call), "compare_campus_foods", `{"source_ids":["food-1","food-2"]}`)
 		default:
 			assert.Equal(t, "none", body["tool_choice"])
@@ -127,7 +164,7 @@ func TestCampusDietAgentReservesLastRoundForFinalAnswer(t *testing.T) {
 	)
 
 	require.True(t, result.AgentUsed)
-	assert.Equal(t, campusDietAgentMaxRounds, call)
+	assert.Equal(t, 4, call)
 	assert.NotContains(t, result.Answer, "AI 解读暂不可用")
 	require.Len(t, result.Recommendation.Recommendations, 3)
 }

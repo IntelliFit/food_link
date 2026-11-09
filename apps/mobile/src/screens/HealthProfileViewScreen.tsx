@@ -87,7 +87,6 @@ const fieldChoiceOptions = {
     { value: 'active', label: '体力劳动' },
   ],
   execution_mode: [
-    { value: 'fast', label: '快速模式' },
     { value: 'standard', label: '普通模式' },
     { value: 'strict', label: '精准模式' },
   ],
@@ -1339,12 +1338,11 @@ function allergyLabel(value: string): string {
 
 function executionModeLabel(value?: string | null): string {
   const raw = normalizeExecutionMode(value)
-  return ({ fast: '快速模式', standard: '普通模式', strict: '精准模式' } as Record<string, string>)[raw] || '普通模式'
+  return ({ standard: '普通模式', strict: '精准模式' } as Record<string, string>)[raw] || '普通模式'
 }
 
 function normalizeExecutionMode(value?: string | null): ExecutionMode {
   const raw = String(value || 'standard')
-  if (raw.includes('fast') || raw === 'lite') return 'fast'
   if (raw.includes('strict') || raw.includes('gemini35')) return 'strict'
   return 'standard'
 }

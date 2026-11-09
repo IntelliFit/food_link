@@ -26,14 +26,26 @@ export function withdrawAmount(me: Pick<PromoterMe, 'withdraw_min_cents' | 'with
 }
 
 export function withdrawRuleText(me: Pick<PromoterMe, 'withdraw_min_cents' | 'withdraw_max_cents'>): string {
-  return `满 ¥${formatCents(me.withdraw_min_cents)} 可提现，单笔最多 ¥${formatCents(me.withdraw_max_cents)}，每天 1 次。审核通过后转到你的微信零钱，需要时在提现记录里点「收款」确认，到账后会显示「已到账」。`
+  return `满 ¥${formatCents(me.withdraw_min_cents)} 可提现，单笔最多 ¥${formatCents(me.withdraw_max_cents)}，每天 1 次。第一次提现时会核实你的实名信息。审核通过后转到你的微信零钱，需要时在提现记录里点「收款」确认，到账后会显示「已到账」。`
+}
+
+/**
+ * 推广码卡片下方的三句话：好友怎么算成你的推广、什么时候有佣金。
+ * 链接里的推广码在好友手机上保留 48 小时；后端只给注册 24 小时内、没付过费的账号绑定。
+ */
+export function attributionLines(me: Pick<PromoterMe, 'rate_bps' | 'settle_delay_days'>): string[] {
+  return [
+    '点「分享给好友」发给还没用过食探的朋友。对方从你的链接打开，就自动记在你名下，不用填推广码。',
+    '朋友 48 小时内登录注册即算你的推广。注册超过一天或付过费的老用户不算。',
+    `之后 365 天内朋友每次开通会员，你得实付金额 ${formatRate(me.rate_bps)} 的佣金，${me.settle_delay_days} 天后可提现。`,
+  ]
 }
 
 /** 推广规则同时作为 v1 推广协议正文展示，申请时需勾选同意。 */
 export function ruleLines(me: Pick<PromoterMe, 'rate_bps' | 'settle_delay_days'>): string[] {
   return [
-    '新用户通过你的推广码或分享链接进入，并在注册后 24 小时内登录，即与你绑定；每位用户只绑定一次。',
-    `绑定后 365 天内，对方购买会员的实付金额按 ${formatRate(me.rate_bps)} 计算佣金。小程序虚拟支付订单暂不计佣。`,
+    '新用户从你分享的链接或小程序码打开食探，并在注册后 24 小时内完成绑定，即算你的推广，不需要手动填推广码；注册超过 24 小时或已付过费的用户不能绑定，每位用户只绑定一次。',
+    `绑定后 365 天内，对方购买会员的实付金额按 ${formatRate(me.rate_bps)} 计算佣金。`,
     `订单支付 ${me.settle_delay_days} 天后佣金转为可提现；在此之前退款的订单不计佣，之后退款的会从余额中扣回。`,
     '只按真实付费订单结算，不奖励转发、点击或注册本身。不得自买自返、刷单或诱导分享，违规将取消资格并扣回佣金。',
     '佣金属于推广劳务报酬，公司按国家规定处理相关税费。',

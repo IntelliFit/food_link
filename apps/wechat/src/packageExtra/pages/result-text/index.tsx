@@ -17,6 +17,7 @@ import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
+import { mealSummaryFromSavePayload, useMealImpactSheet } from '../../../components/MealImpactCard'
 import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
 import { useRecordDate } from '../../../hooks/useRecordDate'
 import RecordDateField from '../../../components/RecordDateField'
@@ -141,6 +142,7 @@ function ResultTextPage() {
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const recordSaveLock = useRef(false)
+  const mealImpact = useMealImpactSheet('result_text')
   const [noData, setNoData] = useState(false)
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
   const [insightCollapsed, setInsightCollapsed] = useState(false)
@@ -478,7 +480,9 @@ function ResultTextPage() {
       }
 
       Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : `已记录到${getRecordDateLabel(recordDate)}`, icon: saveResult.already_saved ? 'none' : 'success' })
-      returnHomeAfterFoodRecord()
+      mealImpact.show(saveResult.id, mealSummaryFromSavePayload(payload), (shown) => {
+        returnHomeAfterFoodRecord(shown ? 0 : undefined)
+      })
     } catch (e: any) {
       await showUnifiedApiError(e, '保存失败')
     } finally {
@@ -857,6 +861,7 @@ function ResultTextPage() {
           )}
         </View>
       )}
+      {mealImpact.sheet}
     </View>
   )
 }

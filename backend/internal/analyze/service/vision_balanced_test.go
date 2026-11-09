@@ -47,7 +47,7 @@ func TestBalancedVisionOrdinaryPrefersOpenLux(t *testing.T) {
 	require.Zero(t, c.a6.calls.Load())
 }
 
-func TestBalancedVisionPrecisionPrefersWanjie(t *testing.T) {
+func TestBalancedVisionPrecisionPrefersOpenLux(t *testing.T) {
 	c := balancedChannels{
 		wanjie35:         &channelFixture{result: channelFood("红烧肉")},
 		openluxPrecision: &channelFixture{result: channelFood("openlux红烧肉")},
@@ -56,11 +56,12 @@ func TestBalancedVisionPrecisionPrefersWanjie(t *testing.T) {
 	s := newBalancedRoutingService(t, c)
 	ctx := WithVisionRequest(context.Background(), precisionExecutionMode, "session-1", false)
 
-	outcome, err := s.runBalancedGeminiVision(ctx, "precision", geminiOpenLuxUpstream, relayGemini37FlashModel, "prompt", []string{"image"}, 0, nil)
+	outcome, err := s.runBalancedGeminiVision(ctx, "precision", geminiOpenLuxUpstream, precisionGeminiFlashModel, "prompt", []string{"image"}, 0, nil)
 	require.NoError(t, err)
-	require.Equal(t, geminiPrimaryUpstream, outcome.upstream)
-	require.Equal(t, gemini35FlashModel, outcome.model)
+	require.Equal(t, geminiOpenLuxUpstream, outcome.upstream)
+	require.Equal(t, precisionGeminiFlashModel, outcome.model)
 	require.Zero(t, c.a6.calls.Load())
+	require.Zero(t, c.wanjie35.calls.Load(), "Wanjie is only the last resort")
 }
 
 func TestBalancedVisionHedgesWhenLeaderIsSlowAndCancelsIt(t *testing.T) {
@@ -144,22 +145,22 @@ func TestBalancedVisionSelectsLeadingChannelForEveryTask(t *testing.T) {
 	s := newBalancedRoutingService(t, c)
 	for _, key := range []string{"task-a", "task-b", "task-c", "task-d"} {
 		require.Equal(t, openLuxGemini3Route, s.SelectFoodImageModel(defaultExecutionMode, key))
-		require.Equal(t, gemini35FlashModel, s.SelectFoodImageModel(precisionExecutionMode, key))
+		require.Equal(t, "openlux:"+precisionGeminiFlashModel, s.SelectFoodImageModel(precisionExecutionMode, key))
 	}
 }
 
 func TestBalancedVisionDemotesChannelThatTurnsSlowWithoutFailing(t *testing.T) {
 	c := balancedChannels{wanjie35: &channelFixture{}, openluxPrecision: &channelFixture{}, a6: &channelFixture{}}
 	s := newBalancedRoutingService(t, c)
-	require.Equal(t, gemini35FlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"), "the production prior leads with Wanjie")
+	require.Equal(t, "openlux:"+precisionGeminiFlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"), "the production prior leads with OpenLux")
 
-	key := channelKey(precisionExecutionMode, geminiPrimaryUpstream, gemini35FlashModel)
+	key := channelKey(precisionExecutionMode, geminiOpenLuxUpstream, precisionGeminiFlashModel)
 	now := time.Now()
-	// Wanjie keeps losing hedges after 35s instead of failing.
+	// OpenLux keeps losing hedges after 35s instead of failing.
 	for i := 0; i < 3; i++ {
 		s.visionChannels.record(key, 35*time.Second, context.Canceled, now)
 	}
-	require.Equal(t, "openlux:"+relayGemini37FlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"))
+	require.Equal(t, "a6:"+precisionGeminiFlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session"))
 }
 
 func TestBalancedVisionKeepsPriorUntilEnoughSamples(t *testing.T) {
@@ -171,4 +172,140 @@ func TestBalancedVisionKeepsPriorUntilEnoughSamples(t *testing.T) {
 	require.Equal(t, openLuxGemini3Route, s.SelectFoodImageModel(defaultExecutionMode, "task"), "two slow samples are not yet evidence")
 	s.visionChannels.record(key, 30*time.Second, nil, time.Now())
 	require.Equal(t, "a6:"+gemini3FlashModel, s.SelectFoodImageModel(defaultExecutionMode, "task"))
+}
+
+func newOrdinaryModelRoutingService(t *testing.T, c balancedChannels, ordinaryModel string) *AnalyzeService {
+	t.Helper()
+	s := newBalancedRoutingService(t, c)
+	s.ConfigureA6VisionRouting("", "", config.VisionRoutingConfig{BalancedRoutingEnabled: true, ResponseWaitSeconds: 5, OrdinaryImageModel: ordinaryModel})
+	s.visionChannels.a6 = c.a6
+	return s
+}
+
+func TestBalancedVisionOrdinaryPhotoUsesConfiguredModel(t *testing.T) {
+	c := balancedChannels{
+		wanjie:           &channelFixture{result: channelFood("万界米饭")},
+		wanjie35:         &channelFixture{result: channelFood("万界3.5米饭")},
+		openlux:          &channelFixture{result: channelFood("米饭"), args: make(chan channelCallArgs, 1)},
+		openluxPrecision: &channelFixture{result: channelFood("精准米饭")},
+		a6:               &channelFixture{result: channelFood("a6米饭")},
+	}
+	s := newOrdinaryModelRoutingService(t, c, precisionGeminiFlashModel)
+
+	require.Equal(t, openLuxPrecisionGeminiRoute, s.SelectFoodImageModel(defaultExecutionMode, "task-1"))
+	outcome, err := s.runBalancedGeminiVision(standardVisionCtx(), "food_image", geminiOpenLuxUpstream, precisionGeminiFlashModel, "prompt", []string{"image"}, 0, validateNonEmptyFoodAnalysisResult)
+	require.NoError(t, err, "an ordinary payload must pass the ordinary validation")
+	require.Equal(t, geminiOpenLuxUpstream, outcome.upstream)
+	require.Equal(t, precisionGeminiFlashModel, outcome.model)
+	require.Equal(t, precisionGeminiFlashModel, (<-c.openlux.args).model)
+	require.Zero(t, c.wanjie35.calls.Load(), "ordinary photos stay off the precision channel family")
+	require.Zero(t, c.openluxPrecision.calls.Load())
+}
+
+func TestBalancedVisionOrdinaryModelKeepsWanjieOnGemini3(t *testing.T) {
+	c := balancedChannels{
+		wanjie:  &channelFixture{result: channelFood("万界米饭"), args: make(chan channelCallArgs, 1)},
+		openlux: &channelFixture{err: errors.New("upstream 500")},
+		a6:      &channelFixture{err: errors.New("upstream 500"), args: make(chan channelCallArgs, 1)},
+	}
+	s := newOrdinaryModelRoutingService(t, c, precisionGeminiFlashModel)
+
+	outcome, err := s.runBalancedGeminiVision(standardVisionCtx(), "food_image", geminiOpenLuxUpstream, precisionGeminiFlashModel, "prompt", []string{"image"}, 0, validateNonEmptyFoodAnalysisResult)
+	require.NoError(t, err)
+	require.Equal(t, precisionGeminiFlashModel, (<-c.a6.args).model)
+	require.Equal(t, geminiPrimaryUpstream, outcome.upstream)
+	require.Equal(t, gemini3FlashModel, (<-c.wanjie.args).model, "Wanjie cannot serve Gemini 3.6")
+}
+
+func TestBalancedVisionOrdinaryModelLeavesTextAndPrecisionAlone(t *testing.T) {
+	c := balancedChannels{
+		wanjie35:         &channelFixture{result: channelFood("红烧肉")},
+		openlux:          &channelFixture{result: channelFood("米饭"), args: make(chan channelCallArgs, 1)},
+		openluxPrecision: &channelFixture{result: channelFood("openlux红烧肉")},
+		a6:               &channelFixture{result: channelFood("a6红烧肉")},
+	}
+	s := newOrdinaryModelRoutingService(t, c, precisionGeminiFlashModel)
+
+	_, err := s.runBalancedGeminiChannels(standardVisionCtx(), "food_text", geminiOpenLuxUpstream, gemini3FlashModel, "prompt", nil, 0, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, gemini3FlashModel, (<-c.openlux.args).model, "text analysis keeps Gemini 3 Flash")
+
+	ctx := WithVisionRequest(context.Background(), precisionExecutionMode, "session-1", false)
+	require.Equal(t, "openlux:"+precisionGeminiFlashModel, s.SelectFoodImageModel(precisionExecutionMode, "session-1"))
+	outcome, err := s.runBalancedGeminiVision(ctx, "precision", geminiOpenLuxUpstream, precisionGeminiFlashModel, "prompt", []string{"image"}, 0, nil)
+	require.NoError(t, err)
+	require.Equal(t, precisionGeminiFlashModel, outcome.model, "precision runs its own plan family on Gemini 3.6")
+}
+
+func TestBalancedVisionNeverHedgesOntoLastResort(t *testing.T) {
+	for _, precision := range []bool{false, true} {
+		c := balancedChannels{
+			wanjie:           &channelFixture{result: channelFood("万界米饭")},
+			wanjie35:         &channelFixture{result: channelFood("万界米饭")},
+			openlux:          &channelFixture{delay: 300 * time.Millisecond, result: channelFood("米饭")},
+			openluxPrecision: &channelFixture{delay: 300 * time.Millisecond, result: channelFood("米饭")},
+			a6:               &channelFixture{err: errors.New("upstream 502")},
+		}
+		s := newBalancedRoutingService(t, c)
+		balancedHedgeDelayPrecision = 80 * time.Millisecond
+		ctx, model := standardVisionCtx(), gemini3FlashModel
+		if precision {
+			ctx, model = WithVisionRequest(context.Background(), precisionExecutionMode, "session-1", false), precisionGeminiFlashModel
+		}
+
+		outcome, err := s.runBalancedGeminiVision(ctx, "food_image", geminiOpenLuxUpstream, model, "prompt", []string{"image"}, 0, validateNonEmptyFoodAnalysisResult)
+		require.NoError(t, err)
+		require.Equal(t, geminiOpenLuxUpstream, outcome.upstream, "the slow leader still answers")
+		require.Zero(t, c.wanjie.calls.Load()+c.wanjie35.calls.Load(), "precision=%v: a slow or failed hedge while another channel runs must not reach Wanjie", precision)
+	}
+}
+
+func TestBalancedVisionUsesLastResortWhenOthersFail(t *testing.T) {
+	c := balancedChannels{
+		wanjie:  &channelFixture{result: channelFood("米饭")},
+		openlux: &channelFixture{err: errors.New("upstream 500")},
+		a6:      &channelFixture{err: errors.New("upstream 502")},
+	}
+	s := newBalancedRoutingService(t, c)
+
+	outcome, err := s.runBalancedGeminiVision(standardVisionCtx(), "food_image", geminiOpenLuxUpstream, gemini3FlashModel, "prompt", []string{"image"}, 0, validateNonEmptyFoodAnalysisResult)
+	require.NoError(t, err)
+	require.Equal(t, geminiPrimaryUpstream, outcome.upstream)
+}
+
+func TestBalancedVisionKeepsLastResortLastWhenOthersLookUnhealthy(t *testing.T) {
+	c := balancedChannels{wanjie: &channelFixture{}, wanjie35: &channelFixture{}, openlux: &channelFixture{}, openluxPrecision: &channelFixture{}, a6: &channelFixture{}}
+	s := newBalancedRoutingService(t, c)
+	now := time.Now()
+	for _, precision := range []bool{false, true} {
+		mode, model := defaultExecutionMode, gemini3FlashModel
+		if precision {
+			mode, model = precisionExecutionMode, precisionGeminiFlashModel
+		}
+		for _, upstream := range []string{geminiOpenLuxUpstream, geminiA6Upstream} {
+			key := channelKey(mode, upstream, model)
+			for i := 0; i < 2; i++ {
+				s.visionChannels.record(key, time.Second, errors.New("upstream 500"), now)
+			}
+		}
+		plans := s.orderedBalancedPlans(mode, precision, true)
+		require.Equal(t, geminiPrimaryUpstream, plans[len(plans)-1].upstream, "precision=%v", precision)
+	}
+}
+
+func TestBalancedVisionOrdinaryModelDefaultsToGemini3(t *testing.T) {
+	c := balancedChannels{wanjie: &channelFixture{}, openlux: &channelFixture{}, a6: &channelFixture{}}
+	for _, configured := range []string{"", "gemini-9-flash", gemini35FlashModel, gemini3FlashModel} {
+		s := newOrdinaryModelRoutingService(t, c, configured)
+		require.Equal(t, gemini3FlashModel, s.ordinaryImageModel(), configured)
+		require.Equal(t, openLuxGemini3Route, s.SelectFoodImageModel(defaultExecutionMode, "task"), configured)
+	}
+	s := newOrdinaryModelRoutingService(t, c, " "+relayGemini37FlashModel+" ")
+	require.Equal(t, "openlux:"+relayGemini37FlashModel, s.SelectFoodImageModel(defaultExecutionMode, "task"))
+}
+
+func TestResolveModelConfigMapsA6Gemini36Route(t *testing.T) {
+	provider, model := resolveModelConfig("a6:" + precisionGeminiFlashModel)
+	require.Equal(t, "gemini", provider)
+	require.Equal(t, precisionGeminiFlashModel, model)
 }

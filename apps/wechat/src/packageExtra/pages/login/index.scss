@@ -26,13 +26,6 @@
             margin-bottom: 12rpx;
         }
 
-        .app-env-tag {
-            font-size: 26rpx;
-            font-weight: normal;
-            color: #00bc7d;
-            margin-left: 8rpx;
-        }
-
         .app-slogan {
             font-size: 28rpx;
             color: #999;
@@ -85,19 +78,6 @@
             background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
             border: none;
             color: #fff;
-
-            &::after {
-                border: none;
-            }
-        }
-
-        .wx-phone-auth-btn {
-            width: 100%;
-            font-size: 26rpx;
-            color: #00bc7d;
-            background: transparent;
-            border: none;
-            line-height: 1.4;
 
             &::after {
                 border: none;
@@ -324,22 +304,6 @@
         font-size: 20rpx;
         text-align: center;
         padding: 4rpx 0;
-    }
-}
-
-.avatar-choose-btn {
-    width: 100%;
-    height: 100%;
-    padding: 0;
-    background: transparent;
-    border: none;
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 10;
-
-    &::after {
-        border: none;
     }
 }
 

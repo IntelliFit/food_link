@@ -73,7 +73,7 @@ func Observe(items []map[string]any, applyIntake bool) Vector {
 				}
 			}
 			if !ok || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) ||
-				factor < 0 || factor > 1 || math.IsNaN(factor) || math.IsInf(factor, 0) {
+				factor < 0 || factor > 1 || math.IsNaN(factor) || math.IsInf(factor, 0) || exceedsServing(item, def.Unit, value) {
 				continue
 			}
 			a.Value += value * factor
@@ -97,36 +97,80 @@ func Observe(items []map[string]any, applyIntake bool) Vector {
 	return out
 }
 
+// exceedsServing is true when a nutrient weighs more than the serving it is in, which
+// only happens when a per-100g value was stored as the serving's (a 16 g fibre drink
+// recorded with 184 g of fibre). Such a value is invalid, not a big intake.
+func exceedsServing(item map[string]any, unit string, value float64) bool {
+	weight, ok := numberFromAny(item["weight"])
+	if !ok || weight <= 0 {
+		return false
+	}
+	grams := value
+	switch unit {
+	case "g":
+	case "mg":
+		grams = value / 1000
+	case "mcg", "mcg RAE", "mcg DFE":
+		grams = value / 1e6
+	case "mg alpha-TE":
+		grams = value / 1000
+	default:
+		return false
+	}
+	return grams > weight
+}
+
 // Combine propagates missing components instead of calling their values zero.
 func Combine(vectors ...Vector) Vector {
 	out := Vector{}
 	for _, def := range Definitions {
-		a := Amount{Unit: def.Unit, Status: "missing"}
-		estimated := false
-		for _, vector := range vectors {
-			v, exists := vector[def.Key]
-			if !exists || v.TotalItems == 0 {
-				a.TotalItems++
-				continue
-			}
-			a.TotalItems += v.TotalItems
-			if v.Unit != def.Unit || v.KnownItems < 0 || v.KnownItems > v.TotalItems || v.Value < 0 || math.IsNaN(v.Value) || math.IsInf(v.Value, 0) {
-				continue
-			}
-			a.KnownItems += v.KnownItems
-			a.Value += v.Value
-			estimated = estimated || v.Status == "estimated"
-		}
-		if a.KnownItems > 0 {
-			a.Status = "partial"
-			if a.KnownItems == a.TotalItems {
-				a.Status = "recorded"
-				if estimated {
-					a.Status = "estimated"
-				}
-			}
-		}
-		out[def.Key] = a
+		out[def.Key] = combineDefinition(def, vectors)
 	}
 	return out
+}
+
+var definitionIndex = func() map[string]int {
+	index := make(map[string]int, len(Definitions))
+	for i, def := range Definitions {
+		index[def.Key] = i
+	}
+	return index
+}()
+
+// CombineKey is Combine(vectors...)[key] without combining every other nutrient.
+func CombineKey(key string, vectors ...Vector) Amount {
+	i, ok := definitionIndex[key]
+	if !ok {
+		return Amount{}
+	}
+	return combineDefinition(Definitions[i], vectors)
+}
+
+func combineDefinition(def Definition, vectors []Vector) Amount {
+	a := Amount{Unit: def.Unit, Status: "missing"}
+	estimated := false
+	for _, vector := range vectors {
+		v, exists := vector[def.Key]
+		if !exists || v.TotalItems == 0 {
+			a.TotalItems++
+			continue
+		}
+		a.TotalItems += v.TotalItems
+		if v.Unit != def.Unit || v.KnownItems < 0 || v.KnownItems > v.TotalItems || v.Value < 0 || math.IsNaN(v.Value) || math.IsInf(v.Value, 0) {
+			continue
+		}
+		a.KnownItems += v.KnownItems
+		a.Value += v.Value
+		estimated = estimated || v.Status == "estimated"
+	}
+	if a.KnownItems > 0 {
+		a.Status = "partial"
+		if a.KnownItems == a.TotalItems {
+			a.Status = "recorded"
+			if estimated {
+				a.Status = "estimated"
+			}
+		}
+	}
+	return a
 }

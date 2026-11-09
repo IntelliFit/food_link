@@ -521,7 +521,7 @@ func TestAnalyzeInputFromTaskPreservesModeSuggestRatioAndCorrectionPayload(t *te
 }
 
 func TestRunFoodAnalysisPassesIntegratedPackagedPayloadToAnalyze(t *testing.T) {
-	mode := "fast_web_search"
+	mode := "standard_web_search"
 	imageURL := "https://example.com/mixed-meal.jpg"
 	fakeAnalyze := &fakeWorkerAnalyzeRunner{result: map[string]any{
 		"items": []any{
@@ -588,11 +588,9 @@ func TestRunFoodAnalysisPassesIntegratedPackagedPayloadToAnalyze(t *testing.T) {
 
 func TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood(t *testing.T) {
 	modes := []string{
-		"fast",
 		"standard",
 		"strict",
 		"strict_separate",
-		"fast_web_search",
 		"standard_web_search",
 		"strict_web_search",
 	}
@@ -660,11 +658,9 @@ func TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood(t *testing.T) {
 
 func TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses(t *testing.T) {
 	modes := []string{
-		"fast",
 		"standard",
 		"strict",
 		"strict_separate",
-		"fast_web_search",
 		"standard_web_search",
 		"strict_web_search",
 	}

@@ -106,7 +106,7 @@ export type ExecutionMode =
   | 'experimental'
   | 'gemini35_flash'
   | 'gemini35_flash_grouped'
-export type AnalysisEngine = 'ai_direct' | 'ai_then_db_exact' | 'db_candidates_ai' | 'legacy_direct' | 'db_first'
+export type AnalysisEngine = 'smart' | 'ai_direct' | 'ai_then_db_exact' | 'db_candidates_ai' | 'legacy_direct' | 'db_first'
 export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
 export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
 export type PrecisionSourceType = 'image' | 'text'
@@ -656,6 +656,7 @@ export interface ExerciseActivityItem {
 export interface FoodRecord {
   id: string
   user_id: string
+  hidden_from_feed?: boolean
   meal_type: MealType
   image_path?: string | null
   image_paths?: string[] | null
@@ -1410,6 +1411,8 @@ export interface DietRecommendationResult {
 	catalog_coverage?: { scope?: string; radius_km?: number; school?: { name: string }; total_matches: number; retrieved: number; status: string }[]
 	selection_audit?: { method: string; fallback_reason?: string; eligible_count: number; shortlisted_count: number }
 	recommendation_id?: string
+	/** The rule pick came back without waiting for the model; ask again with judge_mode 'background'. */
+	judge_pending?: boolean
 	decision_basis?: DietDecisionBasis
   harness_version?: string
   search_scope?: 'nearby' | 'school' | 'unknown' | 'history' | 'nearby_and_history'
@@ -1428,6 +1431,10 @@ export interface DietRecommendationResult {
   candidate_count?: number
   ai_rerank_count?: number
   decision_engine_version?: string
+  /** The meal a home card is for; late at night it can be tomorrow's breakfast or a late snack. */
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'evening_snack'
+  meal_date?: string
+  meal_label?: string
   resolved_school?: {
     id: string
     name: string
@@ -1628,7 +1635,7 @@ export interface PetChatEntryContext {
   selected_source_id?: string
   source: 'home_next_meal'
   date: string
-  meal_type: 'breakfast' | 'lunch' | 'dinner'
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'evening_snack'
   meal_label?: string
   basic_advice?: string
 }
@@ -1876,6 +1883,8 @@ export interface UserInfo {
   mode_switch_count_30d?: number | null
   searchable?: boolean
   public_records?: boolean
+  public_records_reconfirm_pending?: boolean
+  friends_can_view_records?: boolean
 	public_favorite_recipes?: boolean
 }
 
@@ -2399,6 +2408,8 @@ export interface CampusDietAgentResult {
   agent_used: boolean
   tool_count: number
   fallback_reason?: string
+  /** 规则先挑出的几份，模型选好后同一轮的最终结果会替换它（不扣积分、不保存） */
+  provisional?: boolean
 }
 
 // 更新用户信息请求接口
@@ -2410,6 +2421,7 @@ export interface UpdateUserInfoRequest {
   telephone?: string
   searchable?: boolean
   public_records?: boolean
+  friends_can_view_records?: boolean
 	public_favorite_recipes?: boolean
 }
 
@@ -3416,6 +3428,7 @@ export interface AnalyzeTaskSubmitParams {
   district?: string
   diet_goal?: string
   activity_timing?: string
+  eating_mood?: EatingMood
   user_goal?: string
   remaining_calories?: number
   suggest_ratio_enabled?: boolean
@@ -3679,6 +3692,7 @@ export interface AnalyzeTextTaskSubmitParams {
   district?: string
   diet_goal?: string
   activity_timing?: string
+  eating_mood?: EatingMood
   user_goal?: string
   remaining_calories?: number
   suggest_ratio_enabled?: boolean
@@ -3745,6 +3759,7 @@ export interface ContinuePrecisionSessionParams {
   district?: string
   diet_goal?: string
   activity_timing?: string
+  eating_mood?: EatingMood
   user_goal?: string
   remaining_calories?: number
   suggest_ratio_enabled?: boolean
@@ -4283,20 +4298,22 @@ export async function deleteFoodRecord(recordId: string): Promise<void> {
 
 /**
  * 获取分享的饮食记录详情（无需登录，供别人通过分享链接查看）
- * 若记录所有者设置了「不公开饮食记录」则后端会返回 403。
+ * 本人、记录主动分享出的链接（share_token）、好友可以查看不公开的记录，其余情况后端返回 403。
  */
-export async function getSharedFoodRecord(recordId: string): Promise<{ record: FoodRecord }> {
-  const res = await Taro.request({
-    url: `${API_BASE_URL}/api/food-record/share/${encodeURIComponent(recordId)}`,
+export async function getSharedFoodRecord(recordId: string, shareToken?: string): Promise<{ record: FoodRecord }> {
+  const query = shareToken ? `?share_token=${encodeURIComponent(shareToken)}` : ''
+  const res = await publicRequest(`/api/food-record/share/${encodeURIComponent(recordId)}${query}`, {
     method: 'GET',
-    header: withNgrokBypassHeaders(),
     timeout: 10000
   })
-  if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || '获取记录详情失败'
-    throw new Error(msg)
-  }
   return unwrapResponse<{ record: FoodRecord }>(res)
+}
+
+/** 本人分享记录时取得链接凭证，收到链接的人无需登录也能查看这一条。 */
+export async function getFoodRecordShareToken(recordId: string): Promise<string> {
+  const res = await authenticatedRequest(`/api/food-record/${encodeURIComponent(recordId)}/share-token`, { method: 'GET' })
+  if (res.statusCode !== 200) throw new Error('获取分享链接失败')
+  return unwrapResponse<{ share_token: string }>(res).share_token
 }
 
 /**
@@ -4778,7 +4795,7 @@ export async function recordMealRecommendationFeedback(payload: { run_id: string
   if (res.statusCode !== 200) throw new Error('餐食反馈暂未保存')
 }
 
-export async function previewMeals(payload: { meal_type: string; location?: PetChatLocation; radius_km?: number; exclude_source_ids?: string[] }): Promise<DietRecommendationResult> {
+export async function previewMeals(payload: { meal_type: string; location?: PetChatLocation; radius_km?: number; exclude_source_ids?: string[]; judge_mode?: 'skip' | 'background' }): Promise<DietRecommendationResult> {
   const res = await authenticatedRequest('/api/diet/recommendations/preview', { method: 'POST', data: payload, timeout: 30000 })
   return res.data as DietRecommendationResult
 }
@@ -5136,6 +5153,9 @@ export function streamGeneratePetChat(
         if (!settled) reportError(new Error('连接已结束，但未收到完整结果，请重试'))
       },
     })
+
+    // Taro.request 还返回一个 Promise：失败已由 fail 回调处理，这里接住它，免得变成未处理的 rejection
+    ;(requestTask as unknown as Promise<unknown>)?.catch?.(() => undefined)
 
     requestTask.onChunkReceived?.((res: any) => {
       if (settled) return
@@ -6584,6 +6604,7 @@ export async function fetchManualFoodCatalog(
 export interface SaveManualCustomFoodRequest {
   id?: string
   title: string
+  category?: 'custom' | 'snack'
   default_weight_grams: number
   total_calories: number
   total_protein: number
@@ -6926,6 +6947,10 @@ export interface PackagedProductExtractResult {
   product_name?: string
   flavor_text?: string
   package_category?: string
+  /** 后端归好的食物库分类键，如 snack / dairy / other */
+  catalog_category?: string
+  /** 有包装依据的一份重量，没有依据时是整包净含量 */
+  default_portion_g?: number
   net_content_value?: number
   net_content_unit?: string
   unit_count?: number
@@ -8553,6 +8578,8 @@ export interface PublicFoodLibraryListParams {
   keyword?: string
   /** 只返回可展示在地图上的有效经纬度条目 */
   has_location?: boolean
+  /** 只返回该地图点位的餐食，取值为地图接口返回的 key */
+  spot_key?: string
   suitable_for_fat_loss?: boolean
   merchant_name?: string
   min_calories?: number
@@ -8596,6 +8623,7 @@ export async function getPublicFoodLibraryList(
   if (params?.city) q.set('city', params.city)
   if (params?.keyword) q.set('keyword', params.keyword)
   if (params?.has_location !== undefined) q.set('has_location', String(params.has_location))
+  if (params?.spot_key) q.set('spot_key', params.spot_key)
   if (params?.suitable_for_fat_loss !== undefined) q.set('suitable_for_fat_loss', String(params.suitable_for_fat_loss))
   if (params?.merchant_name) q.set('merchant_name', params.merchant_name)
   if (params?.min_calories !== undefined) q.set('min_calories', String(params.min_calories))
@@ -8640,7 +8668,7 @@ export async function getPublicFoodLibraryList(
 export async function getPublicFoodMapSpots(): Promise<{ spots: PublicFoodMapSpotPayload[] }> {
   const response = await authenticatedRequest('/api/public-food-library/map-spots', {
     method: 'GET',
-    timeout: 15000,
+    timeout: 30000,
   })
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取美食地图失败')
@@ -9618,4 +9646,234 @@ export async function submitStructuredFeedback(input: SubmitStructuredFeedbackRe
     category: 'other',
     ...input,
   })
+}
+
+// ---------- 每日营养状态（docs/algorithms/daily-nutrition-state.md，字段以 Go domain.DailyNutritionState 为准） ----------
+
+/** 缺数据一律是 unknown（value 为 null），不按 0 算 */
+export type NutrientStatus = 'ok' | 'short' | 'near_limit' | 'over' | 'unknown'
+export type NutrientKind = 'min' | 'max' | 'range'
+export type NutritionHabitMark = 'hit' | 'miss' | 'today' | 'none'
+export type NutritionEvidenceAction = 'record' | 'weight' | 'water' | 'sleep' | 'none'
+
+export interface NutritionCoverage {
+  recorded_days: number
+  meals: number
+  today_meals: number
+  /** 0~1 */
+  nutrient_completeness: number
+  enough_data: boolean
+}
+
+export interface NutritionPlanSummary {
+  goal: string
+  goal_label: string
+  energy_kcal: number
+  protein_g: number
+  source: string
+}
+
+export interface NutrientReading {
+  key: string
+  label: string
+  unit: string
+  value: number | null
+  target: number
+  kind: NutrientKind | string
+  status: NutrientStatus | string
+  gap: number
+  unknown_meals: number
+}
+
+export interface NutritionGap {
+  key: string
+  label: string
+  text: string
+  severity: number
+}
+
+export interface NutritionNextMeal {
+  meal_type: string
+  label: string
+  advice: string
+  fills: string[]
+  limits: string[]
+}
+
+export interface NutritionHabit {
+  key: string
+  label: string
+  marks: Array<NutritionHabitMark | string>
+  hit: number
+  of: number
+}
+
+export interface NutritionCount {
+  key: string
+  label: string
+  value: number
+  target: number
+  unit: string
+}
+
+export interface NutritionWeekDelta {
+  key: string
+  label: string
+  last: number
+  this: number
+  unit: string
+  better: boolean
+}
+
+export interface NutritionWeek {
+  days: string[]
+  habits: NutritionHabit[]
+  counts: NutritionCount[]
+  vs_last_week: NutritionWeekDelta[]
+}
+
+export interface NutritionFocusScore {
+  key: string
+  title: string
+  score: number | null
+  reason: string
+  evidence: string[]
+}
+
+export interface NutritionScores {
+  overall: number | null
+  overall_last_week: number | null
+  focus: NutritionFocusScore[]
+}
+
+export interface NutritionEvidenceGap {
+  key: string
+  text: string
+  hint: string
+  action: NutritionEvidenceAction | string
+}
+
+export interface NutritionContext {
+  weight_trend: { kg_change: number; days: number } | null
+  training_today: boolean
+  water_ml_today: number | null
+  sleep_hours: number | null
+  notes: string[]
+}
+
+export interface NutritionFinding {
+  key: string
+  kind: string
+  text: string
+  value?: string
+}
+
+export interface DailyNutritionState {
+  date: string
+  generated_at: string
+  coverage: NutritionCoverage
+  plan: NutritionPlanSummary
+  today: NutrientReading[]
+  gaps: NutritionGap[]
+  next_meal: NutritionNextMeal | null
+  week: NutritionWeek
+  scores: NutritionScores
+  evidence_gaps: NutritionEvidenceGap[]
+  context: NutritionContext
+  headline: string
+  findings: NutritionFinding[]
+  /** 用户选的关注（最多 3 项，存在服务器）；旧后端没有这个字段 */
+  focus?: NutritionFocusChoice[]
+}
+
+/** 一项关注：现有关注卡的 key（hypertension…）或 custom:<id> */
+export interface NutritionFocusChoice {
+  key: string
+  title: string
+  custom: boolean
+}
+
+/**
+ * PUT /api/health/focus：整体替换用户的关注，返回服务器存下的 keys。
+ * 超过 3 项、不认识的 key、不属于自己的自定义关注返回 400；空数组清空。
+ */
+export async function saveHealthFocusKeys(keys: string[]): Promise<string[] | null> {
+  const res = await authenticatedRequest('/api/health/focus', {
+    method: 'PUT',
+    data: { keys },
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    const err = new Error(parseFastApiDetail(res.data) || '保存关注失败') as ErrorLike
+    err.statusCode = res.statusCode
+    throw err
+  }
+  const saved = (res.data as { keys?: unknown } | null)?.keys
+  return Array.isArray(saved) ? saved.map(item => String(item || '')).filter(Boolean) : null
+}
+
+/** GET /api/health/nutrition-state：引擎给的当天营养状态；date 省略为今天（北京时间） */
+export async function getNutritionState(date?: string): Promise<DailyNutritionState> {
+  const apiDate = mapCalendarDateToApi(date)
+  const query = apiDate ? `?date=${encodeURIComponent(apiDate)}` : ''
+  const res = await authenticatedRequest(`/api/health/nutrition-state${query}`, { method: 'GET', timeout: 15000 })
+  if (res.statusCode !== 200) {
+    // 旧后端没有这个接口（404）时页面只是不显示新模块，不走诊断日志
+    const err = new Error(parseFastApiDetail(res.data) || '获取营养状态失败') as ErrorLike
+    err.statusCode = res.statusCode
+    throw err
+  }
+  return res.data as DailyNutritionState
+}
+
+/** 一条记录让当天某项从多少变到多少；未知为 null，不按 0 算（Go domain.MealImpactChange） */
+export interface MealImpactChange {
+  key: string
+  label: string
+  unit: string
+  before: number | null
+  after: number | null
+  delta: number | null
+  target: number
+  /** min（至少达到）/ max（不超过）/ range */
+  kind: string
+  /** ok / short / near_limit / over / unknown */
+  status: string
+}
+
+export interface MealImpact {
+  record_id: string
+  date: string
+  meal_type: string
+  changes: MealImpactChange[]
+  headline: string
+}
+
+/** GET /api/health/nutrition-state/meal-impact：这一餐让今天变了什么，只能查自己的记录 */
+export async function getMealImpact(recordId: string, timeoutMs = 3000): Promise<MealImpact> {
+  const res = await authenticatedRequest(
+    `/api/health/nutrition-state/meal-impact?record_id=${encodeURIComponent(recordId)}`,
+    { method: 'GET', timeout: timeoutMs }
+  )
+  return res.data as MealImpact
+}
+
+/** GET /api/pet/daily（Go pet service.Daily）里记录后弹层用到的几项；缺哪项就不显示哪项 */
+export interface PetDailyBrief {
+  pet?: Partial<PetProfile> | null
+  mood?: { key?: string; label?: string; reason?: string; icon?: string } | null
+  report?: { yesterday?: string; today?: string } | null
+  task?: {
+    key?: string
+    title?: string
+    done?: boolean
+    /** 这次读取刚把任务判完成并发了经验 */
+    just_done?: boolean
+    exp_reward?: number
+  } | null
+}
+
+export async function getPetDailyBrief(timeoutMs = 3000): Promise<PetDailyBrief> {
+  const res = await authenticatedRequest('/api/pet/daily', { method: 'GET', timeout: timeoutMs })
+  return (res.data || {}) as PetDailyBrief
 }

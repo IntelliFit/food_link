@@ -1,7 +1,10 @@
-/** 主包仅保留 TabBar 五页，其余页面在 packageExtra 分包以降低主包体积（微信 2MB 限制） */
+/**
+ * 主包只放 TabBar 四页，其余页面在分包以降低主包体积（微信 2MB 限制）。
+ * 伙伴（pages/pet/index）替换了原来的「分析」格；完整分析不再是 Tab，在 packageStats 分包，从伙伴页 navigateTo 进去。
+ */
 const mainPages = [
   'pages/index/index',
-  'pages/stats/index',
+  'pages/pet/index',
   'pages/community/index',
   'pages/profile/index',
 ]
@@ -90,10 +93,19 @@ export default defineAppConfig({
   darkmode: false,
   pages: mainPages,
   subpackages: [
+    // 完整分析（原分析 Tab）：从伙伴页进入的二级页，挪出主包；伙伴页打开时预下载。
+    { root: 'packageStats', name: 'stats', pages: ['pages/stats/index'] },
     { root: 'packageMeal', name: 'meal', pages: ['pages/detail/index', 'pages/create/index', 'pages/mine/index', 'pages/room/index'] },
     { root: 'packageRecap', name: 'recap', pages: ['pages/recap/index'] },
+    // onboarding_v2 实验组的新注册流程：先试拍一顿、3 句话建档
+    { root: 'packageOnboarding', name: 'onboarding', pages: ['pages/try/index', 'pages/profile/index'] },
     // packageExtra is close to the 2MB subpackage limit; the promoter center lives on its own.
     { root: 'packagePromoter', name: 'promoter', pages: ['pages/center/index'] },
+    { root: 'packageLifespan', name: 'lifespan', pages: ['pages/predictor/index'] },
+    // 拍照识别的 3:4 / 4:3 取景相机；packageExtra 快满了，单独分包。
+    { root: 'packageCamera', name: 'camera', pages: ['pages/shoot/index'] },
+    // 称重科研计划和高校共建活动：packageExtra 已到 1900 KB 预算，单独分包。
+    { root: 'packageResearch', name: 'research', pages: ['pages/research-weight/index', 'pages/research-weight-record/index', 'pages/research-weight-containers/index', 'pages/campus-campaign/index'] },
     {
       root: 'packageExtra',
       name: 'extra',
@@ -124,6 +136,9 @@ export default defineAppConfig({
       pages: ['pages/food-library-share/index'],
     },
   ],
+  preloadRule: {
+    'pages/pet/index': { network: 'all', packages: ['stats'] },
+  },
   window: {
     backgroundTextStyle: 'light',
     // 与 `app.scss` 中 page 背景一致，避免导航/页面与 WebView 边缘亚像素缝隙露出默认白底形成一条细白线
@@ -144,8 +159,8 @@ export default defineAppConfig({
         text: '首页',
       },
       {
-        pagePath: 'pages/stats/index',
-        text: '分析',
+        pagePath: 'pages/pet/index',
+        text: '伙伴',
       },
       {
         pagePath: 'pages/community/index',

@@ -26,6 +26,7 @@ import type {
   AnalyzeResponse,
   AnalyzeVideoUploadResult,
   AnalysisEngine,
+  EatingMood,
   ExecutionMode,
   PrecisionCaptureReferenceInput,
   PrecisionReferenceObjectInput,
@@ -57,13 +58,14 @@ import {
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
+import EatingMoodPicker from '../../../components/EatingMoodPicker'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import {
-  ANALYSIS_ENGINE_OPTIONS,
   defaultAnalysisEngineForMode,
   normalizeAnalysisEngine,
 } from '../../../utils/analysis-engine'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { openFoodCameraForResult, takeFoodCameraResult } from '../../../utils/food-camera'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 import OnboardingGuide from '../../../components/OnboardingGuide'
@@ -97,7 +99,7 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
 ]
 
 type ReferencePresetValue = PrecisionReferencePresetKey
-type AnalyzeBaseMode = 'fast' | 'standard' | 'strict'
+type AnalyzeBaseMode = 'standard' | 'strict'
 type PrecisionCaptureMode = 'photos' | 'video'
 
 interface SelectedAnalyzeVideo {
@@ -125,6 +127,8 @@ const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const ANALYZE_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 5
 const PRECISION_CAPTURE_ROLES = ['top_down', 'oblique_45'] as const
+type PrecisionCaptureRole = typeof PRECISION_CAPTURE_ROLES[number]
+type FoodCameraTarget = { kind: 'append' } | { kind: 'precision'; role: PrecisionCaptureRole }
 const MAX_ANALYZE_VIDEO_SIZE_BYTES = 8 * 1024 * 1024
 const MAX_ANALYZE_VIDEO_DURATION_SECONDS = 12
 
@@ -136,25 +140,15 @@ const readSuggestRatioPreference = (): boolean => {
 }
 
 const resolveAnalyzeBaseMode = (mode: ExecutionMode): AnalyzeBaseMode => {
-  if (mode === 'fast' || mode === 'fast_web_search') return 'fast'
   if (mode === 'strict' || mode === 'strict_separate' || mode === 'strict_web_search') return 'strict'
   return 'standard'
 }
 
-const isWebSearchExecutionMode = (mode: ExecutionMode): boolean => (
-  mode === 'fast_web_search' || mode === 'standard_web_search' || mode === 'strict_web_search'
-)
-
-const resolveExecutionModeFromOptions = (
-  baseMode: AnalyzeBaseMode,
-  webSearchEnabled: boolean,
-  separateFoodEstimateEnabled: boolean,
-): ExecutionMode => {
-  if (baseMode === 'fast') return webSearchEnabled ? 'fast_web_search' : 'fast'
-  if (baseMode === 'standard') return webSearchEnabled ? 'standard_web_search' : 'standard'
-  if (webSearchEnabled) return 'strict_web_search'
-  if (separateFoodEstimateEnabled) return 'strict_separate'
-  return 'strict'
+/** 快速模式和联网校准已下线，旧的默认设置迁移到普通或精准模式。 */
+const toVisibleExecutionMode = (mode: ExecutionMode): ExecutionMode => {
+  if (mode === 'fast' || mode === 'fast_web_search' || mode === 'standard_web_search') return 'standard'
+  if (mode === 'strict_web_search') return 'strict'
+  return mode
 }
 
 const normalizePositiveReferenceDimension = (value: unknown): number | undefined => {
@@ -228,7 +222,7 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
       '尽量让食物主体完整入镜',
       '有包装袋时尽量让文字正着、清晰入镜',
       '复杂菜可在下方补充烹饪信息',
-      '多角度拍摄可打开多视角辅助'
+      '同一餐的多张照片会合并识别，不会重复计算'
     ]
   },
   experimental: {
@@ -305,7 +299,7 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
     tips: [
       '包装袋文字尽量正着拍，配料表清晰会更准',
       '复杂菜可在下方补充烹饪方式和份量信息',
-      '多角度拍摄可打开多视角辅助'
+      '同一餐的多张照片会合并识别，不会重复计算'
     ]
   },
   strict_separate: {
@@ -335,7 +329,7 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
       '尽量让食物主体完整入镜',
       '有包装袋时尽量让文字正着、清晰入镜',
       '复杂菜可在下方补充烹饪信息',
-      '多角度拍摄可打开多视角辅助'
+      '同一餐的多张照片会合并识别，不会重复计算'
     ]
   }
 }
@@ -449,14 +443,13 @@ function AnalyzePage() {
   const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>(() => defaultAnalysisEngineForMode('standard'))
   const [precisionInteractiveEnabled, setPrecisionInteractiveEnabled] = useState(true)
   const [precisionSeparateEnabled, setPrecisionSeparateEnabled] = useState(false)
-  const [precisionWebSearchEnabled, setPrecisionWebSearchEnabled] = useState(false)
   const [precisionCaptureMode, setPrecisionCaptureMode] = useState<PrecisionCaptureMode>('photos')
   const [selectedVideo, setSelectedVideo] = useState<SelectedAnalyzeVideo | null>(null)
   const [videoUploadResult, setVideoUploadResult] = useState<AnalyzeVideoUploadResult | null>(null)
   const [videoUploadProgress, setVideoUploadProgress] = useState(0)
   const [isVideoUploading, setIsVideoUploading] = useState(false)
-  const [isMultiView, setIsMultiView] = useState(false)
   const [suggestRatioEnabled, setSuggestRatioEnabled] = useState<boolean>(() => readSuggestRatioPreference())
+  const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
@@ -486,10 +479,6 @@ function AnalyzePage() {
 
   const openHelp = useCallback((key: string) => {
     const helpContent: Record<string, { title: string; content: string }> = {
-      multiview: {
-        title: '多视角辅助',
-        content: '多张图片始终作为一次识别提交；开启后会更强调同一餐食的多角度综合估算。建议从不同角度拍摄同一餐食，让 AI 结合多张照片进行更准确的判断。'
-      },
       text: {
         title: '文字补充',
         content: '提供更多上下文能显著提高识别准确率，例如分量、容器大小、额外配料等。你可以描述食物的具体情况，帮助 AI 更准确地进行分析。'
@@ -506,9 +495,9 @@ function AnalyzePage() {
         title: 'AI摄入比例',
         content: '结果页自动给出每项食物的滑块比例。开启后，AI 会根据你的剩余热量和饮食目标，为每个识别出的食物建议一个摄入比例（0-100%），你可以在结果页通过滑块快速调整。'
       },
-      web_search: {
-        title: '联网校准',
-        content: '开启后会用低成本网络搜索辅助校准包装规格、品牌商品、饮品容量或小众食物信息。联网只做佐证，不会新增图片里不存在的食物。'
+      analysis_mode: {
+        title: '识别方式',
+        content: '普通：一张照片即可出结果，适合日常记录。精准：俯拍和 45° 斜拍各一张，约 1 分钟，重量估算更细，适合减脂、控糖等需要精确记录的场景。\n两种方式都会自动查询食物库：米饭、水果、鸡蛋等常见食物和带品牌的包装食品优先使用库里的营养数据，家常菜按食材和用油计算，查不到的由 AI 估算。多张照片会合并成一次识别，同一食物的不同角度不会重复计算。'
       },
       separate_foods: {
         title: '分项模式',
@@ -522,6 +511,8 @@ function AnalyzePage() {
   }, [])
 
   const imagePathsRef = useRef<string[]>([])
+  // 打开取景相机时记下照片要放到哪里，回到本页时（useDidShow）取回照片。
+  const foodCameraTargetRef = useRef<FoodCameraTarget | null>(null)
   const routeSessionSignatureRef = useRef('')
   const analyzeSubmitDebounceRef = useRef(0)
   imagePathsRef.current = imagePaths.filter(Boolean)
@@ -534,9 +525,6 @@ function AnalyzePage() {
   const selectedBaseMode = resolveAnalyzeBaseMode(executionMode)
   const isStrictBaseModeSelected = selectedBaseMode === 'strict'
   const isVideoCaptureSelected = isStrictBaseModeSelected && precisionCaptureMode === 'video'
-  const isWebSearchEnabled = isStrictBaseModeSelected
-    ? precisionWebSearchEnabled
-    : isWebSearchExecutionMode(executionMode)
   const isSeparateFoodEstimateEnabled = isStrictBaseModeSelected && precisionSeparateEnabled
   const selectedImagePaths = imagePaths.filter(Boolean)
   const precisionSlotsComplete = isPrecisionCaptureComplete(imagePaths)
@@ -553,16 +541,6 @@ function AnalyzePage() {
       setAnalysisEngine(defaultAnalysisEngineForMode('standard'))
     }
   }, [membershipStatus, executionMode, canUseStrictMode, precisionSessionId])
-
-  /** 多视角开关：纯 View 实现，避免任意 Switch 组件在分包内触发 react 未定义 */
-  const handleMultiViewSwitchChange = (e: { detail?: { value?: boolean } }) => {
-    const nextValue = e.detail?.value === true
-    setIsMultiView(nextValue)
-  }
-
-  const toggleMultiView = () => {
-    handleMultiViewSwitchChange({ detail: { value: !isMultiView } })
-  }
 
   const toggleSuggestRatio = () => {
     const nextValue = !suggestRatioEnabled
@@ -587,14 +565,8 @@ function AnalyzePage() {
       return
     }
     setImagePaths(prev => precisionCaptureMode === 'video' ? [] : prev.filter(Boolean))
-    const nextMode = resolveExecutionModeFromOptions(baseMode, isWebSearchEnabled, false)
-    setExecutionMode(nextMode)
-    setAnalysisEngine(defaultAnalysisEngineForMode(nextMode))
-  }
-
-  const handleAnalysisEngineTap = (engine: AnalysisEngine) => {
-    setAnalysisEngine(engine)
-    Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, engine)
+    setExecutionMode(baseMode)
+    setAnalysisEngine(defaultAnalysisEngineForMode(baseMode))
   }
 
   const handlePrecisionCaptureModeTap = (mode: PrecisionCaptureMode) => {
@@ -605,16 +577,6 @@ function AnalyzePage() {
     } else {
       setImagePaths(['', ''])
     }
-  }
-
-  const toggleWebSearch = () => {
-    if (isStrictBaseModeSelected) {
-      setPrecisionWebSearchEnabled(value => !value)
-      return
-    }
-    const nextValue = !isWebSearchEnabled
-    const nextMode = resolveExecutionModeFromOptions(selectedBaseMode, nextValue, false)
-    setExecutionMode(nextMode)
   }
 
   const toggleSeparateFoodEstimate = () => {
@@ -710,7 +672,7 @@ function AnalyzePage() {
         setDefaultMealType(inferredMealType)
         if (!mealTypeChosenRef.current) setMealType(inferredMealType)
         if (!nextSessionId && profile.execution_mode) {
-          const profileMode = normalizeAvailableExecutionMode(profile.execution_mode)
+          const profileMode = toVisibleExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
           setExecutionMode(profileMode)
           if (!requestedAnalysisEngine) setAnalysisEngine(defaultAnalysisEngineForMode(profileMode))
         }
@@ -741,6 +703,16 @@ function AnalyzePage() {
     // 2. 从本地存储获取图片路径 (用于拍照/相册后的跳转)
     const initStoredImagePath = async () => {
       try {
+        // 从取景相机返回：只把拍到的照片放回原位置，不用存储里的旧图覆盖当前这一顿。
+        const cameraTarget = foodCameraTargetRef.current
+        if (cameraTarget) {
+          foodCameraTargetRef.current = null
+          const shotPaths = takeFoodCameraResult()
+          if (shotPaths.length === 0) return
+          if (cameraTarget.kind === 'append') await appendImagePaths(shotPaths)
+          else await placePrecisionImage(cameraTarget.role, shotPaths[0])
+          return
+        }
         if (nextSessionId) {
           if (requestedCaptureMode === 'video') {
             setImagePaths([])
@@ -885,16 +857,21 @@ function AnalyzePage() {
       Taro.showToast({ title: `最多支持 ${MAX_ANALYZE_IMAGES} 张图片`, icon: 'none' })
       return
     }
+    const source = await askPhotoSource()
+    if (!source) return
+    if (source === 'camera') {
+      await openFoodCamera({ kind: 'append' }, remain)
+      return
+    }
     try {
       // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
       const res = await chooseImageWithPrivacy({
         count: remain,
         sizeType: ['original'],
-        sourceType: ['album', 'camera'],
+        sourceType: ['album'],
       })
       const rawPaths = (res.tempFilePaths || []).map(p => String(p || '').trim()).filter(Boolean)
-      const newPaths = await persistImagePathsImmediately(rawPaths)
-      setImagePaths(prev => [...prev, ...newPaths])
+      await appendImagePaths(rawPaths)
     } catch (e) {
       if ((e as any)?.errMsg?.includes('cancel')) return
       if (isPrivacyAuthorizeError(e)) {
@@ -905,28 +882,68 @@ function AnalyzePage() {
     }
   }
 
-  const handleChoosePrecisionImage = async (role: 'top_down' | 'oblique_45') => {
+  /** 追加到本顿已有照片后面，并同步到存储，避免回到本页时被旧图覆盖。 */
+  const appendImagePaths = async (rawPaths: string[]) => {
+    if (rawPaths.length === 0) return
+    const newPaths = await persistImagePathsImmediately(rawPaths)
+    const nextPaths = [...imagePathsRef.current, ...newPaths].slice(0, MAX_ANALYZE_IMAGES)
+    setImagePaths(nextPaths)
+    Taro.setStorageSync('analyzeImagePaths', nextPaths)
+  }
+
+  const placePrecisionImage = async (role: PrecisionCaptureRole, rawPath: string) => {
     const slotIndex = role === 'top_down' ? 0 : 1
+    const [stablePath] = await persistImagePathsImmediately([rawPath])
+    const nextPath = stablePath || rawPath
+    setImagePaths(prev => {
+      const next = [prev[0] || '', prev[1] || '']
+      const otherIndex = slotIndex === 0 ? 1 : 0
+      if (next[otherIndex] && next[otherIndex] === nextPath) {
+        Taro.showToast({ title: '两个角度不能使用同一张图片', icon: 'none' })
+        return next
+      }
+      next[slotIndex] = nextPath
+      return next
+    })
+  }
+
+  /** 拍照走 3:4 / 4:3 取景相机，相册照旧用系统选图。 */
+  const askPhotoSource = async (): Promise<'camera' | 'album' | null> => {
+    try {
+      const { tapIndex } = await Taro.showActionSheet({ itemList: ['拍照', '从相册选择'] })
+      return tapIndex === 0 ? 'camera' : 'album'
+    } catch {
+      return null
+    }
+  }
+
+  const openFoodCamera = async (target: FoodCameraTarget, maxCount: number) => {
+    foodCameraTargetRef.current = target
+    try {
+      await openFoodCameraForResult(maxCount)
+    } catch (e) {
+      foodCameraTargetRef.current = null
+      console.error('[analyze] open food camera failed', e)
+      Taro.showToast({ title: '打开相机失败，请重试', icon: 'none' })
+    }
+  }
+
+  const handleChoosePrecisionImage = async (role: PrecisionCaptureRole) => {
+    const source = await askPhotoSource()
+    if (!source) return
+    if (source === 'camera') {
+      await openFoodCamera({ kind: 'precision', role }, 1)
+      return
+    }
     try {
       const res = await chooseImageWithPrivacy({
         count: 1,
         sizeType: ['original'],
-        sourceType: ['album', 'camera'],
+        sourceType: ['album'],
       })
       const rawPath = String(res.tempFilePaths?.[0] || '').trim()
       if (!rawPath) return
-      const [stablePath] = await persistImagePathsImmediately([rawPath])
-      const nextPath = stablePath || rawPath
-      setImagePaths(prev => {
-        const next = [prev[0] || '', prev[1] || '']
-        const otherIndex = slotIndex === 0 ? 1 : 0
-        if (next[otherIndex] && next[otherIndex] === nextPath) {
-          Taro.showToast({ title: '两个角度不能使用同一张图片', icon: 'none' })
-          return next
-        }
-        next[slotIndex] = nextPath
-        return next
-      })
+      await placePrecisionImage(role, rawPath)
     } catch (e) {
       if ((e as any)?.errMsg?.includes('cancel')) return
       if (isPrivacyAuthorizeError(e)) {
@@ -1120,7 +1137,7 @@ function AnalyzePage() {
       const referenceObjects = buildReferenceObjects()
       const nextReferenceDefaults = buildNextReferenceDefaults()
       const precisionOptions = isStrictBaseModeSelected
-        ? buildPrecisionOptions(precisionInteractiveEnabled, precisionSeparateEnabled, precisionWebSearchEnabled)
+        ? buildPrecisionOptions(precisionInteractiveEnabled, precisionSeparateEnabled, false)
         : undefined
       const captureViews = isVideoCaptureSelected
         ? videoUploadResult?.keyframes
@@ -1135,8 +1152,9 @@ function AnalyzePage() {
         meal_type: mealType,
         diet_goal: 'none',
         activity_timing: activityTiming,
+        eating_mood: eatingMood || undefined,
         additionalContext: additionalInfo || undefined,
-        is_multi_view: isStrictBaseModeSelected ? true : isMultiView,
+        is_multi_view: isStrictBaseModeSelected,
         suggest_ratio_enabled: suggestRatioEnabled,
         analysis_engine: analysisEngine,
         precise_micronutrients: true,
@@ -1479,7 +1497,7 @@ function AnalyzePage() {
         ) : imagePaths.length > 0 ? (
           <View className='image-grid'>
             {imagePaths.map((path, index) => (
-              <View key={index} className={`grid-item ${isMultiView ? 'grid-item--multiview' : ''}`}>
+              <View key={index} className='grid-item'>
                 <Image
                   src={path}
                   mode='aspectFill'
@@ -1514,19 +1532,16 @@ function AnalyzePage() {
         )}
 
         <View className='analyze-guide-quality-zone' id='analyze-guide-quality-zone'>
-        {/* 图片分析设置 */}
+        {/* 识别方式：普通 / 精准，营养数据统一由智能匹配完成 */}
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
-            <Text className='multiview-compact-title'>识别模式</Text>
+            <Text className='multiview-compact-title'>识别方式</Text>
+            <View className='help-icon' onClick={() => openHelp('analysis_mode')}>
+              <Text className='help-icon-text'>?</Text>
+            </View>
             <Text className='mode-link' onClick={handleDefaultModeEdit}>设为默认</Text>
           </View>
           <View className='mode-switch-row'>
-            <View
-              className={`mode-switch-item ${selectedBaseMode === 'fast' ? 'active' : ''}`}
-              onClick={() => handleBaseModeTap('fast')}
-            >
-              快速
-            </View>
             <View
               className={`mode-switch-item ${selectedBaseMode === 'standard' ? 'active' : ''}`}
               onClick={() => handleBaseModeTap('standard')}
@@ -1542,126 +1557,65 @@ function AnalyzePage() {
           </View>
         </View>
 
-        <View className='analysis-engine-section'>
-          <View className='analysis-engine-header'>
-            <Text className='multiview-compact-title'>营养计算方式</Text>
-            <View
-              className='help-icon'
-              onClick={() => setHelpSheet({
-                visible: true,
-                title: '营养计算方式',
-                content: 'AI估算速度最快，会完整理解当前输入且不套标准食物库；标准库校准和数据库候选需要额外查询与复核，速度会慢一些，但命中兼容数据时营养结果更稳定，微量元素通常也更准确。所有方式都会提供完整微量元素。',
-              })}
-            >
-              <Text className='help-icon-text'>?</Text>
-            </View>
-          </View>
-          <View className='analysis-engine-options'>
-            {ANALYSIS_ENGINE_OPTIONS.map(option => (
-              <View
-                key={option.value}
-                className={`analysis-engine-option ${analysisEngine === option.value ? 'active' : ''}`}
-                onClick={() => handleAnalysisEngineTap(option.value)}
-              >
-                <Text className='analysis-engine-option__label'>{option.label}</Text>
-                <Text className='analysis-engine-option__description'>{option.description}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View className='analysis-options-row'>
-          <View
-            className={`analysis-option-card ${precisionInteractiveEnabled && isStrictBaseModeSelected ? 'active' : ''} ${!isStrictBaseModeSelected ? 'disabled' : ''}`}
-            onClick={togglePrecisionInteractive}
-          >
-            <View className='analysis-option-card-left'>
-              <Text className='analysis-option-title'>交互确认</Text>
-              <View
-                className='help-icon'
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setHelpSheet({ visible: true, title: '交互确认', content: '精准模式默认开启。只有食物身份、状态口径、参考尺度或关键烹饪信息不清楚时才暂停，每轮最多 3 个问题；你也可以按当前信息继续估算。' })
-                }}
-              >
-                <Text className='help-icon-text'>?</Text>
-              </View>
-            </View>
-            <View className={`analysis-option-switch ${precisionInteractiveEnabled && isStrictBaseModeSelected ? 'analysis-option-switch--on' : ''}`}>
-              <View className='analysis-option-switch-knob' />
-            </View>
-          </View>
-
-          <View className={`analysis-option-card ${isWebSearchEnabled ? 'active' : ''}`} onClick={toggleWebSearch}>
-            <View className='analysis-option-card-left'>
-              <Text className='analysis-option-title'>联网校准</Text>
-              <View className='help-icon' onClick={(e) => {
-                e.stopPropagation()
-                openHelp('web_search')
-              }}
-              >
-                <Text className='help-icon-text'>?</Text>
-              </View>
-            </View>
-            <View className={`analysis-option-switch ${isWebSearchEnabled ? 'analysis-option-switch--on' : ''}`}>
-              <View className='analysis-option-switch-knob' />
-            </View>
-          </View>
-
-          <View
-            className={`analysis-option-card ${isSeparateFoodEstimateEnabled ? 'active' : ''} ${!isStrictBaseModeSelected ? 'disabled' : ''}`}
-            onClick={toggleSeparateFoodEstimate}
-          >
-            <View className='analysis-option-card-left'>
-              <Text className='analysis-option-title'>分项模式</Text>
-              <View className='help-icon' onClick={(e) => {
-                e.stopPropagation()
-                openHelp('separate_foods')
-              }}
-              >
-                <Text className='help-icon-text'>?</Text>
-              </View>
-            </View>
-            <View className={`analysis-option-switch ${isSeparateFoodEstimateEnabled ? 'analysis-option-switch--on' : ''}`}>
-              <View className='analysis-option-switch-knob' />
-            </View>
-          </View>
-        </View>
-
         {!!precisionUpgradeHint && !isPrecisionExecutionMode(executionMode) && (
           <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
         )}
 
-        {/* 多视角辅助模式 */}
-        {!isStrictBaseModeSelected && <View className='multiview-compact'>
-          <View className='multiview-compact-left'>
-            <Text className='multiview-compact-title'>多视角辅助</Text>
-            <View className='help-icon' onClick={() => openHelp('multiview')}>
-              <Text className='help-icon-text'>?</Text>
+        {/* 识别设置：直接展开，不用先点开才能看到 */}
+        <View className='analysis-options-row'>
+          <View className={`analysis-option-card ${suggestRatioEnabled ? 'active' : ''}`} onClick={toggleSuggestRatio}>
+            <View className='analysis-option-card-left'>
+              <Text className='analysis-option-title'>AI摄入比例</Text>
+              <View className='help-icon' onClick={(e) => {
+                e.stopPropagation()
+                openHelp('suggest_ratio')
+              }}
+              >
+                <Text className='help-icon-text'>?</Text>
+              </View>
+            </View>
+            <View className={`analysis-option-switch ${suggestRatioEnabled ? 'analysis-option-switch--on' : ''}`}>
+              <View className='analysis-option-switch-knob' />
             </View>
           </View>
-          <View
-            className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}
-            onClick={toggleMultiView}
-          >
-            <View className='multiview-toggle-knob' />
-          </View>
-        </View>}
 
-        {/* AI摄入比例 */}
-        <View className='multiview-compact'>
-          <View className='multiview-compact-left'>
-            <Text className='multiview-compact-title'>AI摄入比例</Text>
-            <View className='help-icon' onClick={() => openHelp('suggest_ratio')}>
-              <Text className='help-icon-text'>?</Text>
+          {isStrictBaseModeSelected && (
+            <View className={`analysis-option-card ${precisionInteractiveEnabled ? 'active' : ''}`} onClick={togglePrecisionInteractive}>
+              <View className='analysis-option-card-left'>
+                <Text className='analysis-option-title'>交互确认</Text>
+                <View
+                  className='help-icon'
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setHelpSheet({ visible: true, title: '交互确认', content: '精准模式默认开启。只有食物身份、状态口径、参考尺度或关键烹饪信息不清楚时才暂停，每轮最多 3 个问题；你也可以按当前信息继续估算。' })
+                  }}
+                >
+                  <Text className='help-icon-text'>?</Text>
+                </View>
+              </View>
+              <View className={`analysis-option-switch ${precisionInteractiveEnabled ? 'analysis-option-switch--on' : ''}`}>
+                <View className='analysis-option-switch-knob' />
+              </View>
             </View>
-          </View>
-          <View
-            className={`multiview-toggle ${suggestRatioEnabled ? 'multiview-toggle--on' : ''}`}
-            onClick={toggleSuggestRatio}
-          >
-            <View className='multiview-toggle-knob' />
-          </View>
+          )}
+
+          {isStrictBaseModeSelected && (
+            <View className={`analysis-option-card ${isSeparateFoodEstimateEnabled ? 'active' : ''}`} onClick={toggleSeparateFoodEstimate}>
+              <View className='analysis-option-card-left'>
+                <Text className='analysis-option-title'>分项模式</Text>
+                <View className='help-icon' onClick={(e) => {
+                  e.stopPropagation()
+                  openHelp('separate_foods')
+                }}
+                >
+                  <Text className='help-icon-text'>?</Text>
+                </View>
+              </View>
+              <View className={`analysis-option-switch ${isSeparateFoodEstimateEnabled ? 'analysis-option-switch--on' : ''}`}>
+                <View className='analysis-option-switch-knob' />
+              </View>
+            </View>
+          )}
         </View>
         </View>
       </View>
@@ -1828,6 +1782,15 @@ function AnalyzePage() {
             </View>
           ))}
         </View>
+      </View>
+
+      {/* 此刻心情：选填，随识别任务提交，记录时一起保存 */}
+      <View className='meal-section'>
+        <View className='section-header'>
+          <Text className='section-title'>此刻心情</Text>
+          <Text className='section-optional'>可选</Text>
+        </View>
+        <EatingMoodPicker value={eatingMood} onChange={setEatingMood} />
       </View>
 
       {/* 运动时机（状态二） */}

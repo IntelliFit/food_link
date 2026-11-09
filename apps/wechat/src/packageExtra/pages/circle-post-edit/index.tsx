@@ -1,13 +1,13 @@
 import { Image, Input, Text, Textarea, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { Button } from '@taroify/core'
-import '@taroify/core/button/style'
+import { AppButton } from '../../../components/AppButton'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import {
   communityGetFeedContext,
   createCirclePost,
+  getUserProfile,
   showUnifiedApiError,
   type CirclePostNutritionInput,
   type CommunityFeedTargetType,
@@ -15,8 +15,10 @@ import {
   uploadCirclePostImage,
 } from '../../../utils/api'
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
+import { circlePostAudienceHint } from '../../../utils/feed-share'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { withAuth } from '../../../utils/withAuth'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { formatMacroNutrient, formatMicroNutrient } from '../../../utils/number-format'
 
 import './index.scss'
@@ -108,6 +110,13 @@ function CirclePostEditPage() {
   const [images, setImages] = useState<ImageItem[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [audienceHint, setAudienceHint] = useState('')
+
+  useEffect(() => {
+    void getUserProfile().then((profile) => setAudienceHint(circlePostAudienceHint(profile))).catch(() => {
+      /* 读取失败时不显示可见范围提示 */
+    })
+  }, [])
   const [nutritionEnabled, setNutritionEnabled] = useState(false)
   const [nutrition, setNutrition] = useState<NutritionFormState>(EMPTY_NUTRITION)
 
@@ -323,6 +332,11 @@ function CirclePostEditPage() {
   return (
     <FlPageThemeRoot>
       <View className='circle-post-edit-page'>
+        {!!audienceHint && (
+          <View className='circle-post-edit-audience-hint' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/privacy-settings/index') })}>
+            <Text>{audienceHint}</Text>
+          </View>
+        )}
         <View className='circle-post-edit-card circle-post-edit-image-section'>
           <View className='circle-post-edit-title-row'>
             <Text className='circle-post-edit-section-title'>图片</Text>
@@ -413,20 +427,20 @@ function CirclePostEditPage() {
         </View>
 
         <View className='circle-post-edit-footer'>
-          <Button
+          <AppButton
             className='circle-post-edit-draft-btn'
             onClick={() => void handleSaveDraft()}
           >
             存草稿
-          </Button>
-          <Button
+          </AppButton>
+          <AppButton
             className='circle-post-edit-submit'
             loading={submitting}
             disabled={!canSubmit}
             onClick={() => void handleSubmit()}
           >
             {postId ? '保存' : '发布动态'}
-          </Button>
+          </AppButton>
         </View>
       </View>
     </FlPageThemeRoot>

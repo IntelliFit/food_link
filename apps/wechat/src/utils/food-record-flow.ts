@@ -1,16 +1,19 @@
 import Taro from '@tarojs/taro'
 import type { CreateRecipeRequest, FoodRecord } from './api'
 import { buildFoodRecordItemPayloadFromResultItem } from './food-record-item-payload'
+import { markRecordVisibilityNoticeDue } from './feed-share'
 
 const HOME_TAB_URL = '/pages/index/index'
 
-export const returnHomeAfterFoodRecord = (delay = 600): ReturnType<typeof setTimeout> => (
-  setTimeout(() => {
+export const returnHomeAfterFoodRecord = (delay = 600): ReturnType<typeof setTimeout> => {
+  // 记录已保存：回到首页后提醒一次谁能看到。
+  markRecordVisibilityNoticeDue()
+  return setTimeout(() => {
     void Taro.switchTab({ url: HOME_TAB_URL }).catch(() => {
       void Taro.reLaunch({ url: HOME_TAB_URL })
     })
   }, delay)
-)
+}
 
 const getDefaultFavoriteName = (record: FoodRecord): string => {
   const description = String(record.description || '').trim().replace(/^手动记录[：:]\s*/, '')

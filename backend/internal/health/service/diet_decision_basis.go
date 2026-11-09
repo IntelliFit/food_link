@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/internal/nutritionagg"
 	userservice "food_link/backend/internal/user/service"
 	"strings"
 	"time"
@@ -116,6 +117,9 @@ func buildDietDecisionBasis(profile *domain.StatsUserProfile, records []domain.F
 	}
 	b.RecordedDays = len(days)
 	b.NutrientState = buildDietNutrientState(profile, records, now, b.Targets.Calories)
+	if over := tightenSodiumAfterSaltyWeek(b.NutrientState, records, start); over > 0 {
+		b.Actions = append(b.Actions, fmt.Sprintf("这周已有 %d 天钠超过上限，今天选汤少、酱汁少的。", over))
+	}
 	seenSources := map[string]bool{}
 	for _, rule := range b.NutrientState.Rules {
 		if rule.SourceURL == "" || seenSources[rule.SourceID] {
@@ -144,6 +148,51 @@ func buildDietDecisionBasis(profile *domain.StatsUserProfile, records []domain.F
 		b.Actions = append(b.Actions, "结合今天已记录摄入，在附近比较份量合适、搭配多样的餐食。")
 	}
 	return b
+}
+
+const (
+	saltyWeekDays          = 3
+	saltyWeekSodiumLimitMg = 1500.0
+)
+
+// tightenSodiumAfterSaltyWeek makes the daily rules remember the week: when sodium went
+// over its ceiling on three or more of the six days before today, today's ceiling drops
+// to 1500 mg so the ranking favours less salty meals. A saved personal plan is left as
+// the user set it. It returns the number of salty days when it tightened, else 0.
+func tightenSodiumAfterSaltyWeek(state *DietNutrientState, records []domain.FoodRecord, today time.Time) int {
+	if state == nil {
+		return 0
+	}
+	index := -1
+	for i, rule := range state.Rules {
+		if rule.Key == "sodiumMg" && rule.Limit > saltyWeekSodiumLimitMg && rule.ReferenceType != "saved_personal_plan" {
+			index = i
+		}
+	}
+	if index < 0 {
+		return 0
+	}
+	byDay := map[string][]nutritionagg.Vector{}
+	for _, record := range records {
+		if record.RecordTime == nil || !record.RecordTime.Before(today) || record.RecordTime.Before(today.AddDate(0, 0, -6)) {
+			continue
+		}
+		date := record.RecordTime.In(chinaTZ).Format("2006-01-02")
+		byDay[date] = append(byDay[date], nutritionagg.Observe(record.Items, true))
+	}
+	over := 0
+	for _, vectors := range byDay {
+		// A known subtotal above the ceiling is over whatever the unknown items held.
+		if sodium := nutritionagg.Combine(vectors...)["sodiumMg"]; sodium.KnownItems > 0 && sodium.Value > state.Rules[index].Limit {
+			over++
+		}
+	}
+	if over < saltyWeekDays {
+		return 0
+	}
+	state.Rules[index].Limit = saltyWeekSodiumLimitMg
+	state.Rules[index].Scope += fmt.Sprintf("；本周已有 %d 天超过上限，今天按 1500mg 收紧", over)
+	return over
 }
 
 func dietPatternBonus(basis *DietDecisionBasis, c DietRecommendationCandidate) (float64, string) {

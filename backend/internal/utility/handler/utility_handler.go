@@ -217,6 +217,7 @@ func (h *UtilityHandler) ManualFoodCustomSave(c *gin.Context) {
 	var body struct {
 		ID                 string         `json:"id"`
 		Title              string         `json:"title"`
+		Category           string         `json:"category"`
 		DefaultWeightGrams float64        `json:"default_weight_grams"`
 		TotalCalories      float64        `json:"total_calories"`
 		TotalProtein       float64        `json:"total_protein"`
@@ -237,6 +238,7 @@ func (h *UtilityHandler) ManualFoodCustomSave(c *gin.Context) {
 	item, err := h.manualFoodSvc.SaveCustomFood(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), repo.CustomFoodInput{
 		ID:                 body.ID,
 		Title:              body.Title,
+		Category:           body.Category,
 		DefaultWeightGrams: body.DefaultWeightGrams,
 		TotalCalories:      body.TotalCalories,
 		TotalProtein:       body.TotalProtein,

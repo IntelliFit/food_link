@@ -22,15 +22,24 @@ func (r *Repository) List(ctx context.Context, userID string, admin bool) ([]dom
 	q := r.db.WithContext(ctx).Model(&domain.Update{})
 	if admin {
 		q = q.Select("product_updates.*, (SELECT COUNT(*) FROM product_update_acknowledgements a WHERE a.update_id = product_updates.id) AS acknowledged")
+		q = q.Order("created_at ASC, id ASC")
 	} else {
 		q = q.Where("status = ?", "published")
 		if userID != "" {
 			q = q.Where("NOT EXISTS (SELECT 1 FROM product_update_acknowledgements a WHERE a.update_id = product_updates.id AND a.user_id = ?)", userID)
 		}
+		// Newest first: users only ever get the latest notice.
+		q = q.Order("published_at DESC, id DESC")
 	}
-	// Oldest first: an unacknowledged notice cannot be displaced by new ones.
-	err := q.Order("created_at ASC, id ASC").Find(&items).Error
+	err := q.Find(&items).Error
 	return items, err
+}
+
+func (r *Repository) AcknowledgedSince(ctx context.Context, userID string, since time.Time) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Table("product_update_acknowledgements").
+		Where("user_id = ? AND acknowledged_at >= ?", userID, since).Count(&count).Error
+	return count > 0, err
 }
 
 func (r *Repository) Create(ctx context.Context, item *domain.Update) error {

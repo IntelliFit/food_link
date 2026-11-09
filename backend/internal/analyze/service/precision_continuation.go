@@ -33,7 +33,7 @@ func mergePrecisionContinuationPayload(input SubmitTaskInput, submitted, previou
 	merged := copyMap(previous)
 	for requestKey, payloadKey := range map[string]string{
 		"date": "recorded_on", "meal_type": "meal_type", "province": "province", "city": "city", "district": "district",
-		"diet_goal": "diet_goal", "activity_timing": "activity_timing", "user_goal": "user_goal", "remaining_calories": "remaining_calories",
+		"diet_goal": "diet_goal", "activity_timing": "activity_timing", "eating_mood": "eating_mood", "user_goal": "user_goal", "remaining_calories": "remaining_calories",
 		"suggest_ratio_enabled": "suggest_ratio_enabled", "analysis_engine": "analysis_engine", "precise_micronutrients": "precise_micronutrients",
 		"modelName": "modelName", "timezone_offset_minutes": "timezone_offset_minutes", "capture_protocol": "capture_protocol",
 		"capture_views": "capture_views", "video_capture": "video_capture", "previousResult": "previousResult", "correctionItems": "correctionItems",

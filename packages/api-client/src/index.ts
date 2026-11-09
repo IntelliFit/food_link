@@ -94,6 +94,8 @@ import type {
   StatsCustomFocusResult,
   StatsInsightResult,
   StatsSummary,
+  StatsCalendarMonth,
+  OwnCommentHistoryItem,
   UpdateFoodRecordRequest,
   UserInfo,
   VoucherListResponse,
@@ -502,6 +504,8 @@ export interface ManualFoodCatalogOptions {
 
 export interface SaveCustomFoodInput {
   title: string
+  /** 不传时后端保留原分类，新建的归入自定义 */
+  category?: 'custom' | 'snack'
   defaultWeightGrams?: number
   totalCalories: number
   totalProtein?: number
@@ -1488,13 +1492,20 @@ export class FoodLinkApiClient {
     })
   }
 
-  buildFoodRecordShareUrl(recordId: string): string {
+  buildFoodRecordShareUrl(recordId: string, shareToken?: string): string {
     const id = recordId.trim()
     if (!id) throw new Error('缺少饮食记录 ID')
     const url = new URL(`/share/food-record/${encodeURIComponent(id)}`, `${this.shareBaseUrl}/`)
     const apiEnv = inferShareApiEnv(this.baseUrl)
     if (apiEnv) url.searchParams.set('api_env', apiEnv)
+    if (shareToken) url.searchParams.set('share_token', shareToken)
     return url.toString()
+  }
+
+  /** 本人分享记录时取得链接凭证，收到链接的人无需登录也能查看这一条。 */
+  async getFoodRecordShareToken(recordId: string): Promise<string> {
+    const result = await this.authenticatedRequest<{ share_token: string }>(`/api/food-record/${encodeURIComponent(recordId)}/share-token`, { method: 'GET' })
+    return result.share_token
   }
 
   async updateFoodRecord(recordId: string, body: UpdateFoodRecordRequest): Promise<{ message: string; record: FoodRecord }> {
@@ -1979,6 +1990,7 @@ export class FoodLinkApiClient {
       method: 'POST',
       body: {
         title,
+        ...(input.category ? { category: input.category } : {}),
         default_weight_grams: normalizeNumber(input.defaultWeightGrams) || 100,
         total_calories: calories,
         total_protein: protein,
@@ -2537,6 +2549,14 @@ export class FoodLinkApiClient {
     return this.authenticatedRequest<DiningWindowItem[]>(`/api/school-canteens/${encodeURIComponent(canteenId)}/windows${query}`, { method: 'GET', timeoutMs: 10000 })
   }
 
+  async getStatsCalendarMonth(month: string): Promise<StatsCalendarMonth> {
+    return this.authenticatedRequest<StatsCalendarMonth>(`/api/stats/calendar?month=${encodeURIComponent(month)}`, { method: 'GET', timeoutMs: 30000 })
+  }
+
+  async communityGetOwnComments(cursor = ''): Promise<{ list: OwnCommentHistoryItem[]; has_more: boolean; next_cursor?: string }> {
+    return this.authenticatedRequest(`/api/community/comments/mine?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { method: 'GET', timeoutMs: 15000 })
+  }
+
   /** Free library/history retrieval. Does not generate paid AI recommendations. */
   async previewMeals(input: { meal_type: ReminderMealType; location?: MealPreviewLocation }): Promise<DietRecommendationResult> {
     return this.authenticatedRequest<DietRecommendationResult>('/api/diet/recommendations/preview', {
@@ -2566,7 +2586,13 @@ export class FoodLinkApiClient {
     })
   }
 
-  async registerPushDevice(installationId: string, input: { token: string; project_id: string; platform: 'android' | 'ios' }): Promise<{ registered: boolean }> {
+  async saveLocalMealSettings(installationId: string, preferences: ReminderPreferences): Promise<ReminderSettings> {
+    return this.authenticatedRequest<ReminderSettings>(`/api/push/devices/${encodeURIComponent(installationId)}/local-meals`, {
+      method: 'PUT', body: preferences, timeoutMs: 10000,
+    })
+  }
+
+  async registerPushDevice(installationId: string, input: { token: string; project_id: string; platform: 'android' | 'ios'; provider?: 'expo' | 'honor'; protocol_version?: number }): Promise<{ registered: boolean }> {
     return this.authenticatedRequest<{ registered: boolean }>(`/api/push/devices/${encodeURIComponent(installationId)}`, {
       method: 'PUT', body: input, timeoutMs: 15000,
     })

@@ -133,44 +133,6 @@
   }
 }
 
-.record-detail-swiper {
-  width: 100%;
-  height: 100%;
-}
-
-.record-detail-swiper-item {
-  width: 100%;
-  height: 100%;
-}
-
-.record-detail-swiper-image {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.record-detail-image-counter {
-  position: absolute;
-  bottom: 16rpx;
-  right: 16rpx;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(8rpx);
-  padding: 6rpx 16rpx;
-  border-radius: 200rpx;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.record-detail-image-counter-text {
-  font-size: 22rpx;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: 2rpx;
-}
-
 .detail-image-icon-wrap {
   width: 160rpx;
   height: 160rpx;
@@ -287,7 +249,6 @@
     color: #3b82f6;
   }
 }
-
 
 .food-list-title {
   display: block;
@@ -663,240 +624,6 @@
   height: 1500rpx;
 }
 
-/* 海报预览弹窗：知乎风深色底 + 顶栏关闭/标题 + 居中海报 + 底部双圆形渠道（不改海报画布内容） */
-.poster-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  box-sizing: border-box;
-  background: #0a0a0a;
-}
-
-.poster-modal--sheet .poster-modal-topbar--light {
-  background: #fff;
-  border-bottom: 1rpx solid rgba(15, 23, 42, 0.08);
-}
-
-.poster-modal-topbar--title-only {
-  justify-content: center;
-  padding-left: 32rpx;
-  padding-right: 32rpx;
-}
-
-.poster-modal-topbar--title-only .poster-modal-title {
-  flex: none;
-  width: 100%;
-  text-align: center;
-}
-
-.poster-modal-title--light {
-  color: #111827;
-}
-
-.poster-modal-dark-body {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #0a0a0a;
-}
-
-.poster-modal-inline-back {
-  flex-shrink: 0;
-  width: 100%;
-  padding: 16rpx 24rpx 12rpx;
-  box-sizing: border-box;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-}
-
-.poster-modal-inline-back .poster-modal-close.poster-modal-inline-close-hit {
-  width: 88rpx;
-  height: 88rpx;
-  min-width: 88rpx;
-  min-height: 88rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.poster-modal-inline-back .poster-modal-close-x {
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.poster-modal-shell {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-.poster-modal-topbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: calc(12rpx + env(safe-area-inset-top)) 24rpx 20rpx;
-  min-height: 88rpx;
-  box-sizing: border-box;
-}
-
-.poster-modal-close {
-  width: 72rpx;
-  height: 72rpx;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.poster-modal-close-x {
-  font-size: 48rpx;
-  line-height: 1;
-  color: #fff;
-  font-weight: 300;
-}
-
-.poster-modal-title {
-  flex: 1;
-  text-align: center;
-  font-size: 34rpx;
-  font-weight: 500;
-  color: #fff;
-}
-
-.poster-modal-topbar-placeholder {
-  width: 72rpx;
-  height: 72rpx;
-}
-
-.poster-scroll-area {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-height: 100%;
-  box-sizing: border-box;
-  /* 海报过高时可滚动；勿用 overflow:hidden 否则子项 flex 下易出现 0 高 */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.poster-modal-scroll-inner {
-  flex-shrink: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 16rpx 32rpx 24rpx;
-  box-sizing: border-box;
-}
-
-.poster-modal-card-wrap {
-  /* 不要用 flex:1：会与 aspectFit/自动高图片组合成 0×0；宽度定宽后由 widthFix 撑开高度 */
-  flex-shrink: 0;
-  width: 100%;
-  max-width: 640rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-  box-shadow: 0 12rpx 64rpx rgba(0, 0, 0, 0.55);
-}
-
-.poster-modal-image {
-  width: 100%;
-  display: block;
-  border-radius: 0;
-  margin: 0;
-  padding: 0;
-}
-
-.poster-modal-bottom-bar {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-around;
-  align-items: flex-start;
-  padding: 28rpx 32rpx calc(28rpx + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(10, 10, 10, 0) 0%, #000 40%);
-  border-top: 1rpx solid rgba(255, 255, 255, 0.06);
-}
-
-.poster-share-channel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16rpx;
-  min-width: 112rpx;
-}
-
-/* 微信好友：原生分享按钮去默认样式，与两侧入口对齐 */
-button.poster-share-channel--btn {
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  line-height: normal;
-  border: none;
-  border-radius: 0;
-  font-weight: normal;
-  color: inherit;
-
-  &::after {
-    display: none;
-  }
-}
-
-.poster-share-channel--hover {
-  opacity: 0.88;
-}
-
-.poster-share-channel-icon {
-  width: 112rpx;
-  height: 112rpx;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.poster-share-channel-icon-wechat {
-  background: #07c160;
-  box-shadow: inset 0 -2rpx 0 rgba(0, 0, 0, 0.08);
-}
-
-.poster-share-channel-icon-moments {
-  background: #576b95;
-  box-shadow: inset 0 -2rpx 0 rgba(0, 0, 0, 0.08);
-}
-
-.poster-share-channel-icon-save {
-  background: #2563eb;
-}
-
-.poster-share-channel-glyph {
-  font-size: 56rpx;
-  line-height: 1;
-  color: #fff;
-}
-
-.poster-share-channel-label {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.92);
-  text-align: center;
-}
-
 /* Dark mode */
 .record-detail-root--dark {
   background: #0d1312;
@@ -921,24 +648,12 @@ button.poster-share-channel--btn {
     color: rgba(214, 226, 220, 0.58);
   }
 
-  .detail-card {
-    background: #181f1d;
-  }
-
   .ingredient-name {
     color: #f2f7f4;
   }
 
-  .ingredient-nutrients {
-    color: rgba(214, 226, 220, 0.58);
-  }
-
   .section-title {
     color: #f2f7f4;
-  }
-
-  .section-desc {
-    color: rgba(214, 226, 220, 0.58);
   }
 
   /* 编辑弹窗 dark */
@@ -967,32 +682,6 @@ button.poster-share-channel--btn {
     background: #181f1d;
   }
 
-  .edit-food-name {
-    color: #f2f7f4;
-  }
-
-  .edit-food-name-btn {
-    color: rgba(214, 226, 220, 0.6);
-  }
-
-  .edit-food-delete {
-    color: #ef4444;
-  }
-
-  .edit-section-label {
-    color: rgba(214, 226, 220, 0.76);
-  }
-
-  .intake-input {
-    background: #1e2624;
-    border-color: rgba(255, 255, 255, 0.08);
-    color: #f2f7f4;
-  }
-
-  .intake-unit {
-    color: rgba(214, 226, 220, 0.58);
-  }
-
   .adjust-btn {
     background: #2a3330;
     color: #f2f7f4;
@@ -1004,30 +693,6 @@ button.poster-share-channel--btn {
     &.plus {
       color: #00bc7d;
     }
-  }
-
-  .ratio-value {
-    color: #00bc7d;
-
-    &.over {
-      color: #f59e0b;
-    }
-  }
-
-  .nutrient-chip {
-    background: #1e2624;
-  }
-
-  .nutrient-chip-label {
-    color: rgba(214, 226, 220, 0.58);
-  }
-
-  .nutrient-chip-value {
-    color: #f2f7f4;
-  }
-
-  .nutrient-chip-unit {
-    color: rgba(214, 226, 220, 0.58);
   }
 
   .edit-modal-footer {
@@ -1043,24 +708,7 @@ button.poster-share-channel--btn {
     background: linear-gradient(135deg, #00a870 0%, #00bc7d 100%);
   }
 
-  /* 标签 */
-  .tag-chip {
-    background: #1e2624;
-    color: rgba(214, 226, 220, 0.76);
-
-    &.active {
-      background: rgba(0, 188, 125, 0.2);
-      color: #00bc7d;
-    }
-  }
-
-  /* 底部操作栏 */
-  .bottom-action-bar {
-    background: #181f1d;
-    border-top-color: rgba(255, 255, 255, 0.08);
-  }
-
-  /* 记录详情文字 */
+/* 记录详情文字 */
   .record-detail-body {
     color: #f2f7f4;
   }

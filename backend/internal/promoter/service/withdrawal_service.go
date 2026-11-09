@@ -17,6 +17,7 @@ import (
 	"food_link/backend/pkg/logger"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 const (
@@ -173,17 +174,20 @@ func (s *PromoterService) AdminWithdrawals(ctx context.Context, status string, p
 }
 
 type WithdrawalReviewInput struct {
-	Approve      bool   `json:"approve"`
-	Note         string `json:"note"`
-	PayoutMethod string `json:"payout_method"`
+	Approve           bool   `json:"approve"`
+	Note              string `json:"note"`
+	PayoutMethod      string `json:"payout_method"`
+	RealNameConfirmed bool   `json:"real_name_confirmed"`
 }
 
 // ReviewWithdrawal approves or rejects a withdrawal under review. Rejecting
 // releases the amount back to the balance and needs a reason the promoter
-// will see. Approval is refused while the promoter is not active or when a
-// refund taken back after the request has left the balance short. An
-// approval paid by WeChat transfer starts the transfer at once; a manual one
-// (the default) waits for ops to record the payout.
+// will see. Approval is refused while the promoter is not active, when a
+// refund taken back after the request has left the balance short, or, on a
+// promoter's first payout, until the reviewer confirms their real name, which
+// is then recorded on the promoter. An approval paid by WeChat transfer
+// starts the transfer at once; a manual one (the default) waits for ops to
+// record the payout.
 func (s *PromoterService) ReviewWithdrawal(ctx context.Context, admin, withdrawalID string, input WithdrawalReviewInput) (*domain.Withdrawal, error) {
 	if !isUUID(withdrawalID) {
 		return nil, commonerrors.ErrNotFound
@@ -196,10 +200,11 @@ func (s *PromoterService) ReviewWithdrawal(ctx context.Context, admin, withdrawa
 	var updated *domain.Withdrawal
 	switch {
 	case input.Approve && input.PayoutMethod == domain.PayoutWechatTransfer:
-		updated, err = s.approveForTransfer(ctx, withdrawalID, updates)
+		updated, err = s.approveForTransfer(ctx, withdrawalID, updates, input.RealNameConfirmed)
 	case input.Approve && (input.PayoutMethod == "" || input.PayoutMethod == domain.PayoutManual):
 		updates["status"] = domain.WithdrawalApproved
-		updated, err = s.repo.UpdateWithdrawalLocked(ctx, withdrawalID, []string{domain.WithdrawalReviewing}, updates, s.checkApproval, nil)
+		updated, err = s.repo.UpdateWithdrawalLocked(ctx, withdrawalID, []string{domain.WithdrawalReviewing}, updates,
+			s.approvalCheck(input.RealNameConfirmed), confirmingRealName(input.RealNameConfirmed, nil))
 	case input.Approve:
 		return nil, appError(http.StatusBadRequest, "打款方式无效")
 	default:
@@ -218,17 +223,39 @@ func (s *PromoterService) ReviewWithdrawal(ctx context.Context, admin, withdrawa
 	return updated, nil
 }
 
-// checkApproval refuses approval while the promoter is not active, or when
-// the balance, which already excludes this withdrawal, is below zero because
-// commission was taken back after the request was made.
-func (s *PromoterService) checkApproval(state repo.WithdrawalState) error {
-	if state.PromoterStatus != domain.StatusActive {
-		return appError(http.StatusConflict, "推广员当前不是正常状态，不能通过提现，请驳回或先恢复推广员")
+// approvalCheck refuses approval while the promoter is not active, when the
+// balance, which already excludes this withdrawal, is below zero because
+// commission was taken back after the request was made, or when their real
+// name was never checked and the reviewer has not confirmed it now.
+func (s *PromoterService) approvalCheck(realNameConfirmed bool) func(repo.WithdrawalState) error {
+	return func(state repo.WithdrawalState) error {
+		if state.PromoterStatus != domain.StatusActive {
+			return appError(http.StatusConflict, "推广员当前不是正常状态，不能通过提现，请驳回或先恢复推广员")
+		}
+		if state.AvailableCents < 0 {
+			return appError(http.StatusConflict, "推广员有退款扣回的佣金，余额已不足以支付这笔提现，请驳回")
+		}
+		if !state.RealNameConfirmed && !realNameConfirmed {
+			return appError(http.StatusBadRequest, "这是该推广员第一次提现，请先核实实名信息再通过")
+		}
+		return nil
 	}
-	if state.AvailableCents < 0 {
-		return appError(http.StatusConflict, "推广员有退款扣回的佣金，余额已不足以支付这笔提现，请驳回")
+}
+
+// confirmingRealName records the reviewer's real-name confirmation on the
+// promoter in the approval transaction, then runs next.
+func confirmingRealName(confirmed bool, next func(*gorm.DB, domain.Withdrawal) (map[string]any, error)) func(*gorm.DB, domain.Withdrawal) (map[string]any, error) {
+	return func(tx *gorm.DB, w domain.Withdrawal) (map[string]any, error) {
+		if confirmed {
+			if err := repo.ConfirmRealName(tx, w.PromoterID); err != nil {
+				return nil, err
+			}
+		}
+		if next == nil {
+			return nil, nil
+		}
+		return next(tx, w)
 	}
-	return nil
 }
 
 type WithdrawalPayoutInput struct {

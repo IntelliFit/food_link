@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import {
   Activity,
+  Sparkles,
   Apple,
   Building2,
   CreditCard,
@@ -14,6 +15,7 @@ import {
   Megaphone,
   Images,
   Package,
+  Scale,
   ScanLine,
   Settings,
   Tags,
@@ -32,6 +34,8 @@ export type AdminMenuId =
   | 'overview'
   | 'feedback'
   | 'benchmark'
+  | 'research-weight'
+  | 'campus-campaigns'
   | 'packaged-foods'
   | 'packaged-food-test'
   | 'packaged-food-corrections'
@@ -48,6 +52,7 @@ export type AdminMenuId =
   | 'user-food-photos'
   | 'settings'
   | 'product-updates'
+  | 'onboarding'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
@@ -94,6 +99,8 @@ const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
     label: '实验工具',
     items: [
       { id: 'benchmark', label: '数据集评测', icon: FlaskConical },
+      { id: 'research-weight', label: '称重科研数据', icon: Scale },
+      { id: 'campus-campaigns', label: '高校共建', icon: Building2 },
       { id: 'packaged-food-test', label: '包装食品测试', icon: Package },
       { id: 'payment-test', label: '支付测试', icon: CreditCard },
     ],
@@ -102,6 +109,7 @@ const menuGroups: Array<{ label: string; items: AdminMenuItem[] }> = [
     label: '系统',
     items: [
       { id: 'product-updates', label: '产品更新通知', icon: Megaphone },
+      { id: 'onboarding', label: '注册引导与实验', icon: Sparkles },
       { id: 'settings', label: '系统设置', icon: Settings, disabled: true },
     ],
   },

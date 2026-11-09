@@ -258,6 +258,58 @@
     box-shadow: 0 14rpx 34rpx rgb(46 79 65 / 8%);
   }
 
+  &__stale {
+    display: inline-block;
+    margin-top: 4rpx;
+    padding: 2rpx 12rpx;
+    border-radius: 999rpx;
+    color: #7a8a80;
+    background: #eef3ef;
+    font-size: 19rpx;
+    line-height: 30rpx;
+    vertical-align: middle;
+  }
+
+  &__recent {
+    margin-top: 22rpx;
+    padding-top: 18rpx;
+    border-top: 1rpx solid #e5efe7;
+  }
+
+  &__recent-title {
+    display: block;
+    margin-bottom: 8rpx;
+    color: #679074;
+    font-size: 21rpx;
+    font-weight: 700;
+  }
+
+  &__recent-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16rpx;
+    padding: 8rpx 0;
+    font-size: 24rpx;
+  }
+
+  &__recent-name {
+    overflow: hidden;
+    flex: 1;
+    color: #26463a;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__recent-kcal { flex: 0 0 auto; color: #8ca096; }
+
+  // 端上来: fresh dishes rise onto the card; a saved answer just appears.
+  &__served {
+    position: relative;
+    animation: meal-picks-serve 0.36s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+
+    &.is-stale { animation: none; }
+  }
+
   &__error {
     display: block;
     margin: 8rpx 10rpx 0;
@@ -318,6 +370,10 @@
   .meal-picks__empty,
   .meal-picks__skeleton { border-color: #34463a; background: #222f29; box-shadow: none; }
 
+  .meal-picks__stale { color: #a4b5aa; background: #2c3b33; }
+  .meal-picks__recent { border-top-color: #34463a; }
+  .meal-picks__recent-name { color: #edf8f1; }
+
   .meal-picks__eyebrow,
   .meal-picks__text-action,
   .meal-picks__source,
@@ -325,5 +381,10 @@
 }
 
 @keyframes meal-spin { to { transform: rotate(360deg); } }
+
+@keyframes meal-picks-serve {
+  from { opacity: 0; transform: translateY(28rpx) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 @keyframes meal-pulse { to { opacity: 0.45; } }

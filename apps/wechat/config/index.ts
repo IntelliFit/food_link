@@ -1,10 +1,10 @@
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
-import { createStyleImportPlugin } from 'vite-plugin-style-import'
 
 import devConfig from './dev'
 import prodConfig from './prod'
+import { failOnBlankedRequires, linkSubpackageChunkStyles, subpackageSharedChunks } from './subpackage-chunks'
 
 const appRoot = process.cwd()
 const workspaceRoot = join(appRoot, '..', '..')
@@ -64,6 +64,11 @@ loadTaroEnv()
 // fix: @taroify/icons 字体文件 base64 内联，避免小程序环境中路径解析失败
 const vantIconWoff2Base64 = readFileSync(join(appRoot, 'src/assets/vant-icon/vant-icon.woff2')).toString('base64')
 const vantIconWoffBase64 = readFileSync(join(appRoot, 'src/assets/vant-icon/vant-icon.woff')).toString('base64')
+
+// Subpackage roots are the src/package* folders (app.config.ts declares one subpackage per folder).
+const subpackageRoots = readdirSync(join(appRoot, 'src'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && /^package[A-Z]/.test(entry.name))
+  .map((entry) => entry.name)
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
@@ -139,15 +144,19 @@ export default defineConfig<'vite'>(async (merge) => {
     compiler: {
       type: 'vite',
       vitePlugins: [
-        createStyleImportPlugin({
-          libs: [
-            {
-              libraryName: '@taroify/core',
-              esModule: true,
-              resolveStyle: (name: string) => `@taroify/core/${name}/style`,
-            },
-          ],
+        // Keep modules that only one subpackage uses out of the main package. Must stay before the other
+        // manualChunks plugins below so their explicit rules win. packageExtra is close to its 1900 KB
+        // budget, so its shared modules stay in the main package for now.
+        subpackageSharedChunks({ roots: subpackageRoots, exclude: ['packageExtra'] }),
+        linkSubpackageChunkStyles({
+          roots: subpackageRoots,
+          pageImports: {
+            // The feed detail page shows the community feed cards: load the community tab page's wxss
+            // (always in the main package) instead of compiling a second copy into packageExtra.
+            'packageExtra/pages/interaction-feed-detail/index': ['pages/community/index'],
+          },
         }),
+        failOnBlankedRequires(),
         // fix: 覆盖 Taro 默认的 es6 target，避免 async/await 被编译为 generator
         // 内联辅助函数与局部变量名冲突，导致真机偶发 "c is not a function"
         {
@@ -189,53 +198,6 @@ export default defineConfig<'vite'>(async (merge) => {
           }
         },
         // 将 ECharts/ZRender 打到代谢页专属分包，避免留在共享分包里继续挤占体积。
-        // @vant/area-data is only used by the public-food sharing page. Keeping it in the global vendor
-        // chunk adds the complete China region table to the main package.
-        {
-          name: 'area-data-chunk-to-package-food-library-share',
-          configResolved(config) {
-            const ro = config.build.rollupOptions
-            const outs = ro.output
-            const list = Array.isArray(outs) ? outs : outs ? [outs] : []
-            const apply = (o: NonNullable<(typeof list)[number]>) => {
-              if (!o || typeof o !== 'object') return
-              const prevManual = o.manualChunks
-              o.manualChunks = (id: string, ctx: unknown) => {
-                if (/node_modules[\\/]@vant[\\/]area-data[\\/]/.test(id)) {
-                  return 'food-library-area-data'
-                }
-                if (typeof prevManual === 'function') {
-                  return (prevManual as (a: string, b: unknown) => string | void).call(
-                    o,
-                    id,
-                    ctx
-                  )
-                }
-                return undefined
-              }
-              const prevNames = o.chunkFileNames
-              o.chunkFileNames = (chunkInfo) => {
-                if (chunkInfo.name === 'food-library-area-data') {
-                  return 'packageFoodLibraryShare/area-data-vendor.js'
-                }
-                if (typeof prevNames === 'function') {
-                  return prevNames(chunkInfo)
-                }
-                if (typeof prevNames === 'string') {
-                  return prevNames
-                }
-                return '[name]-[hash].js'
-              }
-            }
-            if (list.length === 0) {
-              const o: Record<string, unknown> = {}
-              ro.output = o
-              apply(o)
-            } else {
-              list.forEach(apply)
-            }
-          },
-        },
         {
           name: 'qrcode-chunk-to-package-extra',
           configResolved(config) {
@@ -258,6 +220,85 @@ export default defineConfig<'vite'>(async (merge) => {
               o.chunkFileNames = (chunkInfo) => {
                 if (chunkInfo.name === 'profile-qrcode-vendor') {
                   return 'packageExtra/profile-qrcode-vendor.js'
+                }
+                if (typeof prevNames === 'function') return prevNames(chunkInfo)
+                if (typeof prevNames === 'string') return prevNames
+                return '[name]-[hash].js'
+              }
+            }
+            if (list.length === 0) {
+              const o: Record<string, unknown> = {}
+              ro.output = o
+              apply(o)
+            } else {
+              list.forEach(apply)
+            }
+          },
+        },
+        // Taro moves every module with more than one importer into the main common.js. The lifespan
+        // predictor's engine, model and sheets are only used by its own page, so keep them in its subpackage.
+        {
+          name: 'lifespan-chunk-to-package-lifespan',
+          configResolved(config) {
+            const ro = config.build.rollupOptions
+            const outs = ro.output
+            const list = Array.isArray(outs) ? outs : outs ? [outs] : []
+            const apply = (o: NonNullable<(typeof list)[number]>) => {
+              if (!o || typeof o !== 'object') return
+              const prevManual = o.manualChunks
+              o.manualChunks = (id: string, ctx: unknown) => {
+                if (/[\\/]src[\\/]packageLifespan[\\/]/.test(id) && !/[\\/]pages[\\/]predictor[\\/]index(\.config)?\.(tsx?|scss)/.test(id)) {
+                  return 'lifespan-core'
+                }
+                if (typeof prevManual === 'function') {
+                  return (prevManual as (a: string, b: unknown) => string | void).call(o, id, ctx)
+                }
+                return undefined
+              }
+              const prevNames = o.chunkFileNames
+              o.chunkFileNames = (chunkInfo) => {
+                if (chunkInfo.name === 'lifespan-core') {
+                  return 'packageLifespan/lifespan-core.js'
+                }
+                if (typeof prevNames === 'function') return prevNames(chunkInfo)
+                if (typeof prevNames === 'string') return prevNames
+                return '[name]-[hash].js'
+              }
+            }
+            if (list.length === 0) {
+              const o: Record<string, unknown> = {}
+              ro.output = o
+              apply(o)
+            } else {
+              list.forEach(apply)
+            }
+          },
+        },
+        // The after-record card is used by three packageExtra record pages only. Its wxss is written
+        // next to the chunk (packageExtra/meal-impact.wxss) and linkSubpackageChunkStyles imports it
+        // into those pages.
+        {
+          name: 'meal-impact-chunk-to-package-extra',
+          configResolved(config) {
+            const ro = config.build.rollupOptions
+            const outs = ro.output
+            const list = Array.isArray(outs) ? outs : outs ? [outs] : []
+            const apply = (o: NonNullable<(typeof list)[number]>) => {
+              if (!o || typeof o !== 'object') return
+              const prevManual = o.manualChunks
+              o.manualChunks = (id: string, ctx: unknown) => {
+                if (/[\\/]src[\\/]components[\\/]MealImpactCard[\\/]/.test(id)) {
+                  return 'meal-impact'
+                }
+                if (typeof prevManual === 'function') {
+                  return (prevManual as (a: string, b: unknown) => string | void).call(o, id, ctx)
+                }
+                return undefined
+              }
+              const prevNames = o.chunkFileNames
+              o.chunkFileNames = (chunkInfo) => {
+                if (chunkInfo.name === 'meal-impact') {
+                  return 'packageExtra/meal-impact.js'
                 }
                 if (typeof prevNames === 'function') return prevNames(chunkInfo)
                 if (typeof prevNames === 'string') return prevNames

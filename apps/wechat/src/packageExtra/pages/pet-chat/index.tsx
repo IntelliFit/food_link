@@ -28,8 +28,12 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
-import { openPetSettings } from '../../../utils/pet-navigation'
+import { openPetSettings, PET_ASK_ENTRY } from '../../../utils/pet-navigation'
+import { DEFAULT_PET_NAME } from '../../../utils/pet-name'
 import { PetAvatar } from '../../../components/PetAvatar'
+import PetThinking from '../../../components/PetThinking'
+import { appendThinkingStep, chatThinkingSteps } from './thinking-steps'
+import { petChatFailureText, savedAnswerFor } from './chat-failure'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { PetMarkdown } from './pet-markdown'
 import { MealSuggestions } from './MealSuggestions'
@@ -55,6 +59,12 @@ type ChatMessage = {
   billingStatus?: string
   // A question that failed before the server stored it.
   unsent?: boolean
+  /** 等回答时宠物真实在做的步骤（后端进度） */
+  steps?: string[]
+  /** 规则先挑出的几份，模型还在细看 */
+  provisional?: boolean
+  /** 这条是失败提示：点「重试」重新问这一句 */
+  retryQuestion?: string
 }
 
 type PendingChatImage = {
@@ -98,7 +108,7 @@ function questionRange(question: string, fallback: RangeMode): RangeMode {
 
 export function isDietRecommendationQuestion(question: string): boolean {
   const normalized = question.replace(/\s+/g, '')
-  return /吃(?:点)?什么|吃啥|点什么|想吃|想点|(?:推荐|找|选|搭配|安排|换)[^，。？！!?；;]{0,20}(?:餐|饭|菜|食物|吃的|外卖)|(?:早|午|晚)(?:餐|饭)[^，。？！!?；;]{0,20}(?:推荐|选|搭配)|(?:附近|周边)[^，。？！!?；;]{0,20}(?:吃|餐|饭|菜|食堂|外卖)|(?:食堂|外卖)[^，。？！!?；;]{0,12}(?:吃|推荐|选|有什么|有哪些)|(?:这顿|这餐|这一餐)[^，。？！!?；;]{0,15}(?:吃什么|吃啥|选|推荐|搭配)/.test(normalized)
+  return /吃(?:点)?什么|吃啥|点什么|想吃|想点|(?:点|叫|订)(?:个|份|一份|一下|些|点)?外卖|喝(?:点|些)?什么|想喝|(?:推荐|来|点|买|整|要|加)(?:个|杯|瓶|份|点|些|一个|一杯|一份)?[^，。？！!?；;]{0,6}(?:饮料|饮品|奶茶|咖啡|果汁|零食|小吃|甜点|配菜|小菜|凉菜|单盘菜)|单点|单盘|加(?:个|一个|一份|道)菜|再来(?:个|一个|一份|道)菜|(?:推荐|找|选|搭配|安排|换)[^，。？！!?；;]{0,20}(?:餐|饭|菜|食物|吃的|外卖)|(?:早|午|晚)(?:餐|饭)[^，。？！!?；;]{0,20}(?:推荐|选|搭配)|(?:附近|周边)[^，。？！!?；;]{0,20}(?:吃|餐|饭|菜|食堂|外卖)|(?:食堂|外卖)[^，。？！!?；;]{0,12}(?:吃|推荐|选|有什么|有哪些)|(?:这顿|这餐|这一餐)[^，。？！!?；;]{0,15}(?:吃什么|吃啥|选|推荐|搭配)/.test(normalized)
 }
 
 export type DietRecommendationIntent = 'initial' | 'refine' | 'more' | 'location' | 'compare' | 'context'
@@ -131,6 +141,8 @@ function isMealFollowUpQuestion(question: string): boolean {
     || isMealFeedbackOnRecommendation(question)
     || (isCompoundMealFollowUp(question) && !leavesMealConversation(question))
     || releasesVenueLimit(question)
+    // Mirrors mealRequestedItemKind: one drink, snack, side or dish asked for in a meal conversation.
+    || (/喝(?:点|些)?什么|想喝|喝的|来(?:一)?杯|饮料|饮品|奶茶|咖啡|果汁|豆浆|酸奶|茶饮|零食|小吃|加餐|甜点|甜品|点心|水果|下午茶|配菜|小菜|凉菜|单盘|单点|一个菜|一道菜/.test(question) && !/(?:不要|不用|不想|别|不需要|不喝|不吃)/.test(question))
     || /这道菜|这份(?:饭|餐)|这些菜|这(?:几|[一二两三四五六七八九十0-9０-９]+)个(?:菜|餐|选项)|你推荐(?:的(?:菜|餐|饭|饮食)|这些)|这个(?:套餐|组合)|这(?:餐|顿)|那(?:餐|顿)|(?:其他|别的|更多)(?:的)?选择|刚才那几个[^，。？！!?；;]{0,10}(?:哪个|更适合|减脂)|(?:这些|它们)[^，。？！!?；;]{0,12}(?:太贵|价格|热量|蛋白|碳水|脂肪|营养)/.test(question)
     || /^(?:那|再|请|麻烦|帮我)?(?:换(?:一份|一餐|一道|一个|一批|几个|几份|几道|两份|三种)(?:选择|推荐)?|再来(?:一批|一份|几个|一组)|还有(?:什么|别的|其他)?(?:选择|推荐)?(?:吗)?|更多(?:选择|推荐)?|其他的?|别的)(?:吧|吗|呢|呀|啊)?[?？。!！]*$/.test(question)
     || /^(?:这些|这几个|这几道|这份|它|各自|分别)?(?:在哪(?:里|个食堂)?|哪里|位置(?:在哪)?|几楼|楼层|窗口|档口|怎么去|多少钱|价格(?:是多少)?|热量(?:是多少)?|多少卡|蛋白(?:质)?(?:多少)?|碳水(?:多少)?|脂肪(?:多少)?|营养(?:怎么样)?|份量|分量|来源|核对来源|为什么(?:这么推荐|推荐这些|适合我)?)(?:呢|吗|啊)?[?？。!！]*$/.test(question)
@@ -367,8 +379,11 @@ function PetChatPage() {
   const [homeMealContext, setHomeMealContext] = useState<HomeMealChatContext | null>(null)
   const [mealUnlocked, setMealUnlocked] = useState(false)
   const homeMealContextRef = useRef<HomeMealChatContext | null>(null)
-  const petName = petSummary?.pet?.name || '你的宠物'
-  const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage('你的宠物')])
+  const petName = petSummary?.pet?.name || DEFAULT_PET_NAME
+  const [messages, setMessages] = useState<ChatMessage[]>([buildIntroMessage(DEFAULT_PET_NAME)])
+  /** 从伙伴页「问问」进来：新对话，不恢复上一段；问题等积分估算好就自动发出 */
+  const freshAskRef = useRef(false)
+  const autoSendRef = useRef('')
   const streamingTextRef = useRef('')
   const streamingDietRecommendationRef = useRef<DietRecommendationResult | null>(null)
   const activeDietContext = useMemo(
@@ -390,14 +405,18 @@ function PetChatPage() {
     if (routeLoadedRef.current) return
     routeLoadedRef.current = true
     const starter = decodeRouteValue(options?.starter)
+    if (options?.entry === PET_ASK_ENTRY && starter) {
+      freshAskRef.current = true
+      autoSendRef.current = starter
+    }
     if (options?.entry === 'home_next_meal') {
       const mealType = decodeRouteValue(options?.meal_type)
-      if (mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner') {
+      if (mealType === 'breakfast' || mealType === 'lunch' || mealType === 'dinner' || mealType === 'evening_snack') {
         const context: HomeMealChatContext = {
           source: 'home_next_meal',
           date: decodeRouteValue(options?.date),
           meal_type: mealType,
-          meal_label: decodeRouteValue(options?.meal_label) || (mealType === 'breakfast' ? '早餐' : mealType === 'lunch' ? '午餐' : '晚餐'),
+          meal_label: decodeRouteValue(options?.meal_label) || { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', evening_snack: '夜宵' }[mealType],
           basic_advice: decodeRouteValue(options?.advice),
           selected_source_id: decodeRouteValue(options?.meal_id),
         }
@@ -429,7 +448,7 @@ function PetChatPage() {
         // Restoring a session by date/type can replace this meal with an old
         // recommendation or failure. Keep old sessions available in Recent;
         // follow-ups in this page still reuse the session created on first send.
-        if (homeMealContextRef.current) return
+        if (homeMealContextRef.current || freshAskRef.current) return
         const history = await getLatestPetChatSession().catch(() => null)
         if (!history?.messages?.length) return
         const restored = history.messages.map(mapHistoryMessage).filter((item) => item.text.trim() || item.imageUrls?.length)
@@ -588,14 +607,19 @@ function PetChatPage() {
       onStart: () => {
         // first chunk will arrive soon
       },
-      // Keep the visual thinking animation until answer text arrives.
-      // Internal retrieval steps are not assistant replies.
+      // 进度只是等待时显示的步骤，不是回答
+      onProgress: (progress) => {
+        updateMessage(streamingMessageID, (message) => ({ ...message, steps: appendThinkingStep(message.steps, progress.label) }))
+      },
+      // 规则先挑的几份马上给用户看；模型选好后同一轮的最终结果替换它
       onDietResult: (result) => {
         streamingDietRecommendationRef.current = result.recommendation
         updateMessage(streamingMessageID, (message) => ({
           ...message,
           kind: 'diet_recommendation',
           recommendation: result.recommendation,
+          provisional: Boolean(result.provisional),
+          text: result.provisional ? result.answer : message.text,
         }))
       },
       onChunk: (text) => {
@@ -636,14 +660,25 @@ function PetChatPage() {
         }
       },
       onError: async (error) => {
-        await showUnifiedApiError(error, `${petName}分析失败`)
+        console.warn('[pet-chat] 回答失败', error?.message || error)
+        // 连接断了，服务端可能已经答完并存好：先去取，取到就直接显示
+        const saved = await getLatestPetChatSession().catch(() => null)
+        if (saved && savedAnswerFor(saved.messages || [], question)) {
+          applyHistory(saved)
+          finish()
+          return
+        }
+        const mealTurn = Boolean(streamingDietRecommendationRef.current) || Boolean(homeMealContextRef.current) ||
+          Boolean(classifyDietRecommendationIntent(question, false))
+        const kept = streamingDietRecommendationRef.current
         updateMessage(userMessageID, (current) => ({ ...current, unsent: true }))
         updateMessage(streamingMessageID, () => ({
           id: nextID('pet'),
           role: 'pet',
-          kind: 'local',
-          text: `${petName}这次没能顺利读完记录。你可以稍后再试，或者先换成最近 7 天的小范围分析。`,
-          actions: ['换最近 7 天', '稍后再试'],
+          kind: kept ? 'diet_recommendation' : 'local',
+          recommendation: kept || undefined,
+          text: petChatFailureText({ petName, mealTurn, keptOptions: Boolean(kept) }),
+          retryQuestion: question,
         }))
         finish()
       },
@@ -651,7 +686,7 @@ function PetChatPage() {
     const location = currentMealLocation(getAccessToken() || '')
     if (mealLocation && !location) setMealLocation(undefined)
     streamGeneratePetChat(question, range, sessionID, !sessionID, callbacks, enableThinking, imageUrls, homeMealContext || undefined, location)
-  }, [appendMessage, enableThinking, homeMealContext, mealLocation, petName, sessionID, summary, updateMessage])
+  }, [appendMessage, applyHistory, enableThinking, homeMealContext, mealLocation, petName, sessionID, summary, updateMessage])
 
   const locateForMeal = useCallback(async () => {
     if (busyRef.current || locatingMeal) return
@@ -790,6 +825,26 @@ function PetChatPage() {
 
   const canSend = Boolean(draftQuestion) && !busy && !imageUploading && !estimatingCredits && estimatedCredits !== null
 
+  /** 失败提示上的「重试」：去掉这条提示和没发出去的那句，再问一次 */
+  const retryQuestion = useCallback((failedMessageID: string, question: string) => {
+    if (!question || busyRef.current) return
+    setMessages((prev) => {
+      const index = prev.findIndex((item) => item.id === failedMessageID)
+      if (index < 0) return prev
+      const before = prev[index - 1]
+      const dropUser = before && before.role === 'user' && before.unsent && before.text === question
+      return prev.filter((_, i) => i !== index && !(dropUser && i === index - 1))
+    })
+    void runAnalysis(question, questionRange(question, activeRange), [])
+  }, [activeRange, runAnalysis])
+
+  // 伙伴页带来的问题：估算好积分后替用户按一次发送；估算失败就留在输入框里让用户自己发
+  useEffect(() => {
+    if (!autoSendRef.current || !canSend || draftQuestion !== autoSendRef.current) return
+    autoSendRef.current = ''
+    handleSend()
+  }, [canSend, draftQuestion, handleSend])
+
   return (
     <View className={`pet-chat-page ${scheme === 'dark' ? 'pet-chat-page--dark' : ''}`}>
       <View className='pet-chat-topbar'>
@@ -828,17 +883,23 @@ function PetChatPage() {
                   message.text ? (
                     <PetMarkdown text={message.recommendation?.generated_by === 'foodlink-grounded-meals-v1' && message.recommendation.recommendations?.length ? '这几份可以参考。想换口味，还是调整份量？' : message.text} />
                   ) : (
-                    <View className='pet-chat-thinking-bubble'>
-                      <View className='pet-chat-thinking-dot' />
-                      <View className='pet-chat-thinking-dot' />
-                      <View className='pet-chat-thinking-dot' />
-                    </View>
+                    <PetThinking pet={petSummary?.pet} steps={chatThinkingSteps(message.steps)} size='chat' dark={scheme === 'dark'} />
                   )
                 ) : (
                   <Text className='pet-chat-message-text'>{message.text}</Text>
                 )}
                 {message.role === 'pet' && message.recommendation ? (
                   <MealSuggestions result={message.recommendation} onOpen={openRecommendationDetail} onSaveSchool={result => void saveCampusPreference(result)} savedSchoolIDs={savedSchoolIDs} />
+                ) : null}
+                {message.role === 'pet' && message.provisional ? (
+                  <View className='pet-chat-provisional'>
+                    <PetThinking steps={chatThinkingSteps(message.steps, '在比哪份最适合你…').slice(-1)} size='chat' hidePet dark={scheme === 'dark'} />
+                  </View>
+                ) : null}
+                {message.role === 'pet' && message.retryQuestion ? (
+                  <View className='pet-chat-retry' aria-role='button' onClick={() => retryQuestion(message.id, message.retryQuestion || '')}>
+                    <Text className='pet-chat-retry-text'>重试</Text>
+                  </View>
                 ) : null}
               </View>
             </View>

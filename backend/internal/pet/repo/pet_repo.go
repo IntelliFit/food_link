@@ -316,7 +316,99 @@ func (r *PetRepo) UpdateDailyScore(ctx context.Context, id string, updates map[s
 	if err != nil {
 		return err
 	}
+	if details, ok := normalizedUpdates["score_details"]; ok {
+		// Recalculated habit details replace the old ones, but the day's pet task lives in the
+		// same JSON and is written concurrently by the task flow, so the database keeps it.
+		normalizedUpdates["score_details"] = gorm.Expr(
+			"CAST(? AS jsonb) || jsonb_strip_nulls(jsonb_build_object(?::text, score_details -> ?::text))",
+			details, DailyTaskDetailsKey, DailyTaskDetailsKey,
+		)
+	}
 	return r.db.WithContext(ctx).Model(&petdomain.UserPetDailyScore{}).Where("id = ?", id).Updates(normalizedUpdates).Error
+}
+
+// DailyTaskDetailsKey is the score_details key holding the day's pet task.
+const DailyTaskDetailsKey = "daily_task"
+
+// StartDailyTask stores the day's pet task on the day's score row unless one is already
+// there. It reports whether this call stored it; the caller re-reads the row otherwise.
+func (r *PetRepo) StartDailyTask(ctx context.Context, userID, date string, task map[string]any) (bool, error) {
+	scoreDate, err := parseChinaDate(date)
+	if err != nil {
+		return false, err
+	}
+	payload, err := jsonbValue(task)
+	if err != nil {
+		return false, err
+	}
+	result := r.db.WithContext(ctx).Exec(`
+		UPDATE user_pet_daily_scores
+		SET score_details = COALESCE(score_details, '{}'::jsonb) || jsonb_build_object(?::text, CAST(? AS jsonb)),
+			updated_at = ?
+		WHERE user_id = ? AND score_date = ? AND (score_details -> ?::text) IS NULL`,
+		DailyTaskDetailsKey, payload, time.Now(), userID, scoreDate, DailyTaskDetailsKey,
+	)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// CompleteDailyTask marks the day's pet task done and adds its experience in one
+// transaction. Only the call that flips the task to done awards anything, so repeated
+// or concurrent reads award once per day.
+func (r *PetRepo) CompleteDailyTask(ctx context.Context, userID, petID, date string, patch map[string]any, expReward int) (*petdomain.UserPet, bool, error) {
+	scoreDate, err := parseChinaDate(date)
+	if err != nil {
+		return nil, false, err
+	}
+	if expReward < 0 {
+		expReward = 0
+	}
+	payload, err := jsonbValue(patch)
+	if err != nil {
+		return nil, false, err
+	}
+	var pet petdomain.UserPet
+	awarded := false
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+		result := tx.Exec(`
+			UPDATE user_pet_daily_scores
+			SET score_details = jsonb_set(score_details, ARRAY[?::text], (score_details -> ?::text) || CAST(? AS jsonb)),
+				exp_gained = exp_gained + ?,
+				updated_at = ?
+			WHERE user_id = ? AND score_date = ?
+				AND jsonb_typeof(score_details -> ?::text) = 'object'
+				AND COALESCE(score_details -> ?::text ->> 'done', 'false') <> 'true'`,
+			DailyTaskDetailsKey, DailyTaskDetailsKey, payload, expReward, now,
+			userID, scoreDate, DailyTaskDetailsKey, DailyTaskDetailsKey,
+		)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return tx.Where("id = ? AND user_id = ?", petID, userID).First(&pet).Error
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", petID, userID).First(&pet).Error; err != nil {
+			return err
+		}
+		pet.Experience += expReward
+		pet.Level = LevelForExperience(pet.Experience)
+		if err := tx.Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(map[string]any{
+			"experience": pet.Experience,
+			"level":      pet.Level,
+			"updated_at": now,
+		}).Error; err != nil {
+			return err
+		}
+		awarded = true
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return &pet, awarded, nil
 }
 
 func (r *PetRepo) GetEventByUserDateType(ctx context.Context, userID, date, eventType string) (*petdomain.UserPetEvent, error) {

@@ -1885,6 +1885,20 @@ describe('FoodLinkApiClient', () => {
     })
 
     expect(client.buildFoodRecordShareUrl('record-1')).toBe('https://healthymax.cn/share/food-record/record-1?api_env=dev')
+    expect(client.buildFoodRecordShareUrl('record-1', 'token-1')).toBe('https://healthymax.cn/share/food-record/record-1?api_env=dev&share_token=token-1')
+  })
+
+  it('sends the custom food category only when the caller chose one', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    await client.saveCustomFood({ title: 'Chips', totalCalories: 548, category: 'snack' })
+    await client.saveCustomFood({ title: 'Tofu', totalCalories: 120 })
+
+    const saves = requests.filter((entry) => entry.url.includes('/api/manual-food/custom') && entry.options?.method === 'POST')
+    expect(saves[0]?.options?.body).toMatchObject({ title: 'Chips', category: 'snack' })
+    expect(saves[1]?.options?.body).not.toHaveProperty('category')
   })
 
   it('saves custom manual food with full backend payload', async () => {

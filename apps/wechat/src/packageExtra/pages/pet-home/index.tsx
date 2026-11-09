@@ -118,10 +118,8 @@ function PetHomePage() {
           is_claimed: true,
         },
       } : prev)
-      Taro.showToast({
-        title: result.credits_awarded > 0 ? `已领取 +${result.credits_awarded} 积分` : `已领取 +${result.exp_awarded} 经验`,
-        icon: 'success'
-      })
+      // 复盘只给经验，不再给积分
+      Taro.showToast({ title: `已领取 +${result.exp_awarded} 经验`, icon: 'success' })
     } catch (error) {
       await showUnifiedApiError(error, '领取奖励失败')
     } finally {

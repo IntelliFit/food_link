@@ -1,0 +1,563 @@
+// 分析页「健康关注」里接引擎营养状态的新模块。颜色走分析页 editorial 的 --stats-* 变量，深色模式跟着变。
+// 由 packageStats/pages/stats/index.scss 引入（组件 tsx 不引），样式只进分析页的 wxss。
+$ns-fill: #5cb896;
+$ns-warn: #e0913f;
+$ns-over: #c8644a;
+
+.stats-ns-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-bottom: 8rpx;
+
+  &__line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16rpx;
+  }
+
+  &__title {
+    font-size: 34rpx;
+    line-height: 48rpx;
+    font-weight: 700;
+    color: var(--stats-ink, #1e2939);
+  }
+
+  &__meta,
+  &__sub {
+    font-size: 26rpx;
+    line-height: 38rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__meta { flex-shrink: 0; }
+}
+
+// 宠物观察条
+.stats-ns-observation {
+  display: flex;
+  align-items: flex-start;
+  gap: 24rpx;
+
+  &__avatar {
+    width: 128rpx;
+    height: 128rpx;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--stats-soft, #eef6f1);
+    overflow: hidden;
+  }
+
+  &__copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8rpx;
+  }
+
+  &__meta {
+    font-size: 26rpx;
+    line-height: 38rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__headline {
+    font-size: 30rpx;
+    line-height: 46rpx;
+    color: var(--stats-ink, #1e2939);
+    word-break: break-word;
+  }
+
+  &__ask {
+    min-height: 72rpx;
+    display: flex;
+    align-items: center;
+    font-size: 28rpx;
+    font-weight: 600;
+    color: var(--stats-accent, #2f7f62);
+  }
+}
+
+// 今天还差什么
+.stats-ns-today-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin-top: 24rpx;
+
+  &__line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+  }
+
+  &__label-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    min-width: 0;
+  }
+
+  &__label {
+    font-size: 30rpx;
+    line-height: 44rpx;
+    color: var(--stats-ink, #1e2939);
+  }
+
+  &__badge {
+    padding: 2rpx 16rpx;
+    border-radius: 999rpx;
+    font-size: 24rpx;
+    line-height: 36rpx;
+    font-weight: 700;
+    background: var(--stats-attention-surface, #fff0d6);
+    color: var(--stats-attention-ink, #7a3f06);
+    white-space: nowrap;
+  }
+
+  &__amount {
+    font-size: 28rpx;
+    line-height: 44rpx;
+    color: var(--stats-muted, #5b6676);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__value {
+    font-weight: 700;
+    color: var(--stats-ink, #1e2939);
+  }
+
+  &__track {
+    height: 16rpx;
+    border-radius: 8rpx;
+    background: var(--stats-track, #edf0ea);
+    overflow: hidden;
+  }
+
+  &__fill {
+    height: 100%;
+    border-radius: 8rpx;
+    background: $ns-fill;
+
+    &.is-warn { background: $ns-warn; }
+    &.is-over { background: $ns-over; }
+  }
+
+  &__note {
+    font-size: 24rpx;
+    line-height: 36rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  // 不知道 ≠ 0：虚线框说明，不画进度条
+  &__unknown {
+    padding: 16rpx 20rpx;
+    border-radius: 16rpx;
+    border: 2rpx dashed var(--stats-line, #c2cbc2);
+    font-size: 26rpx;
+    line-height: 40rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+}
+
+.stats-ns-next-meal {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 28rpx;
+  padding: 28rpx;
+  border-radius: 28rpx;
+  background: var(--stats-soft, #eef6f1);
+
+  &__title {
+    font-size: 30rpx;
+    line-height: 44rpx;
+    font-weight: 700;
+    color: var(--stats-accent, #1f4d3a);
+  }
+
+  &__advice {
+    font-size: 28rpx;
+    line-height: 42rpx;
+    color: var(--stats-ink, #1e2939);
+  }
+
+  &__actions {
+    display: flex;
+    gap: 20rpx;
+  }
+}
+
+.stats-ns-btn {
+  min-height: 88rpx;
+  padding: 0 28rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2rpx solid #9cc2ad;
+  border-radius: 999rpx;
+  background: var(--stats-surface, #fffdf7);
+  color: var(--stats-accent, #1f4d3a);
+  font-size: 28rpx;
+  line-height: 40rpx;
+  white-space: nowrap;
+
+  &--primary {
+    flex: 1;
+    min-width: 0;
+    border-color: var(--stats-accent, #1f4d3a);
+    background: var(--stats-accent, #1f4d3a);
+    color: var(--stats-surface, #ffffff);
+    font-weight: 700;
+  }
+
+  &--compact {
+    flex-shrink: 0;
+    padding: 0 24rpx;
+  }
+}
+
+// 本周规律
+.stats-ns-week {
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+    margin-bottom: 12rpx;
+  }
+
+  &__grid {
+    display: grid;
+    align-items: center;
+  }
+
+  &__days {
+    font-size: 24rpx;
+    line-height: 36rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__day { text-align: center; }
+
+  &__row { min-height: 60rpx; }
+
+  &__label {
+    font-size: 26rpx;
+    line-height: 36rpx;
+    color: var(--stats-ink, #1e2939);
+  }
+
+  &__cell {
+    display: flex;
+    justify-content: center;
+  }
+
+  &__count {
+    text-align: right;
+    font-size: 28rpx;
+    font-weight: 700;
+    color: var(--stats-accent, #2f6b45);
+    font-variant-numeric: tabular-nums;
+
+    &.is-warn { color: var(--stats-attention-ink, #9a4a08); }
+  }
+
+  &__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16rpx;
+    margin-top: 16rpx;
+  }
+
+  &__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28rpx;
+    margin-top: 20rpx;
+    font-size: 24rpx;
+    line-height: 36rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+  }
+}
+
+.stats-ns-chip {
+  padding: 8rpx 20rpx;
+  border-radius: 999rpx;
+  background: var(--stats-track, #f1f3ee);
+  font-size: 26rpx;
+  line-height: 36rpx;
+  color: var(--stats-ink, #1e2939);
+
+  &.is-better {
+    background: var(--stats-soft, #e5f3de);
+    color: var(--stats-accent, #2f5f3a);
+    font-weight: 600;
+  }
+
+  &.is-worse {
+    background: var(--stats-attention-surface, #fff0d6);
+    color: var(--stats-attention-ink, #7a3f06);
+    font-weight: 600;
+  }
+}
+
+.stats-ns-dot {
+  width: 28rpx;
+  height: 28rpx;
+  box-sizing: border-box;
+  border-radius: 50%;
+
+  &--small {
+    width: 20rpx;
+    height: 20rpx;
+  }
+
+  &.is-hit { background: $ns-fill; }
+  &.is-miss { border: 4rpx solid var(--stats-line, #cfd6cf); }
+  &.is-today { border: 4rpx dashed $ns-fill; }
+  // 那天没记录：只留一个小点，和“没做到”区分开
+  &.is-none {
+    width: 10rpx;
+    height: 10rpx;
+    background: var(--stats-line, #cfd6cf);
+  }
+}
+
+// 这些还看不准
+.stats-ns-evidence {
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 24rpx;
+    margin-top: 24rpx;
+  }
+
+  &__copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+  }
+
+  &__text {
+    font-size: 30rpx;
+    line-height: 44rpx;
+    font-weight: 600;
+    color: var(--stats-ink, #1e2939);
+  }
+
+  &__hint {
+    font-size: 26rpx;
+    line-height: 38rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+}
+
+// 我的关注（置顶，最多 3 项）
+.stats-ns-focus {
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+  }
+
+  &__title-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 12rpx;
+  }
+
+  &__manage {
+    min-width: 88rpx;
+    min-height: 88rpx;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    font-size: 28rpx;
+    font-weight: 600;
+    color: var(--stats-accent, #2f7f62);
+  }
+
+  &__empty {
+    display: flex;
+    align-items: center;
+    gap: 24rpx;
+    margin-top: 8rpx;
+  }
+
+  &__empty-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 28rpx;
+    line-height: 42rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__item {
+    padding: 24rpx 0;
+    border-top: 1rpx solid var(--stats-line, #eceee8);
+
+    &:active { background: var(--stats-track, #f1f3ee); }
+  }
+
+  &__row {
+    display: flex;
+    align-items: flex-start;
+    gap: 20rpx;
+  }
+
+  &__icon {
+    width: 72rpx;
+    height: 72rpx;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--stats-soft, #eef3ee);
+    color: var(--stats-accent, #2f6b45);
+    font-size: 36rpx;
+  }
+
+  &__copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6rpx;
+  }
+
+  &__name-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12rpx;
+  }
+
+  &__name {
+    font-size: 30rpx;
+    line-height: 44rpx;
+    font-weight: 700;
+    color: var(--stats-ink, #1e2939);
+  }
+
+  &__badge {
+    font-size: 24rpx;
+    line-height: 34rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__spinner {
+    font-size: 24rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__reason {
+    font-size: 28rpx;
+    line-height: 42rpx;
+    color: var(--stats-ink, #1e2939);
+    word-break: break-word;
+  }
+
+  &__score {
+    flex-shrink: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 4rpx;
+    padding: 6rpx 18rpx;
+    border-radius: 999rpx;
+    background: var(--stats-soft, #e5f3de);
+    color: var(--stats-accent, #2f5f3a);
+
+    &.tone-neutral,
+    &.tone-warning,
+    &.tone-danger {
+      background: var(--stats-attention-surface, #fff0d6);
+      color: var(--stats-attention-ink, #7a3f06);
+    }
+
+    &.tone-pending {
+      background: var(--stats-track, #f1f3ee);
+      color: var(--stats-muted, #5b6676);
+    }
+  }
+
+  &__score-value {
+    font-size: 36rpx;
+    line-height: 48rpx;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__score-unit { font-size: 24rpx; }
+
+  &__evidence {
+    display: flex;
+    flex-direction: column;
+    gap: 4rpx;
+    margin: 12rpx 0 0 92rpx;
+  }
+
+  &__evidence-line {
+    display: flex;
+    gap: 10rpx;
+  }
+
+  &__bullet,
+  &__evidence-text {
+    font-size: 26rpx;
+    line-height: 38rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+
+  &__bullet { color: var(--stats-accent, #2f7f62); }
+
+  &__footnote {
+    display: block;
+    padding-top: 12rpx;
+    font-size: 24rpx;
+    line-height: 36rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+}
+
+// 「其他方面」：没选为关注的卡折叠成一行
+.stats-ns-others-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 96rpx;
+  margin: 0 30rpx 20rpx;
+  padding: 0 28rpx;
+  box-sizing: border-box;
+  border-radius: 24rpx;
+  border: 1rpx solid var(--stats-line, #e1e6dc);
+  background: var(--stats-surface, #fffdf7);
+  font-size: 30rpx;
+  color: var(--stats-ink, #1e2939);
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    font-size: 26rpx;
+    color: var(--stats-muted, #5b6676);
+  }
+}

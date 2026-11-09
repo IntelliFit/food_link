@@ -20,6 +20,7 @@ import (
 	membershipdomain "food_link/backend/internal/membership/domain"
 	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/llmrelay"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
@@ -68,6 +69,8 @@ type ExercisePrecisionDetails struct {
 	AverageHeartRate int
 	DistanceKm       float64
 	Breakdown        string
+	// ShareToFeed is the per-log circle choice; nil follows the owner's setting.
+	ShareToFeed *bool
 }
 
 type exerciseJSONLLMConfig struct {
@@ -101,7 +104,7 @@ func NewExerciseService(repo ExerciseRepo, cfg ...*config.Config) *ExerciseServi
 	if len(cfg) > 0 {
 		c = cfg[0]
 	}
-	return &ExerciseService{repo: repo, cfg: c, client: &http.Client{Timeout: 45 * time.Second}}
+	return &ExerciseService{repo: repo, cfg: c, client: &http.Client{Timeout: 45 * time.Second, Transport: llmrelay.Wrap(nil)}}
 }
 
 type CreditGuard interface {
@@ -261,6 +264,7 @@ func (s *ExerciseService) CreateLogWithDateAndDetails(ctx context.Context, userI
 	if len([]rune(desc)) > exerciseMaxDescriptionRunes {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述过长", HTTPStatus: 400}
 	}
+	shareToFeed := precision.ShareToFeed
 	precision, err := normalizeExercisePrecisionDetails(precision)
 	if err != nil {
 		return nil, err
@@ -293,6 +297,9 @@ func (s *ExerciseService) CreateLogWithDateAndDetails(ctx context.Context, userI
 			"estimation_source": "go_exercise_worker",
 		},
 		CreatedAt: &now,
+	}
+	if shareToFeed != nil {
+		task.Payload["share_to_feed"] = *shareToFeed
 	}
 	if precision.Enabled {
 		task.Payload["estimation_mode"] = "precision"
@@ -618,8 +625,13 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		value := strings.TrimSpace(estimate.ExerciseType)
 		exerciseType = &value
 	}
+	var shareToFeed *bool
+	if value, ok := payload["share_to_feed"].(bool); ok {
+		shareToFeed = &value
+	}
 	log := &domain.ExerciseLog{
 		UserID:         userID,
+		ShareToFeed:    shareToFeed,
 		ExerciseDesc:   logDesc,
 		ExerciseType:   exerciseType,
 		ImageURL:       storedImageURL,
@@ -1137,6 +1149,12 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		status = fmt.Sprintf("http_%d", resp.StatusCode)
 		metrics.ObserveLLMCall("exercise", provider, model, status, time.Since(start))
+		logger.Warn(ctx, "运动热量大模型返回异常状态",
+			logger.Stage("llm_call"),
+			logger.ProviderModel(provider, model),
+			slog.Int("http_status", resp.StatusCode),
+			logger.LLMResponseSummary(string(respBytes)),
+		)
 		return ExerciseEstimate{}, fmt.Errorf("运动分析服务返回异常 %d", resp.StatusCode)
 	}
 	var parsed struct {

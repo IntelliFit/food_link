@@ -1,18 +1,24 @@
 import {
+  SUBMIT_ANALYSIS_ENGINE,
+  analysisEngineLabel,
   defaultAnalysisEngineForMode,
   normalizeAnalysisEngine,
 } from '../../src/utils/analysis-engine'
 
 describe('analysis engine routing', () => {
-  it('defaults fast and standard to direct AI, and precision to candidate-guided AI', () => {
-    expect(defaultAnalysisEngineForMode('fast')).toBe('ai_direct')
-    expect(defaultAnalysisEngineForMode('standard')).toBe('ai_direct')
-    expect(defaultAnalysisEngineForMode('strict')).toBe('db_candidates_ai')
+  it('submits every new analysis with the smart engine, whatever the mode', () => {
+    expect(SUBMIT_ANALYSIS_ENGINE).toBe('smart')
+    expect(defaultAnalysisEngineForMode('standard')).toBe('smart')
+    expect(defaultAnalysisEngineForMode('strict')).toBe('smart')
   })
 
-  it('upgrades legacy stored choices without reintroducing the old forced DB route', () => {
-    expect(normalizeAnalysisEngine('legacy_direct', 'standard')).toBe('ai_direct')
-    expect(normalizeAnalysisEngine('db_first', 'standard')).toBe('ai_direct')
+  it('keeps the engine a stored result was computed with so its label stays true', () => {
+    expect(normalizeAnalysisEngine('ai_direct')).toBe('ai_direct')
+    expect(normalizeAnalysisEngine('legacy_direct')).toBe('ai_direct')
     expect(normalizeAnalysisEngine('db_first', 'strict')).toBe('db_candidates_ai')
+    expect(normalizeAnalysisEngine(undefined)).toBe('smart')
+    expect(analysisEngineLabel('smart')).toBe('智能匹配')
+    expect(analysisEngineLabel('ai_then_db_exact')).toBe('标准库校准')
+    expect(analysisEngineLabel('unknown')).toBe('营养估算')
   })
 })

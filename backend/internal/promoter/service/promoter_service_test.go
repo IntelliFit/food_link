@@ -28,13 +28,18 @@ type fixture struct {
 
 func newFixture(t *testing.T, enabled bool) *fixture {
 	t.Helper()
+	return newFixtureWith(t, config.PromoterConfig{Enabled: enabled})
+}
+
+func newFixtureWith(t *testing.T, cfg config.PromoterConfig) *fixture {
+	t.Helper()
 	db := testdb.New(t)
 	ctx := context.Background()
 	require.NoError(t, db.AutoMigrate(&migrationdo.UserDO{}, &migrationdo.MembershipPaymentDO{}))
 	require.NoError(t, migration.MigratePromoterCommission(ctx, db, "public"))
 	require.NoError(t, migration.MigrateWechatTransfer(ctx, db, "public"))
 	f := &fixture{db: db, now: time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC)}
-	f.svc = NewPromoterService(repo.NewPromoterRepo(db), RulesFromConfig(config.PromoterConfig{Enabled: enabled}))
+	f.svc = NewPromoterService(repo.NewPromoterRepo(db), RulesFromConfig(cfg))
 	f.svc.now = func() time.Time { return f.now }
 	return f
 }
@@ -55,16 +60,17 @@ VALUES (?, ?, 'light_monthly', ?, ?, ?, 'paid', ?)`, id, userID, "order-"+id, am
 	return id
 }
 
-// activePromoter applies and approves a promoter, returning its id and code.
+// activePromoter applies, which opens the account at once, and marks the
+// real name checked, returning the promoter's id and code.
 func (f *fixture) activePromoter(t *testing.T, userID string) (string, string) {
 	t.Helper()
 	ctx := context.Background()
-	_, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
+	me, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
 	require.NoError(t, err)
+	require.Equal(t, domain.StatusActive, me.Status)
 	row, err := f.svc.repo.GetByUser(ctx, userID)
 	require.NoError(t, err)
-	_, err = f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true, RealNameConfirmed: true})
-	require.NoError(t, err)
+	require.NoError(t, repo.ConfirmRealName(f.db, row.ID))
 	return row.ID, row.PromoCode
 }
 
@@ -75,19 +81,46 @@ func requireStatus(t *testing.T, err error, status int) {
 	require.Equal(t, status, appErr.HTTPStatus)
 }
 
-func TestApplyAndReviewLifecycle(t *testing.T) {
+func TestApplyOpensTheAccountAtOnce(t *testing.T) {
 	ctx := context.Background()
 	disabled := newFixture(t, false)
 	_, err := disabled.svc.Apply(ctx, disabled.user(t, "甲", disabled.now), ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
 	requireStatus(t, err, http.StatusForbidden)
 
 	f := newFixture(t, true)
+	userID := f.user(t, "推广员乙", f.now.Add(-30*24*time.Hour))
+	_, err = f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1"})
+	requireStatus(t, err, http.StatusBadRequest)
+
+	me, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
+	require.NoError(t, err)
+	require.False(t, me.ManualReview)
+	require.Equal(t, domain.StatusActive, me.Status)
+	require.Regexp(t, `^[A-HJ-NP-Z2-9]{8}$`, me.PromoCode)
+	require.NotNil(t, me.Summary)
+
+	again, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true})
+	require.NoError(t, err)
+	require.Equal(t, me.PromoCode, again.PromoCode, "applying again keeps the code")
+
+	row, err := f.svc.repo.GetByUser(ctx, userID)
+	require.NoError(t, err)
+	require.False(t, row.RealNameConfirmed, "the real name is checked at the first withdrawal")
+	require.NotNil(t, row.AgreementSignedAt)
+	_, err = f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true})
+	requireStatus(t, err, http.StatusConflict)
+}
+
+func TestApplyAndReviewLifecycle(t *testing.T) {
+	ctx := context.Background()
+	f := newFixtureWith(t, config.PromoterConfig{Enabled: true, ManualReview: true})
 	userID := f.user(t, "推广员甲", f.now.Add(-30*24*time.Hour))
-	_, err = f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v0", AgreementAccepted: true})
+	_, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v0", AgreementAccepted: true})
 	requireStatus(t, err, http.StatusBadRequest)
 
 	me, err := f.svc.Apply(ctx, userID, ApplyInput{AgreementVersion: "v1", AgreementAccepted: true, ApplyNote: "校园推广"})
 	require.NoError(t, err)
+	require.True(t, me.ManualReview)
 	require.Equal(t, domain.StatusPendingReview, me.Status)
 	require.Empty(t, me.PromoCode, "code is hidden until approved")
 	require.Nil(t, me.Summary)
@@ -113,12 +146,11 @@ func TestApplyAndReviewLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.StatusPendingReview, me.Status)
 
-	_, err = f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true})
-	requireStatus(t, err, http.StatusBadRequest)
 	rate := 3000
-	approved, err := f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true, RealNameConfirmed: true, RateBps: &rate})
+	approved, err := f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true, RateBps: &rate})
 	require.NoError(t, err)
 	require.Equal(t, domain.StatusActive, approved.Status)
+	require.False(t, approved.RealNameConfirmed, "approving without the real name leaves it for the first withdrawal")
 	_, err = f.svc.Review(ctx, "ops", row.ID, ReviewInput{Approve: true, RealNameConfirmed: true})
 	requireStatus(t, err, http.StatusConflict)
 
@@ -185,7 +217,7 @@ func TestSyncAccruesSettlesAndReverses(t *testing.T) {
 
 	f.payment(t, invitee, "wechat_mini_program", 19.9, f.now.Add(-2*time.Hour)) // before binding
 	paid := f.payment(t, invitee, "wechat_mini_program", 19.9, f.now.Add(time.Minute))
-	f.payment(t, invitee, "wechat_virtual_payment", 19.9, f.now.Add(2*time.Minute))
+	f.payment(t, invitee, "manual_admin", 19.9, f.now.Add(2*time.Minute))
 	refundedEarly := f.payment(t, invitee, "wechat_papay", 9.9, f.now.Add(3*time.Minute))
 	f.now = f.now.Add(10 * time.Minute)
 
@@ -243,6 +275,37 @@ func TestSyncAccruesSettlesAndReverses(t *testing.T) {
 	require.NoError(t, f.db.Exec(`UPDATE promoter_bindings SET status = 'active' WHERE invitee_user_id = ?`, invitee).Error)
 	f.payment(t, invitee, "wechat_app", 30, f.now.Add(2*time.Minute))
 	require.Equal(t, domain.SyncResult{}, sync(), "terminated promoters stop earning")
+}
+
+func TestVirtualPaymentOrdersEarnCommission(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t, true)
+	promoterUser := f.user(t, "推广员", f.now.Add(-60*24*time.Hour))
+	_, code := f.activePromoter(t, promoterUser)
+	invitee := f.user(t, "小明同学", f.now.Add(-time.Hour))
+	_, err := f.svc.Bind(ctx, invitee, BindInput{PromoCode: code})
+	require.NoError(t, err)
+
+	kept := f.payment(t, invitee, "wechat_virtual_payment", 19.9, f.now.Add(time.Minute))
+	refunded := f.payment(t, invitee, "wechat_virtual_payment", 50, f.now.Add(2*time.Minute))
+	f.now = f.now.Add(10 * time.Minute)
+	sync := func() domain.SyncResult {
+		t.Helper()
+		out, _, err := f.svc.SyncCommissions(ctx)
+		require.NoError(t, err)
+		return out
+	}
+	require.Equal(t, domain.SyncResult{Accrued: 2}, sync())
+	var cents int64
+	require.NoError(t, f.db.Raw(`SELECT commission_cents FROM promoter_commissions WHERE payment_id = ?`, kept).Scan(&cents).Error)
+	require.Equal(t, int64(398), cents, "20% of what the buyer paid")
+
+	// A full virtual payment refund marks the order refunded, as handleXPayRefundNotify does.
+	require.NoError(t, f.db.Exec(`UPDATE pro_membership_payment_records SET status = 'refunded', refunded_at = now() WHERE id = ?`, refunded).Error)
+	require.Equal(t, domain.SyncResult{Cancelled: 1}, sync())
+	f.now = f.now.Add(7 * 24 * time.Hour)
+	require.Equal(t, domain.SyncResult{Settled: 1}, sync())
+	require.Equal(t, int64(398), f.summary(t, promoterUser).AvailableCents)
 }
 
 func TestSyncKeepsFreezeForLateOrdersAndFlagsStuckOnes(t *testing.T) {

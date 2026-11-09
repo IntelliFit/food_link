@@ -1,6 +1,5 @@
 import { View, Text, Input, Textarea, Image, Form, Button as NativeButton, type FormProps } from '@tarojs/components'
-import { Button } from '@taroify/core'
-import '@taroify/core/button/style'
+import { AppButton } from '../../../components/AppButton'
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import Taro from '@tarojs/taro'
 import {
@@ -799,7 +798,7 @@ function HealthProfilePage() {
         <View className='health-profile-load-error'>
           <Text className='health-profile-load-error__title'>档案加载失败</Text>
           <Text className='health-profile-load-error__desc'>{loadError}</Text>
-          <Button
+          <AppButton
             block
             color='primary'
             shape='round'
@@ -807,7 +806,7 @@ function HealthProfilePage() {
             onClick={() => void loadProfile()}
           >
             重新加载
-          </Button>
+          </AppButton>
         </View>
       </View>
     )
@@ -923,7 +922,7 @@ function HealthProfilePage() {
               </View>
               </View>
               <View className='card-footer card-footer-single profile-step-footer'>
-              <Button
+              <AppButton
                 block
                 color='primary'
                 shape='round'
@@ -933,7 +932,7 @@ function HealthProfilePage() {
                 disabled={!avatarUrl || !nickname.trim() || isStudent === null || (isStudent && !selectedSchool)}
               >
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
               {onboardingStatus === 'pending' && (
                 <NativeButton
                   className='profile-skip-onboarding'
@@ -974,9 +973,9 @@ function HealthProfilePage() {
               >
                 <Text className='card-prev-arrow iconfont icon-left' />上一步
               </View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
+              <AppButton block color='primary' shape='round' className={`card-next-btn ${gender ? 'ready' : ''}`} onClick={goNext} disabled={!gender}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -999,9 +998,9 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${birthday ? 'ready' : ''}`} onClick={goNext} disabled={!birthday}>
+              <AppButton block color='primary' shape='round' className={`card-next-btn ${birthday ? 'ready' : ''}`} onClick={goNext} disabled={!birthday}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1020,9 +1019,9 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
+              <AppButton block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1040,9 +1039,9 @@ function HealthProfilePage() {
             />
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
+              <AppButton block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1067,9 +1066,9 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${dietGoal ? 'ready' : ''}`} onClick={goNext} disabled={!dietGoal}>
+              <AppButton block color='primary' shape='round' className={`card-next-btn ${dietGoal ? 'ready' : ''}`} onClick={goNext} disabled={!dietGoal}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1092,9 +1091,9 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${activityLevel ? 'ready' : ''}`} onClick={goNext} disabled={!activityLevel}>
+              <AppButton block color='primary' shape='round' className={`card-next-btn ${activityLevel ? 'ready' : ''}`} onClick={goNext} disabled={!activityLevel}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1109,9 +1108,9 @@ function HealthProfilePage() {
             />
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
+              <AppButton block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1186,9 +1185,9 @@ function HealthProfilePage() {
             )}
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
+              <AppButton block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1210,9 +1209,9 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
+              <AppButton block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1288,9 +1287,9 @@ function HealthProfilePage() {
             )}
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
+              <AppButton block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1311,9 +1310,9 @@ function HealthProfilePage() {
             <Text className='skip-hint'>记录身体的特殊情况，让分析更准确（没有可留空）</Text>
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
+              <AppButton block color='primary' shape='round' className='card-next-btn ready' onClick={goNext}>
                 下一步 <Text className='iconfont icon-right' />
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
 
@@ -1387,7 +1386,7 @@ function HealthProfilePage() {
 
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button
+              <AppButton
                 block
                 color='primary'
                 shape='round'
@@ -1396,7 +1395,7 @@ function HealthProfilePage() {
                 loading={saving}
               >
                 {reportImageUrls.length > 0 ? '确认并开启分析' : '以后再说，直接完成'}
-              </Button>
+              </AppButton>
             </View>
           </LazyProfileStep>
         </View>

@@ -1,7 +1,7 @@
 import SleepCard from './components/SleepCard'
 import NutritionPlans from '../../components/NutritionPlans'
 import { changeNutritionDay, NUTRITION_PLANS_CHANGED, type DayChange } from '../../utils/nutrition-plans'
-import NextMealRecommendations from './components/NextMealRecommendations'
+import NextMealRecommendations, { type NextMealCardMeal } from './components/NextMealRecommendations'
 import { Success } from '@taroify/icons'
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, ScrollView } from '@tarojs/components'
 import {
@@ -13,6 +13,7 @@ import {
 import * as React from 'react'
 import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { useLocalToday } from '../../hooks/useLocalToday'
+import { promptPublicRecordsReconfirm, remindRecordVisibilityOnce } from '../../utils/feed-share'
 import {
   getHomeDashboard,
   getDashboardTargets,
@@ -132,15 +133,29 @@ import { WeeklyRecapEntry } from '../../components/WeeklyRecapEntry'
 import { useSocialInbox } from '../../hooks/useSocialInbox'
 import { socialInboxTotal } from '../../utils/social-inbox'
 import { HomeModule, HomeModuleManager } from './components/HomeModuleManager'
-import { homeLayoutOwner, homeModuleLocks, isHomeQuickStatVisible, readHomeModuleLayout, saveHomeModuleLayout } from './utils/home-module-layout'
+import { homeLayoutOwner, homeModuleLocks, isHomeQuickStatVisible, markOrganizeHintSeen, readHomeModuleLayout, saveHomeModuleLayout, shouldShowOrganizeHint } from './utils/home-module-layout'
 import { PetAvatar } from '../../components/PetAvatar'
 import { isHealthProfileReminderSnoozed, snoozeHealthProfileReminder } from '../../utils/health-profile-reminder'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
   consumeHomeRecordGuideAfterOnboarding,
+  isGuideCompleted,
   shouldOfferOnboardingGuide,
 } from '../../utils/onboarding-guide-storage'
-import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
+import { HOME_ORGANIZE_GUIDE_STEP, HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
+import { OnboardingWelcome } from '../../components/OnboardingWelcome'
+import { FirstBriefSheet } from '../../components/FirstBriefSheet'
+import { useExperiment } from '../../hooks/useExperiment'
+import { readPendingFriendInviteCode } from '../../utils/pending-friend-invite'
+import {
+  FIRST_DAY_KEY,
+  ONBOARDING_CONTROL,
+  ONBOARDING_EXPERIMENT,
+  ONBOARDING_PET_FLOW,
+  WELCOME_DONE_KEY,
+  localDateKey,
+  shouldOfferWelcome,
+} from '../../utils/onboarding-v2'
 import { HOME_PET_PROFILE_CHANGED_EVENT } from '../../utils/pet-events'
 import { buildFoodRecordFavoriteDraft } from '../../utils/food-record-flow'
 import { openPetChat } from '../../utils/pet-navigation'
@@ -814,9 +829,14 @@ function IndexPage() {
   const { scheme } = useAppColorScheme()
   const [moduleLayout, setModuleLayout] = React.useState(readHomeModuleLayout)
   const [showHomeModuleManager, setShowHomeModuleManager] = React.useState(false)
+  const [organizeHintPending, setOrganizeHintPending] = React.useState(shouldShowOrganizeHint)
+  const dismissOrganizeHint = React.useCallback(() => {
+    markOrganizeHintSeen()
+    setOrganizeHintPending(false)
+  }, [])
   const moduleOwner = React.useRef(homeLayoutOwner())
   const socialInbox = useSocialInbox()
-  useDidShow(() => { setModuleLayout(readHomeModuleLayout()); setShowHomeModuleManager(false) })
+  useDidShow(() => { setModuleLayout(readHomeModuleLayout()); setShowHomeModuleManager(false); setOrganizeHintPending(shouldShowOrganizeHint()) })
   useDidHide(() => { setShowHomeModuleManager(false); setShowPlanPicker(false); setPlanUndo(null) })
   const [hiddenMicronutrientKeys, setHiddenMicronutrientKeys] = React.useState<HomeMicronutrientKey[]>(getStoredHiddenMicronutrientKeys)
   const initialSelectedDate = formatDateKey(new Date())
@@ -941,7 +961,13 @@ function IndexPage() {
       setShowRecordMenu(true)
       await new Promise<void>((resolve) => setTimeout(resolve, stepIndex === 0 ? 400 : 220))
     }
-  }, [])
+    if (nextIndex === HOME_ORGANIZE_GUIDE_STEP) {
+      // 这一步要看到首页顶部的「整理首页」，先把记录面板收起来。
+      setShowRecordMenu(false)
+      dismissOrganizeHint()
+      await new Promise<void>((resolve) => setTimeout(resolve, 260))
+    }
+  }, [dismissOrganizeHint])
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
   const dismissHealthProfilePrompt = React.useCallback(() => {
@@ -952,6 +978,8 @@ function IndexPage() {
   const closeHomeOnboardingGuide = React.useCallback(() => {
     setShowHomeOnboardingGuide(false)
     setHomeGuideTransitionPending(false)
+    // 中途跳过教学的人，下次回到首页再提示，不紧接着又弹一个。
+    setOrganizeHintPending(false)
   }, [])
 
   const openHealthProfileFromPrompt = React.useCallback(() => {
@@ -964,10 +992,15 @@ function IndexPage() {
   const [dailyPosterImageUrl, setDailyPosterImageUrl] = React.useState<string | null>(null)
   const [showDailyPosterModal, setShowDailyPosterModal] = React.useState(false)
   const [showHealthProfilePrompt, setShowHealthProfilePrompt] = React.useState(false)
+  // onboarding_v2：只有首次打开的游客参与；两组在同一时刻记曝光，实验组再盖上伙伴首屏
+  const [welcomeEligible] = React.useState(readWelcomeEligible)
+  const [welcomeClosed, setWelcomeClosed] = React.useState(false)
+  const onboardingExperiment = useExperiment(ONBOARDING_EXPERIMENT, ONBOARDING_CONTROL, { expose: welcomeEligible })
+  const showOnboardingWelcome = welcomeEligible && !welcomeClosed && onboardingExperiment.ready && onboardingExperiment.variant === ONBOARDING_PET_FLOW
 
   const promptLoginCheckIn = React.useCallback(async (center: RewardCenterResponse | null) => {
     const checkIn = center?.check_in
-    if (!checkIn || checkIn.claimed_today) return
+    if (!checkIn || checkIn.claimed_today || isOnboardingFirstDay()) return
     const token = getAccessToken()
     const snoozeKey = `home_check_in_snooze_v1:${homeLayoutOwner()}`
     const promptKey = `${homeLayoutOwner()}:${checkIn.today}`
@@ -1346,6 +1379,7 @@ function IndexPage() {
 
   useDidShow(() => {
     homeVisibleRef.current = true
+    void promptPublicRecordsReconfirm().then(() => remindRecordVisibilityOnce())
     clearHomeAuxiliaryTimers()
     setPetHidden(getStoredPetHidden())
     setHiddenMicronutrientKeys(getStoredHiddenMicronutrientKeys())
@@ -1358,7 +1392,7 @@ function IndexPage() {
         const profile = profileResult.status === 'fulfilled' ? profileResult.value : null
         if (profile) {
           const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
-          setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed())
+          setShowHealthProfilePrompt(status !== 'completed' && !isHealthProfileReminderSnoozed() && !isOnboardingFirstDay())
         }
       }, 180)
     } else {
@@ -1374,7 +1408,7 @@ function IndexPage() {
       openRecordMenuFromRequest()
     } else {
       const requestedAfterOnboarding = consumeHomeRecordGuideAfterOnboarding()
-      if (requestedAfterOnboarding || shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
+      if (!isOnboardingFirstDay() && (requestedAfterOnboarding || shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY))) {
         if (homeGuideTimerRef.current) clearTimeout(homeGuideTimerRef.current)
         setHomeGuideTransitionPending(requestedAfterOnboarding)
         setShowHomeOnboardingGuide(false)
@@ -2514,12 +2548,12 @@ function IndexPage() {
   )
   const nextMealName = nextMealLabel(nextMealType)
   const showNextMealGuidance = !isGuest && isTodayRecordDate(selectedDate)
-  const openNextMealGuidance = React.useCallback((option?: DietRecommendationOption) => {
+  const openNextMealGuidance = React.useCallback((option?: DietRecommendationOption, meal?: NextMealCardMeal) => {
     openPetChat({
       source: 'home_next_meal',
-      date: selectedDate,
-      mealType: nextMealType,
-      mealLabel: nextMealName,
+      date: meal?.meal_date || selectedDate,
+      mealType: meal?.meal_type || nextMealType,
+      mealLabel: meal?.meal_label || nextMealName,
       basicAdvice: option?.title || '',
       selectedSourceID: option?.source_id,
       starterQuestion: '',
@@ -2685,9 +2719,14 @@ function IndexPage() {
     return undefined
   }, [analyzeReminder])
 
+  /** 首页左上角的宠物只是伙伴页的入口：点它去底栏「伙伴」，识别提醒照旧 */
+  const openPetTab = React.useCallback(() => {
+    void Taro.switchTab({ url: '/pages/pet/index' })
+  }, [])
+
   const handlePetAnalyzeReminderPress = React.useCallback(() => {
     if (!analyzeReminder.taskId) {
-      openPetChat()
+      openPetTab()
       return
     }
     if (analyzeReminder.kind === 'auto_recorded') {
@@ -2704,7 +2743,7 @@ function IndexPage() {
     void openAnalyzeTaskFromReminder(analyzeReminder.taskId).finally(() => {
       setTimeout(() => void refreshAnalyzeReminder(), 600)
     })
-  }, [analyzeReminder.kind, analyzeReminder.taskId, refreshAnalyzeReminder])
+  }, [analyzeReminder.kind, analyzeReminder.taskId, openPetTab, refreshAnalyzeReminder])
 
   const handleShareDailyPosterImage = React.useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -2963,6 +3002,16 @@ function IndexPage() {
       url: extraPkgUrl('/pages/goose-duck-chicken/index'),
       bgImage: GOOSE_DUCK_CHICKEN_BG_URL,
     },
+    {
+      key: 'lifespan',
+      className: 'home-reward-hint--lifespan',
+      kicker: '寿命预测器 · 模拟估算，不用于诊断',
+      title: '同一个你，三种吃法，三条人生',
+      desc: '用你的饮食，算出活到各个年龄的概率',
+      actionText: '去算算',
+      url: '/packageLifespan/pages/predictor/index',
+      bgImage: undefined,
+    },
     ...(showRewardCreditHint ? [{
       key: 'reward',
       className: 'home-reward-hint--reward',
@@ -3047,14 +3096,21 @@ function IndexPage() {
               className='greeting-pet__avatar'
             />
           )}
-          onPetPress={openPetChat}
+          onPetPress={openPetTab}
           petReminder={petAnalyzeReminder}
           onPetReminderPress={handlePetAnalyzeReminderPress}
         />
 
         <View className='home-layout-toolbar'>
           {!isGuest && socialInboxTotal(socialInbox) > 0 ? <View className='home-social-inbox' role='button' onClick={() => void Taro.switchTab({ url: '/pages/community/index' })}><Text>圈子</Text><Text className='home-social-inbox__badge'>{socialInboxTotal(socialInbox) > 99 ? '99+' : socialInboxTotal(socialInbox)}</Text><Text>条提醒 ›</Text></View> : <View />}
-          <View className='home-layout-toolbar__edit' role='button' onClick={() => { moduleOwner.current = homeLayoutOwner(); setShowHomeModuleManager(true) }}><Text>整理首页</Text></View>
+          <View id='home-layout-edit' className='home-layout-toolbar__edit' role='button' onClick={() => { dismissOrganizeHint(); moduleOwner.current = homeLayoutOwner(); setShowHomeModuleManager(true) }}><Text>整理首页</Text></View>
+          {!isGuest && organizeHintPending && isGuideCompleted(ONBOARDING_HOME_RECORD_GUIDE_KEY) && !isOnboardingFirstDay() && !showHomeOnboardingGuide && !homeGuideTransitionPending && !showOnboardingWelcome && (
+            <View className='home-organize-hint' role='status'>
+              <Text className='home-organize-hint__title'>首页可以自己排</Text>
+              <Text className='home-organize-hint__desc'>想看哪些内容、按什么顺序，点这里调整。保质期默认收起了，需要时可以打开。</Text>
+              <View className='home-organize-hint__ok' role='button' onClick={dismissOrganizeHint}><Text>知道了</Text></View>
+            </View>
+          )}
         </View>
 
         {!getAccessToken() && (
@@ -3114,7 +3170,7 @@ function IndexPage() {
 
         <HomeModule id='nextMeal' layout={moduleLayout} locks={moduleLocks}>
         {showNextMealGuidance && (
-          <NextMealRecommendations mealType={nextMealType} mealName={nextMealName} refreshKey={`${selectedDate}:${totalCurrent}:${proteinCur}:${carbsCur}:${fatCur}:${planRefresh}`} onAdjust={openNextMealGuidance} />
+          <NextMealRecommendations mealType={nextMealType} mealName={nextMealName} refreshKey={`${selectedDate}:${totalCurrent}:${proteinCur}:${carbsCur}:${fatCur}:${planRefresh}`} onAdjust={openNextMealGuidance} pet={petSummary?.pet} petHidden={petHidden} />
         )}
 
         </HomeModule>
@@ -3494,7 +3550,7 @@ function IndexPage() {
                         >
                           <View className='expiry-media-wrap'>
                             <View className='expiry-icon-wrap' style={{ backgroundColor: bgColor }}>
-                              <Text className={`iconfont ${iconClass}`} style={{ color: iconColor, fontSize: '52rpx' }} />
+                              <Text className={`iconfont ${iconClass}`} style={{ color: iconColor, fontSize: '36rpx' }} />
                             </View>
                           </View>
                           <View className='expiry-content'>
@@ -3696,7 +3752,7 @@ function IndexPage() {
       <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} selectedDate={selectedDate} />
 
       <OnboardingGuide
-        visible={showHomeOnboardingGuide}
+        visible={showHomeOnboardingGuide && !showOnboardingWelcome}
         steps={HOME_RECORD_ONBOARDING_STEPS}
         storageKey={ONBOARDING_HOME_RECORD_GUIDE_KEY}
         onClose={closeHomeOnboardingGuide}
@@ -3788,8 +3844,32 @@ function IndexPage() {
         onClose={() => setShowRecordPosterModal(false)}
         onShareContextChange={handleMealPosterShareContext}
       />
+
+      {showOnboardingWelcome && <OnboardingWelcome onClose={() => setWelcomeClosed(true)} />}
+      {!isGuest && <FirstBriefSheet eaten={intakeData.current} target={intakeData.target} ready={!dashboardBusy} />}
     </View>
   )
+}
+
+/** 新流程建档当天：不弹签到、不放 5 步讲解、不催填健康档案 */
+function isOnboardingFirstDay(): boolean {
+  try {
+    return Taro.getStorageSync(FIRST_DAY_KEY) === localDateKey()
+  } catch {
+    return false
+  }
+}
+
+function readWelcomeEligible(): boolean {
+  try {
+    return shouldOfferWelcome({
+      loggedIn: Boolean(getAccessToken()),
+      welcomeDone: Taro.getStorageSync(WELCOME_DONE_KEY) === '1',
+      hasPendingInvite: Boolean(readPendingFriendInviteCode()),
+    })
+  } catch {
+    return false
+  }
 }
 
 export default withAuth(IndexPage, { public: true })

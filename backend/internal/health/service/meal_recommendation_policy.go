@@ -102,7 +102,10 @@ func applyMealFoodConstraints(c *CampusDietRecommendationConstraints, q string) 
 	if regexp.MustCompile(`一餐|吃饱|早餐|午餐|晚餐|早饭|午饭|晚饭`).MatchString(q) {
 		c.CompleteMeal = true
 	}
-	for _, meal := range []struct{ pattern, value string }{{`早餐|早饭`, "breakfast"}, {`午餐|午饭`, "lunch"}, {`晚餐|晚饭`, "dinner"}} {
+	if kind, ok := mealRequestedItemKind(q); ok {
+		c.ItemKind = kind
+	}
+	for _, meal := range []struct{ pattern, value string }{{`早餐|早饭`, "breakfast"}, {`午餐|午饭`, "lunch"}, {`晚餐|晚饭`, "dinner"}, {`夜宵|宵夜`, "evening_snack"}} {
 		if regexp.MustCompile(meal.pattern).MatchString(q) {
 			c.MealType = meal.value
 		}

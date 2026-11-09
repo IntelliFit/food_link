@@ -1,6 +1,6 @@
-import { View, Text, ScrollView, Image, Input, Button, Map } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Input, Button, Map, Canvas } from '@tarojs/components'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import Taro, { useDidShow, useRouter } from '@tarojs/taro'
+import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
 import { Ellipsis, Plus } from '@taroify/icons'
 import '@taroify/icons/style'
 import { withAuth } from '../../../utils/withAuth'
@@ -8,6 +8,7 @@ import { rememberMealLocation } from '../../../utils/meal-location'
 import {
   getAccessToken,
   getPublicFoodMapSpots,
+  getPublicFoodLibraryItem,
   getPublicFoodLibraryList,
   getPublicFoodLibraryCollections,
   getMyPublicFoodLibrary,
@@ -28,9 +29,26 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import {
   buildFoodMapSpotsFromPayload,
+  clusterFoodMapSpots,
+  foodMapClusterTier,
+  FOOD_MAP_MAX_CLUSTER_ZOOM_SCALE,
+  FOOD_MAP_MIN_SCALE,
+  foodMapMarkerItemsInView,
+  formatFoodMapClusterCount,
   formatFoodMapDistance,
   type FoodMapLocation,
+  type FoodMapSpot,
+  mapSpotDishesLabel,
+  mapSpotOpensDishList,
 } from './food-map'
+import {
+  currentPageHasSharedSpot,
+  findSharedMapSpot,
+  parseSharedSpot,
+  sharedSpotFromMapSpot,
+  sharedSpotOrigin,
+} from './food-map-share'
+import { FOOD_MAP_SHARE_CANVAS_ID, foodMapShareWithCover, prepareFoodMapShareCover } from './food-map-share-cover'
 
 // 缓存键名常量
 const CACHE_KEYS = {
@@ -45,8 +63,20 @@ const CACHE_DURATION = 5 * 60 * 1000
 type TabMode = 'all' | 'campus' | 'collections' | 'mine'
 type ViewMode = 'map' | 'list'
 const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
-const DEFAULT_MAP_LOCATION: FoodMapLocation = { latitude: 39.9042, longitude: 116.4074 }
 const FOOD_MAP_MARKER_ICON = '/assets/icons/food-map-marker.png'
+const FOOD_MAP_CLUSTER_ICON = '/assets/icons/food-map-cluster.png'
+const FOOD_MAP_ID = 'food-library-map'
+const FOOD_MAP_NEARBY_SCALE = 15
+const FOOD_MAP_SPOT_SCALE = 17
+const FOOD_MAP_ZOOM_AFTER_MARKERS_MS = 400
+// Wait for the tapping to settle before fetching a dish and drawing its share card.
+const FOOD_MAP_SHARE_PREPARE_MS = 600
+const FOOD_MAP_CLUSTER_STYLES = {
+  small: { bgColor: '#ffffff', color: '#0a7a54', borderColor: '#0a7a54', fontSize: 12, padding: 4 },
+  medium: { bgColor: '#0a7a54', color: '#ffffff', borderColor: '#ffffff', fontSize: 13, padding: 5 },
+  large: { bgColor: '#0b4f3a', color: '#ffffff', borderColor: '#ffffff', fontSize: 14, padding: 6 },
+}
+const CHINA_OVERVIEW = { center: { latitude: 34, longitude: 108 }, scale: 4 }
 
 function campusLocation(item: PublicFoodLibraryItem): string {
   const parts = item.campus_location_text
@@ -115,10 +145,34 @@ function hasDisplayableNutrition(item: PublicFoodLibraryItem): boolean {
     .some(value => Number.isFinite(value) && value > 0)
 }
 
+function displayableKcal(item: PublicFoodLibraryItem): number | undefined {
+  return hasDisplayableNutrition(item) && item.total_calories > 0 ? Math.round(item.total_calories) : undefined
+}
+
+const SPOT_DISH_PAGE_SIZE = 50
+
+interface SpotDishSource {
+  key: string
+  title: string
+  foodCount: number
+}
+
+interface SpotDishList extends SpotDishSource {
+  items: PublicFoodLibraryItem[]
+  loading: boolean
+  hasMore: boolean
+  error: boolean
+}
+
 function FoodLibraryPage() {
   const { scheme } = useAppColorScheme()
   const router = useRouter()
   const fromRecord = router.params.from === 'record'
+  // 分享链接自带地点名、地址和坐标，没登录、地图没加载好也能先看到这个地点。
+  const sharedSpot = useMemo(() => parseSharedSpot(router.params), [router.params])
+  const sharedOrigin = sharedSpotOrigin(router.params)
+  const [shareInviteOpen, setShareInviteOpen] = useState(!!sharedSpot)
+  const sharedSpotFocusedRef = useRef(false)
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
   const [tabMode, setTabMode] = useState<TabMode>('all')
   const [viewMode, setViewMode] = useState<ViewMode>(fromRecord ? 'list' : 'map')
@@ -129,10 +183,14 @@ function FoodLibraryPage() {
   const [mapError, setMapError] = useState(false)
   const [listError, setListError] = useState(false)
   const [mapLocating, setMapLocating] = useState(false)
-  const [mapCenter, setMapCenter] = useState<FoodMapLocation>(DEFAULT_MAP_LOCATION)
-  const [mapScale, setMapScale] = useState(14)
+  const [mapCenter, setMapCenter] = useState<FoodMapLocation>(
+    sharedSpot ? { latitude: sharedSpot.latitude, longitude: sharedSpot.longitude } : CHINA_OVERVIEW.center,
+  )
+  const [mapScale, setMapScale] = useState(sharedSpot ? FOOD_MAP_SPOT_SCALE : CHINA_OVERVIEW.scale)
   const [userLocation, setUserLocation] = useState<FoodMapLocation | null>(null)
   const [selectedMapSpotKey, setSelectedMapSpotKey] = useState('')
+  const [spotDishes, setSpotDishes] = useState<SpotDishList | null>(null)
+  const spotDishRequestRef = useRef(0)
   const [campusList, setCampusList] = useState<PublicFoodLibraryItem[]>([])
   const [campusLoading, setCampusLoading] = useState(false)
   const [collectionList, setCollectionList] = useState<PublicFoodLibraryItem[]>([])
@@ -151,6 +209,7 @@ function FoodLibraryPage() {
   const [showSkeleton, setShowSkeleton] = useState(false)
   const lastRefreshTime = useRef<number>(0)
   const mapLoadedRef = useRef(false)
+  const mapGestureVersionRef = useRef(0)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
@@ -166,30 +225,67 @@ function FoodLibraryPage() {
     () => mapSpots.filter(spot => spot.distanceKm != null && spot.distanceKm <= 10).length,
     [mapSpots],
   )
-  const mapMarkers = useMemo(() => mapSpots.map((spot, index) => ({
-    id: index + 1,
-    latitude: spot.latitude,
-    longitude: spot.longitude,
-    iconPath: FOOD_MAP_MARKER_ICON,
-    width: selectedMapSpotKey === spot.key ? 30 : 24,
-    height: selectedMapSpotKey === spot.key ? 30 : 24,
-    zIndex: selectedMapSpotKey === spot.key ? 10 : 2,
-    anchor: { x: 0.5, y: 1 },
-    callout: {
-      content: `${spot.locationName || foodMapPlace(spot.featuredItem)}${spot.foodCount > 1 ? ` · ${spot.foodCount} 道` : ''}`,
-      color: '#153129',
-      fontSize: 12,
-      anchorX: 0,
-      anchorY: -4,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: '#d5eee4',
-      bgColor: '#ffffff',
-      padding: 8,
-      display: selectedMapSpotKey === spot.key ? 'ALWAYS' as const : 'BYCLICK' as const,
-      textAlign: 'center' as const,
-    },
-  })), [mapSpots, selectedMapSpotKey])
+  const mapMarkerItems = useMemo(
+    () => foodMapMarkerItemsInView(
+      clusterFoodMapSpots(mapSpots, mapScale, selectedMapSpotKey),
+      mapCenter,
+      mapScale,
+      selectedMapSpotKey,
+    ),
+    [mapSpots, mapScale, mapCenter, selectedMapSpotKey],
+  )
+  const mapMarkers = useMemo(() => mapMarkerItems.map((item, index) => {
+    if (item.kind === 'cluster') {
+      const count = item.spots.length
+      return {
+        id: index + 1,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        iconPath: FOOD_MAP_CLUSTER_ICON,
+        width: 14,
+        height: 14,
+        // Bigger groups stay on top where bubbles come close.
+        zIndex: 3 + Math.min(count, 999),
+        anchor: { x: 0.5, y: 0.5 },
+        callout: {
+          ...FOOD_MAP_CLUSTER_STYLES[foodMapClusterTier(count)],
+          content: formatFoodMapClusterCount(count),
+          borderWidth: 1,
+          textAlign: 'center' as const,
+          anchorX: 0,
+          anchorY: -2,
+          borderRadius: 16,
+          display: 'ALWAYS' as const,
+        },
+      }
+    }
+    const { spot } = item
+    const selected = selectedMapSpotKey === spot.key
+    return {
+      id: index + 1,
+      latitude: spot.latitude,
+      longitude: spot.longitude,
+      iconPath: FOOD_MAP_MARKER_ICON,
+      width: selected ? 30 : 24,
+      height: selected ? 30 : 24,
+      zIndex: selected ? 10 : 2,
+      anchor: { x: 0.5, y: 1 },
+      callout: {
+        fontSize: 12,
+        borderWidth: 1,
+        borderColor: '#d5eee4',
+        bgColor: '#ffffff',
+        padding: 8,
+        textAlign: 'center' as const,
+        content: `${spot.locationName || foodMapPlace(spot.featuredItem)}${spot.foodCount > 1 ? ` · ${spot.foodCount} 道` : ''}`,
+        color: '#153129',
+        anchorX: 0,
+        anchorY: -4,
+        borderRadius: 12,
+        display: selected ? 'ALWAYS' as const : 'BYCLICK' as const,
+      },
+    }
+  }), [mapMarkerItems, selectedMapSpotKey])
 
   /**
    * 从缓存加载数据
@@ -383,34 +479,36 @@ function FoodLibraryPage() {
     setMapLoading(true)
     setMapError(false)
     setMapLocating(true)
+    // 定位可能卡在授权框或等 GPS，点位不等它：先画地图，定位回来再移动过去。
+    const locationTask = Taro.getLocation({ type: 'gcj02' }).catch(() => null)
     try {
-      const [foodResult, locationResult] = await Promise.allSettled([
-        getPublicFoodMapSpots(),
-        Taro.getLocation({ type: 'gcj02' }),
-      ])
+      const foodResult = await getPublicFoodMapSpots()
+      setMapSpotPayloads(foodResult.spots || [])
+      setMapLoading(false)
+      if (sharedSpot) {
+        // The native map drops a zoom sent in the same update as the full marker set.
+        setTimeout(() => {
+          setMapCenter({ latitude: sharedSpot.latitude, longitude: sharedSpot.longitude })
+          setMapScale(FOOD_MAP_SPOT_SCALE)
+        }, FOOD_MAP_ZOOM_AFTER_MARKERS_MS)
+      }
 
-      if (foodResult.status === 'rejected') throw foodResult.reason
-      const mappedSpots = foodResult.value.spots || []
-      setMapSpotPayloads(mappedSpots)
-
-      if (locationResult.status === 'fulfilled') {
+      const locationResult = await locationTask
+      if (locationResult) {
         if (locationOwner !== getAccessToken()) return
-        rememberMealLocation(locationOwner, { latitude: locationResult.value.latitude, longitude: locationResult.value.longitude, accuracy_m: locationResult.value.accuracy, captured_at: Date.now(), coordinate_type: 'gcj02' })
+        rememberMealLocation(locationOwner, { latitude: locationResult.latitude, longitude: locationResult.longitude, accuracy_m: locationResult.accuracy, captured_at: Date.now(), coordinate_type: 'gcj02' })
         const location = {
-          latitude: locationResult.value.latitude,
-          longitude: locationResult.value.longitude,
+          latitude: locationResult.latitude,
+          longitude: locationResult.longitude,
         }
         setUserLocation(location)
-        setMapCenter(location)
-        setMapScale(15)
-      } else {
-        const firstMappedSpot = mappedSpots.find(spot => Number.isFinite(spot.latitude) && Number.isFinite(spot.longitude))
-        if (firstMappedSpot) {
-          setMapCenter({
-            latitude: Number(firstMappedSpot.latitude),
-            longitude: Number(firstMappedSpot.longitude),
-          })
+        // A shared spot keeps the map on that spot; only distances use the user's position.
+        if (!sharedSpot) {
+          setMapCenter(location)
+          // The native map drops a zoom sent in the same update as the full marker set.
+          setTimeout(() => setMapScale(FOOD_MAP_NEARBY_SCALE), FOOD_MAP_ZOOM_AFTER_MARKERS_MS)
         }
+      } else {
       }
     } catch (e: any) {
       setMapError(true)
@@ -420,7 +518,48 @@ function FoodLibraryPage() {
       setMapLoading(false)
       setMapLocating(false)
     }
+  }, [sharedSpot])
+
+  useEffect(() => {
+    if (!sharedSpot || sharedSpotFocusedRef.current || mapSpots.length === 0) return
+    const match = findSharedMapSpot(mapSpots, sharedSpot)
+    if (!match) return
+    sharedSpotFocusedRef.current = true
+    setSelectedMapSpotKey(match.key)
+  }, [mapSpots, sharedSpot])
+
+  useEffect(() => {
+    if (sharedSpot && sharedOrigin === 'upload') {
+      Taro.showToast({ title: '已发布，热量稍后自动补上', icon: 'none', duration: 2500 })
+    }
   }, [])
+
+  const shareTarget = useMemo(
+    () => (selectedMapSpot ? sharedSpotFromMapSpot(selectedMapSpot) : sharedSpot),
+    [selectedMapSpot, sharedSpot],
+  )
+  const shareItemId = selectedMapSpot?.featuredItem.id || ''
+  // The map payload leaves calories out, so the share card asks for the featured dish.
+  const loadShareKcal = useCallback(
+    () => (shareItemId && getAccessToken()
+      ? getPublicFoodLibraryItem(shareItemId).then(displayableKcal)
+      : Promise.resolve(undefined)),
+    [shareItemId],
+  )
+
+  useEffect(() => {
+    if (shareTarget?.image) return
+    const timer = setTimeout(() => {
+      void prepareFoodMapShareCover(shareTarget, loadShareKcal).catch(() => {})
+    }, FOOD_MAP_SHARE_PREPARE_MS)
+    return () => clearTimeout(timer)
+  }, [shareTarget, loadShareKcal])
+
+  useShareAppMessage(() => {
+    const isOwnUpload = sharedOrigin === 'upload' && !!sharedSpot
+      && (!selectedMapSpot || findSharedMapSpot([selectedMapSpot], sharedSpot) === selectedMapSpot)
+    return foodMapShareWithCover(shareTarget, isOwnUpload ? 'upload' : 'share', loadShareKcal)
+  })
 
   const locateMapAroundMe = useCallback(async () => {
     setMapLocating(true)
@@ -501,6 +640,9 @@ function FoodLibraryPage() {
       return
     }
 
+    // 从详情返回地点餐食列表时保留列表和滚动位置
+    if (spotDishes) return
+
     // 1. 立即从缓存加载数据
     const hasCache = loadFromCache()
 
@@ -535,7 +677,7 @@ function FoodLibraryPage() {
     if (tabMode === 'all') {
       if (viewMode === 'map') {
         loadMapList(false)
-      } else {
+      } else if (!spotDishes) {
         clearCache()
         loadList(false, true)
       }
@@ -546,6 +688,52 @@ function FoodLibraryPage() {
     }
   }, [loggedIn, tabMode, viewMode])
 
+  const loadSpotDishes = useCallback(async (source: SpotDishSource, items: PublicFoodLibraryItem[]) => {
+    const requestId = ++spotDishRequestRef.current
+    const { key, title, foodCount } = source
+    setSpotDishes({ key, title, foodCount, items, loading: true, hasMore: false, error: false })
+    try {
+      const res = await getPublicFoodLibraryList({ spot_key: key, limit: SPOT_DISH_PAGE_SIZE, offset: items.length })
+      if (requestId !== spotDishRequestRef.current) return
+      const page = res.list || []
+      setSpotDishes({
+        key, title, foodCount, items: [...items, ...page], loading: false,
+        hasMore: page.length === SPOT_DISH_PAGE_SIZE, error: false,
+      })
+    } catch (e: any) {
+      if (requestId !== spotDishRequestRef.current) return
+      setSpotDishes({ key, title, foodCount, items, loading: false, hasMore: false, error: true })
+      await showUnifiedApiError(e, '获取餐食失败')
+    }
+  }, [])
+
+  const closeSpotDishes = useCallback(() => {
+    spotDishRequestRef.current += 1
+    setSpotDishes(null)
+  }, [])
+
+  // 切到地图或其他分类时退出地点餐食列表
+  useEffect(() => {
+    if (viewMode !== 'list' || tabMode !== 'all') closeSpotDishes()
+  }, [viewMode, tabMode, closeSpotDishes])
+
+  const openMapSpot = (spot: FoodMapSpot) => {
+    if (!mapSpotOpensDishList(spot)) {
+      goDetail(spot.featuredItem.id)
+      return
+    }
+    setViewMode('list')
+    void loadSpotDishes({
+      key: spot.key,
+      title: spot.locationName || foodMapPlace(spot.featuredItem),
+      foodCount: spot.foodCount,
+    }, [])
+  }
+
+  const loadMoreSpotDishes = () => {
+    if (spotDishes?.hasMore && !spotDishes.loading) void loadSpotDishes(spotDishes, spotDishes.items)
+  }
+
   // 下拉刷新处理
   const handleRefresherRefresh = useCallback(() => {
     if (!getAccessToken()) {
@@ -553,6 +741,10 @@ function FoodLibraryPage() {
       return
     }
     setRefreshing(true)
+    if (spotDishes && tabMode === 'all') {
+      loadSpotDishes(spotDishes, []).finally(() => setRefreshing(false))
+      return
+    }
     if (tabMode === 'collections') {
       loadCollectionList(true).finally(() => setRefreshing(false))
     } else if (tabMode === 'campus') {
@@ -567,6 +759,7 @@ function FoodLibraryPage() {
   // 搜索
   const handleSearch = (keyword = searchKeyword) => {
     const kw = keyword.trim()
+    closeSpotDishes()
     setSearchKeyword(kw)
     setSearchMerchant(kw)
     if (viewMode === 'map') {
@@ -698,11 +891,40 @@ function FoodLibraryPage() {
   }
 
   const selectMapSpot = (markerId: number | string) => {
-    const spot = mapSpots[Number(markerId) - 1]
-    if (!spot) return
+    const item = mapMarkerItems[Number(markerId) - 1]
+    if (!item) return
+    if (item.kind === 'cluster') {
+      setSelectedMapSpotKey('')
+      setMapCenter(item.focus)
+      setMapScale(Math.min(mapScale + 2, FOOD_MAP_MAX_CLUSTER_ZOOM_SCALE))
+      return
+    }
+    const { spot } = item
     setSelectedMapSpotKey(spot.key)
     setMapCenter({ latitude: spot.latitude, longitude: spot.longitude })
     setMapScale(17)
+  }
+
+  // Only real gestures feed the zoom back: programmatic moves already set state,
+  // and a stale reading must not undo a later locate or cluster tap.
+  const handleMapRegionChange = (event: any) => {
+    const detail = event?.detail || {}
+    const causedBy = detail.causedBy || event?.causedBy
+    if (!['gesture', 'drag', 'scale'].includes(causedBy)) return
+    const version = ++mapGestureVersionRef.current
+    if ((detail.type || event?.type) !== 'end') return
+    const context = Taro.createMapContext(FOOD_MAP_ID)
+    context.getScale({
+      success: (scaleResult) => {
+        context.getCenterLocation({
+          success: (centerResult) => {
+            if (version !== mapGestureVersionRef.current) return
+            setMapScale(scaleResult.scale)
+            setMapCenter({ latitude: centerResult.latitude, longitude: centerResult.longitude })
+          },
+        })
+      },
+    })
   }
 
   const focusNearestMapSpot = () => {
@@ -821,6 +1043,21 @@ function FoodLibraryPage() {
     Taro.switchTab({ url: '/pages/profile/index' })
   }
 
+  const openSharedSpotLocation = async () => {
+    if (!sharedSpot) return
+    try {
+      await Taro.openLocation({
+        latitude: sharedSpot.latitude,
+        longitude: sharedSpot.longitude,
+        name: sharedSpot.name,
+        address: sharedSpot.address,
+        scale: 18,
+      })
+    } catch (e: any) {
+      await showUnifiedApiError(e, '无法打开导航')
+    }
+  }
+
   if (!loggedIn) {
     return (
       <FlPageThemeRoot>
@@ -831,17 +1068,49 @@ function FoodLibraryPage() {
             <Text className='pick-mode-subtitle'>点任意餐食卡片，可直接带回到文字记录里</Text>
           </View>
         )}
-        <View className='login-tip'>
-          <Text className='login-tip-text'>{fromRecord ? '登录后才能从美食图谱带回记录' : '登录后查看美食图谱'}</Text>
-          <Button className='login-tip-btn' onClick={goLogin}>去登录</Button>
-        </View>
+        {sharedSpot ? (
+          <View className='shared-spot-card'>
+            {sharedSpot.image ? (
+              <Image className='shared-spot-photo' src={sharedSpot.image} mode='aspectFill' />
+            ) : (
+              <View className='shared-spot-poster'>
+                <View className='shared-spot-plate'>
+                  <Text className='shared-spot-plate-initial'>{Array.from(sharedSpot.name)[0]}</Text>
+                </View>
+                {sharedSpot.kcal ? (
+                  <Text className='shared-spot-poster-kcal'>{sharedSpot.kcal}<Text className='shared-spot-poster-unit'> 千卡</Text></Text>
+                ) : null}
+                <Text className='shared-spot-poster-note'>还没有照片，去吃的时候拍一张点亮它</Text>
+              </View>
+            )}
+            <Text className='shared-spot-eyebrow'>朋友分享的美食地点</Text>
+            <Text className='shared-spot-name'>{sharedSpot.name}</Text>
+            {sharedSpot.dish && (
+              <Text className='shared-spot-dish'>
+                {sharedSpot.dish}{sharedSpot.kcal ? ` · 约 ${sharedSpot.kcal} 千卡` : ''}
+              </Text>
+            )}
+            {sharedSpot.address && <Text className='shared-spot-address'>{sharedSpot.address}</Text>}
+            <View className='shared-spot-actions'>
+              <Button className='shared-spot-btn shared-spot-btn--secondary' onClick={() => void openSharedSpotLocation()}>导航过去</Button>
+              <Button className='shared-spot-btn shared-spot-btn--primary' onClick={goLogin}>登录看完整图谱</Button>
+            </View>
+            <Text className='shared-spot-invite'>登录后，你也能把身边的好吃的点亮到地图上</Text>
+          </View>
+        ) : (
+          <View className='login-tip'>
+            <Text className='login-tip-text'>{fromRecord ? '登录后才能从美食图谱带回记录' : '登录后查看美食图谱'}</Text>
+            <Button className='login-tip-btn' onClick={goLogin}>去登录</Button>
+          </View>
+        )}
+        <Canvas type='2d' id={FOOD_MAP_SHARE_CANVAS_ID} className='food-map-share-canvas' />
       </View>
       </FlPageThemeRoot>
     )
   }
 
-  const displayList = tabMode === 'all' ? list : tabMode === 'campus' ? campusList : tabMode === 'mine' ? mineList : collectionList
-  const isLoading = tabMode === 'all' ? loading : tabMode === 'campus' ? campusLoading : tabMode === 'mine' ? mineLoading : collectionLoading
+  const displayList = spotDishes && tabMode === 'all' ? spotDishes.items : tabMode === 'all' ? list : tabMode === 'campus' ? campusList : tabMode === 'mine' ? mineList : collectionList
+  const isLoading = spotDishes && tabMode === 'all' ? spotDishes.loading : tabMode === 'all' ? loading : tabMode === 'campus' ? campusLoading : tabMode === 'mine' ? mineLoading : collectionLoading
 
   return (
     <FlPageThemeRoot>
@@ -926,8 +1195,15 @@ function FoodLibraryPage() {
         </View>
       )}
 
+      {spotDishes && tabMode === 'all' && viewMode === 'list' && (
+        <View className='sort-section spot-dish-bar'>
+          <Text className='sort-item spot-dish-bar-title'>{spotDishes.title} · {spotDishes.foodCount} 道</Text>
+          <View className='sort-item spot-dish-bar-back' onClick={() => setViewMode('map')}>返回地图</View>
+        </View>
+      )}
+
       {/* 排序区（仅全部时显示） */}
-      {tabMode === 'all' && viewMode === 'list' && (
+      {tabMode === 'all' && viewMode === 'list' && !spotDishes && (
         <View className='sort-section'>
           <View className='sort-left'>
             <View
@@ -957,7 +1233,7 @@ function FoodLibraryPage() {
       )}
 
       {/* 筛选下拉面板 */}
-      {tabMode === 'all' && viewMode === 'list' && showFilterPanel && (
+      {tabMode === 'all' && viewMode === 'list' && !spotDishes && showFilterPanel && (
         <View className='filter-dropdown-panel'>
           <View className='filter-dropdown-row'>
             <Text className='filter-dropdown-label'>类型</Text>
@@ -983,21 +1259,43 @@ function FoodLibraryPage() {
         <View className='food-map-experience'>
           <View className='food-map-wrap'>
             <Map
+              id={FOOD_MAP_ID}
               className='food-map'
               latitude={mapCenter.latitude}
               longitude={mapCenter.longitude}
               scale={mapScale}
+              minScale={FOOD_MAP_MIN_SCALE}
               markers={mapMarkers}
               showLocation
               enableRotate={false}
               enableOverlooking={false}
               onMarkerTap={e => selectMapSpot(e.detail.markerId)}
               onCallOutTap={e => selectMapSpot(e.detail.markerId)}
+              onRegionChange={handleMapRegionChange}
               onError={() => {}}
             />
             {mapLoading && (
               <View className='map-loading-mask'>
                 <View className='loading-spinner-md' />
+              </View>
+            )}
+
+            {sharedSpot && shareInviteOpen && (
+              <View className='map-share-invite'>
+                <View className='map-share-invite-copy'>
+                  <Text className='map-share-invite-title'>
+                    {sharedOrigin === 'upload' ? `已点亮「${sharedSpot.name}」` : `朋友分享了「${sharedSpot.name}」`}
+                  </Text>
+                  <Text className='map-share-invite-subtitle'>
+                    {sharedOrigin === 'upload' ? '分享给朋友，邀请 TA 也来点亮身边的美食' : '你身边还有好吃的？也来点亮一个地点'}
+                  </Text>
+                </View>
+                {sharedOrigin === 'upload' ? (
+                  <Button className='map-share-invite-btn' openType='share'>分享</Button>
+                ) : (
+                  <Button className='map-share-invite-btn' onClick={goLightFood}>去点亮</Button>
+                )}
+                <Button className='map-share-invite-close' aria-label='关闭邀请' onClick={() => setShareInviteOpen(false)}>×</Button>
               </View>
             )}
 
@@ -1009,7 +1307,7 @@ function FoodLibraryPage() {
             </View>
 
             {!mapLoading && !mapError && selectedMapSpot && (
-              <View className='map-food-sheet' onClick={() => goDetail(selectedMapSpot.featuredItem.id)}>
+              <View className='map-food-sheet' onClick={() => openMapSpot(selectedMapSpot)}>
                 <View className='map-food-sheet-main'>
                   <View className='map-food-sheet-image-wrap'>
                     {foodMapImage(selectedMapSpot.featuredItem) ? (
@@ -1037,10 +1335,18 @@ function FoodLibraryPage() {
                 <View className='map-food-sheet-actions'>
                   <View
                     className='map-food-action map-food-action--secondary'
-                    onClick={(e) => { e.stopPropagation(); goDetail(selectedMapSpot.featuredItem.id) }}
+                    onClick={(e) => { e.stopPropagation(); openMapSpot(selectedMapSpot) }}
                   >
-                    查看餐食
+                    {mapSpotDishesLabel(selectedMapSpot.foodCount)}
                   </View>
+                  <Button
+                    className='map-food-action map-food-action--secondary map-food-share'
+                    openType='share'
+                    aria-label='分享这个地点'
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    分享
+                  </Button>
                   <View
                     className='map-food-action map-food-action--primary'
                     onClick={(e) => { e.stopPropagation(); void navigateToMapFood(selectedMapSpot) }}
@@ -1071,7 +1377,7 @@ function FoodLibraryPage() {
                 <View className='map-discovery-copy'>
                   <Text className='map-discovery-title'>
                     {mapSpots.length > 0 && (!userLocation || nearbySpotCount > 0)
-                      ? '点地图标记，查看餐食'
+                      ? '点数字放大，点标记看餐食'
                       : mapSpots.length > 0 ? '附近暂无收录地点' : '地图暂无收录地点'}
                   </Text>
                 </View>
@@ -1095,6 +1401,7 @@ function FoodLibraryPage() {
         refresherTriggered={refreshing}
         onRefresherRefresh={handleRefresherRefresh}
         refresherDefaultStyle='black'
+        onScrollToLower={loadMoreSpotDishes}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
@@ -1123,10 +1430,10 @@ function FoodLibraryPage() {
             <View className='loading-state'>
               <View className='loading-spinner-md' />
             </View>
-          ) : tabMode === 'all' && listError && displayList.length === 0 ? (
+          ) : tabMode === 'all' && (spotDishes ? spotDishes.error : listError) && displayList.length === 0 ? (
             <View className='empty-state'>
               <Text className='empty-text'>餐食暂时未取到</Text>
-              <Button className='empty-btn' onClick={() => void loadList(false, true)}>重试</Button>
+              <Button className='empty-btn' onClick={() => void (spotDishes ? loadSpotDishes(spotDishes, []) : loadList(false, true))}>重试</Button>
             </View>
           ) : tabMode === 'collections' && displayList.length === 0 ? (
             <View className='empty-state'>
@@ -1265,6 +1572,11 @@ function FoodLibraryPage() {
             )
           })
           )}
+          {spotDishes?.loading && spotDishes.items.length > 0 && (
+            <View className='loading-state'>
+              <View className='loading-spinner-md' />
+            </View>
+          )}
         </View>
       </ScrollView>
       )}
@@ -1273,9 +1585,11 @@ function FoodLibraryPage() {
       {(viewMode !== 'map' || tabMode !== 'all' || fromRecord) && (
         <Button className='fab-button' aria-label='补充餐食' onClick={goShare}><Plus /></Button>
       )}
+      <Canvas type='2d' id={FOOD_MAP_SHARE_CANVAS_ID} className='food-map-share-canvas' />
     </View>
     </FlPageThemeRoot>
   )
 }
 
-export default withAuth(FoodLibraryPage)
+// 没登录的朋友打开分享链接时先看到这个地点，页面里再引导登录。
+export default withAuth(FoodLibraryPage, { publicWhen: currentPageHasSharedSpot })

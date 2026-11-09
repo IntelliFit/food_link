@@ -243,7 +243,7 @@ func dietDecisionConstraintViolations(ctx dietDecisionContext, candidate DietRec
 }
 
 func dietDecisionHealthFit(ctx dietDecisionContext, candidate DietRecommendationCandidate) float64 {
-	ratio := dietDecisionMealRatio(ctx.MealType)
+	ratio := dietDecisionPortionRatio(ctx)
 	calorieTarget := dietDecisionMealTarget(ctx.Remaining.Calories, ctx.Targets.Calories, ratio)
 	proteinTarget := dietDecisionMealTarget(ctx.Remaining.Protein, ctx.Targets.Protein, ratio)
 	carbTarget := dietDecisionMealTarget(ctx.Remaining.Carbs, ctx.Targets.Carbs, ratio)
@@ -371,6 +371,8 @@ func dietDecisionMealRatio(mealType string) float64 {
 		return 0.35
 	case "dinner":
 		return 0.30
+	case "evening_snack":
+		return 0.15 // a late snack stays light
 	default:
 		return 0.30
 	}
@@ -469,10 +471,10 @@ func normalizedDietDecisionCandidateText(candidate domain.DietRecommendationCand
 	return normalizeDietDecisionToken(strings.Join(parts, " "))
 }
 
+var dietDecisionTokenReplacer = strings.NewReplacer(" ", "", "　", "", "-", "", "_", "")
+
 func normalizeDietDecisionToken(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = strings.NewReplacer(" ", "", "　", "", "-", "", "_", "").Replace(value)
-	return value
+	return dietDecisionTokenReplacer.Replace(strings.ToLower(strings.TrimSpace(value)))
 }
 
 func dietDecisionRoleScore(role string, scores DietDecisionScorecard) float64 {

@@ -182,17 +182,22 @@ LIMIT ? OFFSET ?
 // visibleUsersCTE builds the set of users whose records are visible to currentUserID:
 // - users with public_records = true (public to all)
 // - the current user themselves
-// - friends of the current user
+// - friends of the current user who share their records with friends
 const visibleUsersCTE = `
 _search_visible_users AS (
-  SELECT id AS user_id FROM weapp_user WHERE COALESCE(public_records, TRUE) = TRUE
+  SELECT id AS user_id FROM weapp_user WHERE COALESCE(public_records, FALSE) = TRUE
   UNION
   SELECT ? AS user_id
   UNION
-  SELECT
-    CASE WHEN uf.user_id = ? THEN uf.friend_id ELSE uf.user_id END AS user_id
-  FROM user_friends uf
-  WHERE (uf.user_id = ? OR uf.friend_id = ?)
+  SELECT friends.user_id
+  FROM (
+    SELECT
+      CASE WHEN uf.user_id = ? THEN uf.friend_id ELSE uf.user_id END AS user_id
+    FROM user_friends uf
+    WHERE (uf.user_id = ? OR uf.friend_id = ?)
+  ) friends
+  JOIN weapp_user friend_user ON friend_user.id = friends.user_id
+  WHERE COALESCE(friend_user.friends_can_view_records, TRUE) = TRUE
 )
 `
 

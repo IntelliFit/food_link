@@ -276,7 +276,7 @@ SELECT
 		WHEN p.source_type IN ('analysis_task', 'food_record') OR p.record_id <> '' THEN
 			CASE
 				WHEN p.record_id = '' OR circle_record.id IS NULL THEN 'not_shared'
-				WHEN circle_record.hidden_from_feed OR NOT COALESCE(u.public_records, TRUE) THEN 'not_shared'
+				WHEN circle_record.hidden_from_feed OR NOT COALESCE(u.public_records, FALSE) THEN 'not_shared'
 				ELSE 'visible'
 			END
 		ELSE 'not_applicable'

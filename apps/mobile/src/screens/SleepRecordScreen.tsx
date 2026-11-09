@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Moon } from 'lucide-react-native'
 import type { SleepQuality, SleepRecord } from '@food-link/core'
 import { apiClient, getStoredUserId } from '../api'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
@@ -12,7 +13,7 @@ import { buildSleepInput, shiftSleepDate, sleepToday, sleepLocalParts, sleepDura
 import { userFacingErrorMessage } from '../utils/errors'
 import { colors } from '../theme'
 
-export function SleepCard({ date }: { date: string }) {
+export function SleepCard({ date, compact = false, compactWidth }: { date: string; compact?: boolean; compactWidth?: number }) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { isDark } = useColorScheme()
   const [record, setRecord] = useState<SleepRecord | null>(null)
@@ -29,6 +30,10 @@ export function SleepCard({ date }: { date: string }) {
     }).catch(() => { if (active) setFailed(true) }).finally(() => { if (active) setBusy(false) })
     return () => { active = false }
   }, [date]))
+  if (compact) return <Pressable accessibilityRole="button" accessibilityLabel="查看或记录睡眠" onPress={() => navigation.navigate('SleepRecord', { date })} style={{ flex: compactWidth ? 0 : 1, width: compactWidth, minHeight: 60, borderRadius: 14, padding: 8, flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#25372d' : 'rgba(255,255,255,0.78)' }}>
+    <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: '#eee8ff', alignItems: 'center', justifyContent: 'center' }}><Moon size={16} color="#8160ba" /></View>
+    <View style={{ flex: 1 }}>{busy ? <ActivityIndicator size="small" color={colors.brand} /> : <Text style={{ fontSize: 13, lineHeight: 17, color: '#678373', fontWeight: '700' }}>{failed ? '重试' : record ? `${(record.duration_minutes / 60).toFixed(1)}h` : '--'}</Text>}<Text style={{ fontSize: 12, lineHeight: 18, color: isDark ? '#a9b8ad' : '#5a6b63' }}>睡眠</Text></View>
+  </Pressable>
   return <Pressable accessibilityRole="button" accessibilityLabel="查看或记录睡眠" style={[styles.card, { backgroundColor: isDark ? '#181f1d' : '#fff' }]} onPress={() => navigation.navigate('SleepRecord', { date })}>
     <Text style={[styles.title, { color: isDark ? '#f2f7f4' : '#17201d' }]}>昨晚睡得怎么样</Text>
     {busy ? <ActivityIndicator color={colors.brand} /> : <Text style={[styles.note, { color: isDark ? '#a8b6b0' : '#64748b' }]}>{failed ? '记录读取失败，点击重试' : record ? `入睡到起床约 ${sleepDurationLabel(record.duration_minutes)} · 点击修改` : '未记录 · 点击记下睡眠'}</Text>}

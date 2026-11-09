@@ -79,11 +79,12 @@ type UserFriend struct {
 func (UserFriend) TableName() string { return "user_friends" }
 
 type UserProfile struct {
-	ID            string `gorm:"column:id"`
-	Nickname      string `gorm:"column:nickname"`
-	Avatar        string `gorm:"column:avatar"`
-	PublicRecords *bool  `gorm:"column:public_records"`
-	PetLevel      *int   `gorm:"-"`
+	ID                    string `gorm:"column:id"`
+	Nickname              string `gorm:"column:nickname"`
+	Avatar                string `gorm:"column:avatar"`
+	PublicRecords         *bool  `gorm:"column:public_records"`
+	FriendsCanViewRecords *bool  `gorm:"column:friends_can_view_records;default:true"`
+	PetLevel              *int   `gorm:"-"`
 }
 
 type NutrientFoodRow struct {
@@ -134,6 +135,28 @@ func exerciseItemsEmptyLiteral(db *gorm.DB) string {
 
 func (r *FeedRepo) ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
 	return r.listFeedByAuthors(ctx, authorIDs, true, contentType, mealType, dietGoal, date, sortBy, limit, cursor)
+}
+
+// MergeFeedRecords combines two feed lists under the same sort, keeping one copy
+// of a target present in both.
+func MergeFeedRecords(primary, extra []FeedRecord, sortBy string, limit int) []FeedRecord {
+	seen := make(map[string]bool, len(primary)+len(extra))
+	merged := make([]FeedRecord, 0, len(primary)+len(extra))
+	for _, list := range [][]FeedRecord{primary, extra} {
+		for _, row := range list {
+			key := row.FeedType + ":" + row.ID
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			merged = append(merged, row)
+		}
+	}
+	sortFeedRecords(merged, sortBy)
+	if limit > 0 && len(merged) > limit {
+		merged = merged[:limit]
+	}
+	return merged
 }
 
 func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int, cursor *FeedCursor) ([]FeedRecord, error) {
@@ -303,7 +326,7 @@ func (r *FeedRepo) applyFeedAuthorScope(q *gorm.DB, authorIDs []string, publicOn
 	if publicOnly {
 		publicUsers := r.db.Table("weapp_user").
 			Select("id").
-			Where("COALESCE(public_records, TRUE) = TRUE")
+			Where("COALESCE(public_records, FALSE) = TRUE")
 		q = q.Where("user_id IN (?)", publicUsers)
 	}
 	return q
@@ -732,16 +755,17 @@ func (r *FeedRepo) GetUserProfiles(ctx context.Context, userIDs []string) (map[s
 		return map[string]*UserProfile{}, nil
 	}
 	type userProfileRow struct {
-		ID            string `gorm:"column:id"`
-		Nickname      string `gorm:"column:nickname"`
-		Avatar        string `gorm:"column:avatar"`
-		PublicRecords *bool  `gorm:"column:public_records"`
-		PetLevel      *int   `gorm:"column:pet_level"`
+		ID                    string `gorm:"column:id"`
+		Nickname              string `gorm:"column:nickname"`
+		Avatar                string `gorm:"column:avatar"`
+		PublicRecords         *bool  `gorm:"column:public_records"`
+		FriendsCanViewRecords *bool  `gorm:"column:friends_can_view_records"`
+		PetLevel              *int   `gorm:"column:pet_level"`
 	}
 	var rows []userProfileRow
 	err := r.db.WithContext(ctx).
 		Table("weapp_user AS users").
-		Select("users.id, users.nickname, users.avatar, users.public_records, pets.level AS pet_level").
+		Select("users.id, users.nickname, users.avatar, users.public_records, users.friends_can_view_records, pets.level AS pet_level").
 		Joins("LEFT JOIN user_pets AS pets ON pets.user_id = users.id").
 		Where("users.id IN ?", userIDs).
 		Scan(&rows).Error
@@ -752,11 +776,12 @@ func (r *FeedRepo) GetUserProfiles(ctx context.Context, userIDs []string) (map[s
 	for i := range rows {
 		row := rows[i]
 		result[row.ID] = &UserProfile{
-			ID:            row.ID,
-			Nickname:      row.Nickname,
-			Avatar:        row.Avatar,
-			PublicRecords: row.PublicRecords,
-			PetLevel:      row.PetLevel,
+			ID:                    row.ID,
+			Nickname:              row.Nickname,
+			Avatar:                row.Avatar,
+			PublicRecords:         row.PublicRecords,
+			FriendsCanViewRecords: row.FriendsCanViewRecords,
+			PetLevel:              row.PetLevel,
 		}
 	}
 	return result, nil

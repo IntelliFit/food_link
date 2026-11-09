@@ -45,8 +45,6 @@ const (
 	defaultExecutionMode            = "standard"
 	standardWebSearchMode           = "standard_web_search"
 	standardPackagedExperimentMode  = "standard_packaged_experiment"
-	fastExecutionMode               = "fast"
-	fastWebSearchMode               = "fast_web_search"
 	liteExecutionMode               = "lite"
 	precisionExecutionMode          = "strict"
 	precisionSeparateExecutionMode  = "strict_separate"
@@ -75,9 +73,6 @@ const (
 	ratioSuggestionTimeout          = 8 * time.Second
 	ediblePortionTimeout            = 8 * time.Second
 	nutritionFallbackAttemptTimeout = 35 * time.Second
-	fastNutritionFallbackTimeout    = 25 * time.Second
-	fastVisionAnalysisTimeout       = 30 * time.Second
-	fastPostprocessTimeout          = 30 * time.Second
 	standardHybridTimeout           = 60 * time.Second
 	webSearchTimeout                = 6 * time.Second
 	webSearchMaxQueries             = 3
@@ -269,9 +264,6 @@ func (s *AnalyzeService) ConfigureGeminiUpstreamTraffic(ordinaryOpenLuxPercent, 
 // bucket, so retries do not randomly switch providers.
 func (s *AnalyzeService) SelectFoodImageModel(executionMode, routingKey string) string {
 	mode := normalizeExecutionMode(&executionMode)
-	if isFastExecutionMode(mode) {
-		return qwen38FlashModel
-	}
 	if s.balancedVisionEnabled() && (isPrecisionLikeExecutionMode(mode) || isGemini35ExecutionMode(mode) || isOrdinaryFoodImageMode(mode)) {
 		return s.selectBalancedVisionModel(mode, routingKey)
 	}
@@ -1535,10 +1527,11 @@ func normalizeExecutionMode(mode *string) string {
 		return defaultExecutionMode
 	}
 	switch strings.ToLower(strings.TrimSpace(*mode)) {
-	case fastExecutionMode, "qwen_fast", "qwen-fast", "quick":
-		return fastExecutionMode
-	case fastWebSearchMode, "fast-web-search", "qwen_fast_web_search", "qwen-fast-web-search", "quick_web_search":
-		return fastWebSearchMode
+	// The fast tier was retired: stored defaults and older clients still send it.
+	case "fast", "qwen_fast", "qwen-fast", "quick":
+		return defaultExecutionMode
+	case "fast_web_search", "fast-web-search", "qwen_fast_web_search", "qwen-fast-web-search", "quick_web_search":
+		return standardWebSearchMode
 	case standardWebSearchMode, "web_search", "standard-web-search":
 		return standardWebSearchMode
 	case standardPackagedExperimentMode, "packaged_experiment", "standard-packaged-experiment":
@@ -1793,10 +1786,12 @@ JSON:
   "context_advice":"",
   "uncertaintyNotes":[]
 	}`, compact, imageInputHint, additionalLine)
-		// Fast mode shares the one-call schema so micronutrients do not need a
-		// second serial model request after the photo is recognized.
-		if (isOrdinaryFoodImageMode(executionMode) || isFastExecutionMode(executionMode)) && analysisEngineProducesNutrition(input.AnalysisEngine) {
-			return combinedOrdinaryPhotoPrompt(prompt)
+		if isOrdinaryFoodImageMode(executionMode) && analysisEngineProducesNutrition(input.AnalysisEngine) {
+			prompt = combinedOrdinaryPhotoPrompt(prompt)
+			if input.AnalysisEngine == analysisEngineSmart {
+				prompt = withSmartNutritionFields(prompt)
+			}
+			return prompt
 		}
 		return prompt
 	}
@@ -2396,9 +2391,6 @@ JSON:
   "uncertaintyNotes":[]
 }`, strings.TrimSpace(input.Text), tags, contextLine, modeLine)
 	prompt += "\n每项 nutrients 必须同时给出完整微量营养字段（按该项实际克数的总量）：" + strings.Join(preciseMicronutrientKeys, ",") + "。每个字段使用非负数字，合理估算并说明假设；不得用全零或缺字段充当分析完成。纯水等确实无相应营养的字段可以为0。必须给出有效重量和基础营养，无法分析时明确返回错误，禁止生成零重量占位项。"
-	if isFastExecutionMode(executionMode) {
-		prompt += "\n快速模式：直接给出紧凑JSON，每项仍必须包含完整基础营养和微量营养；insight/context_advice各不超过24字，不输出长篇说明。"
-	}
 	return prompt
 }
 
@@ -2703,7 +2695,7 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if normalized == precisionGeminiFlashModel || normalized == "gemini36-flash" || normalized == "gemini36_flash" {
 		return "gemini", precisionGeminiFlashModel
 	}
-	if normalized == openLuxPrecisionGeminiRoute {
+	if normalized == openLuxPrecisionGeminiRoute || normalized == "a6:"+precisionGeminiFlashModel {
 		return "gemini", precisionGeminiFlashModel
 	}
 	if strings.HasPrefix(normalized, "ofox-gemini:") {
@@ -2757,10 +2749,6 @@ func isPackagedExperimentExecutionMode(executionMode string) bool {
 
 func isWebSearchExecutionMode(executionMode string) bool {
 	return executionMode == standardWebSearchMode || executionMode == precisionWebSearchMode
-}
-
-func isFastExecutionMode(executionMode string) bool {
-	return executionMode == fastExecutionMode || executionMode == fastWebSearchMode
 }
 
 func shouldUseImageProviderPreference(modelName string) bool {
@@ -2884,25 +2872,16 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		slog.Bool("has_base64_image", strings.TrimSpace(input.Base64Image) != ""),
 	)
 	lightweightMeta := map[string]any{}
-	qwenNativeSearchMeta := map[string]any{}
-	analysisCallCtx := ctx
-	analysisCallCancel := func() {}
-	if isFastExecutionMode(executionMode) {
-		// The one-call fast output also carries micronutrients and edible-portion
-		// fields, so this budget covers what used to be a second serial request.
-		analysisCallCtx, analysisCallCancel = context.WithTimeout(ctx, fastVisionAnalysisTimeout)
-	}
-	defer analysisCallCancel()
 	fallbackUsed := false
 	fallbackReason := ""
 	geminiUpstreamFallbackUsed := false
 	geminiUpstreamHedgeLaunched := false
 	var parsed map[string]any
 	var err error
-	geminiRouteCtx := analysisCallCtx
+	geminiRouteCtx := ctx
 	geminiRouteCancel := func() {}
 	if provider == "gemini" && len(imageURLs) > 0 {
-		geminiRouteCtx, geminiRouteCancel = s.geminiVisionRouteContext(analysisCallCtx, model, geminiUpstream, client)
+		geminiRouteCtx, geminiRouteCancel = s.geminiVisionRouteContext(ctx, model, geminiUpstream, client)
 		defer geminiRouteCancel()
 		outcome, hedgeErr := s.runHedgedGeminiVision(
 			geminiRouteCtx,
@@ -2932,10 +2911,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		}
 	} else {
 		primaryImageCall := newAnalyzeWithImagesTemperatureModelCall(client, prompt, imageURLs, 0, model)
-		if isFastExecutionMode(executionMode) {
-			primaryImageCall = newAnalyzeWithImagesWithoutThinkingModelCall(client, prompt, imageURLs, model)
-		}
-		parsed, err = analyzeWithJSONParseRetryPolicy(analysisCallCtx, "food_image", provider, model, defaultLLMRetryPolicy, func(callCtx context.Context) (map[string]any, error) {
+		parsed, err = analyzeWithJSONParseRetryPolicy(ctx, "food_image", provider, model, defaultLLMRetryPolicy, func(callCtx context.Context) (map[string]any, error) {
 			if executionMode == liteExecutionMode {
 				if webClient := s.doubaoWebSearchClient; webClient != nil {
 					lightParsed, meta, webErr := webClient.AnalyzeWithImagesWebSearch(callCtx, prompt, imageURLs, DoubaoWebSearchOptions{
@@ -2948,24 +2924,10 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 				}
 				return nil, fmt.Errorf("lite food image mode requires Doubao Responses web search client; configure doubao_web_search_api_key")
 			}
-			if executionMode == fastWebSearchMode {
-				qwenSearchClient, ok := client.(interface {
-					AnalyzeWithImagesDashScopeWebSearch(context.Context, string, []string, DashScopeWebSearchOptions) (map[string]any, map[string]any, error)
-				})
-				if !ok {
-					return nil, fmt.Errorf("fast web search mode requires DashScope qwen client")
-				}
-				fastParsed, meta, fastErr := qwenSearchClient.AnalyzeWithImagesDashScopeWebSearch(callCtx, prompt, imageURLs, DashScopeWebSearchOptions{
-					ForcedSearch:   true,
-					SearchStrategy: "turbo",
-				})
-				qwenNativeSearchMeta = meta
-				return fastParsed, fastErr
-			}
 			return primaryImageCall(callCtx)
 		})
 	}
-	if err == nil && provider == "qwen" && (isOrdinaryFoodImageMode(executionMode) || isFastExecutionMode(executionMode)) {
+	if err == nil && provider == "qwen" && isOrdinaryFoodImageMode(executionMode) {
 		err = validateNonEmptyFoodAnalysisResult(parsed)
 		if stderrors.Is(err, ErrEmptyFoodAnalysisResult) {
 			logger.Warn(ctx, "食物图片千问返回业务空结果",
@@ -3144,20 +3106,6 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			"review_provider": nil,
 			"review_model":    nil,
 			"web_search":      lightweightMeta,
-		}
-	}
-	if isFastExecutionMode(executionMode) {
-		hybridMeta = map[string]any{
-			"status":          "applied",
-			"strategy":        executionMode + "_qwen38_flash_db_first",
-			"base_provider":   provider,
-			"base_model":      model,
-			"review_provider": nil,
-			"review_model":    nil,
-		}
-		if executionMode == fastWebSearchMode {
-			hybridMeta["web_search"] = qwenNativeSearchMeta
-			hybridMeta["strategy"] = "fast_web_search_qwen38_flash_native_search_db_first"
 		}
 	}
 	if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {
@@ -5287,10 +5235,6 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	} else {
 		client = s.doubaoClient
 	}
-	if !defaultTextRoute && isFastExecutionMode(executionMode) && s.dashscopeClient != nil {
-		client = s.dashscopeClient
-		provider, model = "qwen", fastTextModel
-	}
 	start := time.Now()
 	ctx, span := apm.StartSpan(ctx, "analysis.food_text",
 		attribute.String("analysis.user_id", userID),
@@ -5311,7 +5255,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		var raw map[string]any
 		var callErr error
 		if defaultTextRoute {
-			// Fast and standard text share the evaluated default route; the routed
+			// Text uses the evaluated default route; the routed
 			// call validates each channel's result so an invalid answer hedges.
 			raw, provider, model, callErr = s.runDefaultTextModel(callCtx, prompt, textNutritionJSONSchema(analysisEngineProducesNutrition(input.AnalysisEngine)), func(candidate map[string]any) error {
 				_, err := normalizeAndValidateTextResult(candidate, input)
@@ -5320,8 +5264,6 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 			if callErr != nil {
 				return nil, callErr
 			}
-		} else if isFastExecutionMode(executionMode) {
-			raw, callErr = newAnalyzeWithImagesWithoutThinkingModelCall(client, prompt, nil, model)(callCtx)
 		} else if structured, ok := client.(interface {
 			AnalyzeTextWithJSONSchema(context.Context, string, string, map[string]any) (map[string]any, error)
 		}); ok && provider == "qwen" && strings.HasPrefix(model, "qwen3.8-") {
@@ -5955,20 +5897,15 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 		engine = normalizeAnalysisEngine(engine, executionMode, strings.TrimSpace(input.Text) != "")
 	}
 	input.AnalysisEngine = engine
-	fastMode := isFastExecutionMode(executionMode)
-	postprocessCtx := ctx
-	postprocessCancel := func() {}
-	if fastMode {
-		postprocessCtx, postprocessCancel = context.WithTimeout(ctx, fastPostprocessTimeout)
-	}
-	defer postprocessCancel()
 	phaseStart := time.Now()
-	if fastMode {
-		resp["items"] = withDefaultEdiblePortions(toItems(resp["items"]), "fast_default")
-		resp["edible_portion_status"] = "fast_default"
+	if ordinaryTextAnalysis(input, executionMode) {
+		// The text estimate already carries edible weight. The auxiliary model
+		// timed out at its 8s budget on 36 of 37 text calls in production.
+		resp["items"] = withDefaultEdiblePortions(toItems(resp["items"]), "text_default")
+		resp["edible_portion_status"] = "text_default"
 		resp["edible_portion_applied_count"] = 0
 	} else {
-		resp = s.applyEdiblePortionRatios(postprocessCtx, resp, input)
+		resp = s.applyEdiblePortionRatios(ctx, resp, input)
 	}
 	timings["edible_portion"] = observeVisionPhase(ctx, executionMode, "edible_portion", phaseStart)
 	phaseStart = time.Now()
@@ -5976,16 +5913,17 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	case analysisEngineLegacyDirect, analysisEngineAIDirect:
 		resp = finalizeAIDirectNutrition(resp, engine)
 	case analysisEngineAIThenDBExact:
-		resp = s.applyAIThenExactDBNutrition(postprocessCtx, resp, input)
+		resp = s.applyAIThenExactDBNutrition(ctx, resp, input)
 	case analysisEngineDBCandidates:
-		resp = s.applyCandidateGuidedNutrition(postprocessCtx, resp, input)
+		resp = s.applyCandidateGuidedNutrition(ctx, resp, input)
+	case analysisEngineSmart:
+		resp = s.applySmartNutrition(ctx, s.withSmartPackageReading(ctx, resp, input, executionMode))
 	default:
-		resp = s.applyDBFirstNutritionWithOptions(postprocessCtx, resp, dbFirstNutritionOptions{
+		resp = s.applyDBFirstNutritionWithOptions(ctx, resp, dbFirstNutritionOptions{
 			additionalContext:            fullNutritionContext(input),
 			packagedIntegrationEnabled:   true,
 			packagedExperimentCompatMode: isPackagedExperimentExecutionMode(executionMode),
 			skipSemanticRerank:           false,
-			nutritionFallbackTimeout:     fastModeDuration(fastMode, fastNutritionFallbackTimeout),
 		})
 	}
 	timings["nutrition_resolution"] = observeVisionPhase(ctx, executionMode, "nutrition_resolution", phaseStart)
@@ -5994,7 +5932,7 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 		items := toItems(resp["items"])
 		var err error
 		if strings.TrimSpace(input.Text) == "" || !textMicronutrientsComplete(items) {
-			items, err = s.ApplyUserRequestedMicronutrientsToResolvedItems(postprocessCtx, items, fullNutritionContext(input))
+			items, err = s.ApplyUserRequestedMicronutrientsToResolvedItems(ctx, items, fullNutritionContext(input))
 		}
 		if err != nil {
 			resp["precise_micronutrients"] = map[string]any{"requested": true, "status": "failed", "reason": err.Error()}
@@ -6011,18 +5949,17 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, userID str
 	}
 	timings["micronutrients"] = observeVisionPhase(ctx, executionMode, "micronutrients", phaseStart)
 	phaseStart = time.Now()
-	resp = s.applySuggestedRatios(postprocessCtx, resp, input)
+	resp = s.applySuggestedRatios(ctx, resp, input)
 	timings["suggested_ratios"] = observeVisionPhase(ctx, executionMode, "suggested_ratios", phaseStart)
 	timings["total_postprocess"] = observeVisionPhase(ctx, executionMode, "total_postprocess", postprocessStart)
 	resp["processing_timings_ms"] = timings
 	return resp, nil
 }
 
-func fastModeDuration(enabled bool, value time.Duration) time.Duration {
-	if enabled {
-		return value
-	}
-	return 0
+func ordinaryTextAnalysis(input AnalyzeInput, executionMode string) bool {
+	return strings.TrimSpace(input.Text) != "" &&
+		strings.TrimSpace(input.ImageURL) == "" && len(input.ImageURLs) == 0 &&
+		isOrdinaryFoodImageMode(executionMode)
 }
 
 func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[string]any, input AnalyzeInput) map[string]any {

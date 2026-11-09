@@ -97,8 +97,10 @@ func ApplyNutritionQualityReview(ctx context.Context, db *gorm.DB, schema, artif
 	if err := json.Unmarshal(body, &artifact); err != nil {
 		return nil, fmt.Errorf("解析营养审核产物: %w", err)
 	}
-	if strings.TrimSpace(artifact.BatchID) == "" || strings.TrimSpace(artifact.PolicyVersion) == "" || len(artifact.Rows) == 0 || len(artifact.Aliases) == 0 {
-		return nil, fmt.Errorf("营养审核产物缺少批次、策略版本、营养行或别名行")
+	// Alias rows are optional: a promotion-only batch reviews nutrition rows
+	// that have no alias candidates yet.
+	if strings.TrimSpace(artifact.BatchID) == "" || strings.TrimSpace(artifact.PolicyVersion) == "" || len(artifact.Rows) == 0 {
+		return nil, fmt.Errorf("营养审核产物缺少批次、策略版本或营养行")
 	}
 	result := &NutritionQualityReviewResult{
 		BatchID:    artifact.BatchID,

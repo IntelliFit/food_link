@@ -527,7 +527,6 @@
   font-size: 24rpx;
   line-height: 1;
   color: #94a3b8;
-
 }
 
 .pet-home-visibility-status {
@@ -666,10 +665,6 @@
       linear-gradient(145deg, rgb(24 33 31 / 92%) 0%, rgb(18 27 25 / 92%) 100%);
   }
 
-  .pet-home-shadow {
-    background: rgb(0 0 0 / 30%);
-  }
-
   .pet-home-name,
   .pet-home-card-title,
   .pet-home-action-title,
@@ -771,28 +766,5 @@
   .pet-home-candidate-action {
     background: #5cb896;
     color: #fff;
-  }
-
-  .pet-home-inline-action {
-    background: rgb(255 255 255 / 7%);
-    border-color: rgb(92 184 150 / 22%);
-
-    &.primary {
-      background: linear-gradient(135deg, #4a9e7d 0%, #5cb896 100%);
-      border-color: transparent;
-      box-shadow: 0 8rpx 18rpx rgb(92 184 150 / 20%);
-    }
-
-    &.lab {
-      background: rgb(255 255 255 / 8%);
-      border-color: rgb(255 255 255 / 10%);
-    }
-  }
-
-  .pet-body {
-    box-shadow:
-      inset 0 17rpx 27rpx rgb(255 255 255 / 32%),
-      inset 0 -14rpx 20rpx rgb(0 0 0 / 10%),
-      0 14rpx 24rpx rgb(0 0 0 / 18%);
   }
 }

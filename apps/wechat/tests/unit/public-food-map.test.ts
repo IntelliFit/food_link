@@ -1,9 +1,16 @@
 import {
   buildFoodMapSpots,
   buildFoodMapSpotsFromPayload,
+  clusterFoodMapSpots,
+  foodMapClusterTier,
   foodMapDistanceKm,
+  foodMapMarkerItemsInView,
+  formatFoodMapClusterCount,
+  type FoodMapSpot,
   formatFoodMapDistance,
   hasValidFoodCoordinates,
+  mapSpotDishesLabel,
+  mapSpotOpensDishList,
 } from '../../src/packageExtra/pages/food-library/food-map'
 import type { PublicFoodLibraryItem, PublicFoodMapSpotPayload } from '../../src/utils/api'
 import { existsSync, readFileSync } from 'fs'
@@ -132,5 +139,97 @@ describe('public food map helpers', () => {
     expect(formatFoodMapDistance(nearby)).toBe('110m')
     expect(formatFoodMapDistance(2.34)).toBe('2.3km')
     expect(formatFoodMapDistance(128.8)).toBe('129km')
+  })
+})
+
+describe('food map clustering', () => {
+  function spot(key: string, latitude: number, longitude: number): FoodMapSpot {
+    const featuredItem = food({ id: key })
+    return { key, latitude, longitude, items: [featuredItem], featuredItem, foodCount: 1, locationLevel: 'food', locationName: key, address: '' }
+  }
+  const nearA = spot('a', 39.9001, 116.4001)
+  const nearB = spot('b', 39.9002, 116.4002)
+  const far = spot('far', 23.1, 113.3)
+
+  it('merges nearby spots into a counted cluster and leaves distant ones alone', () => {
+    const items = clusterFoodMapSpots([nearA, nearB, far], 5)
+    const cluster = items.find(item => item.kind === 'cluster')
+    expect(items).toHaveLength(2)
+    expect(cluster?.kind === 'cluster' && cluster.spots.map(item => item.key)).toEqual(['a', 'b'])
+    expect(items.find(item => item.kind === 'spot')?.key).toBe('far')
+  })
+
+  it('separates every spot at street level so each one can be opened', () => {
+    expect(clusterFoodMapSpots([nearA, nearB], 17).every(item => item.kind === 'spot')).toBe(true)
+  })
+
+  it('splits a cluster as the map zooms in', () => {
+    const left = spot('left', 39.9, 116.4)
+    const right = spot('right', 39.9, 116.45)
+    expect(clusterFoodMapSpots([left, right], 7)).toHaveLength(1)
+    expect(clusterFoodMapSpots([left, right], 14)).toHaveLength(2)
+  })
+
+  it('keeps bubbles apart however the spots are spread', () => {
+    const spots = Array.from({ length: 600 }, (_, index) => spot(`s${index}`, 22 + (index * 7 % 23) * 0.9, 100 + (index * 13 % 29) * 0.9))
+    ;[4, 6, 8, 10].forEach((scale) => {
+      const pixels = (256 / 360) * 2 ** scale
+      const items = clusterFoodMapSpots(spots, scale)
+      expect(items.reduce((sum, item) => sum + (item.kind === 'cluster' ? item.spots.length : 1), 0)).toBe(600)
+      items.forEach((first, index) => items.slice(index + 1).forEach((second) => {
+        const dx = Math.abs(first.longitude - second.longitude) * pixels
+        const dy = Math.abs(first.latitude - second.latitude) * pixels
+        expect(dx > 40 || dy > 30).toBe(true)
+      }))
+    })
+  })
+
+  it('places a cluster on a real spot and zooms to the middle of its members', () => {
+    const [cluster] = clusterFoodMapSpots([nearA, nearB], 5)
+    expect(cluster.kind).toBe('cluster')
+    expect([cluster.latitude, cluster.longitude]).toEqual([nearA.latitude, nearA.longitude])
+    expect(cluster.kind === 'cluster' && cluster.focus.latitude).toBeCloseTo(39.90015)
+  })
+
+  it('keeps the selected spot as its own marker inside a cluster area', () => {
+    const items = clusterFoodMapSpots([nearA, nearB], 5, 'a')
+    expect(items.map(item => [item.kind, item.key])).toEqual([['spot', 'a'], ['spot', 'b']])
+  })
+
+  it('drops far markers when zoomed in but keeps the selected one', () => {
+    const center = { latitude: 39.9, longitude: 116.4 }
+    const items = clusterFoodMapSpots([nearA, far], 15)
+    expect(foodMapMarkerItemsInView(items, center, 15).map(item => item.key)).toEqual(['a'])
+    expect(foodMapMarkerItemsInView(items, center, 15, 'far').map(item => item.key)).toEqual(['a', 'far'])
+  })
+
+  it('keeps every marker when zoomed out', () => {
+    const items = clusterFoodMapSpots([nearA, far], 6)
+    expect(foodMapMarkerItemsInView(items, { latitude: 39.9, longitude: 116.4 }, 6)).toHaveLength(2)
+  })
+
+  it('shows real counts and shortens thousands', () => {
+    expect(formatFoodMapClusterCount(8)).toBe('\u00A08\u00A0')
+    expect(formatFoodMapClusterCount(10)).toBe('10')
+    expect(formatFoodMapClusterCount(128)).toBe('128')
+    expect(formatFoodMapClusterCount(999)).toBe('999')
+    expect(formatFoodMapClusterCount(1000)).toBe('1.0k')
+    expect(formatFoodMapClusterCount(1890)).toBe('1.8k')
+  })
+
+  it('picks a stronger style for bigger clusters', () => {
+    expect([2, 9, 10, 99, 100].map(foodMapClusterTier)).toEqual(['small', 'small', 'medium', 'medium', 'large'])
+  })
+})
+
+describe('map spot dish list', () => {
+  it('opens a list only when a spot has more than one dish', () => {
+    expect(mapSpotOpensDishList({ foodCount: 279 })).toBe(true)
+    expect(mapSpotOpensDishList({ foodCount: 1 })).toBe(false)
+  })
+
+  it('says how many dishes the button leads to', () => {
+    expect(mapSpotDishesLabel(279)).toBe('查看 279 道餐食')
+    expect(mapSpotDishesLabel(1)).toBe('查看餐食')
   })
 })

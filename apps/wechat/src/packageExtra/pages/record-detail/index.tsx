@@ -3,6 +3,7 @@ import React, { useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
   getSharedFoodRecord,
+  getFoodRecordShareToken,
   getFoodRecordById,
   getAccessToken,
   getFriendInviteProfile,
@@ -199,20 +200,21 @@ function RecordDetailPage() {
   const [expandedNutrientDetails, setExpandedNutrientDetails] = React.useState<Record<string, boolean>>({})
   const [showOnboardingGuide, setShowOnboardingGuide] = React.useState(false)
   const [publicRecords, setPublicRecords] = React.useState<boolean | null>(null)
+  const [shareToken, setShareToken] = React.useState(router.params?.share_token || '')
 
   const offerRecordDetailOnboardingGuide = async () => {
     if (!shouldOfferOnboardingGuide(ONBOARDING_RECORD_DETAIL_GUIDE_KEY)) return
     try {
       const profile = await getUserProfile()
-      const isPublic = profile.public_records !== false
+      const isPublic = profile.public_records === true
       setPublicRecords(isPublic)
-      if (isPublic) {
+      // 只有这条记录真的对所有人可见时才提示“已同步”。
+      if (isPublic && record?.hidden_from_feed === false) {
         setShowOnboardingGuide(true)
       }
     } catch {
-      // 获取隐私设置失败时默认展示，避免用户错过引导
-      setPublicRecords(true)
-      setShowOnboardingGuide(true)
+      // 读取失败时不提示，避免把不公开的记录说成已公开
+      setPublicRecords(false)
     }
   }
 
@@ -227,7 +229,7 @@ function RecordDetailPage() {
           // 自动记录后的本人入口使用鉴权接口，关闭公开记录也能生成自己的打卡图。
           const res = (router.params?.from_auto_record === '1' || router.params?.owned === '1')
             ? await getFoodRecordById(recordId)
-            : await getSharedFoodRecord(recordId)
+            : await getSharedFoodRecord(recordId, router.params?.share_token)
           const fetchedRecord = res.record
           setRecord(fetchedRecord)
           const localProfile = await getCurrentPosterUserProfile(fetchedRecord.user_id)
@@ -306,7 +308,16 @@ function RecordDetailPage() {
   const shareRecordId = record?.id || router.params?.id || ''
   const shareOwnerId = record?.user_id || router.params?.from_user_id || ''
   const inviteCode = ownerInviteCode || getInviteCodeFromUserId(shareOwnerId)
-  const sharePath = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`
+  const shareTokenQuery = shareToken ? `&share_token=${encodeURIComponent(shareToken)}` : ''
+  const sharePath = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}${shareTokenQuery}`
+
+  // 本人分享时带上凭证，好友以外的人也能打开这一条；不影响圈子里的可见范围。
+  useEffect(() => {
+    if (!isOwner || !record?.id || shareToken) return
+    void getFoodRecordShareToken(record.id).then(setShareToken).catch(() => {
+      /* 取不到时分享链接仍可发出，只是对方可能没有权限打开 */
+    })
+  }, [isOwner, record?.id, shareToken])
 
   useShareAppMessage(() => {
     const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得一周轻度版会员` : '加入食探并连续2天使用，双方各得一周轻度版会员'
@@ -321,7 +332,7 @@ function RecordDetailPage() {
     const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得一周轻度版会员` : '加入食探并连续2天使用，双方各得一周轻度版会员'
     return {
       title,
-      query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}`,
+      query: `id=${encodeURIComponent(shareRecordId)}${shareOwnerId ? `&from_user_id=${encodeURIComponent(shareOwnerId)}` : ''}${inviteCode ? `&invite_code=${encodeURIComponent(inviteCode)}` : ''}${shareTokenQuery}`,
       imageUrl: posterShare?.imageUrl || record?.image_path || undefined
     }
   })
@@ -338,7 +349,7 @@ function RecordDetailPage() {
     try {
       const res = (router.params?.from_auto_record === '1' || router.params?.owned === '1')
         ? await getFoodRecordById(record.id)
-        : await getSharedFoodRecord(record.id)
+        : await getSharedFoodRecord(record.id, router.params?.share_token)
       setRecord(res.record)
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)

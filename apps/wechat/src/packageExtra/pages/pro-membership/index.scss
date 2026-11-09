@@ -11,29 +11,6 @@
   border-bottom: 1rpx solid rgb(255 255 255 / 6%);
 }
 
-.audit-preview-banner {
-  margin: 24rpx 32rpx 0;
-  padding: 22rpx 28rpx;
-  border-radius: 20rpx;
-  background: #eff6ff;
-  border: 2rpx solid #bfdbfe;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.audit-preview-title {
-  font-size: 28rpx;
-  font-weight: 800;
-  color: #1d4ed8;
-}
-
-.audit-preview-text {
-  font-size: 23rpx;
-  line-height: 1.6;
-  color: #1e40af;
-}
-
 // ==================== Hero ====================
 .hero-section {
   background: linear-gradient(180deg, #182a25 0%, #203b32 52%, #27493a 100%);
@@ -301,39 +278,6 @@
   .hero-credits-tip {
     white-space: normal;
   }
-}
-
-.upgrade-notice {
-  margin: 24rpx 32rpx 0;
-  padding: 20rpx 24rpx;
-  border-radius: 20rpx;
-  background: #fff7ed;
-  border: 1rpx solid #fdba74;
-}
-
-.upgrade-notice-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-}
-
-.upgrade-notice-text {
-  flex: 1;
-  font-size: 24rpx;
-  color: #9a3412;
-  line-height: 1.6;
-  font-weight: 600;
-}
-
-.upgrade-notice-action {
-  flex-shrink: 0;
-  font-size: 22rpx;
-  color: #c2410c;
-  font-weight: 700;
-  padding: 8rpx 16rpx;
-  border-radius: 999rpx;
-  background: rgb(255 255 255 / 70%);
 }
 
 // ==================== 通用 section 标题 ====================
@@ -783,169 +727,6 @@
   align-self: flex-end;
 }
 
-.auto-renew-card,
-.auto-renew-manage-card {
-  margin: 24rpx 32rpx 0;
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 26rpx 30rpx;
-  box-shadow: 0 4rpx 20rpx rgb(0 100 60 / 8%);
-  border: 2rpx solid #bbf7d0;
-}
-
-.auto-renew-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-  margin-bottom: 18rpx;
-}
-
-.auto-renew-card-title {
-  font-size: 30rpx;
-  font-weight: 800;
-  color: #064e3b;
-}
-
-.auto-renew-card-badge {
-  flex-shrink: 0;
-  font-size: 20rpx;
-  color: #047857;
-  background: #ecfdf5;
-  border: 1rpx solid #a7f3d0;
-  border-radius: 999rpx;
-  padding: 6rpx 14rpx;
-  font-weight: 700;
-}
-
-.auto-renew-switch-desc {
-  display: block;
-  margin-top: 4rpx;
-  font-size: 21rpx;
-  color: #6b7280;
-}
-
-.auto-renew-row {
-  min-height: 62rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1rpx solid #f0f5f2;
-  gap: 20rpx;
-}
-
-.auto-renew-label {
-  font-size: 24rpx;
-  color: #6b7280;
-}
-
-.auto-renew-value {
-  font-size: 25rpx;
-  font-weight: 700;
-  color: #111827;
-  text-align: right;
-  line-height: 1.5;
-
-  &--price {
-    color: #00a86b;
-  }
-}
-
-.auto-renew-desc {
-  display: block;
-  margin-top: 18rpx;
-  font-size: 23rpx;
-  line-height: 1.7;
-  color: #4b5563;
-}
-
-.auto-renew-path {
-  margin-top: 18rpx;
-  padding: 18rpx 20rpx;
-  border-radius: 18rpx;
-  background: #f8fafc;
-  border: 1rpx solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.auto-renew-path-title {
-  font-size: 24rpx;
-  color: #374151;
-  font-weight: 800;
-}
-
-.auto-renew-path-text,
-.auto-renew-manage-text {
-  display: block;
-  font-size: 23rpx;
-  line-height: 1.65;
-  color: #4b5563;
-}
-
-.auto-renew-check {
-  margin-top: 20rpx;
-  min-height: 62rpx;
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-}
-
-.auto-renew-checkbox {
-  width: 34rpx;
-  height: 34rpx;
-  border-radius: 8rpx;
-  border: 2rpx solid #9ca3af;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: #fff;
-}
-
-.auto-renew-check--checked .auto-renew-checkbox {
-  border-color: #00bc7d;
-  background: #00bc7d;
-}
-
-.auto-renew-checkbox-mark {
-  font-size: 24rpx;
-  line-height: 1;
-  color: #fff;
-  font-weight: 800;
-}
-
-.auto-renew-check-text {
-  font-size: 24rpx;
-  color: #374151;
-  line-height: 1.5;
-}
-
-.auto-renew-link {
-  display: block;
-  margin-top: 4rpx;
-  font-size: 23rpx;
-  color: #047857;
-  font-weight: 700;
-}
-
-.auto-renew-manage-card {
-  border-color: #bfdbfe;
-}
-
-.auto-renew-cancel-btn {
-  margin-top: 20rpx;
-  height: 76rpx;
-  line-height: 76rpx;
-  border-radius: 999rpx;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 26rpx;
-  font-weight: 800;
-  border: 1rpx solid #bfdbfe;
-}
-
 // ==================== 三档对比表 ====================
 .features-section {
   margin: 32rpx 32rpx 0;
@@ -1162,11 +943,6 @@
   font-size: 22rpx;
   color: #9ca3af;
   margin-top: 20rpx;
-
-  &--audit {
-    color: #1d4ed8;
-    margin-top: 10rpx;
-  }
 }
 
 /* ==================== 年龄合规提示 ==================== */
@@ -1217,47 +993,6 @@
   }
 }
 
-/* ============================================================ */
-
-/* TODO: [TEST] 以下测试样式在正式上线前必须删除 */
-.test-section {
-  margin: 48rpx 32rpx 0;
-  padding: 24rpx 32rpx;
-  background: #fffbe6;
-  border: 1rpx dashed #f59e0b;
-  border-radius: 20rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20rpx;
-}
-
-.test-section-label {
-  font-size: 22rpx;
-  color: #92400e;
-  text-align: center;
-}
-
-.test-toggle-btn {
-  width: 100%;
-  height: 80rpx;
-  line-height: 80rpx;
-  border-radius: 999rpx;
-  background: #f59e0b;
-  color: #fff;
-  font-size: 28rpx;
-  font-weight: 600;
-  border: none;
-
-  &[disabled] {
-    opacity: 0.6;
-  }
-}
-
-/* TODO: [TEST] 测试样式结束 */
-
-/* ============================================================ */
-
 .membership-page--dark {
   background: linear-gradient(180deg, #131917 0%, #0f1413 42%, #0b0f0e 100%);
 
@@ -1278,21 +1013,6 @@
     border-color: rgb(255 255 255 / 8%);
   }
 
-  .upgrade-notice {
-    background: rgb(120 53 15 / 18%);
-    border-color: rgb(251 191 36 / 28%);
-    box-shadow: 0 10rpx 28rpx rgb(0 0 0 / 22%);
-  }
-
-  .upgrade-notice-text {
-    color: #fed7aa;
-  }
-
-  .upgrade-notice-action {
-    background: rgb(255 255 255 / 8%);
-    color: #fde68a;
-  }
-
   .section-title-text {
     color: #eef4f1;
   }
@@ -1310,8 +1030,7 @@
   .plan-card,
   .features-section,
   .credits-hint-card,
-  .status-card,
-  .test-section {
+  .status-card {
     background: rgb(255 255 255 / 4%);
     border-color: rgb(125 211 176 / 16%);
     box-shadow: 0 14rpx 36rpx rgb(0 0 0 / 26%);
@@ -1322,8 +1041,7 @@
   .plan-card,
   .features-section,
   .credits-hint-card,
-  .status-card,
-  .test-section {
+  .status-card {
     background: rgb(255 255 255 / 4%);
     border-color: rgb(125 211 176 / 16%);
     box-shadow: 0 14rpx 36rpx rgb(0 0 0 / 26%);
@@ -1487,14 +1205,5 @@
     &--dismiss {
       color: #93a39b;
     }
-  }
-
-  .test-section {
-    background: rgb(245 158 11 / 10%);
-    border-color: rgb(245 158 11 / 28%);
-  }
-
-  .test-section-label {
-    color: #fcd34d;
   }
 }

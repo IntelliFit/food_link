@@ -55,6 +55,18 @@ describe('pet campus diet recommendation helpers', () => {
     expect(classifyDietRecommendationIntent('我就是需要附近商家的呀，你给我点呗', false)).toBeNull()
   })
 
+  // Replay 2026-11-05: "点个外卖吧" went to the ordinary chat, which asked a question instead of choosing.
+  it('treats ordering takeout as a meal question, like the server', () => {
+    for (const question of ['我在家不想出门，点个外卖吧', '叫个外卖', '帮我订份外卖', '点外卖', '来杯奶茶', '想喝点什么', '再加个小菜', '推荐点零食']) {
+      expect([question, isDietRecommendationQuestion(question)]).toEqual([question, true])
+    }
+    expect(isDietRecommendationQuestion('奶茶热量高吗')).toBe(false)
+    expect(isDietRecommendationQuestion('单点一个菜就行')).toBe(true)
+    for (const question of ['来杯喝的', '再来点零食']) {
+      expect([question, classifyDietRecommendationIntent(question, true)]).not.toEqual([question, null])
+    }
+  })
+
   it('infers explicit meal wording before falling back to the current meal window', () => {
     expect(inferMealType('早餐吃什么', new Date(2026, 7, 22, 19, 0))).toBe('breakfast')
     expect(inferMealType('今天吃什么', new Date(2026, 7, 22, 12, 15))).toBe('lunch')

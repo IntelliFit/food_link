@@ -3975,7 +3975,7 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 func buildPrecisionItemEstimatePromptFromPayload(sourceType string, payload map[string]any, textInput, additionalContext string, referenceObjects []map[string]any) (string, error) {
 	items := extractItems(payload["items_to_estimate"])
 	if len(items) > 1 {
-		return withPrecisionInlineNutrition(buildPrecisionItemEstimatePromptMulti(sourceType, items, textInput, additionalContext, referenceObjects)), nil
+		return withPrecisionEngineFields(payload, withPrecisionInlineNutrition(buildPrecisionItemEstimatePromptMulti(sourceType, items, textInput, additionalContext, referenceObjects))), nil
 	}
 	itemName := stringFromMap(payload, "item_name")
 	if itemName == "" && len(items) == 1 {
@@ -4017,7 +4017,7 @@ func buildPrecisionItemEstimatePromptFromPayload(sourceType string, payload map[
 	if len(items) == 1 {
 		itemKey = firstNonEmptyString(items[0], "item_key")
 	}
-	return withPrecisionInlineNutrition(buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, textInput, additionalContext, referenceObjects, itemKey)), nil
+	return withPrecisionEngineFields(payload, withPrecisionInlineNutrition(buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, textInput, additionalContext, referenceObjects, itemKey))), nil
 }
 
 func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawInput, additionalContext string, referenceObjects []map[string]any, itemKeys ...string) string {
@@ -4329,6 +4329,7 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 				if nutrients := inlinePrecisionNutrients(raw); nutrients != nil {
 					item["nutrients"] = nutrients
 				}
+				copyPrecisionRoutingFields(raw, item)
 				items = append(items, normalizePrecisionStateMetadata(item, "name"))
 			}
 		}
@@ -4355,6 +4356,7 @@ func parsePrecisionEstimateItems(parsed map[string]any, plannedItems []map[strin
 	if nutrients := inlinePrecisionNutrients(itemPayload); nutrients != nil {
 		item["nutrients"] = nutrients
 	}
+	copyPrecisionRoutingFields(itemPayload, item)
 	return []map[string]any{normalizePrecisionStateMetadata(item, "name")}, nil
 }
 
@@ -5247,8 +5249,47 @@ func (r *Runner) processPublicFoodModeration(ctx context.Context, task *domain.A
 	if err := r.publicFood.UpdateStatus(ctx, itemID, "published"); err != nil {
 		return err
 	}
-	err := r.completeTask(ctx, task, map[string]any{"status": "approved"})
+	result := map[string]any{"status": "approved"}
+	if images := stringSliceFromAny(task.Payload["nutrition_image_urls"]); len(images) > 0 {
+		result["nutrition"] = r.fillPublicFoodNutrition(ctx, task, itemID, images)
+	}
+	err := r.completeTask(ctx, task, result)
 	return err
+}
+
+const publicFoodNutritionContext = "这些图片是同一份餐食的不同角度，请合并判断一次，不要重复计算食物或热量。"
+
+// fillPublicFoodNutrition reads an uploaded dish's nutrition from its photos.
+// The dish is already published, so a failed analysis is recorded on the dish
+// rather than failing the moderation task.
+func (r *Runner) fillPublicFoodNutrition(ctx context.Context, task *domain.AnalysisTask, itemID string, images []string) string {
+	attrs := append(taskAttrs(task.ID, task.TaskType, task.UserID), slog.String("item_id", itemID), slog.Int("image_count", len(images)))
+	result, err := r.analyze.Analyze(ctx, task.UserID, analyzeservice.AnalyzeInput{
+		ImageURL:          images[0],
+		ImageURLs:         images,
+		AdditionalContext: publicFoodNutritionContext,
+	})
+	if err == nil && len(extractItems(result["items"])) == 0 {
+		err = fmt.Errorf("analysis returned no foods")
+	}
+	if err != nil {
+		r.warn(ctx, "美食图谱上传营养识别失败", append(attrs, logger.Err(err))...)
+		if markErr := r.publicFood.MarkNutritionFailed(ctx, itemID); markErr != nil {
+			r.errorLog(ctx, "美食图谱上传营养失败状态写入失败", markErr, attrs...)
+		}
+		return "failed"
+	}
+	filled, err := r.publicFood.UpdateCommonNutritionFromAnalysis(ctx, itemID, result)
+	if err != nil {
+		r.errorLog(ctx, "美食图谱上传营养回写失败", err, attrs...)
+		return "failed"
+	}
+	if !filled {
+		r.info(ctx, "美食图谱上传已有营养，跳过后台识别结果", attrs...)
+		return "kept"
+	}
+	r.info(ctx, "美食图谱上传营养已在后台补齐", attrs...)
+	return "filled"
 }
 
 func (r *Runner) processExercise(ctx context.Context, task *domain.AnalysisTask) error {

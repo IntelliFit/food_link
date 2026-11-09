@@ -48,9 +48,12 @@ func mealCandidateFamily(c DietRecommendationCandidate) string {
 	return staple + ":" + protein
 }
 
+// mealCatalogScanPage is the page size of a catalog scan (at most domain.CatalogScanMaxPage).
+var mealCatalogScanPage = domain.CatalogScanMaxPage
+
 func (s *StatsService) retrievePreviewCandidates(ctx context.Context, state *campusDietAgentRunState, f domain.CampusDietSearchFilter) ([]DietRecommendationCandidate, int64, error) {
 	f.IncludeMenuEvidence = true
-	f.ScanCatalog, f.Offset, f.Limit, f.AfterID = true, 0, 100, ""
+	f.ScanCatalog, f.Offset, f.Limit, f.AfterID = true, 0, mealCatalogScanPage, ""
 	if f.RadiusKM <= 0 {
 		f.RadiusKM = 5
 	}
@@ -78,6 +81,7 @@ func (s *StatsService) retrievePreviewCandidates(ctx context.Context, state *cam
 			coverage.Status = "partial_error"
 			return all, total, err
 		}
+		mealAnnotateServiceHours(state, rows)
 		total = count
 		added := 0
 		for _, row := range rows {

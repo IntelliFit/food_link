@@ -3,14 +3,63 @@ package service
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
 )
 
+const mapSpotCacheTTL = time.Minute
+
+// mapSpotCache keeps the shared map for a short while: every opening of the map page
+// would otherwise rerun an aggregate over the whole library. Filling holds the lock,
+// so concurrent misses share one query.
+type mapSpotCache struct {
+	mu        sync.Mutex
+	spots     []domain.PublicFoodMapSpot
+	expiresAt time.Time
+	now       func() time.Time
+}
+
+func (c *mapSpotCache) get(load func() ([]domain.PublicFoodMapSpot, error)) ([]domain.PublicFoodMapSpot, error) {
+	now := time.Now
+	if c.now != nil {
+		now = c.now
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.spots != nil && now().Before(c.expiresAt) {
+		return c.spots, nil
+	}
+	spots, err := load()
+	if err != nil {
+		return nil, err
+	}
+	c.spots, c.expiresAt = spots, now().Add(mapSpotCacheTTL)
+	return spots, nil
+}
+
+// ListMapSpots returns spots that callers must treat as read-only: they may be shared.
 func (s *PublicFoodService) ListMapSpots(ctx context.Context, userID string) ([]domain.PublicFoodMapSpot, error) {
+	if userID != "" {
+		blocked, err := s.repo.ViewerHasBlocks(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if blocked {
+			return s.loadMapSpots(ctx, userID)
+		}
+	}
+	return s.mapSpots.get(func() ([]domain.PublicFoodMapSpot, error) {
+		return s.loadMapSpots(ctx, "")
+	})
+}
+
+func (s *PublicFoodService) loadMapSpots(ctx context.Context, userID string) ([]domain.PublicFoodMapSpot, error) {
 	candidates, err := s.repo.ListPublishedMapCandidates(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -23,7 +72,7 @@ func (s *PublicFoodService) ListMapSpots(ctx context.Context, userID string) ([]
 			continue
 		}
 		if index, exists := spotIndexes[spot.Key]; exists {
-			spots[index].FoodCount++
+			spots[index].FoodCount += spot.FoodCount
 			continue
 		}
 		spot.FeaturedItem = s.normalizePublicFoodItem(spot.FeaturedItem)
@@ -66,6 +115,10 @@ func mapSpotFromCandidate(candidate repo.MapFoodCandidate) (domain.PublicFoodMap
 	default:
 		return domain.PublicFoodMapSpot{}, false
 	}
+	// The list endpoint filters on the SQL key, so hand clients that exact value.
+	if candidate.SpotKey != "" {
+		key = candidate.SpotKey
+	}
 	featured := domain.PublicFoodItem{
 		ID: candidate.ID, UserID: candidate.UserID, FoodName: candidate.FoodName, Description: candidate.Description,
 		ImagePath: candidate.ImagePath, ImagePaths: []string{}, Items: []map[string]any{}, UserTags: []string{},
@@ -80,8 +133,14 @@ func mapSpotFromCandidate(candidate repo.MapFoodCandidate) (domain.PublicFoodMap
 	}
 	return domain.PublicFoodMapSpot{
 		Key: key, Latitude: latitude, Longitude: longitude, LocationLevel: level,
-		LocationName: locationName, Address: address, FoodCount: 1, FeaturedItem: featured,
+		LocationName: locationName, Address: address, FoodCount: max(1, candidate.SpotFoodCount), FeaturedItem: featured,
 	}, true
+}
+
+var mapSpotKeyPattern = regexp.MustCompile(`^(?:food:-?\d{1,3}\.\d{1,10}:-?\d{1,3}\.\d{1,10}|(?:canteen|campus|school):[0-9a-fA-F-]{36})$`)
+
+func validMapSpotKey(key string) bool {
+	return mapSpotKeyPattern.MatchString(key)
 }
 
 func validMapCoordinate(latitude, longitude *float64) bool {

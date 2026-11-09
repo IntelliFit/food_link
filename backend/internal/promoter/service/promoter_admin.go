@@ -60,8 +60,9 @@ type ReviewInput struct {
 	Note              string `json:"note"`
 }
 
-// Review approves or rejects a pending application. Approval requires the
-// reviewer to have confirmed the applicant's real name.
+// Review approves or rejects a pending application. The reviewer may confirm
+// the applicant's real name now; if not, it is checked when their first
+// withdrawal is reviewed.
 func (s *PromoterService) Review(ctx context.Context, admin, promoterID string, input ReviewInput) (*domain.Promoter, error) {
 	if !isUUID(promoterID) {
 		return nil, commonerrors.ErrNotFound
@@ -72,11 +73,10 @@ func (s *PromoterService) Review(ctx context.Context, admin, promoterID string, 
 	note := strings.TrimSpace(input.Note)
 	updates := map[string]any{"review_note": note, "reviewed_by": admin, "reviewed_at": s.now()}
 	if input.Approve {
-		if !input.RealNameConfirmed {
-			return nil, appError(http.StatusBadRequest, "通过前请先核实推广员实名信息")
-		}
 		updates["status"] = domain.StatusActive
-		updates["real_name_confirmed"] = true
+		if input.RealNameConfirmed {
+			updates["real_name_confirmed"] = true
+		}
 		if input.RateBps != nil {
 			updates["commission_rate_bps"] = *input.RateBps
 		}

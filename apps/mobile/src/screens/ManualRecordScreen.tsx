@@ -21,14 +21,19 @@ import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp 
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
   type ActivityTiming,
+  customDraftFromPackagedExtract,
+  type CustomFoodCategory,
+  describeCustomImport,
   type DietGoal,
   type FoodRecordEntryType,
   getMealTypeLabel,
   inferDefaultMealTypeFromLocalTime,
+  isSnackCustomFood,
   type ManualFoodBrowseResult,
   type ManualFoodCatalogCategory,
   type ManualFoodItem,
   type MealType,
+  pollPackagedExtractResult,
 } from '@food-link/core'
 import {
   AlertTriangle,
@@ -43,6 +48,7 @@ import {
   Moon,
   Plus,
   RefreshCw,
+  ScanLine,
   Search,
   Soup,
   Trash2,
@@ -59,6 +65,12 @@ import { todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
 import { emitHomeIntakeDataChangedEvent } from '../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../utils/home-dashboard-local-cache'
+import {
+  askPackagedUploadConsent,
+  choosePackagePhotos,
+  packageExtractPollDeps,
+  uploadPackagePhotos,
+} from '../utils/package-photo-import'
 
 type ManualDisplayUnit = 'g' | 'ml' | 'serving' | 'piece'
 type CustomEnergyUnit = 'kj' | 'kcal'
@@ -211,6 +223,11 @@ const MICRO_FIELDS = [
 
 const CUSTOM_STORAGE_KEY = 'mobile_manual_custom_foods_v2'
 const KJ_PER_KCAL = 4.184
+const PACKAGE_PHOTO_LIMIT = 4
+const CUSTOM_CATEGORY_OPTIONS: Array<{ value: CustomFoodCategory; label: string }> = [
+  { value: 'custom', label: '自定义' },
+  { value: 'snack', label: '零食' },
+]
 
 async function getCustomStorageKey() {
   const userId = await getStoredUserId()
@@ -411,6 +428,10 @@ export function ManualRecordScreen() {
   const catalogRequestRef = useRef(0)
   const searchRequestRef = useRef(0)
   const categoryRef = useRef(route.params?.sourceChannel === 'recommended' ? 'common' : route.params?.sourceChannel || 'common')
+  const categoryScrollRef = useRef<ScrollView>(null)
+  const categoryChipXRef = useRef<Record<string, number>>({})
+  const customDraftGenerationRef = useRef(0)
+  const packageImportLockRef = useRef(false)
 
   const [mealType, setMealType] = useState<MealType>(route.params?.mealType || inferDefaultMealTypeFromLocalTime())
   const [date, setDate] = useState(normalizeDate(route.params?.date))
@@ -448,13 +469,22 @@ export function ManualRecordScreen() {
   const [customFat, setCustomFat] = useState('')
   const [customMicro, setCustomMicro] = useState<Record<string, string>>({})
   const [customImageLocal, setCustomImageLocal] = useState('')
-  const [customImageRemote, setCustomImageRemote] = useState('')
+  const [customImages, setCustomImages] = useState<string[]>([])
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [customCategory, setCustomCategory] = useState<CustomFoodCategory>('custom')
+  const [customImporting, setCustomImporting] = useState(false)
+  const [customImportNote, setCustomImportNote] = useState('')
   const [customSaving, setCustomSaving] = useState(false)
   const [customTouched, setCustomTouched] = useState<Record<string, boolean>>({})
 
   const dirty = selected.length > 0 ||
     (customOpen && Boolean(customName.trim() || customEnergy.trim() || customImageLocal))
+  const customImageBusy = uploadingImage || customImporting
+
+  // 离开页面后停止轮询包装识别任务
+  useEffect(() => () => {
+    customDraftGenerationRef.current += 1
+  }, [])
 
   useEffect(() => {
     navigation.setOptions({
@@ -518,6 +548,8 @@ export function ManualRecordScreen() {
       }
     } catch (error) {
       if (requestId === catalogRequestRef.current) {
+        // 换分类失败时不留上一个分类的食物，否则会显示在错误的分类下
+        if (!append) setCatalogItems([])
         setLoadError(userFacingErrorMessage(error, '食物目录暂时无法读取'))
       }
     } finally {
@@ -599,6 +631,15 @@ export function ManualRecordScreen() {
     if (next !== 'custom') void loadCatalog(next, 1, false)
   }, [category, loadCatalog])
 
+  const scrollCategoryIntoView = useCallback((key: string) => {
+    const x = categoryChipXRef.current[key]
+    if (x !== undefined) categoryScrollRef.current?.scrollTo({ x: Math.max(0, x - 16), animated: true })
+  }, [])
+
+  useEffect(() => {
+    scrollCategoryIntoView(category)
+  }, [category, scrollCategoryIntoView])
+
   useEffect(() => {
     const keyword = query.trim()
     if (!keyword) {
@@ -648,9 +689,13 @@ export function ManualRecordScreen() {
       ])
     }
     if (category === 'custom') return customItems
+    if (category === 'snack') {
+      // 目录加载时 catalogItems 还是上一个分类的，这时只放自己的零食
+      return mergeFoods([...customItems.filter(isSnackCustomFood), ...(catalogLoading ? [] : catalogItems)])
+    }
     if (category === 'common' && !catalogItems.length) return recommended
     return catalogItems
-  }, [catalogItems, category, customItems, query, recommended, searchItems])
+  }, [catalogItems, catalogLoading, category, customItems, query, recommended, searchItems])
 
   const totals = useMemo(() => selected.reduce((sum, entry) => {
     const nutrients = scaledNutrition(entry.item, entry.weight, entry.defaultWeight)
@@ -677,6 +722,11 @@ export function ManualRecordScreen() {
   }, [customName, query])
 
   const resetCustom = useCallback(() => {
+    customDraftGenerationRef.current += 1
+    packageImportLockRef.current = false
+    setCustomCategory('custom')
+    setCustomImporting(false)
+    setCustomImportNote('')
     setCustomName('')
     setCustomWeight('100')
     setCustomBasis('100')
@@ -688,12 +738,12 @@ export function ManualRecordScreen() {
     setCustomMicro({})
     setCustomMore(false)
     setCustomImageLocal('')
-    setCustomImageRemote('')
+    setCustomImages([])
     setCustomTouched({})
   }, [])
 
   const pickCustomImage = useCallback(async (source: 'camera' | 'library') => {
-    if (uploadingImage) return
+    if (customImageBusy) return
     try {
       if (source === 'camera') {
         const permission = await ImagePicker.requestCameraPermissionsAsync()
@@ -711,15 +761,73 @@ export function ManualRecordScreen() {
         fileName: asset.fileName || 'custom-food.jpg',
         mimeType: asset.mimeType || 'image/jpeg',
       })
-      setCustomImageRemote(uploaded.imageUrl)
+      setCustomImages([uploaded.imageUrl])
     } catch (error) {
       setCustomImageLocal('')
-      setCustomImageRemote('')
+      setCustomImages([])
       void dialog.alert('图片处理失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setUploadingImage(false)
     }
-  }, [dialog, uploadingImage])
+  }, [customImageBusy, dialog])
+
+  const runPackageImport = useCallback(async (existingImages: string[]) => {
+    if (packageImportLockRef.current) return
+    packageImportLockRef.current = true
+    const generation = customDraftGenerationRef.current
+    const isAbandoned = () => generation !== customDraftGenerationRef.current
+    setCustomImportNote('')
+    try {
+      if (!(await askPackagedUploadConsent(dialog))) return
+      let imageUrls = existingImages
+      if (!imageUrls.length) {
+        const photos = await choosePackagePhotos(dialog, PACKAGE_PHOTO_LIMIT)
+        if (!photos.length || isAbandoned()) return
+        setCustomImporting(true)
+        imageUrls = await uploadPackagePhotos(photos)
+        if (isAbandoned()) return
+        setCustomImageLocal(photos[0].uri)
+        setCustomImages(imageUrls)
+      }
+      setCustomImporting(true)
+      const { task_id: taskId } = await apiClient.submitPackagedProductExtractTask({ imageUrls })
+      const result = await pollPackagedExtractResult(taskId, isAbandoned, packageExtractPollDeps)
+      if (!result || isAbandoned()) return
+      const draft = customDraftFromPackagedExtract(result)
+      if (draft.name) setCustomName(draft.name)
+      if (draft.weight) setCustomWeight(draft.weight)
+      setCustomCategory(draft.category)
+      if (draft.nutrition) {
+        // 识别结果统一是每 100g 的 kcal，口径要和数值一起换，不留旧值
+        setCustomBasis('100')
+        setCustomEnergyUnit('kcal')
+        setCustomEnergy(draft.nutrition.calories)
+        setCustomProtein(draft.nutrition.protein)
+        setCustomCarbs(draft.nutrition.carbs)
+        setCustomFat(draft.nutrition.fat)
+        setCustomMicro(draft.nutrition.micro)
+      }
+      const note = describeCustomImport(draft, result)
+      setCustomImportNote(note)
+      AccessibilityInfo.announceForAccessibility(note)
+    } catch (error) {
+      if (!isAbandoned()) {
+        void dialog.alert('识别包装失败，可以手动填写', userFacingErrorMessage(error, '请重拍后再试'), 'danger')
+      }
+    } finally {
+      if (!isAbandoned()) {
+        packageImportLockRef.current = false
+        setCustomImporting(false)
+      }
+    }
+  }, [dialog])
+
+  const startPackageImport = useCallback(() => {
+    if (customSaving || customImageBusy || packageImportLockRef.current) return
+    resetCustom()
+    setCustomOpen(true)
+    void runPackageImport([])
+  }, [customImageBusy, customSaving, resetCustom, runPackageImport])
 
   const customErrors = useMemo(() => ({
     name: customTouched.name && !customName.trim() ? '请输入食物名称' : '',
@@ -738,7 +846,7 @@ export function ManualRecordScreen() {
       AccessibilityInfo.announceForAccessibility('请检查自定义食物的必填项')
       return
     }
-    if (uploadingImage) return
+    if (customImageBusy) return
     setCustomSaving(true)
     const kcal = customEnergyUnit === 'kj' ? energy / KJ_PER_KCAL : energy
     const per100Factor = 100 / basis
@@ -757,6 +865,7 @@ export function ManualRecordScreen() {
       source: 'custom',
       source_label: '自定义',
       title: name,
+      category: customCategory,
       default_weight_grams: weight,
       display_unit: 'g',
       display_unit_label: 'g',
@@ -767,8 +876,8 @@ export function ManualRecordScreen() {
       total_fat: round(numeric(customFat) * perWeightFactor),
       nutrients_per_100g: per100,
       extra_nutrients: per100,
-      image_path: customImageRemote || undefined,
-      image_paths: customImageRemote ? [customImageRemote] : undefined,
+      image_path: customImages[0],
+      image_paths: customImages.length ? customImages : undefined,
       recommend_reason: customEnergyUnit === 'kj'
         ? '标示 ' + compact(energy) + ' kJ ≈ ' + compact(kcal) + ' kcal / 每' + compact(basis) + 'g'
         : '标示 ' + compact(kcal) + ' kcal / 每' + compact(basis) + 'g',
@@ -778,6 +887,7 @@ export function ManualRecordScreen() {
     try {
       saved = await apiClient.saveCustomFood({
         title: name,
+        category: customCategory,
         defaultWeightGrams: weight,
         totalCalories: numeric(localItem.total_calories),
         totalProtein: numeric(localItem.total_protein),
@@ -785,8 +895,8 @@ export function ManualRecordScreen() {
         totalFat: numeric(localItem.total_fat),
         nutrientsPer100g: per100,
         extraNutrients: per100,
-        imagePath: customImageRemote || undefined,
-        imagePaths: customImageRemote ? [customImageRemote] : undefined,
+        imagePath: customImages[0],
+        imagePaths: customImages.length ? customImages : undefined,
         portionLabel: localItem.portion_label,
         recommendReason: localItem.recommend_reason,
         shareToPublic: false,
@@ -797,31 +907,37 @@ export function ManualRecordScreen() {
     const next = mergeFoods([saved, ...customItems.filter((item) => foodTitle(item) !== name)])
     setCustomItems(next)
     await persistCustom(next).catch(() => undefined)
+    const savedAsSnack = customCategory === 'snack'
+    const landingCategory = savedAsSnack ? 'snack' : 'custom'
     resetCustom()
     setCustomOpen(false)
-    setCategory('custom')
+    categoryRef.current = landingCategory
+    setCategory(landingCategory)
     setQuery('')
+    if (savedAsSnack) void loadCatalog('snack', 1, false)
     setCustomSaving(false)
-    AccessibilityInfo.announceForAccessibility('自定义食物已完成')
+    AccessibilityInfo.announceForAccessibility(savedAsSnack ? '已归入零食' : '自定义食物已完成')
     if (!cloudSaved) {
       void dialog.alert('已保存到本机', '网络暂时不可用；这个自定义食物仍可在本机继续记录。', 'warning')
     }
   }, [
     customBasis,
     customCarbs,
+    customCategory,
     customEnergy,
     customEnergyUnit,
     customFat,
-    customImageRemote,
+    customImageBusy,
+    customImages,
     customItems,
     customMicro,
     customName,
     customProtein,
     customWeight,
     dialog,
+    loadCatalog,
     persistCustom,
     resetCustom,
-    uploadingImage,
   ])
 
   const updateWeightInput = useCallback((key: string, value: string) => {
@@ -992,21 +1108,36 @@ export function ManualRecordScreen() {
             ) : null}
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="新建自定义食物"
-            style={({ pressed }) => [styles.customEntry, pressed && styles.pressed]}
-            onPress={openCustom}
-          >
-            <View style={styles.flex}>
+          <View style={styles.customEntry}>
+            <View>
               <Text style={styles.customEntryTitle}>没有找到？直接自定义</Text>
-              <Text style={styles.customEntrySubtitle}>不拍照，不走 AI，填一次后下次可复用</Text>
+              <Text style={styles.customEntrySubtitle}>拍包装袋自动填好，或手动填一次，下次可复用</Text>
             </View>
-            <View style={styles.customEntryButton}>
-              <Plus size={16} color="#ffffff" />
-              <Text style={styles.customEntryButtonText}>{query.trim() ? '按搜索词新建' : '新建'}</Text>
+            <View style={styles.customEntryActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="拍包装导入自定义食物"
+                accessibilityState={{ disabled: customImageBusy }}
+                disabled={customImageBusy}
+                style={({ pressed }) => [styles.customEntryButton, customImageBusy && styles.disabled, pressed && styles.pressed]}
+                onPress={startPackageImport}
+              >
+                <Camera size={16} color="#ffffff" />
+                <Text style={styles.customEntryButtonText}>拍包装导入</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="手动新建自定义食物"
+                style={({ pressed }) => [styles.customEntryButton, styles.customEntryButtonSecondary, pressed && styles.pressed]}
+                onPress={openCustom}
+              >
+                <Plus size={16} color={palette.brandStrong} />
+                <Text style={[styles.customEntryButtonText, styles.customEntryButtonSecondaryText]}>
+                  {query.trim() ? '按搜索词新建' : '手动新建'}
+                </Text>
+              </Pressable>
             </View>
-          </Pressable>
+          </View>
 
           {customOpen ? (
             <View style={styles.customPanel}>
@@ -1029,26 +1160,47 @@ export function ManualRecordScreen() {
                 <View style={styles.imagePreview}>
                   {customImageLocal ? (
                     <Image source={{ uri: customImageLocal }} style={styles.image} />
-                  ) : uploadingImage ? (
+                  ) : customImageBusy ? (
                     <ActivityIndicator color={palette.brand} />
                   ) : (
                     <ImagePlus size={28} color={palette.muted} />
                   )}
                 </View>
                 <View style={[styles.flex, styles.imageActions]}>
-                  <Text style={styles.fieldLabel}>食物图片（可选）</Text>
+                  <Text style={styles.fieldLabel}>
+                    食物图片（可选）{customImages.length > 1 ? ' · 共 ' + customImages.length + ' 张' : ''}
+                  </Text>
                   <View style={styles.inlineButtons}>
-                    <SmallAction icon={Camera} label="拍照" palette={palette} styles={styles} onPress={() => void pickCustomImage('camera')} />
-                    <SmallAction icon={ImagePlus} label="相册" palette={palette} styles={styles} onPress={() => void pickCustomImage('library')} />
+                    <SmallAction icon={Camera} label="拍照" disabled={customImageBusy} palette={palette} styles={styles} onPress={() => void pickCustomImage('camera')} />
+                    <SmallAction icon={ImagePlus} label="相册" disabled={customImageBusy} palette={palette} styles={styles} onPress={() => void pickCustomImage('library')} />
+                    <SmallAction
+                      icon={ScanLine}
+                      label={customImages.length ? '识别这些照片' : '拍包装导入'}
+                      disabled={customImageBusy}
+                      palette={palette}
+                      styles={styles}
+                      onPress={() => void runPackageImport(customImages)}
+                    />
                     {customImageLocal ? (
-                      <SmallAction icon={Trash2} label="移除" danger palette={palette} styles={styles} onPress={() => {
+                      <SmallAction icon={Trash2} label="移除" danger disabled={customImageBusy} palette={palette} styles={styles} onPress={() => {
                         setCustomImageLocal('')
-                        setCustomImageRemote('')
+                        setCustomImages([])
                       }} />
                     ) : null}
                   </View>
                 </View>
               </View>
+
+              {customImporting ? (
+                <View style={styles.importStatus} accessibilityLiveRegion="polite">
+                  <ActivityIndicator size="small" color={palette.brand} />
+                  <Text style={styles.importStatusText}>正在读取包装上的名称和营养成分表</Text>
+                </View>
+              ) : customImportNote ? (
+                <View style={styles.importStatus} accessibilityLiveRegion="polite">
+                  <Text style={styles.importStatusText}>{customImportNote}</Text>
+                </View>
+              ) : null}
 
               <FormField
                 label="名称"
@@ -1060,6 +1212,19 @@ export function ManualRecordScreen() {
                 onChangeText={setCustomName}
                 onBlur={() => setCustomTouched((current) => ({ ...current, name: true }))}
               />
+              <Text style={styles.fieldLabel}>分类</Text>
+              <View style={styles.chipRow}>
+                {CUSTOM_CATEGORY_OPTIONS.map((option) => (
+                  <ChoiceChip
+                    key={option.value}
+                    label={option.label}
+                    selected={customCategory === option.value}
+                    palette={palette}
+                    styles={styles}
+                    onPress={() => setCustomCategory(option.value)}
+                  />
+                ))}
+              </View>
               <View style={[styles.twoColumns, compactLayout && styles.oneColumn]}>
                 <View style={styles.fieldColumn}>
                   <FormField
@@ -1192,11 +1357,11 @@ export function ManualRecordScreen() {
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: customSaving || uploadingImage }}
-                  disabled={customSaving || uploadingImage}
+                  accessibilityState={{ disabled: customSaving || customImageBusy }}
+                  disabled={customSaving || customImageBusy}
                   style={({ pressed }) => [
                     styles.primaryButton,
-                    (customSaving || uploadingImage) && styles.disabled,
+                    (customSaving || customImageBusy) && styles.disabled,
                     pressed && styles.pressed,
                   ]}
                   onPress={() => void completeCustom()}
@@ -1216,20 +1381,28 @@ export function ManualRecordScreen() {
         <View style={styles.catalogCard}>
           {!query.trim() ? (
             <ScrollView
+              ref={categoryScrollRef}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.categoryRow}
               accessibilityRole="tablist"
             >
               {categories.map((item) => (
-                <ChoiceChip
+                <View
                   key={item.key}
-                  label={item.label}
-                  selected={category === item.key}
-                  palette={palette}
-                  styles={styles}
-                  onPress={() => selectCategory(item.key)}
-                />
+                  onLayout={(event) => {
+                    categoryChipXRef.current = { ...categoryChipXRef.current, [item.key]: event.nativeEvent.layout.x }
+                    if (item.key === categoryRef.current) scrollCategoryIntoView(item.key)
+                  }}
+                >
+                  <ChoiceChip
+                    label={item.label}
+                    selected={category === item.key}
+                    palette={palette}
+                    styles={styles}
+                    onPress={() => selectCategory(item.key)}
+                  />
+                </View>
               ))}
             </ScrollView>
           ) : null}
@@ -1419,6 +1592,7 @@ function SmallAction({
   icon: Icon,
   label,
   danger,
+  disabled,
   palette,
   styles,
   onPress,
@@ -1426,6 +1600,7 @@ function SmallAction({
   icon: LucideIcon
   label: string
   danger?: boolean
+  disabled?: boolean
   palette: Palette
   styles: ReturnType<typeof createStyles>
   onPress: () => void
@@ -1434,7 +1609,9 @@ function SmallAction({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.smallAction, danger && styles.smallActionDanger, pressed && styles.pressed]}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
+      style={({ pressed }) => [styles.smallAction, danger && styles.smallActionDanger, disabled && styles.disabled, pressed && styles.pressed]}
       onPress={onPress}
     >
       <Icon size={16} color={danger ? palette.danger : palette.brandStrong} />
@@ -1774,15 +1951,15 @@ function createStyles(p: Palette) {
       borderWidth: 1,
       borderColor: p.brandSoft,
       backgroundColor: p.brandWash,
-      flexDirection: 'row',
-      alignItems: 'center',
       gap: 10,
       padding: 12,
       marginTop: 10,
     },
     customEntryTitle: { color: p.text, fontSize: 15, lineHeight: 21, fontWeight: '900' },
     customEntrySubtitle: { color: p.secondary, fontSize: 12, lineHeight: 18, marginTop: 3 },
+    customEntryActions: { flexDirection: 'row', gap: 8 },
     customEntryButton: {
+      flex: 1,
       minHeight: 44,
       minWidth: 74,
       borderRadius: 22,
@@ -1794,6 +1971,8 @@ function createStyles(p: Palette) {
       paddingHorizontal: 12,
     },
     customEntryButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '900' },
+    customEntryButtonSecondary: { borderWidth: 1, borderColor: p.brand, backgroundColor: p.surface },
+    customEntryButtonSecondaryText: { color: p.brandStrong },
     customPanel: {
       marginTop: 12,
       borderRadius: 14,
@@ -1808,6 +1987,17 @@ function createStyles(p: Palette) {
     textButton: { minHeight: 44, minWidth: 52, alignItems: 'center', justifyContent: 'center' },
     textButtonLabel: { color: p.brandStrong, fontSize: 13, fontWeight: '900' },
     imageRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+    importStatus: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderRadius: 12,
+      backgroundColor: p.brandWash,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginBottom: 12,
+    },
+    importStatusText: { flex: 1, color: p.secondary, fontSize: 12, lineHeight: 18, fontWeight: '700' },
     imagePreview: {
       width: 84,
       height: 84,

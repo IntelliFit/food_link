@@ -6780,6 +6780,8 @@ button.poster-share-channel--btn {
 .greeting-mode-toggle__switch { margin-top: -5rpx; color: #dbe9db; font-size: 26rpx; }
 
 .home-layout-toolbar {
+  position: relative;
+  z-index: 6;
   min-height: 42rpx;
   margin: 0 2rpx -8rpx;
   color: #77877f;
@@ -6790,6 +6792,73 @@ button.poster-share-channel--btn {
   padding: 7rpx 2rpx 7rpx 18rpx;
   color: #526c60;
   font-weight: 650;
+}
+
+.home-organize-hint {
+  position: absolute;
+  top: calc(100% + 12rpx);
+  right: 0;
+  width: 480rpx;
+  padding: 20rpx 22rpx 8rpx;
+  border: 2rpx solid rgb(92 184 150 / 34%);
+  border-radius: 22rpx;
+  background: #fff;
+  box-shadow: 0 14rpx 34rpx rgb(31 79 63 / 18%);
+  box-sizing: border-box;
+  animation: home-organize-hint-in 220ms ease-out;
+
+  &::before {
+    position: absolute;
+    top: -11rpx;
+    right: 44rpx;
+    width: 20rpx;
+    height: 20rpx;
+    border-top: 2rpx solid rgb(92 184 150 / 34%);
+    border-left: 2rpx solid rgb(92 184 150 / 34%);
+    background: inherit;
+    content: '';
+    transform: rotate(45deg);
+  }
+}
+
+.home-organize-hint__title {
+  display: block;
+  color: #0b3b2e;
+  font-size: 27rpx;
+  font-weight: 800;
+  line-height: 38rpx;
+}
+
+.home-organize-hint__desc {
+  display: block;
+  margin-top: 4rpx;
+  color: #4f6158;
+  font-size: 23rpx;
+  line-height: 35rpx;
+}
+
+.home-organize-hint__ok {
+  display: block;
+  padding: 12rpx 0;
+  color: #168561;
+  font-size: 25rpx;
+  font-weight: 800;
+  line-height: 36rpx;
+  text-align: right;
+}
+
+@keyframes home-organize-hint-in {
+  from { opacity: 0; transform: translateY(8rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.home-page--dark .home-organize-hint {
+  border-color: #42765b;
+  background: #233129;
+
+  .home-organize-hint__title { color: #edf5ef; }
+  .home-organize-hint__desc { color: #c3d2c8; }
+  .home-organize-hint__ok { color: #7fd6ad; }
 }
 
 .date-selector-section { margin: 0 0 20rpx; }
@@ -7264,5 +7333,9 @@ button.poster-share-channel--btn {
   .wellness-macro__target { color: #aec0b3 !important; }
   .home-layout-toolbar__edit { color: #aec0b3; }
 }
+
+// 保质期在首页只当提醒看，每条压矮，全部模块打开时才和其他卡片的体量对得上。
+.expiry-item { gap: 14rpx; padding: 10rpx 12rpx; }
+.expiry-media-wrap { width: 72rpx; height: 72rpx; }
 /* Daily plans stay inside the original calorie/macro panel. */
 .wellness-plan-undo { position: fixed; z-index: 1550; left: 28rpx; right: 28rpx; bottom: calc(150rpx + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 24rpx; padding: 24rpx 30rpx; border-radius: 24rpx; background: #274b39; color: #fff; box-shadow: 0 8rpx 30rpx #17362533; font-size: 25rpx; > text:first-child { flex: 1; } button { background: transparent; padding: 4rpx; margin: 0; color: #d2edbf; font-size: 25rpx; line-height: 1.5; &::after { border: none; } } }

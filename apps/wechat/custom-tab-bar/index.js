@@ -71,10 +71,11 @@ Component({
         pagePath: '/pages/index/index', 
         text: '首页'
       },
-      { 
-        id: 'stats',
-        pagePath: '/pages/stats/index', 
-        text: '分析'
+      {
+        // 伙伴替换了原来的「分析」格：一屏看完今天；完整分析 packageStats/pages/stats/index 从伙伴页进去，是二级页。
+        id: 'pet',
+        pagePath: '/pages/pet/index',
+        text: '伙伴'
       },
       { 
         id: 'record',
@@ -323,11 +324,14 @@ Component({
           const homePosterModalOpen = readStorageFlag('home_poster_modal_visible')
           const homeNutritionTargetOpen = readStorageFlag('home_nutrition_target_visible')
           const statsRiskDetailOpen = readStorageFlag('stats_risk_detail_visible')
+          const onboardingWelcomeOpen = readStorageFlag('onboarding_welcome_visible')
+          const petFocusSheetOpen = readStorageFlag('pet_focus_sheet_visible')
 
           const shouldHide =
             (currentPath === '/pages/community/index' && (communityCommentOpen || communityFilterDrawerOpen)) ||
-            (currentPath === '/pages/index/index' && (homePosterModalOpen || homeNutritionTargetOpen)) ||
-            (currentPath === '/pages/stats/index' && statsRiskDetailOpen)
+            (currentPath === '/pages/index/index' && (homePosterModalOpen || homeNutritionTargetOpen || onboardingWelcomeOpen)) ||
+            (currentPath === '/packageStats/pages/stats/index' && statsRiskDetailOpen) ||
+            (currentPath === '/pages/pet/index' && petFocusSheetOpen)
 
           if (shouldHide !== this.data.hidden) {
             this.setData({ hidden: shouldHide })

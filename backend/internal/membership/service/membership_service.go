@@ -2005,6 +2005,15 @@ func (s *MembershipService) AwardStandardFoodContribution(ctx context.Context, u
 	})
 }
 
+// AwardResearchWeightSample pays the credits a reviewer chose for one approved
+// weighed benchmark sample; the sample ID makes a repeated approval a no-op.
+func (s *MembershipService) AwardResearchWeightSample(ctx context.Context, userID, sampleID string, credits int, meta map[string]any) (map[string]any, error) {
+	return s.awardRewardTask(ctx, rewardTaskAwardInput{
+		UserID: userID, TaskType: "research_weight_sample", RewardCredits: credits,
+		DailyMaxEvents: 0, SourceID: sampleID, Meta: meta,
+	})
+}
+
 type rewardTaskAwardInput struct {
 	UserID           string
 	TaskType         string
@@ -2199,10 +2208,6 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	} else if mode == "strict_web_search" {
 		cost = creditCostPrecisionFoodAnalysis
 		analysisLabel = "联网精准分析"
-	} else if mode == "fast" {
-		analysisLabel = "快速分析"
-	} else if mode == "fast_web_search" {
-		analysisLabel = "快速联网分析"
 	} else if mode == "standard_web_search" {
 		analysisLabel = "联网分析"
 	} else if mode == "standard_packaged_experiment" {
@@ -3389,11 +3394,8 @@ func normalizeFoodExecutionMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "lite", "lightweight":
 		return "lite"
-	case "fast", "qwen_fast", "qwen-fast", "quick":
-		return "fast"
-	case "fast_web_search", "fast-web-search", "qwen_fast_web_search", "qwen-fast-web-search", "quick_web_search":
-		return "fast_web_search"
-	case "standard_web_search", "web_search", "standard-web-search":
+	case "fast_web_search", "fast-web-search", "qwen_fast_web_search", "qwen-fast-web-search", "quick_web_search",
+		"standard_web_search", "web_search", "standard-web-search":
 		return "standard_web_search"
 	case "standard_packaged_experiment", "packaged_experiment", "standard-packaged-experiment":
 		return "standard_packaged_experiment"

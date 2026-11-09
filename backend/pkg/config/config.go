@@ -45,6 +45,7 @@ type Config struct {
 	AIUsagePricing AIUsagePricingConfig `mapstructure:"ai_usage_pricing"`
 	Apollo         ApolloConfig         `mapstructure:"apollo"`
 	CanteenCapture CanteenCaptureConfig `mapstructure:"canteen_capture"`
+	ResearchWeight ResearchWeightConfig `mapstructure:"research_weight"`
 	Promoter       PromoterConfig       `mapstructure:"promoter"`
 	WechatTransfer WechatTransferConfig `mapstructure:"wechat_transfer"`
 }
@@ -150,6 +151,7 @@ type ExternalConfig struct {
 	OpenLuxPrecisionGeminiPercent int                 `mapstructure:"openlux_precision_gemini_traffic_percent"`
 	A6APIKey                      string              `mapstructure:"a6_api_key"`
 	A6BaseURL                     string              `mapstructure:"a6_base_url"`
+	WanjieRelayEnabled            bool                `mapstructure:"wanjie_relay_enabled"`
 	VisionRouting                 VisionRoutingConfig `mapstructure:"vision_routing"`
 	LLMProvider                   string              `mapstructure:"llm_provider"`
 	DeepSeekAPIKey                string              `mapstructure:"deepseek_api_key"`
@@ -171,7 +173,9 @@ type ExternalConfig struct {
 	NutritionEmbeddingDimensions  int                 `mapstructure:"nutrition_embedding_dimensions"`
 }
 
-// VisionRoutingConfig controls channel scheduling, without changing product models.
+// VisionRoutingConfig controls channel scheduling. Only OrdinaryImageModel
+// changes a product model: the Gemini model ordinary photos use on the relay
+// channels.
 type VisionRoutingConfig struct {
 	BalancedRoutingEnabled bool     `mapstructure:"balanced_routing_enabled"`
 	ResponseWaitSeconds    int      `mapstructure:"response_wait_seconds"`
@@ -188,6 +192,11 @@ type VisionRoutingConfig struct {
 	CircuitFailures        int      `mapstructure:"circuit_failures"`
 	CircuitCooldownSeconds int      `mapstructure:"circuit_cooldown_seconds"`
 	UncertainReviewEnabled bool     `mapstructure:"uncertain_review_enabled"`
+	OrdinaryImageModel     string   `mapstructure:"ordinary_image_model"`
+	// OrdinaryHedgeSeconds fixes how long an ordinary photo waits for the lead
+	// channel before a second channel starts; 0 keeps the adaptive delay. At
+	// response_wait_seconds or more the second channel runs only on failure.
+	OrdinaryHedgeSeconds int `mapstructure:"ordinary_hedge_seconds"`
 }
 
 type AppAuthConfig struct {
@@ -302,6 +311,15 @@ type CanteenCaptureConfig struct {
 	MembershipOptions   []CanteenCaptureMembershipOption `mapstructure:"membership_options"`
 }
 
+// ResearchWeightConfig switches on automatic scale reading and review of
+// weighed benchmark samples. It stays off by default and only takes effect
+// when app.env is production, because local development shares the
+// production database: a laptop must never start reviewing real
+// contributors' samples.
+type ResearchWeightConfig struct {
+	AutoReviewEnabled bool `mapstructure:"auto_review_enabled"`
+}
+
 // PromoterConfig sets the promoter commission rules. The feature stays off
 // until Enabled is set; zero values fall back to the defaults documented in
 // docs/design/promoter-commission-withdrawal-2026-10-26.md.
@@ -312,10 +330,14 @@ type PromoterConfig struct {
 	BindingValidDays int    `mapstructure:"binding_valid_days"`
 	BindWindowHours  int    `mapstructure:"bind_window_hours"`
 	AgreementVersion string `mapstructure:"agreement_version"`
-	SyncIntervalSecs int    `mapstructure:"sync_interval_seconds"`
-	WithdrawMinCents int64  `mapstructure:"withdraw_min_cents"`
-	WithdrawMaxCents int64  `mapstructure:"withdraw_max_cents"`
-	WithdrawPerDay   int    `mapstructure:"withdraw_daily_limit"`
+	// ManualReview holds new applications for an admin to approve. Off, an
+	// application opens the promoter account at once and the real name is
+	// checked when the first withdrawal is reviewed.
+	ManualReview     bool  `mapstructure:"manual_review"`
+	SyncIntervalSecs int   `mapstructure:"sync_interval_seconds"`
+	WithdrawMinCents int64 `mapstructure:"withdraw_min_cents"`
+	WithdrawMaxCents int64 `mapstructure:"withdraw_max_cents"`
+	WithdrawPerDay   int   `mapstructure:"withdraw_daily_limit"`
 }
 
 // WechatTransferConfig switches on WeChat Pay merchant transfers (商家转账)
@@ -684,6 +706,9 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileV.IsSet("external.a6_base_url") {
 		v.Set("external.a6_base_url", fileCfg.External.A6BaseURL)
+	}
+	if fileV.IsSet("external.wanjie_relay_enabled") {
+		v.Set("external.wanjie_relay_enabled", fileCfg.External.WanjieRelayEnabled)
 	}
 	for _, key := range fileV.AllKeys() {
 		if strings.HasPrefix(key, "external.vision_routing.") {
@@ -1223,6 +1248,7 @@ var cloudConfigKeyAliases = map[string]string{
 	"OPENLUX_BASE_URL":                         "external.openlux_base_url",
 	"A6_API_KEY":                               "external.a6_api_key",
 	"A6_BASE_URL":                              "external.a6_base_url",
+	"WANJIE_RELAY_ENABLED":                     "external.wanjie_relay_enabled",
 	"OPENLUX_ORDINARY_GEMINI_TRAFFIC_PERCENT":  "external.openlux_ordinary_gemini_traffic_percent",
 	"OPENLUX_PRECISION_GEMINI_TRAFFIC_PERCENT": "external.openlux_precision_gemini_traffic_percent",
 	"LLM_PROVIDER":                             "external.llm_provider",
@@ -1672,6 +1698,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.qwen38_precision_traffic_percent", 20)
 	v.SetDefault("external.openlux_base_url", "https://api.openlux.ai/v1")
 	v.SetDefault("external.a6_base_url", DefaultA6BaseURL)
+	v.SetDefault("external.wanjie_relay_enabled", true)
 	v.SetDefault("external.vision_routing.balanced_routing_enabled", true)
 	v.SetDefault("external.vision_routing.response_wait_seconds", 45)
 	v.SetDefault("external.vision_routing.a6_shadow_percent", 10)
@@ -1687,6 +1714,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.vision_routing.circuit_failures", 3)
 	v.SetDefault("external.vision_routing.circuit_cooldown_seconds", 60)
 	v.SetDefault("external.vision_routing.uncertain_review_enabled", false)
+	v.SetDefault("external.vision_routing.ordinary_image_model", "gemini-3-flash-preview")
+	v.SetDefault("external.vision_routing.ordinary_hedge_seconds", 0)
 	v.SetDefault("external.openlux_ordinary_gemini_traffic_percent", 50)
 	v.SetDefault("external.openlux_precision_gemini_traffic_percent", 50)
 	v.SetDefault("external.nutrition_embedding_base_url", "https://yunwu.ai/v1")

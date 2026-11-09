@@ -11,17 +11,20 @@
 }
 
 .mode-link {
+  flex-shrink: 0;
   font-size: 22rpx;
   color: #00bc7d;
   font-weight: 600;
+  white-space: nowrap;
   padding: 4rpx 10rpx;
 }
 
 .mode-switch-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex-shrink: 0;
   gap: 10rpx;
-  width: 430rpx;
+  width: 290rpx;
 }
 
 .mode-switch-item {
@@ -66,55 +69,9 @@
   line-height: 1.5;
 }
 
-.analysis-engine-section {
-  padding: 14rpx 20rpx 16rpx;
-  border-top: 1rpx solid rgb(0 0 0 / 3%);
-}
-
-.analysis-engine-header {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  margin-bottom: 12rpx;
-}
-
-.analysis-engine-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10rpx;
-}
-
-.analysis-engine-option {
-  min-width: 0;
-  padding: 12rpx 10rpx;
-  border: 2rpx solid #e2e8f0;
-  border-radius: 14rpx;
-  background: #f8fafc;
-  box-sizing: border-box;
-
-  &.active {
-    border-color: #00bc7d;
-    background: rgb(0 188 125 / 8%);
-  }
-}
-
-.analysis-engine-option__label,
-.analysis-engine-option__description {
-  display: block;
-}
-
-.analysis-engine-option__label {
-  color: #1f2937;
-  font-size: 22rpx;
-  line-height: 30rpx;
-  font-weight: 700;
-}
-
-.analysis-engine-option__description {
-  margin-top: 4rpx;
-  color: #64748b;
-  font-size: 18rpx;
-  line-height: 26rpx;
+.analysis-options-row {
+  border-top: none;
+  padding-top: 0;
 }
 
 .analysis-options-row {
@@ -690,10 +647,6 @@
 
     /* Initial padding-bottom: 100% from .grid-item is kept, ensuring 1:1 */
   }
-
-  &--multiview {
-    border-color: #00bc7d;
-  }
 }
 
 /* Re-implementing grid item content positioning */
@@ -726,23 +679,6 @@
   transform: translate(-50%, -50%);
   font-size: 24rpx;
   color: #9ca3af;
-}
-
-.image-batch-badge {
-  position: absolute;
-  top: 8rpx;
-  right: 8rpx;
-  background: rgb(0 188 125 / 90%);
-  border-radius: 12rpx;
-  padding: 4rpx 12rpx;
-  z-index: 10;
-
-  .image-batch-badge-text {
-    font-size: 22rpx;
-    color: #fff;
-    font-weight: 600;
-    line-height: 1.2;
-  }
 }
 
 .remove-btn {
@@ -858,6 +794,10 @@
 }
 
 .meal-label {
+  // display/margin used to leak in from packageMeal/common.scss while it sat in the global common.wxss;
+  // kept here so the meal picker looks the same now that those styles stay in packageMeal.
+  display: block;
+  margin: 26rpx 0 12rpx;
   font-size: 26rpx;
   color: #4b5563;
   font-weight: 500;
@@ -936,6 +876,11 @@
   gap: 12rpx;
   margin-bottom: 8rpx;
   position: relative;
+}
+
+.section-optional {
+  font-size: 23rpx;
+  color: #94a3b8;
 }
 
 .section-title {
@@ -1116,62 +1061,16 @@
   .multiview-compact-left {
     display: flex;
     align-items: center;
-    gap: 12rpx;
+    gap: 8rpx;
   }
 
   .multiview-compact-title {
+    flex-shrink: 0;
+    white-space: nowrap;
     font-size: 24rpx;
     font-weight: 600;
     color: #374151;
   }
-
-  .multiview-compact-hint {
-    font-size: 20rpx;
-    color: #94a3b8;
-    line-height: 1.4;
-  }
-}
-
-
-
-// 与系统 Switch 视觉接近的纯 View 开关（不依赖 components/Switch，避免小程序端 react 解析异常）
-.multiview-toggle {
-  position: relative;
-  flex-shrink: 0;
-  width: 88rpx;
-  height: 48rpx;
-  border-radius: 999rpx;
-  background: #e5e7eb;
-  box-sizing: border-box;
-  transition: background 0.2s ease;
-
-  &--on {
-    background: #00bc7d;
-  }
-
-  &--disabled {
-    background: #e5e7eb;
-  }
-}
-
-.multiview-toggle-knob {
-  position: absolute;
-  top: 4rpx;
-  left: 4rpx;
-  width: 40rpx;
-  height: 40rpx;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 12%);
-  transition: transform 0.2s ease;
-}
-
-.multiview-toggle--on .multiview-toggle-knob {
-  transform: translateX(40rpx);
-}
-
-.multiview-toggle--disabled {
-  opacity: 0.45;
 }
 
 // 帮助图标
@@ -1408,19 +1307,6 @@
   .analyze-page .history-link:active {
     background: #1a2e25;
     box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 30%);
-  }
-
-  .analyze-page .multiview-toggle {
-    background: #2d3634;
-  }
-
-  .analyze-page .multiview-toggle--on {
-    background: #4a9d7d;
-  }
-
-  .analyze-page .multiview-toggle-knob {
-    background: #edf5f1;
-    box-shadow: 0 2rpx 10rpx rgb(0 0 0 / 20%);
   }
 
   .analyze-page .precision-session-tip {

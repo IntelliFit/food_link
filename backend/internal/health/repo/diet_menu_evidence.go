@@ -22,15 +22,18 @@ func (r *StatsRepo) enrichDietMenuEvidence(ctx context.Context, candidates []dom
 		AvailableWeekdaysJSON string
 		AvailabilityNote      string
 		AvailabilityStatus    string
+		OpeningHours          string
 		PriceType             string
 		PriceText             string
 		PortionDescription    string
 	}
 	if err := r.db.WithContext(ctx).Table("public_food_library p").
 		Joins("LEFT JOIN campus_food_catalog_items c ON c.id = p.id").
+		Joins("LEFT JOIN school_canteens sc ON sc.id = p.canteen_id").
 		Select(`p.id, COALESCE(c.meal_periods::text,'[]') AS meal_periods_json,
 			COALESCE(c.available_weekdays::text,'[]') AS available_weekdays_json, COALESCE(c.availability_note,'') AS availability_note,
 			CASE WHEN p.availability_status IN ('temporarily_unavailable','discontinued') THEN p.availability_status ELSE COALESCE(c.availability_status,p.availability_status,'unknown') END AS availability_status,
+			COALESCE(sc.opening_hours_raw,'') AS opening_hours,
 			COALESCE(c.price_type,p.price_type,'unknown') AS price_type, COALESCE(c.price_text,'') AS price_text,
 			COALESCE(NULLIF(c.portion_description,''),p.portion_description,'') AS portion_description`).
 		Where("p.id IN ? AND p.status = 'published'", ids).Scan(&rows).Error; err != nil {
@@ -46,13 +49,16 @@ func (r *StatsRepo) enrichDietMenuEvidence(ctx context.Context, candidates []dom
 			continue
 		}
 		c := &candidates[i]
-		if err := json.Unmarshal([]byte(row.MealPeriodsJSON), &c.MealPeriods); err != nil {
+		var periods []string
+		if err := json.Unmarshal([]byte(row.MealPeriodsJSON), &periods); err != nil {
 			return err
 		}
+		// Collectors wrote both "lunch" and "午餐"; "unknown" is no period at all.
+		c.MealPeriods = domain.NormalizeMealPeriods(periods)
 		if err := json.Unmarshal([]byte(row.AvailableWeekdaysJSON), &c.AvailableWeekdays); err != nil {
 			return err
 		}
-		c.AvailabilityNote = row.AvailabilityNote
+		c.AvailabilityNote, c.OpeningHours = row.AvailabilityNote, row.OpeningHours
 		c.AvailabilityStatus, c.PriceType, c.PriceText, c.PortionDescription = row.AvailabilityStatus, row.PriceType, row.PriceText, row.PortionDescription
 	}
 	return nil

@@ -26,8 +26,6 @@ import (
 const (
 	defaultExecutionMode      = "standard"
 	standardWebSearchMode     = "standard_web_search"
-	fastExecutionMode         = "fast"
-	fastWebSearchMode         = "fast_web_search"
 	validExecutionMode        = "strict"
 	strictWebSearchMode       = "strict_web_search"
 	experimentalExecutionMode = "experimental"
@@ -91,8 +89,34 @@ type UpdateProfileInput struct {
 	Telephone             *string `json:"telephone"`
 	Searchable            *bool   `json:"searchable"`
 	PublicRecords         *bool   `json:"public_records"`
+	FriendsCanViewRecords *bool   `json:"friends_can_view_records"`
 	PublicFavoriteRecipes *bool   `json:"public_favorite_recipes"`
 	Motto                 *string `json:"motto"`
+}
+
+// applyRecordVisibilityUpdates keeps the two record switches consistent: strangers
+// never see more than friends, so opening to strangers also opens to friends and
+// closing to friends also closes to strangers. Closing wins if a request does both.
+func applyRecordVisibilityUpdates(updates map[string]any, input UpdateProfileInput) {
+	publicRecords := input.PublicRecords
+	if input.FriendsCanViewRecords != nil {
+		updates["friends_can_view_records"] = *input.FriendsCanViewRecords
+		if !*input.FriendsCanViewRecords {
+			closed := false
+			publicRecords = &closed
+		}
+	}
+	if publicRecords == nil {
+		return
+	}
+	updates["public_records"] = *publicRecords
+	updates["public_records_reconfirm_pending"] = false
+	if *publicRecords {
+		updates["public_records_consented_at"] = time.Now().UTC()
+		updates["friends_can_view_records"] = true
+	} else {
+		updates["public_records_consented_at"] = nil
+	}
 }
 
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, input UpdateProfileInput) (map[string]any, error) {
@@ -124,9 +148,7 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	if input.Searchable != nil {
 		updates["searchable"] = *input.Searchable
 	}
-	if input.PublicRecords != nil {
-		updates["public_records"] = *input.PublicRecords
-	}
+	applyRecordVisibilityUpdates(updates, input)
 	if input.PublicFavoriteRecipes != nil {
 		updates["public_favorite_recipes"] = *input.PublicFavoriteRecipes
 	}
@@ -769,38 +791,40 @@ func buildProfileResponse(user *repo.User) map[string]any {
 func buildProfileResponseWithStorage(user *repo.User, storageClient *storage.Client) map[string]any {
 	onboardingStatus := resolveOnboardingStatus(user)
 	return map[string]any{
-		"id":                      user.ID,
-		"openid":                  user.OpenID,
-		"unionid":                 user.UnionID,
-		"username":                user.Username,
-		"has_password":            user.PasswordHash != nil && strings.TrimSpace(*user.PasswordHash) != "",
-		"password_set_at":         user.PasswordSetAt,
-		"nickname":                user.Nickname,
-		"avatar":                  user.Avatar,
-		"telephone":               user.Telephone,
-		"create_time":             user.CreatedAt,
-		"height":                  user.Height,
-		"weight":                  user.Weight,
-		"birthday":                user.Birthday,
-		"gender":                  user.Gender,
-		"activity_level":          user.ActivityLevel,
-		"health_condition":        normalizeHealthConditionResponse(user.HealthCondition, storageClient),
-		"bmr":                     user.BMR,
-		"tdee":                    user.TDEE,
-		"onboarding_completed":    onboardingStatus != onboardingStatusPending,
-		"onboarding_status":       onboardingStatus,
-		"onboarding_draft_step":   user.OnboardingDraftStep,
-		"diet_goal":               user.DietGoal,
-		"execution_mode":          normalizeExecutionMode(user.ExecutionMode),
-		"mode_set_by":             user.ModeSetBy,
-		"mode_set_at":             user.ModeSetAt,
-		"mode_reason":             user.ModeReason,
-		"mode_commitment_days":    user.ModeCommitmentDays,
-		"mode_switch_count_30d":   user.ModeSwitchCount30d,
-		"searchable":              user.Searchable,
-		"public_records":          user.PublicRecords,
-		"public_favorite_recipes": user.PublicFavoriteRecipes,
-		"motto":                   user.Motto,
+		"id":                               user.ID,
+		"openid":                           user.OpenID,
+		"unionid":                          user.UnionID,
+		"username":                         user.Username,
+		"has_password":                     user.PasswordHash != nil && strings.TrimSpace(*user.PasswordHash) != "",
+		"password_set_at":                  user.PasswordSetAt,
+		"nickname":                         user.Nickname,
+		"avatar":                           user.Avatar,
+		"telephone":                        user.Telephone,
+		"create_time":                      user.CreatedAt,
+		"height":                           user.Height,
+		"weight":                           user.Weight,
+		"birthday":                         user.Birthday,
+		"gender":                           user.Gender,
+		"activity_level":                   user.ActivityLevel,
+		"health_condition":                 normalizeHealthConditionResponse(user.HealthCondition, storageClient),
+		"bmr":                              user.BMR,
+		"tdee":                             user.TDEE,
+		"onboarding_completed":             onboardingStatus != onboardingStatusPending,
+		"onboarding_status":                onboardingStatus,
+		"onboarding_draft_step":            user.OnboardingDraftStep,
+		"diet_goal":                        user.DietGoal,
+		"execution_mode":                   normalizeExecutionMode(user.ExecutionMode),
+		"mode_set_by":                      user.ModeSetBy,
+		"mode_set_at":                      user.ModeSetAt,
+		"mode_reason":                      user.ModeReason,
+		"mode_commitment_days":             user.ModeCommitmentDays,
+		"mode_switch_count_30d":            user.ModeSwitchCount30d,
+		"searchable":                       user.Searchable,
+		"public_records":                   user.PublicRecords,
+		"public_records_reconfirm_pending": user.PublicRecordsReconfirmPending,
+		"friends_can_view_records":         user.FriendsCanViewRecords,
+		"public_favorite_recipes":          user.PublicFavoriteRecipes,
+		"motto":                            user.Motto,
 	}
 }
 
@@ -1110,7 +1134,10 @@ func normalizeExecutionMode(mode *string) string {
 		return defaultExecutionMode
 	}
 	m := *mode
-	if m == standardWebSearchMode || m == fastExecutionMode || m == fastWebSearchMode || m == validExecutionMode || m == strictWebSearchMode || m == experimentalExecutionMode || m == gemini35FlashMode || m == gemini35GroupedMode {
+	if m == "fast_web_search" {
+		return standardWebSearchMode
+	}
+	if m == standardWebSearchMode || m == validExecutionMode || m == strictWebSearchMode || m == experimentalExecutionMode || m == gemini35FlashMode || m == gemini35GroupedMode {
 		return m
 	}
 	return defaultExecutionMode

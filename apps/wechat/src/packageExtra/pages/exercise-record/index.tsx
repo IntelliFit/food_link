@@ -27,6 +27,7 @@ import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { COMMUNITY_FEED_CHANGED_EVENT, HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { markRecordVisibilityNoticeDue, remindRecordVisibilityOnce } from '../../../utils/feed-share'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -450,6 +451,8 @@ export default function ExerciseRecordPage() {
         distance_km: precisionEnabled && precisionDistance ? distanceKm : undefined,
         exercise_breakdown: precisionEnabled ? precisionBreakdown : undefined,
       })
+      markRecordVisibilityNoticeDue()
+      void remindRecordVisibilityOnce()
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       const createdAt = new Date().toISOString()
       setInputValue('')
@@ -739,7 +742,7 @@ export default function ExerciseRecordPage() {
       </View>
 
       <ScrollView
-        className={`records-scroll ${listEmpty ? 'records-scroll--empty' : ''}`}
+        className={`records-scroll${listEmpty ? ' records-scroll--empty' : ''}`}
         scrollY
         scrollWithAnimation
         scrollTop={99999}

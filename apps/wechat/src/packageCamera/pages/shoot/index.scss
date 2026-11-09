@@ -1,0 +1,198 @@
+.food-camera {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32rpx 0 calc(32rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: #000;
+  overflow: hidden;
+}
+
+// 取景框：竖拍 3:4、横拍 4:3，屏幕剩余部分留黑，照片不铺满屏幕
+.food-camera__stage {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 24rpx;
+  background: #111827;
+
+  &--portrait {
+    width: 690rpx;
+    height: 920rpx;
+  }
+
+  &--landscape {
+    width: 690rpx;
+    height: 518rpx;
+    margin: 201rpx 0;
+  }
+}
+
+.food-camera__preview {
+  width: 100%;
+  height: 100%;
+}
+
+.food-camera__corner {
+  position: absolute;
+  width: 56rpx;
+  height: 56rpx;
+  border: 0 solid rgb(255 255 255 / 90%);
+  pointer-events: none;
+
+  &--tl {
+    top: 20rpx;
+    left: 20rpx;
+    border-top-width: 6rpx;
+    border-left-width: 6rpx;
+    border-top-left-radius: 16rpx;
+  }
+
+  &--tr {
+    top: 20rpx;
+    right: 20rpx;
+    border-top-width: 6rpx;
+    border-right-width: 6rpx;
+    border-top-right-radius: 16rpx;
+  }
+
+  &--bl {
+    bottom: 20rpx;
+    left: 20rpx;
+    border-bottom-width: 6rpx;
+    border-left-width: 6rpx;
+    border-bottom-left-radius: 16rpx;
+  }
+
+  &--br {
+    right: 20rpx;
+    bottom: 20rpx;
+    border-right-width: 6rpx;
+    border-bottom-width: 6rpx;
+    border-bottom-right-radius: 16rpx;
+  }
+}
+
+.food-camera__unavailable {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20rpx;
+  padding: 0 64rpx;
+  text-align: center;
+}
+
+.food-camera__unavailable-title {
+  color: #fff;
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.food-camera__unavailable-text {
+  color: rgb(255 255 255 / 70%);
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.food-camera__unavailable-actions {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 12rpx;
+}
+
+.food-camera__pill {
+  padding: 16rpx 36rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 14%);
+  color: #fff;
+  font-size: 26rpx;
+}
+
+.food-camera__hint {
+  margin-top: 24rpx;
+  color: rgb(255 255 255 / 72%);
+  font-size: 24rpx;
+}
+
+.food-camera__ratio {
+  display: flex;
+  margin-top: 24rpx;
+  padding: 6rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 12%);
+}
+
+.food-camera__ratio-option {
+  min-width: 150rpx;
+  padding: 12rpx 24rpx;
+  border-radius: 999rpx;
+  color: rgb(255 255 255 / 72%);
+  font-size: 26rpx;
+  text-align: center;
+
+  &.is-active {
+    background: #fff;
+    color: #111827;
+    font-weight: 600;
+  }
+}
+
+.food-camera__controls {
+  width: 100%;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+}
+
+.food-camera__side-button {
+  width: 120rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+
+  &--placeholder {
+    visibility: hidden;
+  }
+}
+
+.food-camera__side-label {
+  color: #fff;
+  font-size: 22rpx;
+}
+
+.food-camera__shutter {
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: 50%;
+  border: 8rpx solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+
+  &.is-disabled {
+    opacity: 0.45;
+  }
+}
+
+.food-camera__shutter-inner {
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 50%;
+  background: #00bc7d;
+}
+
+// 只用于裁切导出，不显示
+.food-camera__crop-canvas {
+  position: fixed;
+  left: -10000rpx;
+  top: 0;
+  width: 20rpx;
+  height: 20rpx;
+}

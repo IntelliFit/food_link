@@ -14,6 +14,7 @@ import (
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/llmrelay"
 	"food_link/backend/pkg/storage"
 )
 
@@ -40,7 +41,7 @@ func NewOCRService(cfg *config.Config, storageClient ...*storage.Client) *OCRSer
 	if len(storageClient) > 0 {
 		client = storageClient[0]
 	}
-	return &OCRService{cfg: cfg, storage: client, client: http.DefaultClient}
+	return &OCRService{cfg: cfg, storage: client, client: &http.Client{Transport: llmrelay.Wrap(nil)}}
 }
 
 func (s *OCRService) ExtractFromBase64(ctx context.Context, base64Image string) (map[string]any, error) {

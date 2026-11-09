@@ -54,7 +54,7 @@ import {
   MIN_ANALYZE_VIDEO_DURATION_MS,
 } from '../utils/analyzeVideo'
 type AnalyzeRoute = RouteProp<RootStackParamList, 'Analyze'>
-type AnalyzeBaseMode = 'fast' | 'standard' | 'strict'
+type AnalyzeBaseMode = 'standard' | 'strict'
 type PrecisionCaptureMode = 'photos' | 'video'
 type AnalyzeImageAsset = ImagePicker.ImagePickerAsset
 type HelpSheetState = { title: string; content: string } | null
@@ -158,7 +158,6 @@ const ANALYSIS_ENGINE_OPTIONS: Array<{ value: AnalysisEngine; label: string; des
 
 
 const MODE_OPTIONS: Array<{ value: AnalyzeBaseMode; label: string; desc: string }> = [
-  { value: 'fast', label: '快速', desc: '更快出结果，适合先记录下来。' },
   { value: 'standard', label: '普通', desc: '日常推荐，兼顾速度和准确度。' },
   { value: 'strict', label: '精准', desc: '更细估重，适合复杂餐盘。' },
 ]
@@ -208,7 +207,6 @@ const resolveExecutionModeFromOptions = (
   webSearchEnabled: boolean,
   separateFoodEstimateEnabled: boolean,
 ): ExecutionMode => {
-  if (baseMode === 'fast') return webSearchEnabled ? 'fast_web_search' : 'fast'
   if (baseMode === 'standard') return webSearchEnabled ? 'standard_web_search' : 'standard'
   if (webSearchEnabled) return 'strict_web_search'
   if (separateFoodEstimateEnabled) return 'strict_separate'
@@ -1504,7 +1502,6 @@ function normalizeAvailableExecutionMode(value: unknown): ExecutionMode {
 }
 
 function resolveAnalyzeBaseMode(mode: ExecutionMode): AnalyzeBaseMode {
-  if (mode === 'fast' || mode === 'fast_web_search') return 'fast'
   if (isPrecisionExecutionMode(mode)) return 'strict'
   return 'standard'
 }

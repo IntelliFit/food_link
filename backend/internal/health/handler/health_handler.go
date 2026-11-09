@@ -537,6 +537,7 @@ func (h *HealthHandler) CreateExerciseLog(c *gin.Context) {
 		AverageHeartRate int     `json:"average_heart_rate" form:"average_heart_rate"`
 		DistanceKm       float64 `json:"distance_km" form:"distance_km"`
 		Breakdown        string  `json:"exercise_breakdown" form:"exercise_breakdown"`
+		ShareToFeed      *bool   `json:"share_to_feed" form:"share_to_feed"`
 	}
 	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/x-www-form-urlencoded") {
 		if err := c.ShouldBind(&body); err != nil {
@@ -570,6 +571,7 @@ func (h *HealthHandler) CreateExerciseLog(c *gin.Context) {
 			AverageHeartRate: body.AverageHeartRate,
 			DistanceKm:       body.DistanceKm,
 			Breakdown:        body.Breakdown,
+			ShareToFeed:      body.ShareToFeed,
 		})
 	} else if svc, ok := h.exercise.(ExerciseServiceWithRange); ok {
 		result, err = svc.CreateLogWithDate(c.Request.Context(), userID, body.ExerciseDesc, body.Date, body.ImageURL)

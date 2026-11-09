@@ -65,6 +65,24 @@ it('requires agreeing to the rules before applying, then shows the review state'
   expect(screen.queryByText('提交申请')).toBeNull()
 })
 
+it('opens the account at once when the backend skips manual review', async () => {
+  ;(getPromoterMe as jest.Mock).mockResolvedValue({ ...base, manual_review: false })
+  ;(applyPromoter as jest.Mock).mockResolvedValue({
+    ...base, manual_review: false, status: 'active', promo_code: 'AB12CD34', summary: summary({ available_cents: 0 }),
+  })
+  ;(getPromoterCommissions as jest.Mock).mockResolvedValue({ total: 0, items: [] })
+  ;(getPromoterWithdrawals as jest.Mock).mockResolvedValue({ total: 0, items: [] })
+  render(<PromoterCenterPage />)
+
+  expect(await screen.findByText('开通推广员')).toBeTruthy()
+  expect(screen.queryByPlaceholderText(/你打算在哪里推广/)).toBeNull()
+  fireEvent.click(screen.getByText(/我已阅读并同意以上推广规则/))
+  fireEvent.click(screen.getByText('立即开通'))
+  await waitFor(() => expect(applyPromoter).toHaveBeenCalledWith('v1', ''))
+  expect(await screen.findByText('AB12CD34')).toBeTruthy()
+  expect(Taro.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: '已开通' }))
+})
+
 it('shows the promo code, balances and commission list once approved', async () => {
   ;(getPromoterMe as jest.Mock).mockResolvedValue({
     ...base, status: 'active', promo_code: 'AB12CD34', summary: summary(),
@@ -81,6 +99,8 @@ it('shows the promo code, balances and commission list once approved', async () 
   expect(screen.getByText('¥1.98')).toBeTruthy()
   expect(screen.getByText('小** 开通会员')).toBeTruthy()
   expect(screen.getByText('分享给好友').getAttribute('data-open-type')).toBe('share')
+  expect(screen.getByText('怎么算你的推广')).toBeTruthy()
+  expect(screen.getByText(/不用填推广码/)).toBeTruthy()
   expect(getPromoterCommissions).toHaveBeenCalledWith(1, 20)
   expect(screen.queryByText('查看更多')).toBeNull()
   expect(screen.getByText('满 ¥10.00 可提现')).toBeTruthy()

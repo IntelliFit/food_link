@@ -78,7 +78,7 @@ func v3MacroFit(ctx dietDecisionContext, c DietRecommendationCandidate) float64 
 	if c.Calories <= 0 || math.IsNaN(c.Calories) || math.IsInf(c.Calories, 0) {
 		return 0
 	}
-	ratio := dietDecisionMealRatio(ctx.MealType)
+	ratio := dietDecisionPortionRatio(ctx)
 	calories := dietDecisionMealTarget(ctx.Remaining.Calories, ctx.Targets.Calories, ratio)
 	protein := dietDecisionMealTarget(ctx.Remaining.Protein, ctx.Targets.Protein, ratio)
 	carbs := dietDecisionMealTarget(ctx.Remaining.Carbs, ctx.Targets.Carbs, ratio)
@@ -121,14 +121,14 @@ func nutrientPlanEffect(ctx dietDecisionContext, c DietRecommendationCandidate, 
 	before := current.Value
 	if state.RecordedMeals == 0 {
 		e.Mode, before = "serving_share_no_day_total", 0
-		target *= dietDecisionMealRatio(ctx.MealType)
-		limit *= dietDecisionMealRatio(ctx.MealType)
+		target *= dietDecisionPortionRatio(ctx)
+		limit *= dietDecisionPortionRatio(ctx)
 	} else if current.Complete() {
 		e.Mode = "recorded_subtotal_not_complete_day"
 	} else {
 		e.Mode = "serving_share_partial_intake_no_day_total"
-		target *= dietDecisionMealRatio(ctx.MealType)
-		limit *= dietDecisionMealRatio(ctx.MealType)
+		target *= dietDecisionPortionRatio(ctx)
+		limit *= dietDecisionPortionRatio(ctx)
 	}
 	adequacyBefore := before
 	if e.Mode == "serving_share_partial_intake_no_day_total" {

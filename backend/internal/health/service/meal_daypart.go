@@ -37,7 +37,7 @@ func mealDaypartAllowed(mealType string, c DietRecommendationCandidate) bool {
 	}
 	knownPeriod, matches := false, false
 	for _, period := range c.MealPeriods {
-		if period == "breakfast" || period == "lunch" || period == "dinner" {
+		if period == "breakfast" || period == "lunch" || period == "dinner" || period == "evening_snack" {
 			knownPeriod = true
 			matches = matches || period == mealType
 		}

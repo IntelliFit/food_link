@@ -4,7 +4,7 @@ import { flushRecentConsoleLogs, installConsoleLogCapture } from './utils/consol
 installConsoleLogCapture()
 
 import { createElement, type PropsWithChildren, useEffect } from 'react'
-import Taro, { useLaunch } from '@tarojs/taro'
+import Taro, { useError, useLaunch } from '@tarojs/taro'
 import { flushRecentRequestTraces, getAccessToken } from './utils/api'
 import { extraPkgUrl } from './utils/subpackage-extra'
 import { writePendingFriendInviteCode } from './utils/pending-friend-invite'
@@ -13,9 +13,14 @@ import { PrivacyAuthorizationModal } from './components/PrivacyAuthorizationModa
 import { cleanupGeneratedUserFiles } from './utils/weapp-user-files'
 import { parseMarketingCodeFromLaunchOptions } from './utils/marketing-qr'
 import { ProductUpdatePrompt, PRODUCT_UPDATE_AUTH_EVENT } from './utils/product-updates'
+import { experiments } from './utils/experiments'
 import { bindPendingPromoCode, parsePromoCodeFromLaunchOptions, writePendingPromoCode } from './utils/promoter-api'
+import { installAppUpdateCheck } from './utils/app-update'
+import { errorText, handleClientError, recheckBlankPageAfterError } from './utils/client-error'
 
 import './app.scss'
+
+installAppUpdateCheck()
 
 // 不需要登录的页面白名单（与 getCurrentPageRoute 一致，含分包根路径）
 const PUBLIC_PAGES = new Set([
@@ -153,10 +158,14 @@ function handlePromoScene(options?: any) {
 }
 
 function App({ children }: PropsWithChildren<any>) {
+  // Taro 的页面错误边界只把渲染异常交给这个钩子，wx.onError 收不到。
+  useError((error) => handleClientError('error', error))
+
   useLaunch((options) => {
     console.log('App launched.')
     resetPreviousCommunityFeedSession()
     cleanupGeneratedUserFiles().catch(() => { /* ignore startup cleanup errors */ })
+    void experiments.refresh()
     handlePromoScene(options)
     if (!handleMarketingScene(options)) {
       handleInviteScene(options)
@@ -167,6 +176,12 @@ function App({ children }: PropsWithChildren<any>) {
   useEffect(() => {
     const productUpdates = new ProductUpdatePrompt()
     const checkProductUpdates = () => productUpdates.check()
+    // 登录/退出时先把已排队的事件发出去再重新拉分组：退出后发送的事件不带账号，
+    // 不会记到下一个登录的账号名下；登录后的拉取让服务端把匿名分组绑定到账号
+    const refreshExperiments = () => {
+      void experiments.flush().finally(() => experiments.refresh())
+    }
+    Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, refreshExperiments)
     const bindPromoAfterLogin = () => { void bindPendingPromoCode() }
     Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, checkProductUpdates)
     Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, bindPromoAfterLogin)
@@ -181,6 +196,7 @@ function App({ children }: PropsWithChildren<any>) {
     }
     const onShow = (options: any) => {
       productUpdates.show()
+      recheckBlankPageAfterError()
       console.log('[app] onAppShow, options:', options)
       handlePromoScene(options)
       if (!handleMarketingScene(options)) {
@@ -192,19 +208,22 @@ function App({ children }: PropsWithChildren<any>) {
       productUpdates.hide()
       flushRecentRequestTraces()
       flushRecentConsoleLogs()
+      void experiments.flush()
     }
     const onGlobalError = (error: unknown) => {
       console.error('[app-global-error]', {
         route: getCurrentRoute(),
         message: String(error || '').slice(0, 1200),
       })
+      handleClientError('error', error)
     }
     const onUnhandledRejection = (event: { reason?: unknown }) => {
       const reason = event?.reason
       console.error('[app-unhandled-rejection]', {
         route: getCurrentRoute(),
-        message: reason instanceof Error ? reason.message : String(reason || '').slice(0, 1200),
+        message: errorText(reason).slice(0, 1200),
       })
+      handleClientError('rejection', reason)
     }
     const onMemoryWarning = (event: { level?: number }) => {
       console.warn('[app-memory-warning]', {
@@ -221,6 +240,7 @@ function App({ children }: PropsWithChildren<any>) {
     return () => {
       productUpdates.dispose()
       Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, checkProductUpdates)
+      Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, refreshExperiments)
       Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, bindPromoAfterLogin)
       Taro.offAppShow(onShow)
       Taro.offAppHide(onHide)

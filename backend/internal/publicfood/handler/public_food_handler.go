@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -169,6 +173,7 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 		CanteenName:          c.Query("canteen_name"),
 		Floor:                c.Query("floor"),
 		WindowName:           c.Query("window_name"),
+		SpotKey:              c.Query("spot_key"),
 	}
 	if raw := c.Query("suitable_for_fat_loss"); raw != "" {
 		if v, err := strconv.ParseBool(raw); err == nil {
@@ -241,7 +246,36 @@ func (h *PublicFoodHandler) ListMapSpots(c *gin.Context) {
 		return
 	}
 	logger.Info(ctx, "公共美食地图查询完成", slog.String("user_id", userID), slog.Int("spot_count", len(spots)))
-	response.Success(c, gin.H{"spots": spots})
+	writeMapSpots(c, spots)
+}
+
+// writeMapSpots compresses here because nginx has gzip off for the API sites.
+func writeMapSpots(c *gin.Context, spots []domain.PublicFoodMapSpot) {
+	body, err := json.Marshal(gin.H{"code": 0, "message": "ok", "data": gin.H{"spots": spots}})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	const contentType = "application/json; charset=utf-8"
+	c.Header("Vary", "Accept-Encoding")
+	if !strings.Contains(c.GetHeader("Accept-Encoding"), "gzip") {
+		c.Data(http.StatusOK, contentType, body)
+		return
+	}
+	var compressed bytes.Buffer
+	writer, err := gzip.NewWriterLevel(&compressed, gzip.BestSpeed)
+	if err == nil {
+		_, err = writer.Write(body)
+	}
+	if err == nil {
+		err = writer.Close()
+	}
+	if err != nil {
+		c.Data(http.StatusOK, contentType, body)
+		return
+	}
+	c.Header("Content-Encoding", "gzip")
+	c.Data(http.StatusOK, contentType, compressed.Bytes())
 }
 
 func (h *PublicFoodHandler) Mine(c *gin.Context) {

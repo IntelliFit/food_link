@@ -23,7 +23,6 @@ import {
   Flame,
   GlassWater,
   HeartPulse,
-  LogIn,
   Scale,
   Sparkles,
   Target,
@@ -135,8 +134,8 @@ type StatsPalette = {
 }
 
 const statsLightPalette: StatsPalette = {
-  page: colors.background,
-  topWash: 'rgba(92,184,150,0.08)',
+  page: '#f6f5ed',
+  topWash: 'transparent',
   surface: '#ffffff',
   surfaceRaised: '#ffffff',
   surfaceMuted: '#f8fafc',
@@ -506,11 +505,8 @@ export function StatsScreen() {
     return (
       <View style={styles.page}>
         <View style={styles.topWash} pointerEvents="none" />
-        <View style={[styles.guestWrap, { paddingTop: Math.max(insets.top + 72, 96), paddingBottom: insets.bottom + 110 }]}>
+        <View style={[styles.guestWrap, { paddingTop: insets.top + 47, paddingBottom: insets.bottom + 110 }]}>
           <View style={styles.guestCard} accessibilityRole="summary">
-            <View style={styles.guestIcon}>
-              <LogIn size={25} color={palette.brandText} strokeWidth={2.2} />
-            </View>
             <Text style={styles.guestTitle}>登录后查看饮食分析</Text>
             <Text style={styles.guestDesc}>可先浏览首页热量与营养概览，需要账号同步时再登录</Text>
             <Pressable
@@ -1816,22 +1812,22 @@ function createStatsStyles(palette: StatsPalette, isDark: boolean) {
   },
   guestWrap: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
     justifyContent: 'flex-start',
   },
   guestCard: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 34,
-    borderRadius: 20,
+    alignItems: 'stretch',
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(92,184,150,0.2)',
+    borderColor: 'rgba(92,184,150,0.18)',
     backgroundColor: palette.surface,
     shadowColor: palette.shadow,
     shadowOpacity: 0.06,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 7 },
-    elevation: 2,
+    elevation: 0,
   },
   guestIcon: {
     width: 56,
@@ -1844,24 +1840,24 @@ function createStatsStyles(palette: StatsPalette, isDark: boolean) {
   },
   guestTitle: {
     color: palette.text,
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 16,
+    lineHeight: 23,
     fontWeight: '800',
-    textAlign: 'center',
+    textAlign: 'left',
   },
   guestDesc: {
     marginTop: 9,
     color: palette.textSecondary,
-    fontSize: 14,
+    fontSize: 13,
     lineHeight: 21,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   guestButton: {
     minWidth: 136,
-    minHeight: 48,
+    minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+    marginTop: 16,
     paddingHorizontal: 24,
     borderRadius: radius.pill,
     backgroundColor: colors.brand,

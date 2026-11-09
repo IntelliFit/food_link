@@ -59,13 +59,21 @@ export function PromoterWithdrawalsSection({ onAction }: Props) {
     }
   }
 
+  // 推广员申请即开通，实名在第一次通过提现时核实，之后不再询问。
+  function realNameCheck(item: AdminWithdrawal) {
+    return item.real_name_confirmed
+      ? {}
+      : { confirmCheckLabel: '这是对方第一次提现：已核实对方的真实姓名和联系方式（用于打款和报税）' }
+  }
+
   function approveTransfer(item: AdminWithdrawal) {
     onAction({
       title: `通过并微信转账 ${yuan(item.net_amount_cents)} 给 ${item.nickname || '推广员'}？`,
       description: '通过后立即从商户号运营账户发起商家转账，推广员在小程序提现记录里点「收款」确认后到账；24 小时不确认会自动退回余额。推广员当前状态和余额会再校验一次。',
       confirmLabel: '通过并转账',
       noteLabel: '审核备注',
-      run: ({ note }) => post(item, 'review', { approve: true, note, payout_method: 'wechat_transfer' }, '已发起微信转账'),
+      ...realNameCheck(item),
+      run: ({ note }) => post(item, 'review', { approve: true, note, payout_method: 'wechat_transfer', real_name_confirmed: true }, '已发起微信转账'),
     })
   }
 
@@ -75,7 +83,8 @@ export function PromoterWithdrawalsSection({ onAction }: Props) {
       description: '通过后请在微信支付商户平台或微信转账给对方，转完回到这里点「标记已打款」。推广员当前状态和余额会再校验一次。',
       confirmLabel: '通过',
       noteLabel: '审核备注',
-      run: ({ note }) => post(item, 'review', { approve: true, note, payout_method: 'manual' }, '已通过，等待打款'),
+      ...realNameCheck(item),
+      run: ({ note }) => post(item, 'review', { approve: true, note, payout_method: 'manual', real_name_confirmed: true }, '已通过，等待打款'),
     })
   }
 
@@ -172,6 +181,7 @@ export function PromoterWithdrawalsSection({ onAction }: Props) {
                 <TableCell>
                   <div className='font-medium'>{item.nickname || '未命名用户'}</div>
                   <div className='text-xs text-muted-foreground'>{item.promo_code} · {PROMOTER_STATUS_LABEL[item.promoter_status]} · {shortId(item.user_id)}</div>
+                  {item.real_name_confirmed ? null : <Badge variant='outline' className='mt-1'>未核实实名</Badge>}
                 </TableCell>
                 <TableCell className='text-right font-medium'>{yuan(item.amount_cents)}</TableCell>
                 <TableCell className={`text-right ${item.available_cents < 0 ? 'text-destructive' : ''}`}>{yuan(item.available_cents)}</TableCell>

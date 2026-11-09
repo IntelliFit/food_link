@@ -36,7 +36,7 @@ import {
   showUnifiedApiError,
 } from '../../../utils/api'
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
-import { ANALYSIS_ENGINE_OPTIONS, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
+import { analysisEngineLabel, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { MealRecordPosterModal } from '../../../pages/index/components/MealRecordPosterModal'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
@@ -54,9 +54,11 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { applyEnergyEdit } from '../../../utils/nutrition-edit'
 import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
+import { mealSummaryFromSavePayload, useMealImpactSheet } from '../../../components/MealImpactCard'
 import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
 import { useRecordDate } from '../../../hooks/useRecordDate'
 import RecordDateField from '../../../components/RecordDateField'
+import { clearPersistedEatingMood, readPersistedEatingMood } from '../../../utils/eating-mood'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -94,15 +96,6 @@ const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY = 'analysisHealthProfilePromptShown'
 const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 5
-const EATING_MOOD_OPTIONS = [
-  { value: 'happy', emoji: '😊', label: '开心' },
-  { value: 'calm', emoji: '😌', label: '平静' },
-  { value: 'stressed', emoji: '😣', label: '压力大' },
-  { value: 'tired', emoji: '😮‍💨', label: '疲惫' },
-  { value: 'bored', emoji: '😶', label: '无聊' },
-  { value: 'treat', emoji: '✨', label: '犒劳自己' },
-] as const
-type EatingMood = typeof EATING_MOOD_OPTIONS[number]['value']
 /** 用户在分析结果页停留超过此时间且未调整摄入比例，则视为疑似不信任识别结果 */
 const SUSPECT_DISTRUST_TIMEOUT_MS = 15000
 /** 判断当前识别会话是否已保存为饮食记录。
@@ -592,7 +585,7 @@ function ResultPage() {
   })
   const [healthAdvice, setHealthAdvice] = useState('')
   const [description, setDescription] = useState('')
-  const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
+  const [eatingMood] = useState(() => readPersistedEatingMood())
   const [pfcRatioComment, setPfcRatioComment] = useState<string | null>(null)
   const [eatingOrderAdvice, setEatingOrderAdvice] = useState<string | null>(null)
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
@@ -605,6 +598,7 @@ function ResultPage() {
   /** 当前识别会话是否已保存为饮食记录（可跳转详情，不再重复写入/发动态） */
   const [committedRecordId, setCommittedRecordId] = useState<string | null>(null)
   const [savedShareRecord, setSavedShareRecord] = useState<FoodRecord | null>(null)
+  const mealImpact = useMealImpactSheet('result')
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [analysisEngine, setAnalysisEngine] = useState(() => normalizeAnalysisEngine(
     Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY),
@@ -2057,6 +2051,7 @@ function ResultPage() {
         Taro.removeStorageSync('analyzeMealType')
         Taro.removeStorageSync('analyzeDietGoal')
         Taro.removeStorageSync('analyzeActivityTiming')
+        clearPersistedEatingMood()
 
         const sourceTaskId = recordContext.taskId || undefined
         const payload: SaveFoodRecordRequest = {
@@ -2104,7 +2099,8 @@ function ResultPage() {
           setCommittedRecordId(record.id)
           Taro.setStorageSync('analyzeTaskIsRecorded', '1')
           Taro.setStorageSync('analyzeCommittedRecordId', record.id)
-          setSavedShareRecord(record)
+          // 调试预览也走记录后反馈；接口拿不到数据就照旧弹打卡图
+          mealImpact.show(record.id, mealSummaryFromSavePayload(payload), () => setSavedShareRecord(record))
           return
         }
 
@@ -2164,12 +2160,15 @@ function ResultPage() {
             id: saveResult.id,
             record_time: `${recordDate}T${new Date().toTimeString().slice(0, 8)}`,
           }
-        if (previewRecord) {
-          setSavedShareRecord(previewRecord)
-        } else {
-          Taro.showToast({ title: '已记录，可从首页打开分享', icon: 'none' })
-          returnHomeAfterFoodRecord()
-        }
+        // 先告诉用户这一餐让今天变了什么，再照原样弹打卡图
+        mealImpact.show(saveResult.id, mealSummaryFromSavePayload(payload), () => {
+          if (previewRecord) {
+            setSavedShareRecord(previewRecord)
+          } else {
+            Taro.showToast({ title: '已记录，可从首页打开分享', icon: 'none' })
+            returnHomeAfterFoodRecord()
+          }
+        })
       } catch (e: any) {
         await showUnifiedApiError(e, '保存失败')
       } finally {
@@ -2565,6 +2564,7 @@ function ResultPage() {
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
               activity_timing: savedActivityTiming,
+              eating_mood: eatingMood || undefined,
               execution_mode: savedExecutionMode,
               analysis_engine: savedAnalysisEngine,
               suggest_ratio_enabled: readSuggestRatioPreference(),
@@ -2592,6 +2592,7 @@ function ResultPage() {
               meal_type: savedMealType,
               diet_goal: savedDietGoal,
               activity_timing: savedActivityTiming,
+              eating_mood: eatingMood || undefined,
               execution_mode: savedExecutionMode,
               suggest_ratio_enabled: readSuggestRatioPreference(),
               previousResult,
@@ -2699,7 +2700,7 @@ function ResultPage() {
               </View>
               <View className='analysis-engine-result-tag'>
                 <Text className='analysis-engine-result-tag-text'>
-                  {ANALYSIS_ENGINE_OPTIONS.find(option => option.value === analysisEngine)?.label || '营养估算'}
+                  {analysisEngineLabel(analysisEngine)}
                 </Text>
               </View>
               <Text className='execution-mode-default-link' onClick={handleDefaultModeEdit}>
@@ -3294,28 +3295,6 @@ function ResultPage() {
       {/* 底部固定栏：必须放在 scroll-view 外，避免 iOS 上 fixed 相对滚动容器失效 */}
       <View className='footer-actions'>
         {!isAnalyzeSessionCommitted() && !committedRecordId && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
-        {(taskType === 'food' || taskType === 'food_text') && !isAnalyzeSessionCommitted() && !committedRecordId && (
-          <View className='eating-mood-bar'>
-            <View className='eating-mood-heading'>
-              <Text className='eating-mood-title'>此刻心情</Text>
-              <Text className='eating-mood-hint'>可选</Text>
-            </View>
-            <ScrollView className='eating-mood-options' scrollX showScrollbar={false}>
-              <View className='eating-mood-options-inner'>
-                {EATING_MOOD_OPTIONS.map((option) => (
-                  <View
-                    key={option.value}
-                    className={`eating-mood-option ${eatingMood === option.value ? 'active' : ''}`}
-                    onClick={() => setEatingMood(current => current === option.value ? null : option.value)}
-                  >
-                    <Text className='eating-mood-emoji'>{option.emoji}</Text>
-                    <Text className='eating-mood-label'>{option.label}</Text>
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-        )}
         <View className='pba-safe-area'>
           <View className='action-grid'>
             <View
@@ -3745,6 +3724,7 @@ function ResultPage() {
           returnHomeAfterFoodRecord(0)
         }}
       />
+      {mealImpact.sheet}
     </View>
   )
 }

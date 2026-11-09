@@ -16,7 +16,7 @@ type PrivacyState = Record<PrivacyKey, boolean>
 
 const defaultPrivacy: PrivacyState = {
   searchable: true,
-  public_records: true,
+  public_records: false,
   public_favorite_recipes: true,
 }
 
@@ -29,8 +29,8 @@ const privacyItems = [
   },
   {
     key: 'public_records',
-    title: '公开我的饮食记录',
-    description: '开启后，其他用户在圈子里可以看到你的动态和饮食记录。',
+    title: '公开我的圈子动态',
+    description: '开启后，所有用户（包括未登录的访客）都能看到你同步到圈子的记录和照片，包括历史记录。关闭后只有好友能看到。',
     icon: Users,
   },
   {
@@ -77,7 +77,7 @@ export function PrivacySettingsScreen() {
       const profile = await apiClient.getUserProfile()
       setPrivacy({
         searchable: profile.searchable ?? true,
-        public_records: profile.public_records ?? true,
+        public_records: profile.public_records ?? false,
         public_favorite_recipes: profile.public_favorite_recipes ?? true,
       })
       loadedRef.current = true

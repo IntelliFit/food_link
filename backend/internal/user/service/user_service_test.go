@@ -50,6 +50,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		mode_switch_count_30d INTEGER,
 		searchable BOOLEAN,
 		public_records BOOLEAN,
+		public_records_consented_at TIMESTAMPTZ,
+		public_records_reconfirm_pending BOOLEAN NOT NULL DEFAULT FALSE,
+		friends_can_view_records BOOLEAN NOT NULL DEFAULT TRUE,
 		public_favorite_recipes BOOLEAN,
 		last_seen_analyze_history_at TIMESTAMP,
 		registration_invite_code TEXT,
@@ -193,6 +196,77 @@ func TestUserService_UpdateProfile(t *testing.T) {
 	result, err := svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{Nickname: &nickname})
 	assert.NoError(t, err)
 	assert.Equal(t, "New", result["nickname"])
+}
+
+func TestUserService_UpdateProfileRecordsPublicRecordsConsent(t *testing.T) {
+	db := setupTestDB(t)
+	userRepo := repo.NewUserRepo(db)
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
+	ctx := context.Background()
+	user := &repo.User{OpenID: "o1", Nickname: "Old", PublicRecordsReconfirmPending: true}
+	assert.NoError(t, userRepo.Create(ctx, user))
+	on, off := true, false
+
+	result, err := svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{PublicRecords: &on})
+	assert.NoError(t, err)
+	assert.Equal(t, false, result["public_records_reconfirm_pending"])
+	stored, err := userRepo.FindByID(ctx, user.ID)
+	assert.NoError(t, err)
+	assert.True(t, *stored.PublicRecords)
+	assert.NotNil(t, stored.PublicRecordsConsentedAt)
+
+	_, err = svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{PublicRecords: &off})
+	assert.NoError(t, err)
+	stored, err = userRepo.FindByID(ctx, user.ID)
+	assert.NoError(t, err)
+	assert.False(t, *stored.PublicRecords)
+	assert.Nil(t, stored.PublicRecordsConsentedAt)
+	assert.False(t, stored.PublicRecordsReconfirmPending)
+}
+
+func TestUserService_UpdateProfileKeepsRecordSwitchesConsistent(t *testing.T) {
+	db := setupTestDB(t)
+	userRepo := repo.NewUserRepo(db)
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
+	ctx := context.Background()
+	user := &repo.User{OpenID: "o1", Nickname: "Old"}
+	assert.NoError(t, userRepo.Create(ctx, user))
+	on, off := true, false
+	read := func() *repo.User {
+		stored, err := userRepo.FindByID(ctx, user.ID)
+		assert.NoError(t, err)
+		return stored
+	}
+
+	assert.True(t, *read().FriendsCanViewRecords, "new accounts share with friends")
+
+	_, err := svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{PublicRecords: &on})
+	assert.NoError(t, err)
+	_, err = svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{FriendsCanViewRecords: &off})
+	assert.NoError(t, err)
+	stored := read()
+	assert.False(t, *stored.FriendsCanViewRecords)
+	assert.False(t, *stored.PublicRecords, "closing to friends also closes to strangers")
+	assert.Nil(t, stored.PublicRecordsConsentedAt)
+
+	result, err := svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{PublicRecords: &on})
+	assert.NoError(t, err)
+	assert.NotNil(t, result["friends_can_view_records"])
+	stored = read()
+	assert.True(t, *stored.FriendsCanViewRecords, "opening to strangers also opens to friends")
+	assert.True(t, *stored.PublicRecords)
+
+	_, err = svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{FriendsCanViewRecords: &off, PublicRecords: &on})
+	assert.NoError(t, err)
+	stored = read()
+	assert.False(t, *stored.FriendsCanViewRecords, "closing wins in a contradictory request")
+	assert.False(t, *stored.PublicRecords)
+
+	_, err = svc.UpdateProfile(ctx, user.ID, UpdateProfileInput{FriendsCanViewRecords: &on})
+	assert.NoError(t, err)
+	stored = read()
+	assert.True(t, *stored.FriendsCanViewRecords)
+	assert.False(t, *stored.PublicRecords, "opening to friends leaves strangers closed")
 }
 
 func TestUserService_UpdateProfile_NotFound(t *testing.T) {
@@ -803,9 +877,9 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	grouped := "gemini35_flash_grouped"
 	assert.Equal(t, "gemini35_flash_grouped", normalizeExecutionMode(&grouped))
 	fast := "fast"
-	assert.Equal(t, "fast", normalizeExecutionMode(&fast))
+	assert.Equal(t, "standard", normalizeExecutionMode(&fast))
 	fastWeb := "fast_web_search"
-	assert.Equal(t, "fast_web_search", normalizeExecutionMode(&fastWeb))
+	assert.Equal(t, "standard_web_search", normalizeExecutionMode(&fastWeb))
 	assert.Equal(t, "standard", normalizeExecutionMode(nil))
 	invalid := "invalid"
 	assert.Equal(t, "standard", normalizeExecutionMode(&invalid))

@@ -46,9 +46,19 @@ export function answerAsksQuestion(answer: string): boolean {
 // True for a message the server answers with a fixed free reply (no model, no credits)
 // while the conversation's latest recommendation still has options.
 export function isFreeMealAcknowledgement(question: string, lastAnswerAsksQuestion: boolean): boolean {
+  if (asksOpeningHours(question)) return true
   const kind = mealAcknowledgementKind(question)
   if (!kind) return false
   return !(kind === 'ack' && lastAnswerAsksQuestion)
+}
+
+// Mirrors mealHoursQuestion: "这家现在还开着吗" is answered from the card's collected hours, free.
+const OPENING_HOURS = /(?:还)?(?:开着|开门|营业|在营业)(?:吗|没|呢|不)|营业(?:时间|到几点|到什么时候)|几点(?:关门|打烊|开门|下班)|(?:关门|打烊)了(?:吗|没)|现在(?:还)?(?:能去|去得了)(?:吗)?/
+const HOURS_WITH_REQUEST = /推荐|吃什么|吃啥|换|其他|别的|外卖/
+
+export function asksOpeningHours(question: string): boolean {
+  const compact = question.replace(NOT_KEPT, '')
+  return compact.length <= 24 && OPENING_HOURS.test(compact) && !HOURS_WITH_REQUEST.test(compact)
 }
 
 // "换家店" / "推荐其他食堂": asking for another venue (mealRequestsOtherVenue).

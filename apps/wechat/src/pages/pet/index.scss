@@ -1,0 +1,518 @@
+// 伙伴 Tab：照画布「宠物 Tab 一屏」画板，暖米底、浅绿主卡、奶白卡片，一屏不滚动。
+.pet-tab-page {
+  --pet-bg: #f7f4ec;
+  --pet-hero: #eef6f1;
+  --pet-card: #fffdf7;
+  --pet-border: #e1e6dc;
+  --pet-text: #1e2939;
+  --pet-muted: #5b6676;
+  --pet-deep: #1f4d3a;
+  --pet-link: #2f7f62;
+  --pet-exp: #5cb896;
+  --pet-track: #edf0ea;
+  --pet-warn: #e0913f;
+  --pet-warn-text: #7a3f06;
+  --pet-mood-bg: #ffffff;
+  --pet-mood-text: #3d6b94;
+  --pet-input-border: #d6ddd5;
+  --pet-input-bg: #ffffff;
+  --pet-skeleton: #ebe6da;
+  --pet-on-deep: #ffffff;
+
+  min-height: 100vh;
+  background: var(--pet-bg);
+  color: var(--pet-text);
+  box-sizing: border-box;
+}
+
+.pet-tab-page--dark {
+  --pet-bg: #101716;
+  --pet-hero: #17241f;
+  --pet-card: #161e1c;
+  --pet-border: #26332f;
+  --pet-text: #e5efe9;
+  --pet-muted: #9aa8a1;
+  --pet-deep: #7dd3b0;
+  --pet-link: #7dd3b0;
+  --pet-track: #24352e;
+  --pet-warn-text: #f0b878;
+  --pet-mood-bg: #1f2a27;
+  --pet-mood-text: #a9c8e3;
+  --pet-input-border: #2c3a36;
+  --pet-input-bg: #161e1c;
+  --pet-skeleton: #1f2a27;
+  --pet-on-deep: #0f1a16;
+}
+
+.pet-tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding: 0 32rpx calc(160rpx + env(safe-area-inset-bottom));
+}
+
+.pet-tab-card.pet-tab-focus-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 20rpx;
+  padding: 22rpx 28rpx;
+}
+
+.pet-tab-focus-row-title {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--pet-text);
+  white-space: nowrap;
+}
+
+.pet-tab-focus-row-chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.pet-tab-focus-row-chip {
+  padding: 4rpx 18rpx;
+  border-radius: 22rpx;
+  background: var(--pet-hero);
+  color: var(--pet-deep);
+  font-size: 24rpx;
+  font-weight: 600;
+  line-height: 36rpx;
+}
+
+.pet-tab-focus-row-empty {
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: var(--pet-muted);
+}
+
+.pet-tab-focus-row-arrow {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: var(--pet-muted);
+}
+
+.pet-tab-hero {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 24rpx;
+  border-radius: 36rpx;
+  background: var(--pet-hero);
+}
+
+.pet-tab-hero-avatar {
+  flex-shrink: 0;
+  width: 176rpx;
+  height: 176rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pet-tab-hero-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.pet-tab-hero-name-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.pet-tab-hero-name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--pet-deep);
+}
+
+.pet-tab-hero-level {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--pet-link);
+}
+
+.pet-tab-hero-line {
+  font-size: 30rpx;
+  line-height: 44rpx;
+  color: var(--pet-text);
+}
+
+.pet-tab-mood {
+  padding: 4rpx 18rpx;
+  border-radius: 24rpx;
+  background: var(--pet-mood-bg);
+  color: var(--pet-mood-text);
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.pet-tab-mood--salty,
+.pet-tab-mood--greasy,
+.pet-tab-mood--sweet,
+.pet-tab-mood--full {
+  color: var(--pet-warn-text);
+}
+
+.pet-tab-mood--happy,
+.pet-tab-mood--craving_greens {
+  color: var(--pet-link);
+}
+
+.pet-tab-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+  padding: 26rpx 32rpx;
+  border-radius: 32rpx;
+  background: var(--pet-card);
+  border: 2rpx solid var(--pet-border);
+}
+
+.pet-tab-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.pet-tab-card-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--pet-text);
+}
+
+.pet-tab-card-side-wrap {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.pet-tab-more {
+  min-width: 72rpx;
+  min-height: 44rpx;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.pet-tab-more-text {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--pet-link);
+}
+
+.pet-tab-card-side,
+.pet-tab-muted {
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: var(--pet-muted);
+}
+
+.pet-tab-gap {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.pet-tab-gap-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 28rpx;
+}
+
+.pet-tab-gap-label {
+  color: var(--pet-text);
+}
+
+.pet-tab-gap-text {
+  color: var(--pet-muted);
+}
+
+.pet-tab-gap-text.is-warn {
+  color: var(--pet-warn-text);
+  font-weight: 600;
+}
+
+.pet-tab-gap-track {
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: var(--pet-track);
+  overflow: hidden;
+}
+
+.pet-tab-gap-fill {
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: var(--pet-exp);
+}
+
+.pet-tab-gap-fill.is-warn {
+  background: var(--pet-warn);
+}
+
+.pet-tab-meal {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding-top: 8rpx;
+}
+
+.pet-tab-meal-line {
+  flex: 1;
+  min-width: 0;
+  font-size: 26rpx;
+  line-height: 38rpx;
+  color: var(--pet-text);
+}
+
+.pet-tab-meal-btn {
+  flex-shrink: 0;
+  height: 88rpx;
+  padding: 0 28rpx;
+  border-radius: 44rpx;
+  background: var(--pet-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pet-tab-meal-btn-text {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--pet-on-deep);
+}
+
+.pet-tab-task {
+  flex-direction: row;
+  align-items: center;
+  gap: 24rpx;
+  padding: 24rpx 32rpx;
+}
+
+.pet-tab-task-icon {
+  flex-shrink: 0;
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 36rpx;
+  background: #e5f3de;
+  color: #2f6b45;
+  font-size: 34rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pet-tab-page--dark .pet-tab-task-icon {
+  background: rgba(125, 211, 176, 0.14);
+  color: #7dd3b0;
+}
+
+.pet-tab-task-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.pet-tab-task-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 40rpx;
+  color: var(--pet-text);
+}
+
+.pet-tab-task-hint {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: var(--pet-muted);
+}
+
+.pet-tab-task.is-done .pet-tab-task-title {
+  color: var(--pet-muted);
+}
+
+.pet-tab-water-btn {
+  flex-shrink: 0;
+  min-width: 112rpx;
+  height: 80rpx;
+  padding: 0 24rpx;
+  box-sizing: border-box;
+  border: 2rpx solid #9fbdd6;
+  border-radius: 40rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pet-tab-water-btn-text {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #2c587e;
+}
+
+.pet-tab-page--dark .pet-tab-water-btn-text {
+  color: #a9c8e3;
+}
+
+.pet-tab-spinner {
+  width: 32rpx;
+  height: 32rpx;
+  box-sizing: border-box;
+  border: 4rpx solid var(--pet-track);
+  border-top-color: var(--pet-exp);
+  border-radius: 50%;
+  animation: pet-tab-spin 0.7s linear infinite;
+}
+
+.pet-tab-spinner--light {
+  border-color: rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+}
+
+@keyframes pet-tab-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pet-tab-week {
+  flex-direction: row;
+  align-items: center;
+  gap: 16rpx;
+  padding: 24rpx 32rpx;
+}
+
+.pet-tab-week-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.pet-tab-week-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+}
+
+.pet-tab-week-score {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: var(--pet-text);
+}
+
+.pet-tab-week-delta {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--pet-muted);
+}
+
+.pet-tab-week-delta.is-better {
+  color: #2f6b45;
+}
+
+.pet-tab-page--dark .pet-tab-week-delta.is-better {
+  color: #7dd3b0;
+}
+
+.pet-tab-week-sub {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: var(--pet-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pet-tab-week-link {
+  flex-shrink: 0;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--pet-link);
+}
+
+.pet-tab-week-arrow {
+  font-size: 24rpx;
+  color: var(--pet-link);
+}
+
+.pet-tab-ask {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.pet-tab-ask-input {
+  flex: 1;
+  height: 88rpx;
+  padding: 0 32rpx;
+  box-sizing: border-box;
+  border: 2rpx solid var(--pet-input-border);
+  border-radius: 44rpx;
+  background: var(--pet-input-bg);
+  font-size: 28rpx;
+  color: var(--pet-text);
+}
+
+.pet-tab-ask-placeholder {
+  color: var(--pet-muted);
+}
+
+.pet-tab-ask-send {
+  flex-shrink: 0;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 44rpx;
+  background: var(--pet-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pet-tab-ask-send-icon {
+  font-size: 34rpx;
+  color: var(--pet-on-deep);
+}
+
+.pet-tab-retry {
+  align-items: flex-start;
+}
+
+.pet-tab-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  padding-top: 64rpx;
+}
+
+.pet-tab-skeleton-block {
+  height: 120rpx;
+  border-radius: 32rpx;
+  background: var(--pet-skeleton);
+  animation: pet-tab-shimmer 1.2s ease-in-out infinite;
+}
+
+.pet-tab-skeleton-block--hero {
+  height: 224rpx;
+  border-radius: 36rpx;
+}
+
+.pet-tab-skeleton-block--tall {
+  height: 360rpx;
+}
+
+@keyframes pet-tab-shimmer {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}

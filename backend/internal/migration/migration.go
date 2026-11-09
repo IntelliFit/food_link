@@ -191,6 +191,12 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := MigrateCanteenCaptureTables(ctx, db); err != nil {
 		return err
 	}
+	if err := MigrateResearchWeightTables(ctx, db); err != nil {
+		return err
+	}
+	if err := MigrateCampusCampaignTables(ctx, db); err != nil {
+		return err
+	}
 	if err := MigrateMealDishTables(ctx, db); err != nil {
 		return err
 	}
@@ -204,6 +210,12 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 		return err
 	}
 	if err := ensureOnboardingStatus(ctx, db); err != nil {
+		return err
+	}
+	if err := MigrateExperimentTables(ctx, db); err != nil {
+		return err
+	}
+	if err := MigrateContentConfigTables(ctx, db); err != nil {
 		return err
 	}
 	if err := ensureConstraints(ctx, db); err != nil {
@@ -1247,7 +1259,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("user_pet_daily_scores", "user_pet_daily_scores_score_check", `habit_score >= 0 AND exp_gained >= 0`),
 		dropAndAddCheck("user_credit_bonus_events", "user_credit_bonus_events_bonus_type_check", `bonus_type = ANY (ARRAY['share_poster'::text])`),
 		dropAndAddCheck("user_credit_bonus_events", "user_credit_bonus_events_credits_check", `credits >= 0`),
-		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_task_type_check", `task_type = ANY (ARRAY['packaged_food_upload'::text,'public_food_upload'::text,'standard_food_upload'::text])`),
+		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_task_type_check", rewardTaskTypeCheck),
 		dropAndAddCheck("food_nutrition_contributions", "food_nutrition_contributions_status_check", `status = ANY (ARRAY['pending'::text,'approved'::text,'rejected'::text])`),
 		dropAndAddCheck("food_nutrition_contributions", "food_nutrition_contributions_review_action_check", `review_action IS NULL OR review_action = ANY (ARRAY['approve_new'::text,'merge_existing'::text,'reject'::text])`),
 		dropAndAddCheck("food_nutrition_contributions", "food_nutrition_contributions_nutrition_check", `kcal_per_100g >= 0 AND protein_per_100g >= 0 AND carbs_per_100g >= 0 AND fat_per_100g >= 0`),
@@ -3708,7 +3720,7 @@ func ensureMottoColumn(ctx context.Context, db *gorm.DB) error {
 func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 	result := db.WithContext(ctx).Exec(`
 		UPDATE weapp_user
-		SET public_records = TRUE
+		SET public_records = FALSE
 		WHERE public_records IS NULL
 	`)
 	if result.Error != nil {

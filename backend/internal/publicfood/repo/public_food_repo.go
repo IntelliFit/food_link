@@ -55,6 +55,7 @@ type ListFilter struct {
 	WindowName           string
 	IsCampusHighlight    *bool
 	ViewerUserID         string
+	SpotKey              string
 }
 
 type CampusDirectoryRef struct {
@@ -114,6 +115,8 @@ type MapFoodCandidate struct {
 	SchoolProvince     string     `gorm:"column:school_province"`
 	SchoolCity         string     `gorm:"column:school_city"`
 	SchoolLatitude     *float64   `gorm:"column:school_latitude"`
+	SpotFoodCount      int        `gorm:"column:spot_food_count"`
+	SpotKey            string     `gorm:"column:spot_key"`
 	SchoolLongitude    *float64   `gorm:"column:school_longitude"`
 }
 
@@ -164,6 +167,69 @@ func (r *PublicFoodRepo) UpdateNutritionFromAnalysis(ctx context.Context, itemID
 			"published_at":   now,
 			"updated_at":     now,
 		}).Error
+}
+
+// UpdateCommonNutritionFromAnalysis fills an uploaded merchant dish from its
+// background photo analysis. Nutrition the uploader already supplied is never
+// overwritten, and the name, description and insight are only filled when blank.
+// It reports false when the row already had nutrition.
+func (r *PublicFoodRepo) UpdateCommonNutritionFromAnalysis(ctx context.Context, itemID string, result map[string]any) (bool, error) {
+	snapshot := NutritionSnapshotFromResult(result)
+	updated := r.db.WithContext(ctx).
+		Model(&domain.PublicFoodItem{}).
+		Where("id = ? AND COALESCE(total_calories, 0) <= 0", itemID).
+		Updates(map[string]any{
+			"total_calories":           snapshot.TotalCalories,
+			"total_protein":            snapshot.TotalProtein,
+			"total_carbs":              snapshot.TotalCarbs,
+			"total_fat":                snapshot.TotalFat,
+			"items":                    datatypes.JSONSlice[map[string]any](snapshot.Items),
+			"food_name":                gorm.Expr("COALESCE(NULLIF(BTRIM(food_name), ''), ?)", nullableText(InferPublicFoodName(snapshot.Items, snapshot.Description))),
+			"description":              gorm.Expr("COALESCE(NULLIF(BTRIM(description), ''), ?)", nullableText(snapshot.Description)),
+			"insight":                  gorm.Expr("COALESCE(NULLIF(BTRIM(insight), ''), ?)", nullableText(snapshot.Insight)),
+			"nutrition_status":         "current",
+			"nutrition_source_version": gorm.Expr("content_version"),
+			"updated_at":               time.Now(),
+		})
+	return updated.RowsAffected > 0, updated.Error
+}
+
+// MarkNutritionFailed records that the background analysis found no usable
+// nutrition, so the dish shows as missing nutrition instead of zero calories.
+func (r *PublicFoodRepo) MarkNutritionFailed(ctx context.Context, itemID string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.PublicFoodItem{}).
+		Where("id = ? AND COALESCE(total_calories, 0) <= 0", itemID).
+		Updates(map[string]any{"nutrition_status": "failed", "updated_at": time.Now()}).Error
+}
+
+// InferPublicFoodName names a dish from its recognised foods the way the upload
+// page used to: up to three food names, else the start of the description.
+func InferPublicFoodName(items []map[string]any, description string) string {
+	names := make([]string, 0, 3)
+	for _, item := range items {
+		if name := strings.TrimSpace(stringFromAny(item["name"])); name != "" {
+			names = append(names, name)
+		}
+		if len(names) == 3 {
+			break
+		}
+	}
+	if len(names) > 0 {
+		return strings.Join(names, "、")
+	}
+	runes := []rune(strings.TrimSpace(description))
+	if len(runes) > 20 {
+		runes = runes[:20]
+	}
+	return string(runes)
+}
+
+func nullableText(value string) any {
+	if value = strings.TrimSpace(value); value == "" {
+		return nil
+	}
+	return value
 }
 
 type NutritionSnapshot struct {
@@ -233,6 +299,14 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	}
 	if f.City != "" {
 		q = q.Where("p.city = ?", f.City)
+	}
+	if f.SpotKey != "" {
+		// Same grouping as the map, so the list shows exactly the dishes its count covers,
+		// starting with the dish the map features.
+		q = q.Where("p.id IN (SELECT id FROM (?) AS spot_candidates WHERE spot_key = ?)",
+			r.publishedMapCandidatesQuery(ctx, f.ViewerUserID), f.SpotKey).
+			Order("CASE WHEN NULLIF(BTRIM(COALESCE(p.image_path, '')), '') IS NOT NULL THEN 0 ELSE 1 END ASC").
+			Order("(COALESCE(p.like_count, 0) * 3 + COALESCE(p.collection_count, 0) * 4 + COALESCE(p.comment_count, 0) * 2) DESC")
 	}
 	if f.SuitableForFatLoss != nil {
 		q = q.Where("p.suitable_for_fat_loss = ?", *f.SuitableForFatLoss)
@@ -354,6 +428,10 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	default:
 		q = q.Order("p.published_at desc NULLS LAST, p.created_at desc")
 	}
+	if f.SpotKey != "" {
+		// Imported dishes share timestamps; paging needs a stable tie-break.
+		q = q.Order("p.id ASC")
+	}
 	if f.Limit <= 0 || f.Limit > 100 {
 		f.Limit = 20
 	}
@@ -364,8 +442,39 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	return rows, err
 }
 
+const mapSpotLimit = 5000
+
+// ViewerHasBlocks reports whether any block involves this viewer, which is the only
+// thing that makes their map differ from everyone else's.
+func (r *PublicFoodRepo) ViewerHasBlocks(ctx context.Context, viewerUserID string) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Table("user_blocks").
+		Where("blocker_user_id = ? OR blocked_user_id = ?", viewerUserID, viewerUserID).
+		Limit(1).Count(&count).Error
+	return count > 0, err
+}
+
 func (r *PublicFoodRepo) ListPublishedMapCandidates(ctx context.Context, viewerUserID string) ([]MapFoodCandidate, error) {
 	var rows []MapFoodCandidate
+	q := r.publishedMapCandidatesQuery(ctx, viewerUserID)
+	// Rank inside each spot in SQL: the limit then applies to spots, so a shop's
+	// dishes can no longer push other shops off the map, and each spot keeps its
+	// full dish count and most presentable dish.
+	ranked := r.db.WithContext(ctx).Table("(?) AS candidates", q).
+		Select(`candidates.*, COUNT(*) OVER (PARTITION BY spot_key) AS spot_food_count,
+			ROW_NUMBER() OVER (PARTITION BY spot_key ORDER BY
+				CASE WHEN NULLIF(BTRIM(COALESCE(image_path, '')), '') IS NOT NULL THEN 0 ELSE 1 END ASC,
+				(COALESCE(like_count, 0) * 3 + COALESCE(collection_count, 0) * 4 + COALESCE(comment_count, 0) * 2) DESC,
+				published_at DESC NULLS LAST, id ASC) AS spot_rank`).
+		Where("spot_key IS NOT NULL")
+	return rows, r.db.WithContext(ctx).Table("(?) AS ranked", ranked).
+		Where("spot_rank = 1").
+		Order("spot_food_count DESC, id ASC").
+		Limit(mapSpotLimit).
+		Scan(&rows).Error
+}
+
+func (r *PublicFoodRepo) publishedMapCandidatesQuery(ctx context.Context, viewerUserID string) *gorm.DB {
 	directLocation := validMapCoordinateSQL("p.latitude", "p.longitude")
 	canteenLocation := validMapCoordinateSQL("map_canteen.latitude", "map_canteen.longitude")
 	campusLocation := validMapCoordinateSQL("map_campus.latitude", "map_campus.longitude")
@@ -392,7 +501,13 @@ func (r *PublicFoodRepo) ListPublishedMapCandidates(ctx context.Context, viewerU
 			COALESCE(map_school.name, '') AS directory_school_name,
 			COALESCE(map_school.province, '') AS school_province,
 			COALESCE(map_school.city, '') AS school_city,
-			map_school.latitude AS school_latitude, map_school.longitude AS school_longitude`).
+			map_school.latitude AS school_latitude, map_school.longitude AS school_longitude,
+			CASE
+				WHEN `+directLocation+` THEN 'food:' || ROUND(p.latitude::numeric, 5) || ':' || ROUND(p.longitude::numeric, 5)
+				WHEN map_canteen.id IS NOT NULL AND `+canteenLocation+` THEN 'canteen:' || map_canteen.id::text
+				WHEN map_campus.id IS NOT NULL AND `+campusLocation+` THEN 'campus:' || map_campus.id::text
+				WHEN map_school.id IS NOT NULL AND `+schoolLocation+` THEN 'school:' || map_school.id::text
+			END AS spot_key`).
 		Joins("LEFT JOIN school_canteens map_canteen ON map_canteen.id = p.canteen_id AND map_canteen.status = 'active'").
 		Joins("LEFT JOIN school_campuses map_campus ON map_campus.id = COALESCE(map_canteen.campus_id, p.campus_id) AND map_campus.status = 'active'").
 		Joins(`LEFT JOIN schools map_school ON map_school.status = 'active'
@@ -407,12 +522,7 @@ func (r *PublicFoodRepo) ListPublishedMapCandidates(ctx context.Context, viewerU
 		Where("p.status = ?", "published").
 		Where(validPublishedCampusNutritionSQL("p")).
 		Where("(" + directLocation + ") OR (" + canteenLocation + ") OR (" + campusLocation + ") OR (" + schoolLocation + ")")
-	q = visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
-	q = q.Order("CASE WHEN NULLIF(BTRIM(COALESCE(p.image_path, '')), '') IS NOT NULL THEN 0 ELSE 1 END ASC").
-		Order("(COALESCE(p.like_count, 0) * 3 + COALESCE(p.collection_count, 0) * 4 + COALESCE(p.comment_count, 0) * 2) DESC").
-		Order("p.published_at DESC NULLS LAST, p.id ASC").
-		Limit(5000)
-	return rows, q.Scan(&rows).Error
+	return visiblePublicFoodToViewer(q, "p.user_id", viewerUserID)
 }
 
 func validMapCoordinateSQL(latitudeColumn, longitudeColumn string) string {
@@ -822,14 +932,21 @@ func (r *PublicFoodRepo) CreateCampusAnalysisTask(ctx context.Context, userID, i
 	return &task, nil
 }
 
-func (r *PublicFoodRepo) CreateModerationTask(ctx context.Context, userID, itemID, text string) (*analyzedomain.AnalysisTask, error) {
+// CreateModerationTask queues the text check of an upload. nutritionImages, when
+// given, also asks the worker to read the dish's nutrition from those photos
+// after the check, so the uploader does not wait for the analysis.
+func (r *PublicFoodRepo) CreateModerationTask(ctx context.Context, userID, itemID, text string, nutritionImages []string) (*analyzedomain.AnalysisTask, error) {
+	payload := map[string]any{"item_id": itemID}
+	if len(nutritionImages) > 0 {
+		payload["nutrition_image_urls"] = nutritionImages
+	}
 	task := analyzedomain.AnalysisTask{
 		ID:        uuid.New().String(),
 		UserID:    userID,
 		TaskType:  "public_food_library_text",
 		Status:    "pending",
 		TextInput: &text,
-		Payload:   map[string]any{"item_id": itemID},
+		Payload:   payload,
 	}
 	if err := r.db.WithContext(ctx).Create(&task).Error; err != nil {
 		return nil, err

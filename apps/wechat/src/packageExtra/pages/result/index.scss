@@ -62,26 +62,6 @@
   transform: translateZ(0);
 }
 
-.scanner-hero-swiper {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-  pointer-events: auto;
-}
-
-.scanner-hero-swiper-item {
-  width: 100%;
-  height: 100%;
-}
-
-.scanner-hero-image {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
 .scanner-hero-placeholder {
   position: absolute;
   inset: 0;
@@ -141,52 +121,10 @@
   word-break: break-all;
 }
 
-// 多图时在渐变之上显示张数
-.image-counter {
-  position: absolute;
-  bottom: 36rpx;
-  right: 28rpx;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(8rpx);
-  padding: 8rpx 20rpx;
-  border-radius: 200rpx;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.counter-text {
-  font-size: 24rpx;
-  font-weight: 600;
-  color: #fff;
-  letter-spacing: 2rpx;
-}
-
-// 批量分析：共 X 张标记
-.image-batch-badge {
-  position: absolute;
-  top: 36rpx;
-  right: 28rpx;
-  background: rgb(0 188 125 / 90%);
-  border-radius: 12rpx;
-  padding: 6rpx 16rpx;
-  z-index: 3;
-  pointer-events: none;
-
-  .image-batch-badge-text {
-    font-size: 24rpx;
-    color: #fff;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-}
-
 // 内容容器 - 白卡盖住头图底部，圆角与阴影压在图片上方
 .content-container {
   position: relative;
-  padding: 32rpx 32rpx 500rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
+  padding: 32rpx 32rpx 600rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
   z-index: 3;
   pointer-events: auto;
   display: flex;
@@ -278,21 +216,6 @@
   border-radius: 32rpx;
   border: 1rpx solid transparent;
   box-shadow: 0 4rpx 24rpx rgb(0 0 0 / 4%);
-
-  &.outcome-ok {
-    background: linear-gradient(135deg, #f0fdf4 0%, #fff 100%);
-    border-color: #bbf7d0;
-  }
-
-  &.outcome-soft_reject {
-    background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);
-    border-color: #fcd34d;
-  }
-
-  &.outcome-hard_reject {
-    background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);
-    border-color: #fca5a5;
-  }
 }
 
 .recognition-status-header {
@@ -326,18 +249,6 @@
   border-radius: 999rpx;
   border: 1rpx solid transparent;
   background: rgb(255 255 255 / 80%);
-
-  &.chip-ok {
-    border-color: #86efac;
-  }
-
-  &.chip-soft_reject {
-    border-color: #fcd34d;
-  }
-
-  &.chip-hard_reject {
-    border-color: #fca5a5;
-  }
 }
 
 .recognition-chip-text {
@@ -628,16 +539,6 @@
   font-weight: 600;
 }
 
-
-// 双模型对比切换区域
-.model-switch-card {
-  @extend %card-base;
-
-  padding: 32rpx;
-  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-  border: 2rpx solid #d1fae5;
-}
-
 .card-header {
   margin-bottom: 24rpx;
 }
@@ -651,54 +552,6 @@
     margin-right: 12rpx;
     font-size: 36rpx;
     opacity: 0.9;
-  }
-}
-
-.model-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20rpx;
-}
-
-.model-tab {
-  background: #fff;
-  border-radius: 20rpx;
-  padding: 24rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-  border: 2rpx solid transparent;
-  transition: all 0.2s ease;
-
-  .model-name {
-    font-size: 28rpx;
-    font-weight: 600;
-    color: #475569;
-  }
-
-  &.active {
-    border-color: #00bc7d;
-    background: #ecfdf5;
-    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 10%);
-
-    .model-name {
-      color: #059669;
-    }
-  }
-
-  &.error {
-    background: #fef2f2;
-
-    .model-name {
-      color: #dc2626;
-    }
-  }
-
-  .model-status {
-    font-size: 24rpx;
-    font-weight: bold;
-    color: #059669;
   }
 }
 
@@ -803,14 +656,6 @@ transitiontransition
     }
   }
 
-  &.blue {
-    background: rgb(59 130 246 / 10%);
-
-    .insight-icon {
-      color: #3b82f6;
-    }
-  }
-
   &.orange {
     background: rgb(249 115 22 / 10%);
 
@@ -859,22 +704,6 @@ transitiontransition
   line-height: 48rpx; // 增加行高，提升阅读体验
   text-align: justify;
   margin-top: 8rpx; // 对齐图标中心
-}
-
-.insight-tags {
-  display: flex;
-  gap: 16rpx;
-  margin-top: 20rpx;
-}
-
-.insight-tag {
-  font-size: 22rpx;
-  color: #d97706;
-  background: #fffbeb;
-  padding: 8rpx 16rpx;
-  border-radius: 100rpx;
-  font-weight: 600;
-  border: 1rpx solid #fcd34d;
 }
 
 // 成分列表区域
@@ -942,7 +771,6 @@ transitiontransition
   border: 1rpx solid rgb(255 255 255 / 60%);
   border-radius: 28rpx;
   transition: all 0.3s ease;
-
 }
 
 .ingredient-main {
@@ -1428,76 +1256,6 @@ transitiontransition
 }
 
 // 底部固定操作栏
-.eating-mood-bar {
-  padding: 20rpx 32rpx 14rpx;
-  border-bottom: 1rpx solid #e7f2ec;
-  background: linear-gradient(135deg, #f5fcf8 0%, #ffffff 100%);
-}
-
-.eating-mood-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 12rpx;
-}
-
-.eating-mood-title {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #1f2937;
-}
-
-.eating-mood-hint {
-  font-size: 23rpx;
-  color: #94a3b8;
-}
-
-.eating-mood-options {
-  width: 100%;
-  white-space: nowrap;
-}
-
-.eating-mood-options-inner {
-  display: inline-flex;
-  gap: 12rpx;
-  padding-right: 32rpx;
-}
-
-.eating-mood-option {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  flex: none;
-  padding: 12rpx 16rpx;
-  border: 1rpx solid #e2e8f0;
-  border-radius: 100rpx;
-  background: #fff;
-
-  &:active {
-    transform: scale(0.97);
-  }
-
-  &.active {
-    border-color: #38c98d;
-    background: #eafaf2;
-  }
-}
-
-.eating-mood-emoji {
-  font-size: 28rpx;
-  line-height: 1;
-}
-
-.eating-mood-label {
-  font-size: 24rpx;
-  font-weight: 600;
-  color: #475569;
-}
-
-.eating-mood-option.active .eating-mood-label {
-  color: #058b5e;
-}
-
 .footer-actions {
   position: fixed;
   bottom: 0;
@@ -2186,28 +1944,6 @@ transitiontransition
     background: #ecfdf5;
     border-color: #00bc7d;
     box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 10%);
-
-    .option-icon {
-      color: #00bc7d;
-      transform: scale(1.1);
-    }
-
-    .option-label {
-      color: #059669;
-      font-weight: 700;
-    }
-  }
-
-  .option-icon {
-    font-size: 48rpx;
-    color: #94a3b8;
-    transition: all 0.2s ease;
-  }
-
-  .option-label {
-    font-size: 28rpx;
-    color: #64748b;
-    font-weight: 500;
   }
 }
 
@@ -2215,8 +1951,7 @@ transitiontransition
   display: flex;
   gap: 24rpx;
 
-  .cancel-btn,
-  .confirm-btn {
+  .cancel-btn {
     flex: 1;
     height: 88rpx;
     border-radius: 20rpx;
@@ -2230,69 +1965,6 @@ transitiontransition
   .cancel-btn {
     background: #f1f5f9;
     color: #64748b;
-  }
-
-  .confirm-btn {
-    background: #00bc7d;
-    color: #fff;
-    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 20%);
-  }
-}
-
-// 二次纠错入口
-.feedback-link-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16rpx;
-  margin-top: 16rpx;
-  padding: 0 4rpx;
-}
-
-.correction-entry {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  gap: 10rpx;
-  padding: 14rpx 24rpx 14rpx 16rpx;
-  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
-  border: 2rpx solid #6ee7b7;
-  border-radius: 100rpx;
-  transition: all 0.2s ease;
-
-  &:active {
-    background: #d1fae5;
-    transform: scale(0.97);
-  }
-
-  .correction-entry-icon-box {
-    width: 40rpx;
-    height: 40rpx;
-    border-radius: 50%;
-    background: #00bc7d;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .correction-icon {
-    font-size: 22rpx;
-    color: #fff;
-  }
-
-  .correction-text {
-    font-size: 26rpx;
-    font-weight: 600;
-    color: #059669;
-  }
-
-  .correction-arrow {
-    font-size: 32rpx;
-    color: #059669;
-    font-weight: 600;
-    margin-left: 2rpx;
-    line-height: 1;
   }
 }
 
@@ -2744,8 +2416,7 @@ transitiontransition
   .ingredient-cal-kcal-unit,
   .followup-question-label,
   .recognition-status-label,
-  .state-label,
-  .option-label {
+  .state-label {
     color: rgba(214, 226, 220, 0.72);
   }
 
@@ -2773,7 +2444,6 @@ transitiontransition
     border-color: rgba(111, 196, 149, 0.22);
   }
 
-  .recognition-status-card.outcome-ok,
   .followup-question-card,
   .nutrition-overview-card,
   .insight-card,
@@ -2810,16 +2480,6 @@ transitiontransition
       background: rgba(17, 55, 56, 0.96);
       border-color: rgba(45, 212, 191, 0.18);
     }
-  }
-
-  .recognition-status-card.outcome-soft_reject {
-    background: linear-gradient(180deg, rgba(46, 33, 16, 0.95) 0%, rgba(31, 25, 15, 0.96) 100%);
-    border-color: rgba(245, 158, 11, 0.28);
-  }
-
-  .recognition-status-card.outcome-hard_reject {
-    background: linear-gradient(180deg, rgba(52, 23, 23, 0.96) 0%, rgba(31, 18, 18, 0.98) 100%);
-    border-color: rgba(248, 113, 113, 0.25);
   }
 
   .recognition-chip {
@@ -2974,7 +2634,6 @@ transitiontransition
     border-color: rgba(120, 139, 130, 0.18);
   }
 
-  .option-icon,
   .correction-index,
   .edit-icon-wrapper .iconfont {
     color: rgba(214, 226, 220, 0.56);
@@ -3051,29 +2710,6 @@ transitiontransition
 
   .context-textarea::placeholder {
     color: rgba(214, 226, 220, 0.4);
-  }
-
-  .eating-mood-bar {
-    border-color: rgba(111, 196, 149, 0.22);
-    background: linear-gradient(135deg, rgba(20, 47, 38, 0.98) 0%, rgba(22, 30, 28, 0.98) 100%);
-  }
-
-  .eating-mood-title {
-    color: #e8f3ef;
-  }
-
-  .eating-mood-option {
-    border-color: rgba(120, 139, 130, 0.24);
-    background: rgba(32, 41, 39, 0.96);
-  }
-
-  .eating-mood-label {
-    color: #cbd9d2;
-  }
-
-  .eating-mood-option.active {
-    border-color: rgba(74, 222, 128, 0.5);
-    background: rgba(14, 50, 38, 0.94);
   }
 }
 
