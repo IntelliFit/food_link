@@ -55,7 +55,7 @@ test('treats the same club under a slightly different name as one club', () => {
 test('the invite text says how to join and what the leader does', () => {
   const text = inviteText({ title: '秋季称重月', join_code: 'ABC234', school_name: '清华大学', org_name: '健身协会', ends_at: '2026-12-06T15:59:00Z' }, 15)
   assert.match(text, /加入码：ABC234/)
-  assert.match(text, /我的 → 科研共建 → 高校共建/)
+  assert.match(text, /我的 → 科研共建 → 高校伙伴计划/)
   assert.match(text, /最多 15 人/)
 })
 

@@ -25,7 +25,7 @@ export interface HomeBannerInput {
 
 /**
  * 首页轮播只放现在重点推的项目，2026-11 起：高校伙伴计划排第一，
- * 鹅腿鸭腿识别和校园食堂计划已下线（页面还在，「我的」里照样能进）。
+ * 鹅腿鸭腿识别和食堂菜品共建已下线（页面还在，「我的」里照样能进）。
  */
 export function buildHomeBanners({ petName, rewardCredits, rewardTaskText }: HomeBannerInput): HomeBanner[] {
   const rewardBanner: HomeBanner[] = rewardCredits != null && rewardCredits > 0 ? [{

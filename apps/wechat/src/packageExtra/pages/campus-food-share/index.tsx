@@ -193,8 +193,9 @@ function CampusFoodSharePage() {
     <PageMeta backgroundColor={scheme === 'dark' ? '#07110f' : '#f9fafb'} />
     <View className={`campus-share-page ${scheme === 'dark' ? 'campus-share-page--dark' : ''}`}>
       <View className='campus-share-hero'>
-        <Text className='campus-share-hero__title'>{isEdit ? '修正这道菜' : '上传食堂菜品'}</Text>
-        <Text className='campus-share-hero__subtitle'>{isEdit ? '修改立即生效，并保留更新记录。' : '照片、菜名、地点填好即可发布。营养在保存后分析，不用等待。'}</Text>
+        <Text className='campus-share-hero__title'>{isEdit ? '修正这道菜' : '食堂菜品共建'}</Text>
+        <Text className='campus-share-hero__subtitle'>{isEdit ? '修改立即生效，并保留更新记录。' : '拍下食堂的菜，帮大家查热量。照片、菜名、地点填好即可发布。'}</Text>
+        {isEdit ? null : <Text className='campus-share-hero__relation'>只记菜和价格，称克重请去称重科研计划</Text>}
       </View>
       {loading ? <View className='campus-share-section'><View className='btn-spinner' /></View> : <>
         <View className='campus-share-section'>

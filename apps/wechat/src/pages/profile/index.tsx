@@ -333,7 +333,7 @@ function ProfilePage() {
     {
       id: 17,
       iconClass: 'icon-duoren',
-      title: '高校共建',
+      title: '高校伙伴计划',
       desc: '和健身社团一起称食堂的饭，扫社团的码加入',
       path: extraPkgUrl('/pages/campus-campaign/index')
     },

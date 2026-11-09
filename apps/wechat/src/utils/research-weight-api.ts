@@ -68,7 +68,7 @@ export interface ResearchSamplePayload {
   device: Record<string, string>
   notes: string
   consent_version: string
-  /** 高校共建：称重日、食堂菜品、同一顿的拍照记录，服务端按本人参加的活动校验。 */
+  /** 高校伙伴计划：称重日、食堂菜品、同一顿的拍照记录，服务端按本人参加的活动校验。 */
   station_session_id?: string
   catalog_item_id?: string
   paired_food_record_id?: string

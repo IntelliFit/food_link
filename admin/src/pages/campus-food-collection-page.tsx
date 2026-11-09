@@ -922,7 +922,7 @@ export function CampusFoodCollectionPage({ onLogout, onMenuChange }: CampusFoodC
         <section className='detail-panel space-y-5 p-6'>
           <div className='editor-header'>
             <div>
-              <h2>食堂批量上传授权</h2>
+              <h2>食堂菜品共建 · 批量上传授权</h2>
               <p>这里只审核人员与采集范围。普通用户单菜上传和已授权代理的菜品会即时生效，不逐条预审。</p>
             </div>
             <div className='actions' style={{ marginTop: 0 }}>

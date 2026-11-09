@@ -9,6 +9,7 @@
 .collector-hero { padding: 22rpx 8rpx 28rpx; }
 .collector-title { display: block; font-size: 40rpx; font-weight: 750; }
 .collector-subtitle { display: block; margin-top: 12rpx; color: #687970; font-size: 25rpx; line-height: 40rpx; }
+.collector-relation { display: block; margin-top: 8rpx; color: #8a9792; font-size: 22rpx; line-height: 34rpx; }
 .collector-scroll { height: calc(100vh - 190rpx); }
 .collector-card { margin-bottom: 20rpx; padding: 28rpx; border: 2rpx solid #e5ece8; border-radius: 24rpx; background: #fff; }
 .collector-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin-bottom: 18rpx; }
@@ -44,7 +45,7 @@
 .collector-page--dark {
   background: #0d1512;
   color: #edf7f2;
-  .collector-subtitle, .collector-card-desc, .collector-empty { color: rgb(222 239 231 / 58%); }
+  .collector-subtitle, .collector-relation, .collector-card-desc, .collector-empty { color: rgb(222 239 231 / 58%); }
   .collector-card { border-color: rgb(255 255 255 / 8%); background: #151f1b; }
   .collector-field, .collector-entry { border-color: rgb(255 255 255 / 8%); }
   .collector-label { color: rgb(222 239 231 / 62%); }

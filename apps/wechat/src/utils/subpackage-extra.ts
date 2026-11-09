@@ -16,7 +16,7 @@ const EXTRA_PACKAGE_ROOT_BY_PAGE: Readonly<Record<string, string>> = {
   '/pages/food-library-share/index': SUBPACKAGE_FOOD_LIBRARY_SHARE_ROOT,
   // 完整分析在 4.6.20 是主包 Tab 页，本地保存的旧回跳地址 /pages/stats/index 也会映射到这里。
   '/pages/stats/index': SUBPACKAGE_STATS_ROOT,
-  // 称重科研计划和高校共建活动在 packageResearch（4.6.22 起）；旧的 /packageExtra 地址经 normalizeRedirectUrlForSubpackage 也映射到这里。
+  // 称重科研计划和高校伙伴计划活动在 packageResearch（4.6.22 起）；旧的 /packageExtra 地址经 normalizeRedirectUrlForSubpackage 也映射到这里。
   '/pages/research-weight/index': SUBPACKAGE_RESEARCH_ROOT,
   '/pages/research-weight-record/index': SUBPACKAGE_RESEARCH_ROOT,
   '/pages/research-weight-containers/index': SUBPACKAGE_RESEARCH_ROOT,
