@@ -66,3 +66,41 @@ export function petWeekTitle(week: { score: number | null; delta: number | null 
   const delta = week.delta == null || week.delta === 0 ? '' : `比上周 ${week.delta > 0 ? '+' : ''}${week.delta}`
   return { score: `本周 ${week.score} 分`, delta, better: (week.delta || 0) > 0 }
 }
+
+/** 简报卡右上角的本周标签：有分数写分数和比上周，没有就说还在攒 */
+export function petWeekChip(week: { score: number | null; delta: number | null } | null | undefined): string {
+  if (!week || week.score == null) return '本周分数还在攒'
+  if (!week.delta) return `本周 ${week.score} 分`
+  return `本周 ${week.score} 分 · ${week.delta > 0 ? '+' : ''}${week.delta}`
+}
+
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+/** 「今天 · 11月8日 周日」；日期读不出来就只写「今天」 */
+export function petDayLabel(date: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || '').trim())
+  if (!match) return '今天'
+  const day = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  return `今天 · ${Number(match[2])}月${Number(match[3])}日 ${WEEKDAYS[day.getDay()]}`
+}
+
+/** 下一餐建议拆成两行：第一个逗号前是吃什么（大字），后面是怎么吃（小字） */
+export function petMealLines(advice: string): { dish: string; note: string } {
+  const text = String(advice || '').trim()
+  const index = text.search(/[，,；;]/)
+  if (index <= 0) return { dish: text, note: '' }
+  return { dish: text.slice(0, index).trim(), note: text.slice(index + 1).trim() }
+}
+
+/**
+ * 简报卡上那一句，只说今天（本周的话在完整分析页）：拿「今天还差」排第一的一项，
+ * 配上下一顿怎么办。快到上限 / 超了就让下一顿清淡点，差的就让下一顿补上。
+ */
+export function petTodayLine(gaps: ReadonlyArray<{ label: string; text: string; status: string }>, mealLabel: string): string {
+  const meal = mealLabel || '下一顿'
+  const top = gaps[0]
+  if (!top) return `今天都在范围里，${meal}照这样吃就好。`
+  if (top.status === 'over') return `今天${top.label}已经超了，${meal}清淡一点。`
+  if (top.status === 'near_limit') return `今天${top.label}快到上限了，${meal}清淡一点。`
+  return `今天${top.label}${top.text}，${meal}补上就好。`
+}
