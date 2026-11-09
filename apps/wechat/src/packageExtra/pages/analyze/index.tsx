@@ -602,8 +602,27 @@ function AnalyzePage() {
     setPrecisionInteractiveEnabled(value => !value)
   }
 
+  // 从取景相机返回：只把拍到的照片放回原位置，不用存储里的旧图覆盖当前这一顿。
+  // 相机页 navigateBack 回来时本页不会重新挂载，所以必须在 useDidShow 里取回照片。
+  const takeBackFoodCameraPhotos = async (target: FoodCameraTarget) => {
+    const shotPaths = takeFoodCameraResult()
+    if (shotPaths.length === 0) return
+    try {
+      if (target.kind === 'append') await appendImagePaths(shotPaths)
+      else await placePrecisionImage(target.role, shotPaths[0])
+    } catch (error) {
+      console.error('[analyze] take back food camera photos failed', error)
+      Taro.showToast({ title: '照片没放进来，请重拍', icon: 'none' })
+    }
+  }
+
   // 每次进入拍照页都刷新配额（从分析结果页返回时）；无图时按当前时间刷新默认餐次
   useDidShow(() => {
+    const cameraTarget = foodCameraTargetRef.current
+    if (cameraTarget) {
+      foodCameraTargetRef.current = null
+      void takeBackFoodCameraPhotos(cameraTarget)
+    }
     const params = Taro.getCurrentInstance().router?.params
     const nextSessionId = String(params?.precision_session_id || '').trim()
     const requestedCaptureMode = String(params?.capture_mode || '').trim()
@@ -703,16 +722,6 @@ function AnalyzePage() {
     // 2. 从本地存储获取图片路径 (用于拍照/相册后的跳转)
     const initStoredImagePath = async () => {
       try {
-        // 从取景相机返回：只把拍到的照片放回原位置，不用存储里的旧图覆盖当前这一顿。
-        const cameraTarget = foodCameraTargetRef.current
-        if (cameraTarget) {
-          foodCameraTargetRef.current = null
-          const shotPaths = takeFoodCameraResult()
-          if (shotPaths.length === 0) return
-          if (cameraTarget.kind === 'append') await appendImagePaths(shotPaths)
-          else await placePrecisionImage(cameraTarget.role, shotPaths[0])
-          return
-        }
         if (nextSessionId) {
           if (requestedCaptureMode === 'video') {
             setImagePaths([])
@@ -1517,15 +1526,15 @@ function AnalyzePage() {
                   </View>
                 </View>
               ))}
+              {/* 「再拍一张」紧跟在最后一张照片后面，照片多了就一起横向滑动 */}
+              {imagePaths.length < MAX_ANALYZE_IMAGES && (
+                <View className='image-strip__add' onClick={handleChooseImage}>
+                  <Text className='image-strip__add-icon'>+</Text>
+                  <Text className='image-strip__add-text'>再拍一张</Text>
+                </View>
+              )}
             </View>
           </ScrollView>
-          {/* 「再拍一张」放在滚动条外面：相册里比 4:3 更宽的照片也不会把它挤出屏幕 */}
-          {imagePaths.length < MAX_ANALYZE_IMAGES && (
-            <View className='image-strip__add' onClick={handleChooseImage}>
-              <Text className='image-strip__add-icon'>+</Text>
-              <Text className='image-strip__add-text'>再拍一张</Text>
-            </View>
-          )}
           </View>
         ) : (
           <View className='no-image-placeholder' onClick={handleChooseImage}>
