@@ -1,12 +1,15 @@
 import { Image, Text, View } from '@tarojs/components'
 import { useCallback, useEffect, useState } from 'react'
-import Taro from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getFoodRecordList, type FoodRecord } from '../../../utils/api'
 import { linkCampaignRecord, type CampaignMine, type CampaignStation } from '../../../utils/campus-campaign-api'
 import { DishPicker, type PickedDish } from './dish-picker'
-import { MEAL_LABELS, ROLE_LABELS, chinaToday } from './labels'
+import { MEAL_LABELS, ROLE_LABELS, chinaToday, scaleButtonLabel } from './labels'
 import { HowTo, MEMBER_STEPS } from './how-to'
+import { MyWeighings } from './my-weighings'
+import type { ResearchDraft } from '../research-weight/model'
+import { loadDraft } from '../research-weight/storage'
 
 /** 拍照记一餐走自建相机页（小程序已没有「记录」Tab）。 */
 const FOOD_CAMERA_PAGE = '/packageCamera/pages/shoot/index'
@@ -36,6 +39,9 @@ export function MemberHome({ mine, onChanged }: MemberHomeProps) {
   const [records, setRecords] = useState<FoodRecord[]>([])
   const [linking, setLinking] = useState<FoodRecord | null>(null)
   const [linked, setLinked] = useState<Record<string, string>>({})
+  const [draft, setDraft] = useState<ResearchDraft>(loadDraft)
+
+  useDidShow(() => setDraft(loadDraft()))
 
   const loadRecords = useCallback(async () => {
     try {
@@ -82,6 +88,7 @@ export function MemberHome({ mine, onChanged }: MemberHomeProps) {
         <View className='rw-stat'><Text className='rw-stat__value'>{mine.stats.submitted}</Text><Text className='rw-stat__label'>称重提交</Text></View>
         <View className='rw-stat'><Text className='rw-stat__value'>{mine.stats.photo_records}</Text><Text className='rw-stat__label'>拍照计入</Text></View>
       </View>
+      <MyWeighings onReviewed={onChanged} />
       <Text className='cc-role'>{`${ROLE_LABELS[mine.role || 'member']}${canPrecision ? ' · 活动期间可用精准模式' : ''}`}</Text>
 
       {todayStations.length ? (
@@ -98,7 +105,7 @@ export function MemberHome({ mine, onChanged }: MemberHomeProps) {
 
       <View className='cc-actions'>
         <View className='rw-submit cc-action' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/research-weight-record/index') })}>
-          <Text>用秤记一顿</Text>
+          <Text>{scaleButtonLabel(draft)}</Text>
         </View>
         <View className='rw-submit cc-action cc-action--ghost' onClick={openCamera}>
           <Text>拍照记一顿</Text>
