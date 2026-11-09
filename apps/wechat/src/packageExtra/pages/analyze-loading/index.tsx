@@ -22,7 +22,7 @@ import { persistEatingMoodFromPayload } from '../../../utils/eating-mood'
 import { openRecordedMealPoster } from '../../../utils/open-analyze-task'
 import { getPhotoFrameSize } from '@food-link/core'
 import MealDishPrompt from '../../../components/MealDishPrompt'
-import { WaitingPetCompanion, petQuizLine, type PetReaction } from './WaitingPetCompanion'
+import { buildWaitSteps, waitStatusNote } from './wait-steps'
 import {
   markAnalyzeTaskRecognizing,
   readAutoRecordPreference,
@@ -1324,7 +1324,6 @@ function AnalyzeLoadingPage() {
   const [lastTaskStatusText, setLastTaskStatusText] = useState('已提交')
   const [interactionIndex, setInteractionIndex] = useState(() => getNextInteractionIndex())
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null)
-  const [petReaction, setPetReaction] = useState<PetReaction | null>(null)
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [isCorrectionMode, setIsCorrectionMode] = useState(() =>
     Taro.getCurrentInstance().router?.params?.correction === '1'
@@ -1792,7 +1791,7 @@ function AnalyzeLoadingPage() {
     }
     Taro.showModal({
       title: '放心先离开',
-      content: isCorrectionMode ? '纠错分析会在后台继续，完成后可在识别记录中查看。' : '识别会在后台继续。完成后，首页小宠物和底部摄像头角标会提醒你。',
+      content: isCorrectionMode ? '纠错分析会在后台继续，完成后可在识别记录中查看。' : '识别会在后台继续，好了首页和底部相机角标会提醒你。',
       showCancel: true,
       confirmText: '去首页',
       cancelText: '继续等待',
@@ -1912,83 +1911,75 @@ function AnalyzeLoadingPage() {
     : undefined
   const showPrecisionLongWaitNotice = taskType === 'food' && (executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search') && !isCorrectionMode
 
+  const waitSteps = buildWaitSteps({
+    taskType,
+    isCorrection: isCorrectionMode,
+    statusText: lastTaskStatusText,
+    recognitionReady: showMealDish && recognitionReady,
+  })
+  const statusNote = waitStatusNote(lastTaskStatusText)
+  const showScanDots = taskType !== 'exercise' && !isTextFoodTask && !!imagePath
+
   return (
-    <View className='analyze-loading-page-v3'>
-      {/* 背景不放照片，照片只在下方按比例的框内显示；文字分析与结果页「无图占位」同一视觉 */}
-      {isTextFoodTask ? (
-        <View className='fullscreen-bg-text-record'>
-          <View className='fullscreen-text-placeholder'>
-            <View className='text-record-icon-wrap'>
-              <Text className='iconfont icon-shiwu' style={{ fontSize: '120rpx', color: '#00bc7d' }} />
-            </View>
-            <Text className='text-record-placeholder-label'>{textRecordPreview}</Text>
-          </View>
-        </View>
-      ) : (
-        <View className='fullscreen-bg-fallback' />
-      )}
-
-      {/* 底部渐变：仅衬托文字，不遮挡整图 */}
-      <View className='loading-bottom-readability' />
-
-      {/* 内容层 */}
-      <View className='content-layer'>
-        <View className='scanner-frame-container'>
-          <View className='scanner-frame-v3' style={photoFrameStyle}>
+    <View className='analyze-wait'>
+      <View className='analyze-wait__body'>
+        {/* 照片按拍摄比例放在框里（横 4:3、竖 3:4），扫描光带和光点只是动画，不配“加载中”文字 */}
+        <View className='analyze-wait__frame-wrap'>
+          <View className='analyze-wait__frame' style={photoFrameStyle}>
             {taskType === 'exercise' ? (
-              <View className='frame-placeholder-v3'>
-                <IconExercise size={64} color='#f97316' />
+              <View className='analyze-wait__placeholder'>
+                <IconExercise size={64} color='#c56a2c' />
               </View>
             ) : isTextFoodTask ? (
-              <View className='frame-placeholder-v3 frame-placeholder-text-record'>
-                <View className='frame-text-record-icon-wrap'>
-                  <Text className='iconfont icon-shiwu' style={{ fontSize: '64rpx', color: '#00bc7d' }} />
+              <View className='analyze-wait__placeholder analyze-wait__placeholder--text'>
+                <View className='analyze-wait__text-icon'>
+                  <Text className='iconfont icon-shiwu' style={{ fontSize: '60rpx', color: '#1a6549' }} />
                 </View>
-                <Text className='frame-text-record-label'>{textRecordPreview}</Text>
+                <Text className='analyze-wait__text-preview'>{textRecordPreview}</Text>
               </View>
             ) : imagePath ? (
-              <Image className='frame-image-v3' src={imagePath} mode='aspectFill' onLoad={handlePhotoLoad} />
+              <Image className='analyze-wait__photo' src={imagePath} mode='aspectFill' onLoad={handlePhotoLoad} />
             ) : (
-              <View className='frame-placeholder-v3'>
-                <Text className='iconfont icon-shiwu' style={{ fontSize: '64rpx', color: '#00bc7d' }} />
+              <View className='analyze-wait__placeholder'>
+                <Text className='iconfont icon-shiwu' style={{ fontSize: '64rpx', color: '#1a6549' }} />
               </View>
             )}
-            <View className='scan-line-v3' />
-            <View className='corner corner-tl' />
-            <View className='corner corner-tr' />
-            <View className='corner corner-bl' />
-            <View className='corner corner-br' />
+            <View className='analyze-wait__sweep' />
+            {showScanDots && (
+              <>
+                <View className='analyze-wait__dot analyze-wait__dot--a' />
+                <View className='analyze-wait__dot analyze-wait__dot--b' />
+                <View className='analyze-wait__dot analyze-wait__dot--c' />
+                <View className='analyze-wait__dot analyze-wait__dot--d' />
+              </>
+            )}
+            {taskType !== 'exercise' && (
+              <View className={`analyze-wait__mode analyze-wait__mode--${isCorrectionMode ? 'correction' : executionMode}`}>
+                <Text className='analyze-wait__mode-text'>
+                  {isCorrectionMode ? '纠错分析' : EXECUTION_MODE_META[executionMode].title}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
-        <WaitingPetCompanion
-          tip={HEALTH_TIPS[tipIndex]}
-          reaction={petReaction}
-          elapsedSeconds={elapsedSeconds}
-          taskType={taskType}
-          isCorrection={isCorrectionMode}
-          isPrecision={showPrecisionLongWaitNotice}
-          recognitionReady={showMealDish && recognitionReady}
-        />
-
-        <View className='steps-panel'>
-          <View className='stage-summary'>
-            <View className='stage-summary-left'>
-              <Text className='stage-summary-title'>
-                {isCorrectionMode ? '纠错任务' : '任务'}{lastTaskStatusText}
-              </Text>
-              {taskType !== 'exercise' && (
-                <View className={`mode-badge inline ${executionMode}`}>
-                  <Text className='mode-badge-text'>
-                    {isCorrectionMode ? '纠错分析' : EXECUTION_MODE_META[executionMode].title}
-                  </Text>
-                </View>
-              )}
+        <View className='analyze-wait__card analyze-wait__progress'>
+          {waitSteps.map((step, index) => (
+            <View key={step.label} className={`analyze-wait__step analyze-wait__step--${step.state}`}>
+              <View className='analyze-wait__step-mark'>
+                {step.state === 'done' && <Text className='analyze-wait__step-check'>✓</Text>}
+                {step.state === 'active' && <View className='analyze-wait__step-spinner' />}
+                {step.state === 'todo' && <Text className='analyze-wait__step-num'>{index + 1}</Text>}
+              </View>
+              <Text className='analyze-wait__step-label'>{step.label}</Text>
             </View>
-            <Text className='stage-summary-time'>已等待 {formatElapsed(elapsedSeconds)}</Text>
+          ))}
+          <View className='analyze-wait__progress-foot'>
+            <Text className='analyze-wait__progress-note'>{statusNote}</Text>
+            <Text className='analyze-wait__elapsed'>已等待 {formatElapsed(elapsedSeconds)}</Text>
           </View>
           {showPrecisionLongWaitNotice && (
-            <Text className='precision-long-wait-notice'>
+            <Text className='analyze-wait__precision-note'>
               精准模式会更细致识别食物和份量，可能需要更久；你可以先离开，完成后到识别记录查看。
             </Text>
           )}
@@ -1999,6 +1990,7 @@ function AnalyzeLoadingPage() {
             key={taskId}
             taskId={taskId}
             surface='wait'
+            tone='light'
             recognitionReady={recognitionReady}
             photoUrl={imagePath}
             onBusyChange={handleMealDishBusy}
@@ -2007,9 +1999,16 @@ function AnalyzeLoadingPage() {
         )}
 
         {!(showMealDish && mealDishVisible) && (
-          <View className='waiting-interaction-card'>
+          <View className='analyze-wait__card analyze-wait__tip'>
+            <Text className='analyze-wait__eyebrow'>小贴士</Text>
+            <Text className='analyze-wait__tip-text'>{HEALTH_TIPS[tipIndex]}</Text>
+          </View>
+        )}
+
+        {!(showMealDish && mealDishVisible) && (
+          <View className='analyze-wait__card waiting-interaction-card'>
             <View className='waiting-interaction-head'>
-              <Text className='waiting-interaction-eyebrow'>{interactionCard.eyebrow}</Text>
+              <Text className='analyze-wait__eyebrow'>{interactionCard.eyebrow}</Text>
               <Text className='waiting-interaction-skip' onClick={handleNextInteraction}>
                 换一个
               </Text>
@@ -2025,19 +2024,17 @@ function AnalyzeLoadingPage() {
                     <View
                       key={option}
                       className={`waiting-quiz-option${chosen ? ' chosen' : ''}${revealed && correct ? ' correct' : ''}`}
-                      onClick={() => {
-                        if (selectedQuizOption === null) {
-                          setPetReaction({ id: Date.now(), text: petQuizLine(correct) })
-                        }
-                        setSelectedQuizOption(index)
-                      }}
+                      onClick={() => setSelectedQuizOption(index)}
                     >
                       <Text className='waiting-quiz-option-text'>{option}</Text>
                     </View>
                   )
                 })}
                 {selectedQuizOption !== null && (
-                  <Text className='waiting-interaction-reveal'>{interactionCard.reveal}</Text>
+                  <Text className='waiting-interaction-reveal'>
+                    {selectedQuizOption === interactionCard.answerIndex ? '答对了。' : '差一点。'}
+                    {interactionCard.reveal}
+                  </Text>
                 )}
               </View>
             ) : (
@@ -2051,29 +2048,31 @@ function AnalyzeLoadingPage() {
           </View>
         )}
 
-        <View className='bottom-actions'>
+        <View className='analyze-wait__actions'>
           {!isCorrectionMode && taskType !== 'exercise' && elapsedSeconds >= 5 && (
             <View
-              className={`btn-auto-record-v3${autoRecordEnabled ? ' is-enabled' : ''}${autoRecordUpdating ? ' is-updating' : ''}`}
+              className={`analyze-wait__card analyze-wait__auto${autoRecordEnabled ? ' is-enabled' : ''}${autoRecordUpdating ? ' is-updating' : ''}`}
               onClick={() => void handleToggleAutoRecord()}
             >
-              <Text className='btn-auto-record-title-v3'>
-                {autoRecordUpdating
-                  ? ''
-                  : autoRecordEnabled
-                    ? `完成后将自动记入${AUTO_RECORD_MEAL_LABELS[getAutoRecordMealType()]}`
-                    : `完成后自动记入${AUTO_RECORD_MEAL_LABELS[getAutoRecordMealType()]}`}
-              </Text>
-              {!autoRecordUpdating && (
-                <Text className='btn-auto-record-desc-v3'>
+              <View className='analyze-wait__auto-copy'>
+                <Text className='analyze-wait__auto-title'>
+                  完成后自动记入{AUTO_RECORD_MEAL_LABELS[getAutoRecordMealType()]}
+                </Text>
+                <Text className='analyze-wait__auto-desc'>
                   {autoRecordEnabled ? '本次已开启，离开页面也会继续' : '仅对本次生效；长期默认可到“我的－记录设置”设置'}
                 </Text>
+              </View>
+              {autoRecordUpdating ? (
+                <View className='analyze-wait__step-spinner' />
+              ) : (
+                <View className={`analyze-wait__switch${autoRecordEnabled ? ' is-on' : ''}`}>
+                  <View className='analyze-wait__switch-knob' />
+                </View>
               )}
-              {autoRecordUpdating && <View className='auto-record-spinner-v3' />}
             </View>
           )}
-          <View className='btn-leave-v3' onClick={handleLeave}>
-            <Text className='btn-leave-text-v3'>先去首页，完成后小宠物提醒我</Text>
+          <View className='analyze-wait__leave' onClick={handleLeave}>
+            <Text className='analyze-wait__leave-text'>先去首页，好了提醒你</Text>
           </View>
           {isDebugMode && (
             <View className='btn-exit-debug-v3' onClick={() => Taro.navigateBack()}>
