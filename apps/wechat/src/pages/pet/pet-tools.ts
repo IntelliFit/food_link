@@ -104,3 +104,13 @@ export function petTodayLine(gaps: ReadonlyArray<{ label: string; text: string; 
   if (top.status === 'near_limit') return `今天${top.label}快到上限了，${meal}清淡一点。`
   return `今天${top.label}${top.text}，${meal}补上就好。`
 }
+
+/**
+ * 今天的任务如果就是「吃好下一餐 / 记一餐」，和上面的「下一顿怎么补」是一回事：
+ * 并成餐卡底下一行字。喝水任务和吃饭无关，仍然单独一行（带 +1 杯）。
+ */
+export function petMealReward(task: { kind: string; done: boolean; exp_reward: number } | null | undefined): { text: string; done: boolean } | null {
+  if (!task || task.kind === 'water') return null
+  if (task.done) return { text: `今天的任务完成了 · +${task.exp_reward} 经验已到账`, done: true }
+  return { text: `记下这一餐就完成今天的任务 · +${task.exp_reward} 经验`, done: false }
+}

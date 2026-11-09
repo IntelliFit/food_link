@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { petDayLabel, petMealLines, petTodayLine, petWeekChip } from '../../src/pages/pet/pet-tools'
+import { petDayLabel, petMealLines, petMealReward, petTodayLine, petWeekChip } from '../../src/pages/pet/pet-tools'
 
 const root = path.resolve(__dirname, '../..')
 const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8')
@@ -25,6 +25,13 @@ describe('伙伴页简报卡', () => {
     expect(petTodayLine([{ label: '钠', text: '1850/2000mg，快到上限', status: 'near_limit' }], '晚餐')).toBe('今天钠快到上限了，晚餐清淡一点。')
     expect(petTodayLine([{ label: '钠', text: '超出 400mg', status: 'over' }], '')).toBe('今天钠已经超了，下一顿清淡一点。')
     expect(petTodayLine([], '午餐')).toBe('今天都在范围里，午餐照这样吃就好。')
+  })
+
+  it('folds a meal task into the meal card instead of repeating it', () => {
+    expect(petMealReward({ kind: 'fill', done: false, exp_reward: 15 })).toEqual({ text: '记下这一餐就完成今天的任务 · +15 经验', done: false })
+    expect(petMealReward({ kind: 'record', done: true, exp_reward: 15 })).toEqual({ text: '今天的任务完成了 · +15 经验已到账', done: true })
+    expect(petMealReward({ kind: 'water', done: false, exp_reward: 10 })).toBeNull()
+    expect(petMealReward(null)).toBeNull()
   })
 
   it('splits the next-meal advice into what to eat and how', () => {

@@ -162,11 +162,14 @@ export function PetBrief({ pet, status, name, dayLabel, weekChip, line, today, o
 }
 
 /** 第二眼：下一顿怎么补，整页唯一的大按钮 */
-export function PetMealCard({ label, dish, note, buttonText, onPick }: {
+export function PetMealCard({ label, dish, note, buttonText, reward, rewardDone, onPick }: {
   label: string
   dish: string
   note: string
   buttonText: string
+  /** 今天的任务就是吃好这一餐时，并在这里说一句，不再单独放任务卡 */
+  reward?: string
+  rewardDone?: boolean
   onPick: () => void
 }) {
   return (
@@ -177,6 +180,12 @@ export function PetMealCard({ label, dish, note, buttonText, onPick }: {
       <View className='pet-meal__btn' onClick={onPick}>
         <Text className='pet-meal__btn-text'>{buttonText}</Text>
       </View>
+      {reward ? (
+        <View className={`pet-meal__reward ${rewardDone ? 'is-done' : ''}`}>
+          <Text className='pet-meal__reward-icon'>{rewardDone ? '✓' : '★'}</Text>
+          <Text className='pet-meal__reward-text'>{reward}</Text>
+        </View>
+      ) : null}
     </View>
   )
 }

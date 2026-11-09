@@ -330,6 +330,27 @@
   color: var(--pet-brief-text);
 }
 
+.pet-meal__reward {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.pet-meal__reward-icon {
+  font-size: 22rpx;
+  color: #c9a24a;
+}
+
+.pet-meal__reward.is-done .pet-meal__reward-icon {
+  color: var(--pet-green);
+}
+
+.pet-meal__reward-text {
+  font-size: 24rpx;
+  color: var(--pet-sub);
+}
+
 .pet-task {
   flex-direction: row;
   align-items: center;

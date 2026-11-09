@@ -20,6 +20,7 @@ import {
   petActionTarget,
   petDayLabel,
   petMealLines,
+  petMealReward,
   petTodayLine,
   petWeekChip,
   pickMealTarget,
@@ -206,6 +207,7 @@ function PetTabPage() {
   const meal = daily?.next_meal
   const mealLines = petMealLines(meal?.advice || '')
   const mealsToday = daily?.meals_today || 0
+  const mealReward = petMealReward(daily?.task)
   const briefLine = daily
     ? (mealsToday > 0
       ? petTodayLine(daily.gaps || [], meal?.label || '')
@@ -253,9 +255,11 @@ function PetTabPage() {
               dish={mealLines.dish || `${meal?.label || '下一餐'}吃什么，让${petName}看看`}
               note={mealLines.note}
               buttonText={`让${petName}挑一份`}
+              reward={mealReward?.text}
+              rewardDone={mealReward?.done}
               onPick={handlePickMeal}
             />
-            {daily.task ? (
+            {daily.task && !mealReward ? (
               <PetTaskRow task={daily.task} addingWater={addingWater} onAction={handleTaskAction} onAddWater={handleAddWater} />
             ) : null}
             <PetAskBar placeholder={`问问${petName}：${ASK_FALLBACK}`} onAsk={handleAsk} />
