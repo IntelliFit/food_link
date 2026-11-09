@@ -5,8 +5,6 @@ import NextMealRecommendations, { type NextMealCardMeal } from './components/Nex
 import { Success } from '@taroify/icons'
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem, Button, ScrollView } from '@tarojs/components'
 import {
-  CAFETERIA_HERO_BG_URL,
-  GOOSE_DUCK_CHICKEN_BG_URL,
   HOME_BOTANICAL_BG_URL as homeBotanicalBackground,
   HOME_NUTRITION_ORBIT_URL as nutritionOrbitImage,
 } from '../../utils/static-asset-cdn-url'
@@ -133,6 +131,7 @@ import { WeeklyRecapEntry } from '../../components/WeeklyRecapEntry'
 import { useSocialInbox } from '../../hooks/useSocialInbox'
 import { socialInboxTotal } from '../../utils/social-inbox'
 import { HomeModule, HomeModuleManager } from './components/HomeModuleManager'
+import { buildHomeBanners, type HomeBanner } from './utils/home-banners'
 import { homeLayoutOwner, homeModuleLocks, isHomeQuickStatVisible, markOrganizeHintSeen, readHomeModuleLayout, saveHomeModuleLayout, shouldShowOrganizeHint } from './utils/home-module-layout'
 import { PetAvatar } from '../../components/PetAvatar'
 import { isHealthProfileReminderSnoozed, snoozeHealthProfileReminder } from '../../utils/health-profile-reminder'
@@ -2991,58 +2990,11 @@ function IndexPage() {
     availableRewardCredits > 0 &&
     (membershipCredits.remaining < LOW_CREDIT_REWARD_HINT_THRESHOLD || rewardHintTasks.some(isRewardTaskAvailable))
   const rewardHintTaskText = formatRewardHintTaskText(rewardHintTasks)
-  const rewardHintBanners = [
-    {
-      key: 'goose-duck-chicken',
-      className: 'home-reward-hint--goose-duck-chicken',
-      kicker: '热点专线',
-      title: '鹅腿还是鸭腿？',
-      desc: '上传图片，让食探只在鹅 / 鸭 / 鸡里做判断',
-      actionText: '去识别',
-      url: extraPkgUrl('/pages/goose-duck-chicken/index'),
-      bgImage: GOOSE_DUCK_CHICKEN_BG_URL,
-    },
-    {
-      key: 'lifespan',
-      className: 'home-reward-hint--lifespan',
-      kicker: '寿命预测器 · 模拟估算，不用于诊断',
-      title: '同一个你，三种吃法，三条人生',
-      desc: '用你的饮食，算出活到各个年龄的概率',
-      actionText: '去算算',
-      url: '/packageLifespan/pages/predictor/index',
-      bgImage: undefined,
-    },
-    ...(showRewardCreditHint ? [{
-      key: 'reward',
-      className: 'home-reward-hint--reward',
-      kicker: '今日可赚积分',
-      title: `今天还可以赚 ${availableRewardCredits} 积分`,
-      desc: rewardHintTaskText,
-      actionText: '去赚',
-      url: extraPkgUrl('/pages/reward-center/index'),
-      bgImage: undefined,
-    }] : []),
-    {
-      key: 'campus',
-      className: 'home-reward-hint--campus',
-      kicker: '食探校园活动',
-      title: '食探校园食堂计划',
-      desc: '一起补全食堂菜品、价格、窗口和营养信息',
-      actionText: '去看看',
-      url: extraPkgUrl('/pages/campus-canteen/index'),
-      bgImage: CAFETERIA_HERO_BG_URL,
-    },
-    {
-      key: 'feedback',
-      className: 'home-reward-hint--feedback',
-      kicker: '帮助我们一起成长',
-      title: '意见反馈',
-      desc: '提交宝贵建议，最高可得 +5 积分',
-      actionText: '去反馈',
-      url: extraPkgUrl('/pages/feedback/index'),
-      bgImage: undefined,
-    },
-  ] as const
+  const rewardHintBanners = buildHomeBanners({
+    petName: petSummary?.pet?.name,
+    rewardCredits: showRewardCreditHint ? availableRewardCredits : null,
+    rewardTaskText: rewardHintTaskText,
+  })
   const showRewardHint = !isGuest && rewardHintBanners.length > 0
   const activeRewardHintIndex = rewardHintBanners.length > 0 ? rewardHintIndex % rewardHintBanners.length : 0
 
@@ -3054,8 +3006,9 @@ function IndexPage() {
     return () => clearInterval(timer)
   }, [rewardHintBanners.length])
 
-  const handleRewardHintClick = React.useCallback((url: string) => {
-    Taro.navigateTo({
+  const handleRewardHintClick = React.useCallback(({ url, tab }: HomeBanner) => {
+    const open = tab ? Taro.switchTab : Taro.navigateTo
+    open({
       url,
       fail: (error) => {
         console.warn('首页横幅跳转失败', { url, error })
@@ -3284,7 +3237,7 @@ function IndexPage() {
                 <SwiperItem key={banner.key} className='home-reward-hint-swiper__item'>
                   <View
                     className={`home-reward-hint ${banner.className}`}
-                    onClick={() => handleRewardHintClick(banner.url)}
+                    onClick={() => handleRewardHintClick(banner)}
                   >
                     {banner.bgImage && (
                       <Image
@@ -3302,7 +3255,7 @@ function IndexPage() {
                       className='home-reward-hint__actions'
                       onClick={(event) => {
                         event.stopPropagation()
-                        handleRewardHintClick(banner.url)
+                        handleRewardHintClick(banner)
                       }}
                     >
                       <Text className='home-reward-hint__go'>{banner.actionText}</Text>

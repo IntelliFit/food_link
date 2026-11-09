@@ -1556,35 +1556,31 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
-.home-reward-hint--goose-duck-chicken {
+// 轮播里每个项目一种底色，白字都要看得清。
+.home-reward-hint--partner {
   background:
-    radial-gradient(circle at 12% 18%, rgb(255 255 255 / 28%), transparent 24%),
-    linear-gradient(135deg, #2b211f 0%, #c44f37 54%, #f2b15f 100%);
+    radial-gradient(circle at 10% 12%, rgb(255 236 170 / 36%), transparent 30%),
+    linear-gradient(135deg, #12382c 0%, #1f7a5a 56%, #5cb896 100%);
 
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    background:
-      radial-gradient(circle at 12% 18%, rgb(255 255 255 / 28%), transparent 24%),
-      linear-gradient(135deg, rgba(43, 33, 31, 0.82) 0%, rgba(196, 79, 55, 0.58) 54%, rgba(242, 177, 95, 0.36) 100%);
-    pointer-events: none;
-  }
+  .home-reward-hint__go { color: #1f6b4f; }
+}
 
-  .home-reward-hint__main,
-  .home-reward-hint__actions {
-    position: relative;
-    z-index: 2;
-  }
+.home-reward-hint--invite {
+  background: linear-gradient(135deg, #7a2e3b 0%, #c9534f 56%, #f0a36a 100%);
 
-  .home-reward-hint__kicker {
-    color: rgb(255 244 214 / 84%);
-  }
+  .home-reward-hint__go { color: #a8403b; }
+}
 
-  .home-reward-hint__go {
-    color: #a03d24;
-  }
+.home-reward-hint--food-map {
+  background: linear-gradient(135deg, #5a3a12 0%, #b8711f 56%, #e8b75c 100%);
+
+  .home-reward-hint__go { color: #8f5510; }
+}
+
+.home-reward-hint--research {
+  background: linear-gradient(135deg, #14304a 0%, #2d6994 56%, #77afd0 100%);
+
+  .home-reward-hint__go { color: #275a80; }
 }
 
 .home-reward-hint__bg {
