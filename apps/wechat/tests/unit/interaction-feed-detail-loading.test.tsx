@@ -44,9 +44,6 @@ jest.mock('../../src/pages/community/components/FeedReportMask', () => ({
 jest.mock('../../src/pages/community/components/FeedReportSheet', () => ({
   FeedReportSheet: () => null,
 }))
-jest.mock('../../src/pages/community/components/ManualFoodCards', () => ({
-  ManualFoodCards: () => null,
-}))
 jest.mock('../../src/pages/community/components/ExerciseActivityCards', () => ({
   ExerciseActivityCards: () => null,
   hasExerciseActivityCards: () => false,
@@ -187,6 +184,83 @@ describe('InteractionFeedDetailPage loading', () => {
 
     expect(communityDeleteComment).toHaveBeenCalledWith('record-1', 'comment-1', 'food_record')
     expect(view.queryByText('看着真香')).not.toBeInTheDocument()
+  })
+
+  describe('manual food cards', () => {
+    const renderManualFood = async (item: Record<string, unknown>, guest = false) => {
+      if (guest) (getAccessToken as jest.Mock).mockReturnValue('')
+      ;(communityGetFeedContext as jest.Mock).mockResolvedValue({
+        item: {
+          ...feedItem,
+          record: {
+            ...feedItem.record,
+            entry_type: 'food_library',
+            description: '手动记录：三元 极致有机纯牛奶 250ml',
+            items: [{
+              name: '三元 极致有机纯牛奶 250ml',
+              manual_source: 'packaged_food',
+              manual_source_id: 'milk-1',
+              weight: 250, intake: 125, ratio: 50,
+              nutrients: { calories: 186, protein: 10, carbs: 14, fat: 10, sodium_mg: 162, calciumMg: 298 },
+              ...item,
+            }],
+          },
+        },
+      })
+      const view = render(<InteractionFeedDetailPage />)
+      await act(async () => {
+        loadPage?.({ targetType: 'food_record', targetId: 'record-1' })
+        await Promise.resolve()
+      })
+      await act(async () => {
+        jest.advanceTimersByTime(80)
+        await Promise.resolve()
+      })
+      fireEvent.click(view.container.querySelector('.feed-manual-food-card')!)
+      return view
+    }
+
+    it.each([
+      { manual_source: 'packaged_food' },
+      { manual_source: 'nutrition_library' },
+      { manual_source: undefined, manual_source_id: undefined, packaged_food_id: 'legacy-milk' },
+      { manual_source: 'packaged_food', manual_source_id: undefined },
+    ])('opens saved food details without querying the public library: %j', async (item) => {
+      const view = await renderManualFood(item)
+      const sheet = view.container.querySelector('.manual-food-detail-sheet')!
+      expect(sheet).toHaveTextContent('三元 极致有机纯牛奶 250ml')
+      expect(sheet).toHaveTextContent('本次记录')
+      expect(sheet).toHaveTextContent('摄入 125g')
+      expect(sheet).toHaveTextContent('93 kcal')
+      expect(sheet).toHaveTextContent('蛋白质5 g')
+      expect(sheet).toHaveTextContent('钠81 mg')
+      expect(sheet).toHaveTextContent('钙149 mg')
+      expect(sheet).not.toHaveTextContent('钾')
+      expect(Taro.navigateTo).not.toHaveBeenCalled()
+      fireEvent.click(view.getByText('关闭'))
+      expect(view.container.querySelector('.manual-food-detail-sheet')).toBeNull()
+    })
+
+    it('keeps known zero nutrients and applies the recorded intake ratio once', async () => {
+      const view = await renderManualFood({ nutrients: { calories: 0, protein: 0, calciumMg: 0 }, ratio: 100, intake: 250 })
+      const sheet = view.container.querySelector('.manual-food-detail-sheet')!
+      expect(sheet).toHaveTextContent('摄入 250g')
+      expect(sheet).toHaveTextContent('0 kcal')
+      expect(sheet).toHaveTextContent('钙0 mg')
+    })
+
+    it('still opens public meals in their library detail page', async () => {
+      const view = await renderManualFood({ manual_source: 'public_library', manual_source_id: 'meal/1' })
+      expect(Taro.navigateTo).toHaveBeenCalledWith({ url: '/packageExtra/pages/food-library-detail/index?id=meal%2F1' })
+      expect(view.container.querySelector('.manual-food-detail-sheet')).toBeNull()
+    })
+
+    it('keeps the login prompt for guests tapping a food card', async () => {
+      const view = await renderManualFood({}, true)
+      expect(Taro.showToast).toHaveBeenCalledWith({ title: '登录后可查看食物详情', icon: 'none' })
+      expect(Taro.navigateTo).not.toHaveBeenCalled()
+      expect(view.container.querySelector('.manual-food-detail-sheet')).toBeNull()
+    })
   })
 
   describe('without login', () => {
