@@ -138,9 +138,12 @@ export function newClientKey(now = Date.now()): string {
   return `rw-${now.toString(36)}-${randomPart()}${randomPart()}`
 }
 
-/** 外卖默认吃完再称空盒，其余场景默认先称空容器。 */
+/**
+ * 外卖、食堂、餐馆的饭是盛好端来的，空碗没法先称，默认吃完再称；
+ * 家里和其他场景能先称空碗。
+ */
 export function defaultTareSource(scene: ResearchScene): ResearchTareSource {
-  return scene === 'takeout' ? 'after_meal' : 'measured'
+  return scene === 'home' || scene === 'other' ? 'measured' : 'after_meal'
 }
 
 export function newItem(seed = Date.now()): DraftItem {

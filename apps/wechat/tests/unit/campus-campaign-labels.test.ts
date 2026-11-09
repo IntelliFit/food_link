@@ -1,4 +1,5 @@
-import { chinaDayOf, chinaToday, closedNote, formatChinaDay, isoMs, joinCodeFrom } from '../../src/packageResearch/pages/campus-campaign/labels'
+import { chinaDayOf, chinaToday, closedNote, formatChinaDay, isCampaignWeighing, isoMs, joinCodeFrom, scaleButtonLabel, weighingResult } from '../../src/packageResearch/pages/campus-campaign/labels'
+import { emptyDraft } from '../../src/packageResearch/pages/research-weight/model'
 
 describe('campus campaign page helpers', () => {
   it('reads the join code from a share link or a mini program code scene', () => {
@@ -29,6 +30,31 @@ describe('campus campaign page helpers', () => {
     expect(isoMs('2026-11-09 00:00:00')).toBe(beijingMidnight)
     expect(Number.isNaN(isoMs('soon'))).toBe(true)
     expect(chinaDayOf('soon')).toBe('soon')
+  })
+
+  it('offers to continue a weighed meal saved for after eating', () => {
+    const draft = emptyDraft(1)
+    expect(scaleButtonLabel(draft)).toBe('用秤记一顿')
+    const shot = { url: 'https://cdn.test/a.jpg', capturedAt: '2026-11-09T04:00:00.000Z' }
+    const waiting = {
+      ...draft,
+      dishName: '宫保鸡丁',
+      photos: { eval_top: shot },
+      containers: [{ ...draft.containers[0], name: '米饭', gross: '512', grossPhoto: shot, tareSource: 'after_meal' as const }],
+    }
+    expect(scaleButtonLabel(waiting)).toBe('继续：吃完称空盒')
+    expect(scaleButtonLabel({ ...waiting, containers: [{ ...waiting.containers[0], gross: '' }] })).toBe('继续记这一顿')
+  })
+
+  it('shows each campaign weighing with its review result and points', () => {
+    const base = { total_net_grams: 832, quality_tier: undefined, reward_credits: 0, review_note: '' }
+    expect(weighingResult({ ...base, status: 'pending' })).toBe('832g · 自动审核中，几秒出结果')
+    expect(weighingResult({ ...base, status: 'approved', quality_tier: 'B', reward_credits: 3 })).toBe('832g · B 级 · +3 积分')
+    expect(weighingResult({ ...base, status: 'approved', quality_tier: 'A', review_note: '今天已满 10 份，不再计分' })).toBe('832g · A 级 · 今天加分的份数已满')
+    expect(weighingResult({ ...base, status: 'approved', quality_tier: 'C' })).toBe('832g · C 级 · 不加分')
+    expect(weighingResult({ ...base, status: 'rejected', review_note: '照片里看不清秤的读数' })).toBe('832g · 照片里看不清秤的读数')
+    expect(isCampaignWeighing({ collection_channel: 'campus_station' })).toBe(true)
+    expect(isCampaignWeighing({ collection_channel: 'personal' })).toBe(false)
   })
 
   it('says when a campaign starts instead of calling it ended', () => {
