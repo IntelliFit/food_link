@@ -36,7 +36,7 @@ import {
   showUnifiedApiError,
 } from '../../../utils/api'
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
-import { analysisEngineLabel, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
+import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { MealRecordPosterModal } from '../../../pages/index/components/MealRecordPosterModal'
 import { readCustomNavMetrics, rpxToPx } from '../../../utils/custom-nav-metrics'
@@ -56,7 +56,8 @@ import { applyEnergyEdit } from '../../../utils/nutrition-edit'
 import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { mealSummaryFromSavePayload, useMealImpactSheet } from '../../../components/MealImpactCard'
-import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
+import { getRecordDateLabel, isAllowedRecordDate, requireAllowedRecordDate } from '../../../utils/record-date'
+import RecordDateChip from './RecordDateChip'
 import { useRecordDate } from '../../../hooks/useRecordDate'
 import RecordDateField from '../../../components/RecordDateField'
 import { clearPersistedEatingMood, readPersistedEatingMood } from '../../../utils/eating-mood'
@@ -540,6 +541,10 @@ const RESULT_HERO_SHRINK_SCROLL_PX = 350
 const RESULT_HERO_INNER_RADIUS_MAX_RPX = 24
 /** V3：照片通顶、满宽、固定高度（不是全屏），随内容一起滚走 */
 const RESULT_PHOTO_HERO_RPX = 600
+/** 照片上那一排食物标签：离照片底 64rpx、行高 76rpx。导航在标签滑到它底下之前就变成实底，避免标签压住标题和胶囊。 */
+const RESULT_HERO_LABELS_BOTTOM_RPX = 64
+const RESULT_HERO_LABELS_HEIGHT_RPX = 76
+const RESULT_HERO_LABELS_TOP_RPX = RESULT_PHOTO_HERO_RPX - RESULT_HERO_LABELS_BOTTOM_RPX - RESULT_HERO_LABELS_HEIGHT_RPX
 const QUICK_UNDO_MS = 6000
 
 /** AI 饮食分析的手风琴：一次展开一项 */
@@ -583,6 +588,8 @@ function ResultPage() {
   const devFeedbackLogsRef = useRef<Array<{ type: AnalysisFeedbackType; state: AnalysisResolutionState; at: number; ok: boolean; disabled?: boolean; err?: string; sourceTaskId?: string; sourceRecordId?: string }>>([])
   const [devFeedbackPanelOpen, setDevFeedbackPanelOpen] = useState(false)
   const [expandedNutritionDetailIds, setExpandedNutritionDetailIds] = useState<Record<number, boolean>>({})
+  /** 食物卡片默认只露三行（名称、热量和三大营养素、实际摄入），点「详情」再展开其余 */
+  const [openCardIds, setOpenCardIds] = useState<Record<number, boolean>>({})
   const [nutritionStats, setNutritionStats] = useState({
     calories: 0,
     protein: 0,
@@ -637,7 +644,7 @@ function ResultPage() {
   const [precisionReferenceHeight, setPrecisionReferenceHeight] = useState('0.8')
   const [precisionReferencePlacement, setPrecisionReferencePlacement] = useState('')
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
-  const [insightCollapsed, setInsightCollapsed] = useState(false)
+  const [insightCollapsed, setInsightCollapsed] = useState(() => getAiInsightCollapsed())
 
   // 餐次选择弹窗状态
   const mealTypeChosenRef = useRef(false)
@@ -694,7 +701,7 @@ function ResultPage() {
 
   const handlePhotoScroll = useCallback((e: { detail?: { scrollTop?: number } }) => {
     const st = typeof e.detail?.scrollTop === 'number' ? Math.max(0, e.detail.scrollTop) : 0
-    const threshold = rpxToPx(RESULT_PHOTO_HERO_RPX, navMetrics.windowWidth) - navTotalPx - 8
+    const threshold = rpxToPx(RESULT_HERO_LABELS_TOP_RPX, navMetrics.windowWidth) - navTotalPx - 8
     const solid = st > threshold
     if (solid === navSolidRef.current) return
     navSolidRef.current = solid
@@ -1082,6 +1089,17 @@ function ResultPage() {
 
   const handleDefaultModeEdit = () => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
+  }
+
+  /** 顶部「普通 / 精准」点开：设为默认收在这里，不再单独占一个链接 */
+  const openModeMenu = () => {
+    Taro.showActionSheet({ itemList: ['设为默认识别方式'] })
+      .then((res) => { if (res.tapIndex === 0) handleDefaultModeEdit() })
+      .catch(() => { /* 取消 */ })
+  }
+
+  const toggleCardDetails = (id: number) => {
+    setOpenCardIds(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
   const isStrictMode = executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search'
@@ -2736,6 +2754,8 @@ function ResultPage() {
   const navOverPhoto = hasPhotoHero && !navSolid
   const navTotalRpx = Math.round((navTotalPx * 750) / navMetrics.windowWidth)
   const mealCommitted = isAnalyzeSessionCommitted() || !!committedRecordId
+  // 日期在可记录范围里时，日期放进顶部的小胶囊；超出范围才在底栏显示完整的「请选择日期」
+  const recordDateValid = isAllowedRecordDate(recordDate)
   const quickCorrections = mealCommitted
     ? []
     : buildQuickCorrections(nutritionItems.map(item => ({ id: item.id, name: item.name, calorie: item.calorie, ratio: item.ratio })))
@@ -2813,7 +2833,12 @@ function ResultPage() {
               <Text className='result-hero__count' style={{ top: `${navTotalRpx + 12}rpx` }}>{heroIndex + 1}/{imagePaths.length}</Text>
             )}
             {nutritionItems.length > 0 && (
-              <ScrollView scrollX showScrollbar={false} className='result-hero__labels'>
+              // 外层 View 定位、scroll-view 给死高度：真机上不定高的 scroll-view 会撑满整张照片，标签跑到最上面压住导航
+              <View
+                className='result-hero__labels-wrap'
+                style={{ bottom: `${RESULT_HERO_LABELS_BOTTOM_RPX}rpx`, height: `${RESULT_HERO_LABELS_HEIGHT_RPX}rpx` }}
+              >
+              <ScrollView scrollX showScrollbar={false} className='result-hero__labels' style={{ height: `${RESULT_HERO_LABELS_HEIGHT_RPX}rpx` }}>
                 <View className='result-hero__labels-track'>
                   {nutritionItems.map((item, index) => (
                     <View key={item.id} className='result-hero__label' style={{ animationDelay: `${200 + index * 140}ms` }}>
@@ -2824,6 +2849,7 @@ function ResultPage() {
                   ))}
                 </View>
               </ScrollView>
+              </View>
             )}
           </View>
         )}
@@ -2833,20 +2859,22 @@ function ResultPage() {
           )}
           <View className='execution-mode-row'>
             <View className='execution-mode-left'>
-              <View className={`execution-mode-tag ${executionMode}`}>
+              <View className={`execution-mode-tag ${executionMode}`} onClick={openModeMenu}>
                 <Text className='execution-mode-tag-text'>
                   {getExecutionModeLabel(executionMode)}
                 </Text>
+                <Text className='execution-mode-tag-arrow'>›</Text>
               </View>
-              <View className='analysis-engine-result-tag'>
-                <Text className='analysis-engine-result-tag-text'>
-                  {analysisEngineLabel(analysisEngine)}
-                </Text>
-              </View>
-              <Text className='execution-mode-meal'>{getMealTypeLabel(selectedMealType)}</Text>
-              <Text className='execution-mode-default-link' onClick={handleDefaultModeEdit}>
-                设为默认
-              </Text>
+              {recordDateValid ? (
+                <RecordDateChip
+                  date={recordDate}
+                  mealLabel={getMealTypeLabel(selectedMealType)}
+                  onChange={setRecordDate}
+                  disabled={saving || mealCommitted}
+                />
+              ) : (
+                <Text className='execution-mode-meal'>{getMealTypeLabel(selectedMealType)}</Text>
+              )}
             </View>
             {hasUploadableImage ? (
               <View
@@ -3141,6 +3169,17 @@ function ResultPage() {
                 </View>
               </View>
 
+              {insightCollapsed && !!ratioAdviceText && (
+                <Text
+                  className='insight-preview'
+                  onClick={() => {
+                    setInsightCollapsed(false)
+                    setAiInsightCollapsed(false)
+                  }}
+                >
+                  {ratioAdviceText}
+                </Text>
+              )}
               {!insightCollapsed && (
                 <View className='insight-accordion'>
                   {insightRows.map((row, index) => {
@@ -3171,8 +3210,6 @@ function ResultPage() {
               <Text className='quick-ratio-btn' onClick={() => setQuickRatioSheetVisible(true)}>快捷比例</Text>
             </View>
 
-            <Text className='section-ratio-hint'>每种食物可单独调整实际食用比例</Text>
-
             <View className='ingredients-list'>
               {nutritionItems.map((item, itemIndex) => {
                 const detailRows = getNutrientDetailRows(item)
@@ -3181,8 +3218,10 @@ function ResultPage() {
                 const ediblePortionHint = getEdiblePortionHint(item)
                 const packageChoicePending = isPackagedChoicePending(item)
                 const packagedCandidates = item.packagedCandidates || []
+                const cardOpen = !!openCardIds[item.id]
+                const intakeShare = item.ratio / 100
                 return (
-                <View key={item.id} className='ingredient-card'>
+                <View key={item.id} className={`ingredient-card ${cardOpen ? 'is-open' : ''}`}>
                   <View className='ingredient-main'>
                     <View className='ingredient-header ingredient-header--title-row'>
                       {hasPhotoHero && <Text className='ingredient-index'>{itemIndex + 1}</Text>}
@@ -3197,12 +3236,25 @@ function ResultPage() {
                         </View>
                       </View>
                     </View>
-                    <Text className='ingredient-basis-label'>当前整份营养（约 {Math.round(item.weight)}g）</Text>
-                    <Text className='ingredient-per100-label'>每100g参考：{Math.round(per100.calories || 0)} kcal · 蛋白 {formatMacroDisplay(per100.protein || 0)}g · 碳水 {formatMacroDisplay(per100.carbs || 0)}g · 脂肪 {formatMacroDisplay(per100.fat || 0)}g</Text>
-                    {ediblePortionHint && (
-                      <View className='ingredient-edible-portion-hint'>
-                        <Text className='ingredient-edible-portion-hint-text'>{ediblePortionHint}</Text>
+                    {!packageChoicePending && (
+                      <View className='ingredient-brief' onClick={() => toggleCardDetails(item.id)}>
+                        <Text className='ingredient-brief__kcal'>{Math.round(item.calorie * intakeShare)}</Text>
+                        <Text className='ingredient-brief__unit'>kcal</Text>
+                        <Text className='ingredient-brief__meta'>
+                          约 {Math.round(item.intake)}g · 蛋白 {formatMacroDisplay(item.protein * intakeShare)}g · 碳水 {formatMacroDisplay(item.carbs * intakeShare)}g · 脂肪 {formatMacroDisplay(item.fat * intakeShare)}g
+                        </Text>
                       </View>
+                    )}
+                    {cardOpen && (
+                      <>
+                        <Text className='ingredient-basis-label'>当前整份营养（约 {Math.round(item.weight)}g）</Text>
+                        <Text className='ingredient-per100-label'>每100g参考：{Math.round(per100.calories || 0)} kcal · 蛋白 {formatMacroDisplay(per100.protein || 0)}g · 碳水 {formatMacroDisplay(per100.carbs || 0)}g · 脂肪 {formatMacroDisplay(per100.fat || 0)}g</Text>
+                        {ediblePortionHint && (
+                          <View className='ingredient-edible-portion-hint'>
+                            <Text className='ingredient-edible-portion-hint-text'>{ediblePortionHint}</Text>
+                          </View>
+                        )}
+                      </>
                     )}
                   </View>
 
@@ -3271,6 +3323,8 @@ function ResultPage() {
 
                   {!packageChoicePending && (
                     <>
+                  {cardOpen && (
+                  <>
                   <View className='ingredient-nutrition-strip'>
                     <View
                       className='ingredient-summary-cell ingredient-summary-cell--cal'
@@ -3329,7 +3383,11 @@ function ResultPage() {
                     </View>
                   )}
 
+                  </>
+                  )}
+
                   <View className='ingredient-controls'>
+                    {cardOpen && (
                     <View className='weight-control'>
                       <Text className='control-label'>估算重量</Text>
                       {item.ediblePortionRatio > 0 && item.ediblePortionRatio < 99 && (
@@ -3347,12 +3405,13 @@ function ResultPage() {
                         >+</View>
                       </View>
                     </View>
+                    )}
 
                     <View className='ratio-control'>
                       <View className='ratio-control-main'>
                         <View className='ratio-label-wrap'>
                           <Text className='control-label'>实际摄入</Text>
-                          <Text className='control-sub-label'>约 {formatWeightDisplay(item.intake)}</Text>
+                          {cardOpen && <Text className='control-sub-label'>约 {formatWeightDisplay(item.intake)}</Text>}
                         </View>
                         <View className='ratio-control-right'>
                           <View className='ratio-slider-shell'>
@@ -3384,6 +3443,10 @@ function ResultPage() {
                       )}
                     </View>
                   </View>
+                  <View className='ingredient-fold' onClick={() => toggleCardDetails(item.id)}>
+                    <Text className='ingredient-fold__text'>{cardOpen ? '收起' : '详情'}</Text>
+                    <Text className={`ingredient-fold__chevron ${cardOpen ? 'is-open' : ''}`}>›</Text>
+                  </View>
                     </>
                   )}
                 </View>
@@ -3405,7 +3468,7 @@ function ResultPage() {
         </View>
       )}
       <View className='footer-actions result-bar'>
-        {!mealCommitted && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
+        {!mealCommitted && !recordDateValid && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
         <View className='pba-safe-area result-bar__inner'>
           {quickCorrections.length > 0 && (
             <ScrollView scrollX showScrollbar={false} className='result-bar__chips'>
