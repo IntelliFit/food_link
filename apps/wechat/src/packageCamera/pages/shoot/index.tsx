@@ -9,6 +9,7 @@ import { readCustomNavMetrics } from '../../../utils/custom-nav-metrics'
 import { saveFoodCameraResult } from '../../../utils/food-camera'
 import { getFoodAnalysisCreditBlockMessage, isFoodAnalysisCreditExhausted } from '../../../utils/membership'
 import { persistRecordTargetDate } from '../../../utils/record-date'
+import { useLocalToday } from '../../../hooks/useLocalToday'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   chooseImageWithPrivacy,
@@ -61,7 +62,11 @@ export default function FoodCameraPage() {
   // return=1：同一顿饭里「添加 / 再拍一张」打开的相机，拍完把照片交回上一页。
   const returnToOpener = router.params?.return === '1'
   const maxCount = Math.min(MAX_ALBUM_PHOTOS, Math.max(1, Number(router.params?.max) || MAX_ALBUM_PHOTOS))
-  const recordDate = useMemo(() => resolveCameraRecordDate(router.params?.date), [router.params?.date])
+  const explicitBackfill = router.params?.backfill === '1'
+  // Includes foreground day changes and an immediate check after returning from
+  // the background. Actions below also resolve again instead of using a render's day.
+  useLocalToday()
+  const recordDate = resolveCameraRecordDate(router.params?.date, explicitBackfill)
   const [orientation, setOrientation] = useState<ShotOrientation>(readStoredOrientation)
   const [cameraState, setCameraState] = useState<CameraState>('preparing')
   const [shooting, setShooting] = useState(false)
@@ -80,15 +85,12 @@ export default function FoodCameraPage() {
 
   useEffect(() => {
     if (!returnToOpener && !getAccessToken()) {
-      const query = router.params?.date ? `?date=${encodeURIComponent(String(router.params.date))}` : ''
+      const target = resolveCameraRecordDate(router.params?.date, explicitBackfill)
+      const query = target.backfill ? `?date=${encodeURIComponent(target.date)}&backfill=1` : ''
       void Taro.redirectTo({ url: buildLoginRedirectUrl(`${CAMERA_PAGE_PATH}${query}`) })
       return
     }
     if (!returnToOpener) {
-      persistRecordTargetDate(recordDate.date)
-      if (recordDate.fellBackToToday) {
-        void Taro.showToast({ title: '只能记近 14 天，这次记到今天', icon: 'none' })
-      }
       // 进相机先看积分：用完了直接弹积分说明，不让人拍完才被拦。
       getMyMembership()
         .then((status) => {
@@ -107,6 +109,14 @@ export default function FoodCameraPage() {
       })
   }, [])
 
+  useEffect(() => {
+    if (returnToOpener) return
+    persistRecordTargetDate(recordDate.date)
+    if (recordDate.fellBackToToday) {
+      void Taro.showToast({ title: '只能记近 14 天，这次记到今天', icon: 'none' })
+    }
+  }, [returnToOpener, recordDate.date, recordDate.fellBackToToday])
+
   const creditBlocked = !returnToOpener && isFoodAnalysisCreditExhausted(membership)
 
   const finishWithPhotos = (paths: string[]) => {
@@ -115,9 +125,11 @@ export default function FoodCameraPage() {
       void Taro.navigateBack()
       return
     }
+    const target = resolveCameraRecordDate(router.params?.date, explicitBackfill)
+    persistRecordTargetDate(target.date)
     Taro.setStorageSync('analyzeImagePath', paths[0])
     Taro.setStorageSync('analyzeImagePaths', paths)
-    void Taro.redirectTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate.date)}` })
+    void Taro.redirectTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(target.date)}${target.backfill ? '&backfill=1' : ''}` })
   }
 
   const switchOrientation = (next: ShotOrientation) => {
@@ -188,7 +200,8 @@ export default function FoodCameraPage() {
 
   const openSideEntry = (entry: CameraSideEntry) => {
     if (busyRef.current) return
-    const url = buildCameraEntryUrl(entry, recordDate.date)
+    const target = resolveCameraRecordDate(router.params?.date, explicitBackfill)
+    const url = buildCameraEntryUrl(entry, target.date, target.backfill)
     // 识别记录看完还能回来拍；其他方式替换掉相机页，返回直接回到首页。
     const open = entry === 'history' ? Taro.navigateTo : Taro.redirectTo
     void open({ url }).catch(() => {

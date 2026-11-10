@@ -89,6 +89,7 @@ import { FOOD_LIBRARY_PICKED_EVENT, libraryItemToAnalyzeItem } from '../../../ut
 import { mealRecordAdvice } from '../../../utils/meal-record-advice'
 import { resultRatioAdvice } from './ratio-advice'
 import { loadAnalyzeNutritionBudget } from '../../../utils/analyze-nutrition-budget'
+import { loadAnalysisRetryDate } from '../../../utils/analysis-retry-date'
 import { readAnalyzeTaskRecordState, writeAnalyzeTaskRecordState, loadAnalyzeResultSnapshot, updateAnalyzeResultSnapshot } from '../../../utils/analyze-result-session'
 import './index.scss'
 
@@ -1230,9 +1231,29 @@ export function ResultPage() {
     }
   }
 
-  const handleRetakePrecision = () => {
+  const handleRetakePrecision = async () => {
     if (!precisionSessionId) return
-    Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?precision_session_id=${precisionSessionId}` })
+    try {
+      const date = await loadAnalysisRetryDate(recordDate, recordContext.taskId)
+      if (!date || !canPresentResult()) return
+      await Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?precision_session_id=${encodeURIComponent(precisionSessionId)}&date=${encodeURIComponent(date)}&backfill=1` })
+    } catch (error) {
+      if (canPresentResult()) await showUnifiedApiError(error, '读取任务日期失败，请稍后重试')
+    }
+  }
+
+  const handleRetryAnalysis = async () => {
+    try {
+      const date = await loadAnalysisRetryDate(recordDate, recordContext.taskId)
+      if (!date || !canPresentResult()) return
+      await Taro.redirectTo({
+        url: taskType === 'food_text'
+          ? `${extraPkgUrl('/pages/record-text/index')}?text=${encodeURIComponent(textRecordInput)}&date=${encodeURIComponent(date)}`
+          : `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(date)}&backfill=1`,
+      })
+    } catch (error) {
+      if (canPresentResult()) await showUnifiedApiError(error, '读取任务日期失败，请稍后重试')
+    }
   }
 
   /** 概览区三色柱高度：按该成分供能在「蛋白+碳水+脂肪」总供能中的占比（4/4/9 kcal·g⁻¹） */
@@ -2732,11 +2753,7 @@ export function ResultPage() {
         <Text className='result-invalid-note'>这份结果不会被记录，也不会计入摄入。</Text>
         <View
           className='result-invalid-retry'
-          onClick={() => Taro.redirectTo({
-            url: taskType === 'food_text'
-              ? `${extraPkgUrl('/pages/record-text/index')}?text=${encodeURIComponent(textRecordInput)}&date=${recordDate}`
-              : extraPkgUrl('/pages/analyze/index'),
-          })}
+          onClick={handleRetryAnalysis}
         ><Text>重新分析</Text></View>
       </View>
     )

@@ -70,14 +70,15 @@ describe('custom tab bar camera button', () => {
     delete (global as any).getCurrentPages
   })
 
-  it('opens the camera page straight away for the date shown on home', () => {
+  it('starts a new camera session without carrying a stale home date', () => {
     storage.home_selected_date_v1 = '2026-11-06'
     const tabBar = loadTabBar()
 
     tapCameraButton(tabBar)
 
     expect(wxMock.navigateTo).toHaveBeenCalledTimes(1)
-    expect(wxMock.navigateTo.mock.calls[0][0].url).toBe(`${CAMERA_PAGE}?date=2026-11-06`)
+    expect(wxMock.navigateTo.mock.calls[0][0].url).toBe(CAMERA_PAGE)
+    expect(wxMock.getStorageSync).not.toHaveBeenCalledWith('home_selected_date_v1')
     expect(wxMock.switchTab).not.toHaveBeenCalled()
     expect(storage.showRecordMenuModal).toBeUndefined()
     expect(tabBar.data.recordOpening).toBe(true)

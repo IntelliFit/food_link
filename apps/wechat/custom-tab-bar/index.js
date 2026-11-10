@@ -14,20 +14,12 @@ function readStorageFlag(key) {
 }
 
 const FOOD_CAMERA_PAGE = '/packageCamera/pages/shoot/index'
-/** 首页当前选中的日期，首页每次切换日期都会写入（pages/index/index.tsx 的 HOME_SELECTED_DATE_KEY） */
-const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
-
 /**
  * 底栏相机直接打开取景相机（V3：点相机直接拍，文字、食物库、常吃的在相机页下面），
- * 按首页选中的日期记；日期不对或超出可记录范围时，由相机页改记今天。
+ * 新拍摄始终记今天。首页浏览过的历史日期不代表用户要补录。
  */
 function buildFoodCameraUrl() {
-  let date = ''
-  try {
-    const stored = wx.getStorageSync(HOME_SELECTED_DATE_KEY)
-    if (typeof stored === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(stored)) date = stored
-  } catch (e) {}
-  return date ? FOOD_CAMERA_PAGE + '?date=' + encodeURIComponent(date) : FOOD_CAMERA_PAGE
+  return FOOD_CAMERA_PAGE
 }
 
 Component({

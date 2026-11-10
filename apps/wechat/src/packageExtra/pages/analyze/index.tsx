@@ -60,7 +60,8 @@ import {
 } from '../../../utils/membership'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import EatingMoodPicker from '../../../components/EatingMoodPicker'
-import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
+import { persistRecordTargetDate, getTodayRecordDateKey, resolveNewRecordDate } from '../../../utils/record-date'
+import { useLocalToday } from '../../../hooks/useLocalToday'
 import {
   defaultAnalysisEngineForMode,
   normalizeAnalysisEngine,
@@ -433,7 +434,15 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
   return persistedPaths
 }
 
-function AnalyzePage() {
+export function AnalyzePage() {
+  const [recordDateInput] = useState(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    return { date: String(params?.date || ''), backfill: params?.backfill === '1' }
+  })
+  const today = useLocalToday()
+  const dateChoice = resolveNewRecordDate(recordDateInput.date, recordDateInput.backfill)
+  const recordTargetDate = dateChoice.backfill ? dateChoice.date : today
+  const resolveCurrentRecordDate = () => resolveNewRecordDate(recordDateInput.date, recordDateInput.backfill).date
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const mealTypeChosenRef = useRef(false)
@@ -648,7 +657,7 @@ function AnalyzePage() {
     }
     if (getAccessToken()) {
       getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
-      const targetDate = getStoredRecordTargetDate()
+      const targetDate = resolveCurrentRecordDate()
       if (targetDate !== getTodayRecordDateKey()) {
         getMyMembership(targetDate).then(ms => setTargetDateStatus(ms)).catch(() => {})
       } else {
@@ -669,7 +678,7 @@ function AnalyzePage() {
     const params = Taro.getCurrentInstance().router?.params
     const nextSessionId = String(params?.precision_session_id || '').trim()
     const requestedCaptureMode = String(params?.capture_mode || '').trim()
-    persistRecordTargetDate(String(params?.date || ''))
+    persistRecordTargetDate(resolveCurrentRecordDate())
     const requestedAnalysisEngine = String(params?.analysis_engine || '').trim()
     routeSessionSignatureRef.current = `${nextSessionId}|${requestedAnalysisEngine}|${requestedCaptureMode}`
     setPrecisionSessionId(nextSessionId)
@@ -703,7 +712,7 @@ function AnalyzePage() {
           try {
             const ms = await getMyMembership()
             setMembershipStatus(ms)
-            const targetDate = getStoredRecordTargetDate()
+            const targetDate = resolveCurrentRecordDate()
             if (targetDate !== getTodayRecordDateKey()) {
               const tms = await getMyMembership(targetDate)
               setTargetDateStatus(tms)
@@ -1116,7 +1125,7 @@ function AnalyzePage() {
     Taro.showLoading({ title: '', mask: true })
 
     try {
-      const targetRecordDate = getStoredRecordTargetDate()
+      let targetRecordDate = resolveCurrentRecordDate()
       // Fetch the selected day's current budget while photos upload, without
       // letting dashboard availability block recognition or invent a zero budget.
       const nutritionBudgetPromise = loadAnalyzeNutritionBudget(targetRecordDate, { enabled: suggestRatioEnabled })
@@ -1161,7 +1170,20 @@ function AnalyzePage() {
       const precisionReferenceObject = isStrictBaseModeSelected ? buildPrecisionReferenceObject() : undefined
 
       Taro.showLoading({ title: '', mask: true })
-      const nutritionBudget = await nutritionBudgetPromise
+      let nutritionBudget = await nutritionBudgetPromise
+      // Uploading may span midnight. Keep both the task and its nutrition
+      // budget on the day of submission, while explicit backfill stays fixed.
+      const afterUploadDate = resolveCurrentRecordDate()
+      if (afterUploadDate !== targetRecordDate) {
+        targetRecordDate = afterUploadDate
+        nutritionBudget = await loadAnalyzeNutritionBudget(targetRecordDate, { enabled: suggestRatioEnabled })
+      }
+      const submitDate = resolveCurrentRecordDate()
+      if (submitDate !== targetRecordDate) {
+        targetRecordDate = submitDate
+        nutritionBudget = {}
+      }
+      persistRecordTargetDate(targetRecordDate)
       const commonPayload = {
         date: targetRecordDate,
         meal_type: mealType,
@@ -1303,7 +1325,6 @@ function AnalyzePage() {
   }
 
   // 配额提示条文案与样式计算
-  const recordTargetDate = getStoredRecordTargetDate()
   const isBackfill = recordTargetDate !== getTodayRecordDateKey()
   const creditCost = getFoodAnalysisCreditCost(executionMode, creditUnits)
 

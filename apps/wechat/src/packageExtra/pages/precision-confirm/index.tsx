@@ -13,6 +13,8 @@ import {
   showUnifiedApiError,
 } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { getTaskRecordTargetDate } from '../../../utils/record-date'
+import { requireAnalysisRetryDate } from '../../../utils/analysis-retry-date'
 import { withAuth } from '../../../utils/withAuth'
 import './index.scss'
 
@@ -155,10 +157,13 @@ function PrecisionConfirmPage() {
 
   const handleRetake = () => {
     if (!sessionId) return
+    const date = requireAnalysisRetryDate(getTaskRecordTargetDate(task || {}))
+    if (!date) return
+    const dateQuery = `date=${encodeURIComponent(date)}&backfill=1`
     if (isVideoCapture || retakeRequirements.some((item) => item.role === 'video')) {
       Taro.removeStorageSync('analyzePrecisionRetakeImagePaths')
       Taro.redirectTo({
-        url: `${extraPkgUrl('/pages/analyze/index')}?precision_session_id=${encodeURIComponent(sessionId)}&capture_mode=video`,
+        url: `${extraPkgUrl('/pages/analyze/index')}?precision_session_id=${encodeURIComponent(sessionId)}&capture_mode=video&${dateQuery}`,
       })
       return
     }
@@ -173,7 +178,7 @@ function PrecisionConfirmPage() {
     }
     Taro.setStorageSync('analyzePrecisionRetakeImagePaths', nextPaths)
     Taro.redirectTo({
-      url: `${extraPkgUrl('/pages/analyze/index')}?precision_session_id=${encodeURIComponent(sessionId)}`,
+      url: `${extraPkgUrl('/pages/analyze/index')}?precision_session_id=${encodeURIComponent(sessionId)}&${dateQuery}`,
     })
   }
 

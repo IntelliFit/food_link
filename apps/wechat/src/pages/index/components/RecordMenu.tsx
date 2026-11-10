@@ -24,7 +24,7 @@ import {
   openDebugResultPageFromMenu
 } from '../../../utils/dev-debug-tools'
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
-import { persistRecordTargetDate, getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
+import { persistRecordTargetDate, getRecordDateLabel, getTodayRecordDateKey, requireAllowedRecordDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import {
   chooseImageWithPrivacy,
@@ -143,6 +143,23 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 }
 
+/** Browsing a past day is not permission to date a newly taken photo to that day. */
+async function chooseImageRecordDate(selectedDate: string): Promise<{ date: string; backfill: boolean } | null> {
+  const today = getTodayRecordDateKey()
+  const selectedLabel = getRecordDateLabel(selectedDate)
+  if (!selectedDate || selectedDate >= today || selectedLabel === '请选择日期') {
+    return { date: today, backfill: false }
+  }
+  try {
+    const choice = await Taro.showActionSheet({ itemList: ['记录今天', `补录${selectedLabel}`] })
+    if (choice.tapIndex === 0) return { date: getTodayRecordDateKey(), backfill: false }
+    if (choice.tapIndex === 1) return { date: selectedDate, backfill: true }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
@@ -206,8 +223,9 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   if ((!visible || imagePickInProgress) && !onboardingPreviewOpen) return null
 
   const handleGridClick = (modeId: string) => {
-    if (!requireAllowedRecordDate(selectedDate)) return
-    const recordDate = persistRecordTargetDate(selectedDate)
+    const isImageEntry = modeId === 'camera' || modeId === 'album'
+    if (!isImageEntry && !requireAllowedRecordDate(selectedDate)) return
+    const recordDate = isImageEntry ? '' : persistRecordTargetDate(selectedDate)
 
     switch (modeId) {
       case 'camera':
@@ -227,6 +245,10 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
         imagePickLockRef.current = true
         setImagePreflightMode(modeId)
         void (async () => {
+          const chosenDate = await chooseImageRecordDate(selectedDate)
+          if (!chosenDate || !requireAllowedRecordDate(chosenDate.date)) return
+          const imageRecordDate = persistRecordTargetDate(chosenDate.date)
+          const dateQuery = `date=${encodeURIComponent(imageRecordDate)}${chosenDate.backfill ? '&backfill=1' : ''}`
           try {
             const preflightStartedAt = Date.now()
             // 优先使用弹窗打开时预取的结果，未命中则降级发起新请求
@@ -258,7 +280,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
             // 拍照走自建相机页：取景框竖拍 3:4、横拍 4:3，不用微信相机的全屏取景。
             await closeBeforeNativePicker()
             try {
-              await Taro.navigateTo({ url: `${FOOD_CAMERA_PAGE}?date=${encodeURIComponent(recordDate)}` })
+              await Taro.navigateTo({ url: `${FOOD_CAMERA_PAGE}?${dateQuery}` })
               logRecordMenuStage('camera-page-navigate-success', { interaction_id: interactionId, mode: modeId })
             } catch (err: any) {
               logRecordMenuStage('camera-page-navigate-failed', { interaction_id: interactionId, message: String(err?.errMsg || err?.message || '') })
@@ -289,7 +311,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
             }
             Taro.setStorageSync('analyzeImagePath', tempPaths[0])
             Taro.setStorageSync('analyzeImagePaths', tempPaths)
-            await Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
+            await Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?${dateQuery}` })
             logRecordMenuStage('analyze-page-navigate-success', { interaction_id: interactionId, mode: modeId })
           } catch (err: any) {
             if (err.errMsg?.includes('cancel')) {
