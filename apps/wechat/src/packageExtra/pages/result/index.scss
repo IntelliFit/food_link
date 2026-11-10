@@ -3525,3 +3525,157 @@ $v3-cream: #fffdf1;
 @keyframes result-spin {
   to { transform: rotate(360deg); }
 }
+
+// ===================================================================
+// 2026-11-09 减字：顶部一个模式胶囊 + 日期餐次胶囊；食物卡片默认三行，
+// 其余收进「详情」；AI 饮食分析默认只露第一句。
+// ===================================================================
+.result-page--v3 {
+  .execution-mode-left {
+    gap: 12rpx;
+  }
+
+  .execution-mode-tag {
+    gap: 4rpx;
+    border-radius: 999rpx;
+  }
+
+  .execution-mode-tag-arrow,
+  .result-date-chip__arrow {
+    color: #7b8a82;
+    font-size: 24rpx;
+    line-height: 1;
+  }
+
+  .result-date-chip {
+    height: 52rpx;
+    padding: 0 18rpx;
+    box-sizing: border-box;
+    border-radius: 26rpx;
+    display: inline-flex;
+    align-items: center;
+    gap: 6rpx;
+    background: #fff;
+    border: 1rpx solid #e0e5dc;
+
+    &.is-disabled {
+      background: transparent;
+      border-color: transparent;
+    }
+  }
+
+  .result-date-chip__text {
+    color: #3e4a42;
+    font-size: 24rpx;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  // 卡片默认：名称一行、热量和三大营养素一行、实际摄入一行
+  .ingredient-card:not(.is-open) .ingredient-main {
+    padding-bottom: 6rpx;
+    border-bottom: none;
+  }
+
+  .ingredient-card:not(.is-open) .ingredient-controls {
+    padding-top: 8rpx;
+    padding-bottom: 4rpx;
+  }
+
+  .ingredient-brief {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6rpx 10rpx;
+    margin-top: 10rpx;
+  }
+
+  .ingredient-brief__kcal {
+    color: #0c4535;
+    font-size: 34rpx;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+
+  .ingredient-brief__unit {
+    margin-left: -4rpx;
+    color: #5a6b63;
+    font-size: 22rpx;
+    font-weight: 700;
+  }
+
+  .ingredient-brief__meta {
+    color: #5a6b63;
+    font-size: 24rpx;
+    line-height: 1.5;
+  }
+
+  .ingredient-fold {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6rpx;
+    padding: 4rpx 24rpx 16rpx;
+  }
+
+  .ingredient-fold__text {
+    color: #127a58;
+    font-size: 23rpx;
+    font-weight: 700;
+  }
+
+  .ingredient-fold__chevron {
+    color: #127a58;
+    font-size: 26rpx;
+    line-height: 1;
+    transform: rotate(90deg);
+    transition: transform 180ms ease;
+
+    &.is-open {
+      transform: rotate(-90deg);
+    }
+  }
+
+  // AI 饮食分析收起时只露第一句建议，最多两行，点一下展开
+  .insight-preview {
+    display: -webkit-box;
+    margin: 4rpx 0 22rpx;
+    overflow: hidden;
+    color: #3e4a42;
+    font-size: 26rpx;
+    line-height: 40rpx;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}
+
+.result-page--v3.result-page--dark {
+  .result-date-chip {
+    background: #1e2624;
+    border-color: #3d5d51;
+
+    &.is-disabled {
+      background: transparent;
+      border-color: transparent;
+    }
+  }
+
+  .result-date-chip__text,
+  .insight-preview {
+    color: rgb(214 226 220 / 80%);
+  }
+
+  .ingredient-brief__kcal {
+    color: #f2f7f4;
+  }
+
+  .ingredient-brief__unit,
+  .ingredient-brief__meta {
+    color: rgb(214 226 220 / 65%);
+  }
+
+  .ingredient-fold__text,
+  .ingredient-fold__chevron {
+    color: #7dd3b0;
+  }
+}
