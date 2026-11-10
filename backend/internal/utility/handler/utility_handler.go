@@ -250,7 +250,8 @@ func (h *UtilityHandler) ManualFoodCustomSave(c *gin.Context) {
 		ImagePaths:         body.ImagePaths,
 		PortionLabel:       body.PortionLabel,
 		RecommendReason:    body.RecommendReason,
-		ShareToPublic:      body.ShareToPublic,
+		// 旧小程序固定传 false；小程序自定义食物直接贡献，App 保留已有公开开关。
+		ShareToPublic: body.ShareToPublic || !strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Food-Link-Client")), "mobile_app"),
 	})
 	if err != nil {
 		response.Error(c, err)

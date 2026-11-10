@@ -142,7 +142,7 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 	}
 	publicStatus := "private"
 	if input.ShareToPublic {
-		publicStatus = "pending"
+		publicStatus = "published"
 	}
 	now := time.Now()
 	row := domain.UserCustomFood{
@@ -189,6 +189,11 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 				return &commonerrors.AppError{Code: 10002, Message: "已有同名自定义食物，请使用不同名称", HTTPStatus: 400}
 			}
 			columns := []string{"title", "normalized_title", "default_weight_grams", "total_calories", "total_protein", "total_carbs", "total_fat", "nutrients_per_100g", "extra_nutrients", "image_path", "image_paths", "portion_label", "recommend_reason", "updated_at"}
+			if input.ShareToPublic {
+				columns = append(columns, "public_status")
+			} else {
+				row.PublicStatus = existing.PublicStatus
+			}
 			if categoryProvided {
 				columns = append(columns, "category")
 			} else {
@@ -199,7 +204,7 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 		if err != nil {
 			return domain.ManualFoodResult{}, err
 		}
-		return r.manualFoodResultFromCustomFood(row), nil
+		return r.manualFoodResultFromCustomFood(row, userID), nil
 	}
 	upsertColumns := []string{"title"}
 	if categoryProvided {
@@ -232,7 +237,7 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 		First(&saved).Error; err != nil {
 		return domain.ManualFoodResult{}, err
 	}
-	return r.manualFoodResultFromCustomFood(saved), nil
+	return r.manualFoodResultFromCustomFood(saved, userID), nil
 }
 
 func (r *ManualFoodRepo) DeleteCustomFood(ctx context.Context, userID, id string) error {
@@ -275,20 +280,23 @@ func (r *ManualFoodRepo) ListCustomFoods(ctx context.Context, userID string, lim
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
-		results = append(results, r.manualFoodResultFromCustomFood(row))
+		results = append(results, r.manualFoodResultFromCustomFood(row, userID))
 	}
 	return results, hasMore, nil
 }
 
 func (r *ManualFoodRepo) searchCustomFoods(ctx context.Context, userID string, query string, limit int) ([]domain.ManualFoodResult, error) {
-	if strings.TrimSpace(userID) == "" {
-		return []domain.ManualFoodResult{}, nil
-	}
+	userID = strings.TrimSpace(userID)
 	var rows []domain.UserCustomFood
 	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	like := "%" + normalizedQuery + "%"
-	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND status <> ? AND LOWER(title) LIKE ?", userID, "deleted", like).
+	queryDB := r.db.WithContext(ctx).Where("status = ? AND LOWER(title) LIKE ?", "active", like)
+	if userID == "" {
+		queryDB = queryDB.Where("public_status = ?", "published")
+	} else {
+		queryDB = queryDB.Where("(user_id = ? OR public_status = ?)", userID, "published")
+	}
+	if err := queryDB.
 		Clauses(clause.OrderBy{
 			Expression: clause.Expr{
 				SQL: `CASE
@@ -309,7 +317,7 @@ func (r *ManualFoodRepo) searchCustomFoods(ctx context.Context, userID string, q
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
-		result := r.manualFoodResultFromCustomFood(row)
+		result := r.manualFoodResultFromCustomFood(row, userID)
 		result.MatchScore = computeMatchScore(query, result.Title)
 		results = append(results, result)
 	}
@@ -522,7 +530,7 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 			FROM user_food_records
 			CROSS JOIN LATERAL jsonb_array_elements(items) item
 			WHERE trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) <> ''
-				AND COALESCE(item->>'manual_source', '') <> 'packaged_food'
+				AND COALESCE(item->>'manual_source', '') NOT IN ('packaged_food', 'custom')
 				AND COALESCE(item->'nutrients'->>'calories', item->>'calories') ~ '^[0-9]+([.][0-9]+){0,1}$'
 		)
 		SELECT
@@ -591,7 +599,7 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, userID string, 
 			FROM user_food_records
 			CROSS JOIN LATERAL jsonb_array_elements(items) item
 			WHERE trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) <> ''
-				AND COALESCE(item->>'manual_source', '') <> 'packaged_food'
+				AND COALESCE(item->>'manual_source', '') NOT IN ('packaged_food', 'custom')
 				AND COALESCE(item->'nutrients'->>'calories', item->>'calories') ~ '^[0-9]+([.][0-9]+){0,1}$'
 				%s
 		)
@@ -755,6 +763,10 @@ func (r *ManualFoodRepo) listRecentItems(ctx context.Context, userID string, lim
 		result.MatchScore = 0.45
 		results = append(results, result)
 	}
+	results, err = r.refreshRecentCustomFoods(ctx, userID, results)
+	if err != nil {
+		return nil, err
+	}
 	return r.refreshRecentPackagedFoods(ctx, results)
 }
 
@@ -903,7 +915,47 @@ func (r *ManualFoodRepo) searchRecentItems(ctx context.Context, userID string, q
 		result.MatchScore = computeMatchScore(query, result.Title, result.Subtitle) + 0.35
 		results = append(results, result)
 	}
+	results, err = r.refreshRecentCustomFoods(ctx, userID, results)
+	if err != nil {
+		return nil, err
+	}
 	return r.refreshRecentPackagedFoods(ctx, results)
+}
+
+// 录餐快照保留历史摄入；重新选食物时读取当前资料和权限，避免旧快照覆盖公开贡献的修改。
+func (r *ManualFoodRepo) refreshRecentCustomFoods(ctx context.Context, userID string, results []domain.ManualFoodResult) ([]domain.ManualFoodResult, error) {
+	ids := make([]string, 0)
+	for _, result := range results {
+		if result.Source == "custom" && result.ID != "" {
+			ids = append(ids, result.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return results, nil
+	}
+	var rows []domain.UserCustomFood
+	if err := r.db.WithContext(ctx).Where("id::text IN ?", ids).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	byID := make(map[string]domain.UserCustomFood, len(rows))
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+	refreshed := make([]domain.ManualFoodResult, 0, len(results))
+	for _, result := range results {
+		if result.Source == "custom" {
+			if row, found := byID[result.ID]; found {
+				if row.Status != "active" || (row.UserID != userID && row.PublicStatus != "published") {
+					continue
+				}
+				current := r.manualFoodResultFromCustomFood(row, userID)
+				current.UsageCount, current.MatchScore = result.UsageCount, result.MatchScore
+				result = current
+			}
+		}
+		refreshed = append(refreshed, result)
+	}
+	return refreshed, nil
 }
 
 // refreshRecentPackagedFoods prevents historical record snapshots from
@@ -1681,7 +1733,7 @@ func (r *ManualFoodRepo) normalizePublicFoodItem(item publicdomain.PublicFoodIte
 	return item
 }
 
-func (r *ManualFoodRepo) manualFoodResultFromCustomFood(item domain.UserCustomFood) domain.ManualFoodResult {
+func (r *ManualFoodRepo) manualFoodResultFromCustomFood(item domain.UserCustomFood, viewerUserID string) domain.ManualFoodResult {
 	nutrientsPer100g := manualFoodNutrientsFromMap(item.NutrientsPer100g)
 	extraNutrients := manualFoodNutrientsFromMap(item.ExtraNutrients)
 	imagePaths := compactStrings(item.ImagePaths)
@@ -1707,6 +1759,7 @@ func (r *ManualFoodRepo) manualFoodResultFromCustomFood(item domain.UserCustomFo
 	result := domain.ManualFoodResult{
 		ID:                 item.ID,
 		Source:             "custom",
+		CanEdit:            viewerUserID != "" && viewerUserID == item.UserID,
 		Title:              item.Title,
 		Subtitle:           fmt.Sprintf("%.0f kcal / %sg", item.TotalCalories, formatManualCompactNumber(item.DefaultWeightGrams)),
 		Category:           normalizeCustomFoodCategory(item.Category),
@@ -1732,7 +1785,13 @@ func (r *ManualFoodRepo) manualFoodResultFromCustomFood(item domain.UserCustomFo
 		result.PortionLabel = fmt.Sprintf("%sg", formatManualCompactNumber(result.DefaultWeightGrams))
 	}
 	if result.RecommendReason == "" {
-		result.RecommendReason = "我的自定义食物"
+		result.RecommendReason = "用户贡献的食物"
+		if result.CanEdit {
+			result.RecommendReason = "我的自定义食物"
+		}
+	}
+	if !result.CanEdit {
+		result.SourceLabel = "用户贡献"
 	}
 	applyManualFoodServingProfile(&result)
 	return result

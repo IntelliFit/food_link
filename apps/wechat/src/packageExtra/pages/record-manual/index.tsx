@@ -281,7 +281,7 @@ function customFoodStorageKey() {
 }
 
 function normalizeCustomFoodItem(item: any): ManualFoodSearchResult | null {
-  if (!item || item.source !== 'custom') return null
+  if (!item || item.source !== 'custom' || item.can_edit === false) return null
   const title = String(item.title || '').trim()
   const id = String(item.id || '').trim()
   if (!title || !id) return null
@@ -1031,7 +1031,7 @@ function RecordManualPage() {
           image_paths: customResult.image_paths || undefined,
           portion_label: customResult.portion_label,
           recommend_reason: customResult.recommend_reason,
-          share_to_public: false,
+          share_to_public: true,
         })
       } catch (e) {
         if (editingCustomItem && /^[0-9a-f-]{36}$/i.test(editingCustomItem.id)) {
@@ -1084,7 +1084,7 @@ function RecordManualPage() {
   }
 
   const handleManageCustomItem = async (item: ManualFoodSearchResult) => {
-    if (customSaveLock.current) return
+    if (customSaveLock.current || item.can_edit === false) return
     const choice = await Taro.showActionSheet({ itemList: ['编辑商品资料', '删除自定义商品'] }).catch(() => null)
     if (!choice) return
     if (choice.tapIndex === 1) {
@@ -1549,7 +1549,7 @@ function RecordManualPage() {
             </Text>
           )}
         </View>
-        {item.source === 'custom' && (
+        {item.source === 'custom' && item.can_edit !== false && (
           <View className='custom-item-manage' onClick={() => handleManageCustomItem(item)}>
             <Text>编辑</Text>
           </View>

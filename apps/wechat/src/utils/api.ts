@@ -6450,6 +6450,7 @@ export async function uploadHealthReportOcr(base64Image: string): Promise<{
 export interface ManualFoodSearchResult {
   id: string
   source: 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom'
+  can_edit?: boolean
   title: string
   subtitle: string
   category?: string

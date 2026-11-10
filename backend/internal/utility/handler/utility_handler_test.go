@@ -76,6 +76,7 @@ type mockManualFoodService struct {
 	customErr            error
 	saveCustomItem       domain.ManualFoodResult
 	saveCustomErr        error
+	saveCustomInput      repo.CustomFoodInput
 }
 
 func (m *mockManualFoodService) Browse(ctx context.Context, userID string, limit int) (*domain.ManualFoodBrowseResult, error) {
@@ -95,7 +96,34 @@ func (m *mockManualFoodService) ListCustomFoods(ctx context.Context, userID stri
 	return m.customItems, m.customHasMore, m.customErr
 }
 func (m *mockManualFoodService) SaveCustomFood(ctx context.Context, userID string, input repo.CustomFoodInput) (domain.ManualFoodResult, error) {
+	m.saveCustomInput = input
 	return m.saveCustomItem, m.saveCustomErr
+}
+
+func TestManualFoodCustomSavePublicCompatibility(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		client string
+		body   string
+		public bool
+	}{
+		{"legacy mini program", "", `{"title":"薯片","share_to_public":false}`, true},
+		{"mini program without flag", "", `{"title":"薯片"}`, true},
+		{"mobile private", "mobile_app", `{"title":"薯片","share_to_public":false}`, false},
+		{"mobile public", "mobile_app", `{"title":"薯片","share_to_public":true}`, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			foodService := &mockManualFoodService{}
+			router := setupRouter(NewUtilityHandler(nil, nil, foodService))
+			request := httptest.NewRequest(http.MethodPost, "/api/manual-food/custom", bytes.NewBufferString(test.body))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("X-Food-Link-Client", test.client)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, request)
+			assert.Equal(t, http.StatusOK, recorder.Code)
+			assert.Equal(t, test.public, foodService.saveCustomInput.ShareToPublic)
+		})
+	}
 }
 
 func setupRouter(h *UtilityHandler) *gin.Engine {

@@ -78,6 +78,7 @@ type ManualFoodServingPreset struct {
 type ManualFoodResult struct {
 	ID                  string                    `json:"id"`
 	Source              string                    `json:"source"`
+	CanEdit             bool                      `json:"can_edit"`
 	Title               string                    `json:"title"`
 	Subtitle            string                    `json:"subtitle"`
 	Category            string                    `json:"category,omitempty"`
