@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 import FoodCameraPage from '../../src/packageCamera/pages/shoot'
-import { getAccessToken } from '../../src/utils/api'
+import { getAccessToken, getMyMembership } from '../../src/utils/api'
 import { chooseImageWithPrivacy } from '../../src/utils/weapp-privacy'
 
 jest.mock('../../src/components/CreditShortageSheet', () => ({ __esModule: true, default: () => null }))
@@ -10,10 +10,7 @@ jest.mock('../../src/utils/api', () => ({
   getAccessToken: jest.fn(() => 'test-token'),
   getMyMembership: jest.fn(() => Promise.resolve({})),
 }))
-jest.mock('../../src/utils/membership', () => ({
-  getFoodAnalysisCreditBlockMessage: jest.fn(() => ''),
-  isFoodAnalysisCreditExhausted: jest.fn(() => false),
-}))
+jest.mock('../../src/utils/membership', () => jest.requireActual('../../src/utils/membership'))
 jest.mock('../../src/utils/weapp-privacy', () => ({
   ensureWeappPrivacyAuthorized: jest.fn(() => Promise.resolve()),
   chooseImageWithPrivacy: jest.fn(),
@@ -62,6 +59,7 @@ beforeEach(() => {
   ;(Taro.navigateBack as jest.Mock).mockResolvedValue({})
   ;(Taro.redirectTo as jest.Mock).mockResolvedValue({})
   ;(getAccessToken as jest.Mock).mockReturnValue('test-token')
+  ;(getMyMembership as jest.Mock).mockResolvedValue({})
   ;(Taro as any).createCameraContext = jest.fn(() => ({
     takePhoto: jest.fn(({ success }) => success({ tempImagePath: 'wxfile://fresh-today.jpg' })),
   }))
@@ -140,5 +138,34 @@ it('returns all selected photos without overwriting the opener’s explicit reco
   expect(Taro.navigateBack).toHaveBeenCalledTimes(1)
   expect(storage.get('recordTargetDate')).toBe('2026-11-08')
   expect(storage.get('foodCameraReturnPaths')).toEqual(['wxfile://a.jpg', 'wxfile://b.jpg'])
+  expect(Taro.redirectTo).not.toHaveBeenCalled()
+})
+
+it('allows a historical capture when today is exhausted but the target day has credits', async () => {
+  params = { date: '2026-11-08', backfill: '1' }
+  storage.set('access_token', 'test-token')
+  storage.set('user_id', 'user-a')
+  ;(getMyMembership as jest.Mock).mockImplementation(async (date?: string) => ({
+    is_pro: false, daily_credits_max: 20, system_credits_remaining: date ? 20 : 0,
+    earned_credits_balance: 0, total_credits_available: date ? 20 : 0,
+  }))
+  render(<FoodCameraPage />)
+  await settle()
+  await shoot()
+  expect(getMyMembership).toHaveBeenCalledWith('2026-11-08')
+  expect(Taro.redirectTo).toHaveBeenCalledWith({ url: '/packageExtra/pages/analyze/index?date=2026-11-08&backfill=1' })
+})
+
+it('keeps a same-day capture blocked when its credits are exhausted', async () => {
+  storage.set('access_token', 'test-token')
+  storage.set('user_id', 'user-a')
+  ;(getMyMembership as jest.Mock).mockResolvedValue({
+    is_pro: false, daily_credits_max: 20, system_credits_remaining: 0,
+    earned_credits_balance: 0, total_credits_available: 0,
+  })
+  render(<FoodCameraPage />)
+  await settle()
+  await shoot()
+  expect(Taro.createCameraContext).not.toHaveBeenCalled()
   expect(Taro.redirectTo).not.toHaveBeenCalled()
 })

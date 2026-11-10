@@ -203,6 +203,38 @@ export function getEarnedCreditsBalance(status?: MembershipStatus | null): numbe
   return Math.max(Number(status?.earned_credits_balance ?? 0), 0)
 }
 
+/** Match the server's backfill spend plan: target day + today + one shared reward balance.
+ * Incomplete legacy responses cannot prove exhaustion; leave that decision to the API. */
+export function getFoodAnalysisCreditStatusForDate(
+  todayStatus: MembershipStatus | null | undefined,
+  targetStatus: MembershipStatus | null | undefined,
+  isBackfill: boolean,
+): MembershipStatus | null {
+  if (!isBackfill) return todayStatus || null
+  const finiteCredit = (value: unknown): number | null => (
+    typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+  )
+  const credits = (status: MembershipStatus | null | undefined) => {
+    const earned = finiteCredit(status?.earned_credits_balance)
+    const total = finiteCredit(status?.total_credits_available ?? status?.daily_credits_remaining)
+    const explicitSystem = finiteCredit(status?.system_credits_remaining)
+    const system = explicitSystem ?? (total !== null && earned !== null ? Math.max(0, total - earned) : null)
+    return system !== null && earned !== null ? { system, earned } : null
+  }
+  const today = credits(todayStatus)
+  const target = credits(targetStatus)
+  if (!today || !target || !todayStatus) return null
+  const system = today.system + target.system
+  const earned = Math.max(today.earned, target.earned)
+  return {
+    ...todayStatus,
+    system_credits_remaining: system,
+    earned_credits_balance: earned,
+    daily_credits_remaining: system + earned,
+    total_credits_available: system + earned,
+  }
+}
+
 export function isFoodAnalysisCreditExhausted(
   status?: MembershipStatus | null,
   executionMode?: ExecutionMode | string | null,

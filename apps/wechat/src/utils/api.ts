@@ -1,4 +1,5 @@
 import Taro from '@tarojs/taro'
+import { AUTH_SESSION_CHANGED_EVENT, advanceAuthSession, captureAuthSession, isAuthSessionCurrent, authSessionChangedError } from './auth-session'
 import { rememberMealLocation } from './meal-location'
 import { COMMUNITY_FEED_CHANGED_EVENT, HOME_INTAKE_DATA_CHANGED_EVENT } from './home-events'
 
@@ -3610,7 +3611,9 @@ export async function markAnalyzeHistorySeen(): Promise<{ success: boolean }> {
 
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const session = captureAuthSession()
   const payload = await enrichAnalyzePayloadWithGeoContext({ ...body, precise_micronutrients: true })
+  if (!isAuthSessionCurrent(session)) throw authSessionChangedError()
   const res = await authenticatedRequest('/api/analyze/submit', {
     method: 'POST',
     data: payload,
@@ -3725,7 +3728,9 @@ export interface AnalyzeTextTaskSubmitParams {
 
 /** 提交文字分析任务（异步） */
 export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const session = captureAuthSession()
   const payload = await enrichAnalyzePayloadWithGeoContext({ ...body, precise_micronutrients: true })
+  if (!isAuthSessionCurrent(session)) throw authSessionChangedError()
   const res = await authenticatedRequest('/api/analyze-text/submit', {
     method: 'POST',
     data: payload,
@@ -3836,7 +3841,9 @@ export async function continuePrecisionSession(
   sessionId: string,
   body: ContinuePrecisionSessionParams,
 ): Promise<{ task_id: string; message: string }> {
+  const session = captureAuthSession()
   const payload = await enrichAnalyzePayloadWithGeoContext(body)
+  if (!isAuthSessionCurrent(session)) throw authSessionChangedError()
   const res = await authenticatedRequest(`/api/precision-sessions/${sessionId}/continue`, {
     method: 'POST',
     data: payload,
@@ -5020,6 +5027,8 @@ export interface StreamGeneratePetChatCallbacks {
   onChunk: (text: string) => void
   onDone: (meta: PetChatStreamMeta) => void
   onError: (error: Error) => void
+  /** Session replacement stops the old turn without fetching its history. */
+  onCancel?: () => void
 }
 
 export function streamGeneratePetChat(
@@ -5033,6 +5042,7 @@ export function streamGeneratePetChat(
   entryContext?: PetChatEntryContext,
   location?: PetChatLocation,
 ): () => void {
+  const requestSession = captureAuthSession()
   const token = getAccessToken()
   if (!token) {
     redirectToLogin('未登录，请先登录')
@@ -5051,6 +5061,7 @@ export function streamGeneratePetChat(
       clearTimeout(timeoutID)
       timeoutID = null
     }
+    Taro.eventCenter.off(AUTH_SESSION_CHANGED_EVENT, onAuthChanged)
   }
 
   const reportError = (error: unknown) => {
@@ -5060,12 +5071,24 @@ export function streamGeneratePetChat(
     callbacks.onError(error instanceof Error ? error : new Error(String(error || '请求失败')))
   }
 
+  const ensureSession = () => {
+    if (isAuthSessionCurrent(requestSession)) return true
+    settled = true
+    clearRequestTimeout()
+    try { requestTask?.abort?.() } catch (_) {}
+    callbacks.onCancel?.()
+    return false
+  }
+  const onAuthChanged = () => { if (!settled) ensureSession() }
+  Taro.eventCenter.on(AUTH_SESSION_CHANGED_EVENT, onAuthChanged)
+
   const processSSEText = (text: string) => {
-    if (settled) return
+    if (settled || !ensureSession()) return
     buffer += text
     const events = buffer.split('\n\n')
     buffer = events.pop() || ''
     for (const event of events) {
+      if (settled || !ensureSession()) return
       const lines = event.split('\n')
       let dataLine = ''
       for (const line of lines) {
@@ -5124,14 +5147,16 @@ export function streamGeneratePetChat(
       enableChunked: true,
       timeout: 180000,
       success: (res) => {
-        if (settled) return
-        if (res.statusCode === 401 || res.statusCode === 403) {
+        if (settled || !ensureSession()) return
+        if (res.statusCode === 401) {
           redirectToLogin('登录已失效，请重新登录')
           reportError(new Error('登录已失效，请重新登录'))
           return
         }
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          reportError(new Error('小食探分析失败'))
+          try {
+            throwHttpErrorWithStatus(res.statusCode, res.data, '小食探分析失败', res.header as Record<string, any> | undefined)
+          } catch (error) { reportError(error) }
           return
         }
         callbacks.onStart?.()
@@ -5143,10 +5168,11 @@ export function streamGeneratePetChat(
         }
       },
       fail: (err) => {
+        if (settled || !ensureSession()) return
         reportError(new Error(String(err?.errMsg || err || '请求失败')))
       },
       complete: () => {
-        if (settled) return
+        if (settled || !ensureSession()) return
         const trailingText = decoder.decode()
         if (trailingText) processSSEText(trailingText)
         if (!settled && buffer.trim()) processSSEText('\n\n')
@@ -5158,7 +5184,7 @@ export function streamGeneratePetChat(
     ;(requestTask as unknown as Promise<unknown>)?.catch?.(() => undefined)
 
     requestTask.onChunkReceived?.((res: any) => {
-      if (settled) return
+      if (settled || !ensureSession()) return
       const chunk = res.data instanceof ArrayBuffer
         ? decoder.decode(res.data, { stream: true })
         : String(res.data || '')
@@ -5167,7 +5193,7 @@ export function streamGeneratePetChat(
 
     if (!settled) {
       timeoutID = setTimeout(() => {
-        if (settled) return
+        if (settled || !ensureSession()) return
         reportError(new Error('宠物回答超时，请稍后重试'))
         try {
           requestTask?.abort?.()
@@ -5358,6 +5384,7 @@ export function saveTokens(accessToken: string, refreshToken: string, user_id: s
     Taro.setStorageSync('access_token', accessToken)
     Taro.setStorageSync('refresh_token', refreshToken)
     Taro.setStorageSync('user_id', user_id)
+    advanceAuthSession()
     Taro.eventCenter.trigger('product_update_auth_changed')
   } catch (error) {
     console.error('保存 token 失败:', error)
@@ -5374,6 +5401,7 @@ export function clearTokens() {
     Taro.removeStorageSync('access_token')
     Taro.removeStorageSync('refresh_token')
     Taro.removeStorageSync('user_id')
+    advanceAuthSession()
     Taro.eventCenter.trigger('product_update_auth_changed')
     Taro.removeStorageSync('stats_custom_focus_pending_tasks_v1')
   } catch (error) {
@@ -5452,7 +5480,7 @@ function redirectToLogin(message: string = '登录已失效，请重新登录') 
 /**
  * 带认证的请求
  * - 无 token 时清除本地并跳转登录页
- * - 响应 401/403 时视为 token 失效，清除登录态并跳转登录页
+ * - 仅当前会话的 401 清除登录态；403 是业务权限错误
  * @param url 请求 URL
  * @param options 请求选项
  * @returns Promise<any>
@@ -5461,6 +5489,7 @@ export async function authenticatedRequest(
   url: string,
   options: Omit<Taro.request.Option, 'url'> = {}
 ): Promise<any> {
+  const requestSession = captureAuthSession()
   const token = getAccessToken()
 
   if (!token) {
@@ -5494,15 +5523,19 @@ export async function authenticatedRequest(
       startedAt,
       error,
     })
+    if (!isAuthSessionCurrent(requestSession)) throw authSessionChangedError()
     throw error
   }
-  if (res.statusCode === 401 || res.statusCode === 403) {
+  // A late response belongs to its original login, including a late 401. It
+  // must neither return old private data nor clear a more recent login.
+  if (!isAuthSessionCurrent(requestSession)) throw authSessionChangedError()
+  if (res.statusCode === 401) {
     redirectToLogin('登录已失效，请重新登录')
     throw new Error('登录已失效，请重新登录')
   }
 
   // 特殊处理 openid 相关错误：视为登录状态异常，强制重新登录
-  if (res.statusCode >= 400 && res.statusCode < 500) {
+  if (res.statusCode >= 400 && res.statusCode < 500 && res.statusCode !== 403) {
     const detail = (res.data as any)?.detail as string | undefined
     if (detail && (detail.includes('openid') || detail.includes('Token 中缺少 openid'))) {
       redirectToLogin('登录状态异常，请重新登录')

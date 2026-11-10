@@ -233,7 +233,9 @@ export default function ExerciseRecordPage() {
           const payload = applyExerciseTaskResult(task)
           if (task.status === 'done' && payload) {
             setPendingItems((prev) => prev.filter((p) => p.clientId !== clientId))
-            setInputValue('')
+            // The submitted draft was cleared when its task was created. The
+            // input may now belong to the next exercise, so completion only
+            // updates the finished task and its records.
             if (currentRecordDateRef.current === targetDate) {
               await loadRecordsForDate(targetDate)
             }

@@ -39,6 +39,7 @@ import {
 } from '../../../utils/precision-mode'
 import { compressAnalyzeVideoToLimit } from '../../../utils/analyze-video'
 import { loadAnalyzeNutritionBudget } from '../../../utils/analyze-nutrition-budget'
+import { authSessionChangedError, captureAuthSession, isAuthSessionCurrent, type AuthSession } from '../../../utils/auth-session'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   canUseStrictModeForMembership,
@@ -56,6 +57,7 @@ import {
   getFoodAnalysisCreditBlockMessage,
   getFoodAnalysisCreditCost,
   getMembershipCreditSummary,
+  getFoodAnalysisCreditStatusForDate,
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
@@ -461,8 +463,15 @@ export function AnalyzePage() {
   const [suggestRatioEnabled, setSuggestRatioEnabled] = useState<boolean>(() => readSuggestRatioPreference())
   const [eatingMood, setEatingMood] = useState<EatingMood | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const analyzeMountedRef = useRef(true)
+  useEffect(() => {
+    analyzeMountedRef.current = true
+    return () => { analyzeMountedRef.current = false }
+  }, [])
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
-  const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
+  const [membershipCreditDate, setMembershipCreditDate] = useState('')
+  const [membershipCreditOwner, setMembershipCreditOwner] = useState<AuthSession | null>(null)
+  const [targetDateStatus, setTargetDateStatus] = useState<{ date: string; status: MembershipStatus } | null>(null)
   const [precisionSessionId, setPrecisionSessionId] = useState('')
   const [savedReferenceDefaults, setSavedReferenceDefaults] = useState<PrecisionReferenceDefaults>(
     () => buildDefaultReferenceDefaults()
@@ -542,7 +551,28 @@ export function AnalyzePage() {
   const precisionCaptureComplete = isVideoCaptureSelected ? videoCaptureComplete : precisionSlotsComplete
 
   const creditUnits = 1
-  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode, creditUnits)
+  const creditStatus = getFoodAnalysisCreditStatusForDate(
+    membershipCreditDate === today && membershipCreditOwner && isAuthSessionCurrent(membershipCreditOwner) ? membershipStatus : null,
+    targetDateStatus?.date === recordTargetDate && membershipCreditOwner && isAuthSessionCurrent(membershipCreditOwner) ? targetDateStatus.status : null,
+    recordTargetDate !== today,
+  )
+  const isQuotaExhausted = isFoodAnalysisCreditExhausted(creditStatus, executionMode, creditUnits)
+
+  const refreshCreditStatus = async () => {
+    const owner = captureAuthSession()
+    if (!owner.token) return
+    const requestedToday = getTodayRecordDateKey()
+    const targetDate = resolveCurrentRecordDate()
+    const [status, targetStatus] = await Promise.all([
+      getMyMembership(),
+      targetDate !== requestedToday ? getMyMembership(targetDate).catch(() => null) : Promise.resolve(null),
+    ])
+    if (!isAuthSessionCurrent(owner)) return
+    setMembershipStatus(status)
+    setMembershipCreditDate(requestedToday)
+    setMembershipCreditOwner(owner)
+    setTargetDateStatus(targetStatus ? { date: targetDate, status: targetStatus } : null)
+  }
 
   useEffect(() => {
     if (!membershipStatus) return
@@ -656,13 +686,7 @@ export function AnalyzePage() {
       }
     }
     if (getAccessToken()) {
-      getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
-      const targetDate = resolveCurrentRecordDate()
-      if (targetDate !== getTodayRecordDateKey()) {
-        getMyMembership(targetDate).then(ms => setTargetDateStatus(ms)).catch(() => {})
-      } else {
-        setTargetDateStatus(null)
-      }
+      void refreshCreditStatus().catch(() => {})
     }
     if (imagePathsRef.current.length === 0 && !mealTypeChosenRef.current) {
       setMealType(defaultMealType)
@@ -710,15 +734,7 @@ export function AnalyzePage() {
           applyReferencePreset(referenceDefaults.preferred_reference_key || DEFAULT_REFERENCE_PRESET, referenceDefaults)
           // 加载会员状态和配额
           try {
-            const ms = await getMyMembership()
-            setMembershipStatus(ms)
-            const targetDate = resolveCurrentRecordDate()
-            if (targetDate !== getTodayRecordDateKey()) {
-              const tms = await getMyMembership(targetDate)
-              setTargetDateStatus(tms)
-            } else {
-              setTargetDateStatus(null)
-            }
+            await refreshCreditStatus()
           } catch (err) {
             console.error('获取会员状态失败:', err)
           }
@@ -1098,6 +1114,8 @@ export function AnalyzePage() {
       Taro.showToast({ title: '请先登录后再使用识别功能', icon: 'none' })
       return
     }
+    const owner = captureAuthSession()
+    const canContinue = () => analyzeMountedRef.current && isAuthSessionCurrent(owner)
     const submitImagePaths = isVideoCaptureSelected
       ? (videoUploadResult?.keyframes.map(frame => frame.image_url) || [])
       : isStrictBaseModeSelected
@@ -1136,15 +1154,18 @@ export function AnalyzePage() {
           return sourcePath
         }
         const stablePath = await persistImagePathIfNeeded(sourcePath)
+        if (!canContinue()) throw authSessionChangedError()
         const uploadPath = await compressImagePathForUpload(stablePath || sourcePath, {
           // 精准双角度继续保留原像素，只复用原有 2.5MB 体积门槛；普通模式才收敛超高像素。
           maxLongEdge: isStrictBaseModeSelected ? 0 : 2048,
         })
+        if (!canContinue()) throw authSessionChangedError()
 
         try {
           const { imageUrl } = await uploadAnalyzeImageFile(uploadPath || stablePath || sourcePath)
           return imageUrl
         } catch (fileUploadError) {
+          if (!canContinue()) throw authSessionChangedError()
           if (!shouldFallbackToLegacyAnalyzeUpload(fileUploadError)) {
             throw fileUploadError
           }
@@ -1152,9 +1173,11 @@ export function AnalyzePage() {
         }
 
         const base64 = await imageToBase64(uploadPath || stablePath || sourcePath)
+        if (!canContinue()) throw authSessionChangedError()
         const { imageUrl } = await uploadAnalyzeImage(base64)
         return imageUrl
       }))
+      if (!canContinue()) return
 
       const primaryImageUrl = imageUrls[0]
       const referenceObjects = buildReferenceObjects()
@@ -1171,12 +1194,14 @@ export function AnalyzePage() {
 
       Taro.showLoading({ title: '', mask: true })
       let nutritionBudget = await nutritionBudgetPromise
+      if (!canContinue()) return
       // Uploading may span midnight. Keep both the task and its nutrition
       // budget on the day of submission, while explicit backfill stays fixed.
       const afterUploadDate = resolveCurrentRecordDate()
       if (afterUploadDate !== targetRecordDate) {
         targetRecordDate = afterUploadDate
         nutritionBudget = await loadAnalyzeNutritionBudget(targetRecordDate, { enabled: suggestRatioEnabled })
+        if (!canContinue()) return
       }
       const submitDate = resolveCurrentRecordDate()
       if (submitDate !== targetRecordDate) {
@@ -1250,6 +1275,7 @@ export function AnalyzePage() {
             execution_mode: executionMode,
             ...commonPayload,
           })
+      if (!canContinue()) return
       const task_id = String(
         (response as { task_id?: string; taskId?: string }).task_id
           ?? (response as { task_id?: string; taskId?: string }).taskId
@@ -1266,6 +1292,7 @@ export function AnalyzePage() {
         url: `${extraPkgUrl('/pages/analyze-loading/index')}?${q}`
       })
     } catch (error: any) {
+      if (!canContinue()) return
       Taro.hideLoading()
       setIsAnalyzing(false)
       const statusCode = (error as { statusCode?: number })?.statusCode
@@ -1283,6 +1310,10 @@ export function AnalyzePage() {
       } else {
         await showUnifiedApiError(error, '分析失败，请重试')
       }
+    } finally {
+      // This is component-local state. A cancelled old session may release its
+      // button, but must not hide another page/session's global loading UI.
+      if (analyzeMountedRef.current) setIsAnalyzing(false)
     }
   }
 
@@ -1292,8 +1323,15 @@ export function AnalyzePage() {
     const now = Date.now()
     if (now - analyzeSubmitDebounceRef.current < ANALYZE_SUBMIT_DEBOUNCE_MS) return
     analyzeSubmitDebounceRef.current = now
-    if (isQuotaExhausted) {
-      setCreditSheet({ visible: true, message: getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode, creditUnits) })
+    const actionDate = resolveCurrentRecordDate()
+    const actionToday = getTodayRecordDateKey()
+    const actionCreditStatus = getFoodAnalysisCreditStatusForDate(
+      membershipCreditDate === actionToday && membershipCreditOwner && isAuthSessionCurrent(membershipCreditOwner) ? membershipStatus : null,
+      targetDateStatus?.date === actionDate && membershipCreditOwner && isAuthSessionCurrent(membershipCreditOwner) ? targetDateStatus.status : null,
+      actionDate !== actionToday,
+    )
+    if (isFoodAnalysisCreditExhausted(actionCreditStatus, executionMode, creditUnits)) {
+      setCreditSheet({ visible: true, message: getFoodAnalysisCreditBlockMessage(actionCreditStatus, executionMode, creditUnits) })
       return
     }
     if (selectedImagePaths.length === 0) {
@@ -1332,7 +1370,7 @@ export function AnalyzePage() {
   let quotaBarText = ''
   let quotaBarLoading = false
   if (isBackfill) {
-    const targetSummary = targetDateStatus ? getMembershipCreditSummary(targetDateStatus) : null
+    const targetSummary = targetDateStatus?.date === recordTargetDate && membershipCreditOwner && isAuthSessionCurrent(membershipCreditOwner) ? getMembershipCreditSummary(targetDateStatus.status) : null
     const targetHasInfo = targetSummary?.hasInfo ?? false
     const targetRemaining = targetSummary?.remaining ?? 0
     const monthDay = `${Number(recordTargetDate.slice(5, 7))}月${Number(recordTargetDate.slice(8, 10))}日`
@@ -1910,7 +1948,7 @@ export function AnalyzePage() {
       )}
       <CreditShortageSheet
         visible={creditSheet.visible}
-        membershipStatus={membershipStatus}
+        membershipStatus={creditStatus || membershipStatus}
         requiredCredits={creditCost}
         scenarioLabel='食物分析'
         message={creditSheet.message}

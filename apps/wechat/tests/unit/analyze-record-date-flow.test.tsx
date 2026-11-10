@@ -1,8 +1,9 @@
 import { act, fireEvent, render } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 import { AnalyzePage } from '../../src/packageExtra/pages/analyze'
-import { getHomeDashboard, submitAnalyzeTask, uploadAnalyzeImageFile } from '../../src/utils/api'
+import { getHomeDashboard, getMyMembership, submitAnalyzeTask, uploadAnalyzeImageFile } from '../../src/utils/api'
 import { openFoodCameraForResult, takeFoodCameraResult } from '../../src/utils/food-camera'
+import { advanceAuthSession } from '../../src/utils/auth-session'
 
 jest.mock('@tarojs/components', () => {
   const React = require('react')
@@ -31,12 +32,7 @@ jest.mock('../../src/utils/api', () => ({
   getHomeDashboard: jest.fn(),
   showUnifiedApiError: jest.fn(),
 }))
-jest.mock('../../src/utils/membership', () => ({
-  getFoodAnalysisCreditCost: () => 1,
-  getMembershipCreditSummary: () => ({ hasInfo: true, max: 100, used: 0, remaining: 100 }),
-  isFoodAnalysisCreditExhausted: () => false,
-  getFoodAnalysisCreditBlockMessage: () => '',
-}))
+jest.mock('../../src/utils/membership', () => jest.requireActual('../../src/utils/membership'))
 jest.mock('../../src/utils/execution-mode', () => ({
   canUseStrictModeForMembership: () => false,
   getStrictModeLockedHint: () => '',
@@ -130,6 +126,7 @@ describe('AnalyzePage record date at submission', () => {
     ;(submitAnalyzeTask as jest.Mock).mockResolvedValue({ task_id: 'new-task' })
     ;(uploadAnalyzeImageFile as jest.Mock).mockResolvedValue({ imageUrl: freshUploadedPhoto })
     ;(takeFoodCameraResult as jest.Mock).mockReturnValue([])
+    ;(getMyMembership as jest.Mock).mockResolvedValue({ is_pro: false })
   })
 
   afterEach(() => {
@@ -213,5 +210,55 @@ describe('AnalyzePage record date at submission', () => {
       date: expectedDate, image_urls: [freshUploadedPhoto], remaining_calories: remainingCalories,
     }))
     expect(getHomeDashboard).toHaveBeenLastCalledWith(expectedDate)
+  })
+
+  it('submits explicit photo backfill using target credits when today is exhausted', async () => {
+    route.backfill = '1'
+    storage.set('access_token', 'test-token')
+    ;(getMyMembership as jest.Mock).mockImplementation(async (date?: string) => ({
+      is_pro: false, daily_credits_max: 20, system_credits_remaining: date ? 20 : 0,
+      earned_credits_balance: 0, total_credits_available: date ? 20 : 0,
+    }))
+    const view = await mountPage()
+    await submit(view)
+    expect(getMyMembership).toHaveBeenCalledWith('2026-11-08')
+    expect(submitAnalyzeTask).toHaveBeenCalledWith(expect.objectContaining({ date: '2026-11-08' }))
+  })
+
+  it('keeps insufficient same-day photo analysis blocked', async () => {
+    storage.set('access_token', 'test-token')
+    ;(getMyMembership as jest.Mock).mockResolvedValue({
+      is_pro: false, daily_credits_max: 20, system_credits_remaining: 0,
+      earned_credits_balance: 0, total_credits_available: 0,
+    })
+    const view = await mountPage()
+    await submit(view)
+    expect(submitAnalyzeTask).not.toHaveBeenCalled()
+    expect(view.container.querySelector('.confirm-btn')).toHaveTextContent('积分不足')
+  })
+
+  it('does not submit old photos or overwrite new-account context after a delayed upload', async () => {
+    storage.set('access_token', 'test-token')
+    storage.set('analyzeImagePaths', [freshLocalPhoto])
+    let finishUpload!: (value: { imageUrl: string }) => void
+    ;(uploadAnalyzeImageFile as jest.Mock).mockReturnValue(new Promise(resolve => { finishUpload = resolve }))
+    const view = await mountPage()
+    await submit(view)
+    expect(uploadAnalyzeImageFile).toHaveBeenCalledTimes(1)
+    advanceAuthSession()
+    storage.set('user_id', 'user-b')
+    storage.set('analyzeImagePaths', ['https://fixture.invalid/new-account-photo.jpg'])
+    ;(Taro.hideLoading as jest.Mock).mockClear()
+    await act(async () => { finishUpload({ imageUrl: freshUploadedPhoto }); await flush() })
+    expect(submitAnalyzeTask).not.toHaveBeenCalled()
+    expect(Taro.redirectTo).not.toHaveBeenCalled()
+    expect(Taro.hideLoading).not.toHaveBeenCalled()
+    expect(storage.get('analyzeImagePaths')).toEqual(['https://fixture.invalid/new-account-photo.jpg'])
+    expect(view.container.querySelector('.confirm-btn')).not.toHaveClass('disabled')
+    expect(view.container.querySelector('.btn-spinner')).toBeNull()
+    act(() => jest.advanceTimersByTime(301))
+    await submit(view)
+    expect(uploadAnalyzeImageFile).toHaveBeenCalledTimes(2)
+    expect(submitAnalyzeTask).toHaveBeenCalledTimes(1)
   })
 })
