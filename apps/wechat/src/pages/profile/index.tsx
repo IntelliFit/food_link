@@ -1,3 +1,4 @@
+import { clearAnalyzeResultSessionCache } from '../../utils/analyze-result-session'
 import { LifespanEntry } from '../../components/LifespanEntry'
 import { WeeklyRecapEntry } from '../../components/WeeklyRecapEntry'
 import { resetSocialInbox } from '../../utils/social-inbox'
@@ -587,6 +588,8 @@ function ProfilePage() {
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzeDebugPreview')
           Taro.removeStorageSync('analyzeShareData')
+          Taro.removeStorageSync('analyze_committed_session')
+          clearAnalyzeResultSessionCache()
           Taro.removeStorageSync('analyzeTaskIsRecorded')
           Taro.removeStorageSync('analyzeCommittedRecordId')
 

@@ -6,7 +6,8 @@ import { getPetSummary, type PetProfile } from '../../../utils/api'
 import { DEFAULT_PET_NAME, petDisplayName } from '../../../utils/pet-name'
 import {
   PET_MAX_SNACKS,
-  PET_SNACKS,
+  createPetSnackTray,
+  replacePetSnack,
   petSnackLine,
   petTapLine,
   pickWaitingStageLine,
@@ -25,6 +26,7 @@ const STAGE_LINE_MS = 5000
 const REACTION_MS = 3500
 const HOP_MS = 520
 const FLOATER_MS = 900
+const MAX_FLOATERS = 6
 
 export interface PetReaction {
   id: number
@@ -58,11 +60,14 @@ export function WaitingPetCompanion({ tip, reaction, ...stageInput }: WaitingPet
   const [hopping, setHopping] = useState(false)
   const [floaters, setFloaters] = useState<Floater[]>([])
   const [snacksEaten, setSnacksEaten] = useState(0)
+  const [snackTray, setSnackTray] = useState(createPetSnackTray)
+  const snackTrayRef = useRef(snackTray)
+  const snacksEatenRef = useRef(0)
   const tapCountRef = useRef(0)
   const nextFloaterRef = useRef(0)
   const reactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const floaterTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  const floaterTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
 
   const stage = pickWaitingStageLine(stageInput)
 
@@ -92,6 +97,7 @@ export function WaitingPetCompanion({ tip, reaction, ...stageInput }: WaitingPet
     if (reactionTimerRef.current) clearTimeout(reactionTimerRef.current)
     if (hopTimerRef.current) clearTimeout(hopTimerRef.current)
     floaterTimersRef.current.forEach(clearTimeout)
+    floaterTimersRef.current.clear()
   }, [])
 
   const hop = () => {
@@ -110,11 +116,19 @@ export function WaitingPetCompanion({ tip, reaction, ...stageInput }: WaitingPet
   const addFloater = (glyph: string) => {
     nextFloaterRef.current += 1
     const id = nextFloaterRef.current
-    setFloaters(prev => [...prev, { id, glyph }])
-    floaterTimersRef.current = [
-      ...floaterTimersRef.current,
-      setTimeout(() => setFloaters(prev => prev.filter(item => item.id !== id)), FLOATER_MS),
-    ]
+    setFloaters(prev => [...prev.slice(-(MAX_FLOATERS - 1)), { id, glyph }])
+    if (floaterTimersRef.current.size >= MAX_FLOATERS) {
+      const oldest = floaterTimersRef.current.values().next().value
+      if (oldest) {
+        clearTimeout(oldest)
+        floaterTimersRef.current.delete(oldest)
+      }
+    }
+    const timer = setTimeout(() => {
+      setFloaters(prev => prev.filter(item => item.id !== id))
+      floaterTimersRef.current.delete(timer)
+    }, FLOATER_MS)
+    floaterTimersRef.current.add(timer)
   }
 
   const reactionId = reaction?.id
@@ -131,9 +145,14 @@ export function WaitingPetCompanion({ tip, reaction, ...stageInput }: WaitingPet
   }
 
   const handleFeed = (snack: PetSnack) => {
-    say(petSnackLine(snack, snacksEaten))
-    if (snacksEaten >= PET_MAX_SNACKS) return
-    setSnacksEaten(prev => prev + 1)
+    const eaten = snacksEatenRef.current
+    say(petSnackLine(snack, eaten))
+    if (eaten >= PET_MAX_SNACKS || !snackTrayRef.current.some(item => item.id === snack.id)) return
+    snacksEatenRef.current = eaten + 1
+    setSnacksEaten(eaten + 1)
+    const nextTray = replacePetSnack(snackTrayRef.current, snack.id)
+    snackTrayRef.current = nextTray
+    setSnackTray(nextTray)
     addFloater(snack.emoji)
   }
 
@@ -170,13 +189,14 @@ export function WaitingPetCompanion({ tip, reaction, ...stageInput }: WaitingPet
         </View>
       </View>
       <View className='waiting-pet__snacks'>
-        <Text className='waiting-pet__snacks-label'>喂它一口</Text>
-        {PET_SNACKS.map(snack => (
+        <Text className='waiting-pet__snacks-label'>{snacksEaten >= PET_MAX_SNACKS ? '吃饱啦' : '喂它一口'}</Text>
+        {snackTray.map(snack => (
           <View
             key={snack.id}
-            className='waiting-pet__snack'
+            className={`waiting-pet__snack${snacksEaten >= PET_MAX_SNACKS ? ' is-full' : ''}`}
             role='button'
             aria-label={`喂${snack.label}`}
+            aria-disabled={snacksEaten >= PET_MAX_SNACKS}
             onClick={() => handleFeed(snack)}
           >
             <Text className='waiting-pet__snack-emoji'>{snack.emoji}</Text>

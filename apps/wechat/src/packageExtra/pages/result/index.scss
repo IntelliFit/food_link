@@ -3679,3 +3679,7 @@ $v3-cream: #fffdf1;
     color: #7dd3b0;
   }
 }
+
+.result-preparing { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f8fafc; }
+.result-preparing-spinner { width: 48rpx; height: 48rpx; border: 5rpx solid #d1fae5; border-top-color: #168060; border-radius: 50%; animation: result-preparing-spin .8s linear infinite; }
+@keyframes result-preparing-spin { to { transform: rotate(360deg); } }

@@ -223,3 +223,9 @@ access_token / refresh_token     → 全局                  → POST /api/auth/
 user_id / userInfo               → 全局                  → GET  /api/user/profile
 membershipStatus                 → pages/profile         → GET  /api/user/membership
 ```
+
+## 识别结果与分享会话（2026-11-10）
+
+- 已记录状态复用 `analyze_committed_session`，按识别任务 ID 保存真实记录 ID；不读取无任务归属的全局已记录标记。
+- 结果、照片和餐次等上下文在结果页内固定为当前任务快照；最多保留 8 个按用户和任务隔离的内存快照，切换账号不复用。
+- “我的 → 清除缓存”同时清理该任务记录映射和内存快照；未知记录 ID 不回退到其他餐。

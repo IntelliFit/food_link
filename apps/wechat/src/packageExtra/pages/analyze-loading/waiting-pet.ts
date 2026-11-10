@@ -25,10 +25,52 @@ export const PET_SNACKS: readonly PetSnack[] = [
   { id: 'egg', emoji: '🥚', label: '鸡蛋', fact: '好香！一个鸡蛋约 6 克蛋白质。' },
   { id: 'broccoli', emoji: '🥦', label: '西兰花', fact: '绿绿的！每 100 克西兰花只有约 35 千卡。' },
   { id: 'milk', emoji: '🥛', label: '牛奶', fact: '咕嘟咕嘟！一杯 250 毫升牛奶约 8 克蛋白质。' },
+  { id: 'strawberry', emoji: '🍓', label: '草莓', fact: '草莓小帽子摘掉，酸酸甜甜一口吃！' },
+  { id: 'banana', emoji: '🍌', label: '香蕉', fact: '剥开一根小香蕉，今天也是元气满满！' },
+  { id: 'carrot', emoji: '🥕', label: '胡萝卜', fact: '咔嚓咔嚓，听见胡萝卜的声音了吗？' },
+  { id: 'orange', emoji: '🍊', label: '橘子', fact: '一瓣给我，一瓣留给你～' },
+  { id: 'grapes', emoji: '🍇', label: '葡萄', fact: '葡萄排排队，一个一个慢慢吃。' },
+  { id: 'corn', emoji: '🌽', label: '玉米', fact: '抱着小玉米，啃得整整齐齐！' },
+  { id: 'sweet-potato', emoji: '🍠', label: '红薯', fact: '热乎乎的红薯，先吹一吹再吃～' },
+  { id: 'bread', emoji: '🍞', label: '面包', fact: '面包软软的，快乐也软乎乎！' },
+  { id: 'watermelon', emoji: '🍉', label: '西瓜', fact: '抱住小西瓜，夏天的快乐藏在里面。' },
+  { id: 'rice', emoji: '🍙', label: '饭团', fact: '饭团小小一个，捧在手里刚刚好！' },
+  { id: 'pear', emoji: '🍐', label: '梨', fact: '梨子脆脆的，嘴巴忙起来了！' },
+  { id: 'peach', emoji: '🍑', label: '桃子', fact: '收到一颗小桃子，心情也甜起来了。' },
 ]
 
+export const PET_SNACK_TRAY_SIZE = 4
 export const PET_MAX_SNACKS = 5
 export const PET_FULL_LINE = '吃饱啦，打个嗝～剩下的留给你这顿！'
+
+function randomIndex(length: number, random: () => number): number {
+  const value = random()
+  return Math.min(length - 1, Math.max(0, Math.floor((Number.isFinite(value) ? value : 0) * length)))
+}
+
+/** Each wait gets a small shuffled tray, rather than the same four foods. */
+export function createPetSnackTray(random: () => number = Math.random): PetSnack[] {
+  const shuffled = [...PET_SNACKS]
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const other = randomIndex(i + 1, random)
+    ;[shuffled[i], shuffled[other]] = [shuffled[other], shuffled[i]]
+  }
+  return shuffled.slice(0, PET_SNACK_TRAY_SIZE)
+}
+
+/** Replace only the eaten food; the next tray never duplicates a visible food. */
+export function replacePetSnack(
+  tray: readonly PetSnack[],
+  eatenId: string,
+  random: () => number = Math.random,
+): PetSnack[] {
+  if (!tray.some(snack => snack.id === eatenId)) return [...tray]
+  const visible = new Set(tray.map(snack => snack.id))
+  const candidates = PET_SNACKS.filter(snack => !visible.has(snack.id))
+  if (candidates.length === 0) return [...tray]
+  const next = candidates[randomIndex(candidates.length, random)]
+  return tray.map(snack => snack.id === eatenId ? next : snack)
+}
 
 const TAP_LINES = ['嘿嘿，痒痒的～', '我在认真干活呢！', '再摸摸，我看得更快！', '好啦好啦，别分我心～']
 const TAP_COMBO_LINE = '你也太喜欢我了吧！'
@@ -100,5 +142,6 @@ export function petQuizLine(correct: boolean): string {
 }
 
 export function petSnackLine(snack: PetSnack, eatenBefore: number): string {
-  return eatenBefore >= PET_MAX_SNACKS ? PET_FULL_LINE : snack.fact
+  if (eatenBefore >= PET_MAX_SNACKS) return PET_FULL_LINE
+  return eatenBefore % 2 === 0 ? snack.fact : `${snack.label}我收下啦！谢谢投喂，继续陪你等结果～`
 }

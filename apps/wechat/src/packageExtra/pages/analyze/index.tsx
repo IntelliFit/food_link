@@ -38,6 +38,7 @@ import {
   isVideoKeyframeCaptureComplete,
 } from '../../../utils/precision-mode'
 import { compressAnalyzeVideoToLimit } from '../../../utils/analyze-video'
+import { loadAnalyzeNutritionBudget } from '../../../utils/analyze-nutrition-budget'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   canUseStrictModeForMembership,
@@ -493,7 +494,7 @@ function AnalyzePage() {
       },
       suggest_ratio: {
         title: 'AI摄入比例',
-        content: '结果页自动给出每项食物的滑块比例。开启后，AI 会根据你的剩余热量和饮食目标，为每个识别出的食物建议一个摄入比例（0-100%），你可以在结果页通过滑块快速调整。'
+        content: '开启后，普通识别会结合记录当天的剩余热量和饮食目标给出摄入建议。有单项建议时，可在结果页点击“应用建议”。滑块表示实际吃下的比例，不会自动替你更改；未取得建议时会如实提示。'
       },
       analysis_mode: {
         title: '识别方式',
@@ -1115,6 +1116,10 @@ function AnalyzePage() {
     Taro.showLoading({ title: '', mask: true })
 
     try {
+      const targetRecordDate = getStoredRecordTargetDate()
+      // Fetch the selected day's current budget while photos upload, without
+      // letting dashboard availability block recognition or invent a zero budget.
+      const nutritionBudgetPromise = loadAnalyzeNutritionBudget(targetRecordDate, { enabled: suggestRatioEnabled })
       // 1. 并行上传图片并保持原始顺序，避免多角度识别把上传耗时串行叠加。
       const imageUrls = await Promise.all(submitImagePaths.map(async path => {
         const sourcePath = String(path || '').trim()
@@ -1156,10 +1161,11 @@ function AnalyzePage() {
       const precisionReferenceObject = isStrictBaseModeSelected ? buildPrecisionReferenceObject() : undefined
 
       Taro.showLoading({ title: '', mask: true })
+      const nutritionBudget = await nutritionBudgetPromise
       const commonPayload = {
-        date: getStoredRecordTargetDate(),
+        date: targetRecordDate,
         meal_type: mealType,
-        diet_goal: 'none',
+        ...nutritionBudget,
         activity_timing: activityTiming,
         eating_mood: eatingMood || undefined,
         additionalContext: additionalInfo || undefined,
@@ -1190,7 +1196,8 @@ function AnalyzePage() {
         Taro.setStorageSync('analyzeImagePaths', submitImagePaths)
       }
       Taro.setStorageSync('analyzeMealType', mealType)
-      Taro.removeStorageSync('analyzeDietGoal')
+      if (nutritionBudget.diet_goal) Taro.setStorageSync('analyzeDietGoal', nutritionBudget.diet_goal)
+      else Taro.removeStorageSync('analyzeDietGoal')
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
       Taro.setStorageSync('analyzePrecisionCaptureMode', isVideoCaptureSelected ? 'video' : 'photos')

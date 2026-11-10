@@ -20,6 +20,7 @@ import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { persistEatingMoodFromPayload } from '../../../utils/eating-mood'
 import { openRecordedMealPoster } from '../../../utils/open-analyze-task'
+import { writeAnalyzeTaskRecordState } from '../../../utils/analyze-result-session'
 import { getPhotoFrameSize } from '@food-link/core'
 import MealDishPrompt from '../../../components/MealDishPrompt'
 import { buildWaitSteps, waitStatusNote } from './wait-steps'
@@ -1237,18 +1238,29 @@ const persistResultImageFromTask = (task: AnalysisTask) => {
   if (taskImageUrl) {
     Taro.setStorageSync('analyzeImagePath', taskImageUrl)
     Taro.setStorageSync('analyzeImagePaths', [taskImageUrl])
+  } else {
+    Taro.removeStorageSync('analyzeImagePath')
+    Taro.removeStorageSync('analyzeImagePaths')
   }
 }
 
 const persistAnalyzeContextFromPayload = (payload: Record<string, unknown>) => {
   if (typeof payload.meal_type === 'string' && payload.meal_type.trim()) {
     Taro.setStorageSync('analyzeMealType', payload.meal_type)
+  } else if (typeof payload.auto_record_meal_type === 'string' && payload.auto_record_meal_type.trim()) {
+    Taro.setStorageSync('analyzeMealType', payload.auto_record_meal_type)
+  } else {
+    Taro.removeStorageSync('analyzeMealType')
   }
   if (typeof payload.diet_goal === 'string' && payload.diet_goal.trim()) {
     Taro.setStorageSync('analyzeDietGoal', payload.diet_goal)
+  } else {
+    Taro.removeStorageSync('analyzeDietGoal')
   }
   if (typeof payload.activity_timing === 'string' && payload.activity_timing.trim()) {
     Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing)
+  } else {
+    Taro.removeStorageSync('analyzeActivityTiming')
   }
   persistEatingMoodFromPayload(payload)
 }
@@ -1614,6 +1626,7 @@ function AnalyzeLoadingPage() {
           await waitForMealDishAnswer(() => cancelled)
           if (cancelled) return
           const needsPrecisionAction = needsPrecisionUserAction(result)
+          writeAnalyzeTaskRecordState(taskId, Boolean(task.is_recorded), task.record_id)
           if (needsPrecisionAction) {
             settled = true
             setStatus('done')
@@ -1640,6 +1653,7 @@ function AnalyzeLoadingPage() {
                 return
               }
               if (autoRecordResult.status === 'recorded' || autoRecordResult.record_id) {
+                writeAnalyzeTaskRecordState(taskId, true, autoRecordResult.record_id)
                 settled = true
                 setStatus('done')
                 if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
@@ -1700,7 +1714,7 @@ function AnalyzeLoadingPage() {
             persistAnalyzeContextFromPayload(payload)
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food_text')
-            Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}&task_id=${encodeURIComponent(taskId)}` })
           } else {
             Taro.removeStorageSync('analyzeTextInput')
             Taro.removeStorageSync('analyzeTextAdditionalContext')
@@ -1710,7 +1724,7 @@ function AnalyzeLoadingPage() {
             persistAnalyzeContextFromPayload(payload)
             Taro.setStorageSync('analyzeSourceTaskId', taskId)
             Taro.setStorageSync('analyzeTaskType', 'food')
-            Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}` })
+            Taro.redirectTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(targetDate)}&task_id=${encodeURIComponent(taskId)}` })
           }
           return
         }
@@ -1823,7 +1837,10 @@ function AnalyzeLoadingPage() {
         icon: next && result.status === 'recorded' ? 'success' : 'none',
       })
       void syncAnalyzeTaskReminderState().catch(() => undefined)
-      if (next && result.record_id) offerAutoRecordPoster(result.record_id)
+      if (next && result.record_id) {
+        writeAnalyzeTaskRecordState(taskId, true, result.record_id)
+        offerAutoRecordPoster(result.record_id)
+      }
     } catch (error) {
       await showUnifiedApiError(error, next ? '开启自动记录失败' : '关闭自动记录失败')
     } finally {
@@ -1967,6 +1984,7 @@ function AnalyzeLoadingPage() {
 
         {/* 伙伴陪着等：气泡里先说当前进度，之后轮播小贴士；首页藏起伙伴的人这里只看小贴士 */}
         <WaitingPetCompanion
+          key={taskId}
           tip={HEALTH_TIPS[tipIndex]}
           reaction={petReaction}
           elapsedSeconds={elapsedSeconds}
@@ -2051,9 +2069,6 @@ function AnalyzeLoadingPage() {
             ) : (
               <View className='waiting-fact-body'>
                 <Text className='waiting-interaction-reveal'>{interactionCard.reveal}</Text>
-                <View className='waiting-fact-next' onClick={handleNextInteraction}>
-                  <Text className='waiting-fact-next-text'>{interactionCard.actionText}</Text>
-                </View>
               </View>
             )}
           </View>

@@ -38,6 +38,7 @@ import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { acknowledgeAnalyzeTaskReminders } from '../../../utils/analyze-task-reminder'
 import { requireAllowedRecordDate, getRecordDateLabel } from '../../../utils/record-date'
 import { openAnalyzeTaskFromReminder } from '../../../utils/open-analyze-task'
+import { writeAnalyzeTaskRecordState } from '../../../utils/analyze-result-session'
 import {
   MealTypeSelectSheet,
   normalizeSelectableMealType,
@@ -1115,6 +1116,7 @@ function AnalyzeHistoryPage() {
           entry_type: 'analyze_history' as const,
         }
         const saveResult = await saveFoodRecord(payload)
+        writeAnalyzeTaskRecordState(task.id, true, saveResult.id)
         Taro.hideLoading()
         markRecordVisibilityNoticeDue()
         void remindRecordVisibilityOnce()
@@ -1167,6 +1169,7 @@ function AnalyzeHistoryPage() {
   }
 
   const openTaskDetail = (task: AnalysisTask) => {
+    writeAnalyzeTaskRecordState(task.id, Boolean(task.is_recorded), task.record_id)
     // 违规任务不允许查看详情
     if (task.status === 'violated' || task.is_violated) {
       Taro.showModal({
@@ -1222,15 +1225,7 @@ function AnalyzeHistoryPage() {
       }
       Taro.setStorageSync('analyzeSourceTaskId', task.id)
       Taro.setStorageSync('analyzeTaskType', sourceTaskType)
-      if (task.is_recorded) {
-        Taro.setStorageSync('analyzeTaskIsRecorded', '1')
-        if (task.record_id) {
-          Taro.setStorageSync('analyzeCommittedRecordId', task.record_id)
-        }
-      } else {
-        Taro.removeStorageSync('analyzeTaskIsRecorded')
-        Taro.removeStorageSync('analyzeCommittedRecordId')
-      }
+      writeAnalyzeTaskRecordState(task.id, Boolean(task.is_recorded), task.record_id)
       Taro.navigateTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(getTaskRecordDate(task) || '')}&task_id=${encodeURIComponent(task.id)}` })
       return
     }

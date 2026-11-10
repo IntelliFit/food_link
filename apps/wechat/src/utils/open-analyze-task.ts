@@ -5,6 +5,7 @@ import { persistEatingMoodFromPayload } from './eating-mood'
 import { needsPrecisionUserAction } from './precision-mode'
 import { extraPkgUrl } from './subpackage-extra'
 import { getTaskRecordTargetDate } from './record-date'
+import { writeAnalyzeTaskRecordState } from './analyze-result-session'
 
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 
@@ -72,6 +73,9 @@ const persistTaskResultContext = (task: AnalysisTask, result: AnalyzeResponse) =
     if (paths.length > 0) {
       Taro.setStorageSync('analyzeImagePaths', paths)
       Taro.setStorageSync('analyzeImagePath', paths[0])
+    } else {
+      Taro.removeStorageSync('analyzeImagePaths')
+      Taro.removeStorageSync('analyzeImagePath')
     }
     Taro.removeStorageSync('analyzeTextInput')
     Taro.removeStorageSync('analyzeTextAdditionalContext')
@@ -97,13 +101,7 @@ const persistTaskResultContext = (task: AnalysisTask, result: AnalyzeResponse) =
   } else {
     Taro.removeStorageSync('analyzePrecisionSessionId')
   }
-  if (task.is_recorded) {
-    Taro.setStorageSync('analyzeTaskIsRecorded', '1')
-    if (task.record_id) Taro.setStorageSync('analyzeCommittedRecordId', task.record_id)
-  } else {
-    Taro.removeStorageSync('analyzeTaskIsRecorded')
-    Taro.removeStorageSync('analyzeCommittedRecordId')
-  }
+  writeAnalyzeTaskRecordState(task.id, Boolean(task.is_recorded), task.record_id)
 }
 
 export async function openAnalyzeTaskFromReminder(taskId: string): Promise<void> {
@@ -112,6 +110,7 @@ export async function openAnalyzeTaskFromReminder(taskId: string): Promise<void>
   Taro.showLoading({ title: '', mask: true })
   try {
     const task = await getAnalyzeTask(normalizedTaskId)
+    writeAnalyzeTaskRecordState(task.id, Boolean(task.is_recorded), task.record_id)
     Taro.hideLoading()
     if ((task.status === 'pending' || task.status === 'processing')) {
       const mode = normalizeExecutionMode(taskPayloadString(task, 'execution_mode', 'executionMode'))
