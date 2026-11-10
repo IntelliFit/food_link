@@ -1,4 +1,4 @@
-import { View, Text, Image, Textarea, PageMeta, Video, ScrollView } from '@tarojs/components'
+import { View, Text, Image, Textarea, PageMeta, Video } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import {
@@ -1504,37 +1504,34 @@ function AnalyzePage() {
             <Text className='precision-capture-note'>两张必须是同一餐，且不能重复使用同一图片。</Text>
           </View>
         ) : imagePaths.length > 0 ? (
-          // 照片按拍摄时的 3:4 / 4:3 原比例排一行（高度固定、宽度随比例），不再裁成方块。
-          <View className='image-strip-row'>
-          <ScrollView scrollX showScrollbar={false} className='image-strip'>
-            <View className='image-strip__track'>
-              {imagePaths.map((path, index) => (
-                <View key={index} className='image-strip__item'>
-                  <Image
-                    src={path}
-                    mode='heightFix'
-                    className='image-strip__image'
-                    onClick={() => handlePreviewImage(path)}
-                  />
+          // 照片统一按方形预览，一排三个，满三个换到第二排；「再拍一张」占下一个格子。
+          <View className='image-grid'>
+            {imagePaths.map((path, index) => (
+              <View key={index} className='image-grid__item'>
+                <Image
+                  src={path}
+                  mode='aspectFill'
+                  className='image-grid__image'
+                  onClick={() => handlePreviewImage(path)}
+                />
 
-                  <View className='remove-btn' onClick={(e) => {
-                    e.stopPropagation()
-                    handleRemoveImage(index)
-                  }}
-                  >
-                    <Text className='close-icon'>×</Text>
-                  </View>
+                <View className='remove-btn' onClick={(e) => {
+                  e.stopPropagation()
+                  handleRemoveImage(index)
+                }}
+                >
+                  <Text className='close-icon'>×</Text>
                 </View>
-              ))}
-              {/* 「再拍一张」紧跟在最后一张照片后面，照片多了就一起横向滑动 */}
-              {imagePaths.length < MAX_ANALYZE_IMAGES && (
-                <View className='image-strip__add' onClick={handleChooseImage}>
-                  <Text className='image-strip__add-icon'>+</Text>
-                  <Text className='image-strip__add-text'>再拍一张</Text>
+              </View>
+            ))}
+            {imagePaths.length < MAX_ANALYZE_IMAGES && (
+              <View className='image-grid__add' onClick={handleChooseImage}>
+                <View className='image-grid__add-inner'>
+                  <Text className='image-grid__add-icon'>+</Text>
+                  <Text className='image-grid__add-text'>再拍一张</Text>
                 </View>
-              )}
-            </View>
-          </ScrollView>
+              </View>
+            )}
           </View>
         ) : (
           <View className='no-image-placeholder' onClick={handleChooseImage}>
