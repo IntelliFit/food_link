@@ -2945,16 +2945,24 @@ $v3-cream: #fffdf1;
     font-weight: 700;
   }
 
-  .result-hero__labels {
+  // bottom / height 由 index.tsx 给（RESULT_HERO_LABELS_*），和导航变实底的时机对齐
+  .result-hero__labels-wrap {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 64rpx;
+    z-index: 2;
+    overflow: hidden;
+  }
+
+  .result-hero__labels {
+    width: 100%;
     white-space: nowrap;
   }
 
   .result-hero__labels-track {
+    height: 100%;
     display: inline-flex;
+    align-items: center;
     gap: 12rpx;
     padding: 0 24rpx;
   }

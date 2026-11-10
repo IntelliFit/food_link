@@ -540,6 +540,10 @@ const RESULT_HERO_SHRINK_SCROLL_PX = 350
 const RESULT_HERO_INNER_RADIUS_MAX_RPX = 24
 /** V3：照片通顶、满宽、固定高度（不是全屏），随内容一起滚走 */
 const RESULT_PHOTO_HERO_RPX = 600
+/** 照片上那一排食物标签：离照片底 64rpx、行高 76rpx。导航在标签滑到它底下之前就变成实底，避免标签压住标题和胶囊。 */
+const RESULT_HERO_LABELS_BOTTOM_RPX = 64
+const RESULT_HERO_LABELS_HEIGHT_RPX = 76
+const RESULT_HERO_LABELS_TOP_RPX = RESULT_PHOTO_HERO_RPX - RESULT_HERO_LABELS_BOTTOM_RPX - RESULT_HERO_LABELS_HEIGHT_RPX
 const QUICK_UNDO_MS = 6000
 
 /** AI 饮食分析的手风琴：一次展开一项 */
@@ -694,7 +698,7 @@ function ResultPage() {
 
   const handlePhotoScroll = useCallback((e: { detail?: { scrollTop?: number } }) => {
     const st = typeof e.detail?.scrollTop === 'number' ? Math.max(0, e.detail.scrollTop) : 0
-    const threshold = rpxToPx(RESULT_PHOTO_HERO_RPX, navMetrics.windowWidth) - navTotalPx - 8
+    const threshold = rpxToPx(RESULT_HERO_LABELS_TOP_RPX, navMetrics.windowWidth) - navTotalPx - 8
     const solid = st > threshold
     if (solid === navSolidRef.current) return
     navSolidRef.current = solid
@@ -2813,7 +2817,12 @@ function ResultPage() {
               <Text className='result-hero__count' style={{ top: `${navTotalRpx + 12}rpx` }}>{heroIndex + 1}/{imagePaths.length}</Text>
             )}
             {nutritionItems.length > 0 && (
-              <ScrollView scrollX showScrollbar={false} className='result-hero__labels'>
+              // 外层 View 定位、scroll-view 给死高度：真机上不定高的 scroll-view 会撑满整张照片，标签跑到最上面压住导航
+              <View
+                className='result-hero__labels-wrap'
+                style={{ bottom: `${RESULT_HERO_LABELS_BOTTOM_RPX}rpx`, height: `${RESULT_HERO_LABELS_HEIGHT_RPX}rpx` }}
+              >
+              <ScrollView scrollX showScrollbar={false} className='result-hero__labels' style={{ height: `${RESULT_HERO_LABELS_HEIGHT_RPX}rpx` }}>
                 <View className='result-hero__labels-track'>
                   {nutritionItems.map((item, index) => (
                     <View key={item.id} className='result-hero__label' style={{ animationDelay: `${200 + index * 140}ms` }}>
@@ -2824,6 +2833,7 @@ function ResultPage() {
                   ))}
                 </View>
               </ScrollView>
+              </View>
             )}
           </View>
         )}
