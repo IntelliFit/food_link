@@ -23,6 +23,7 @@ import { openRecordedMealPoster } from '../../../utils/open-analyze-task'
 import { getPhotoFrameSize } from '@food-link/core'
 import MealDishPrompt from '../../../components/MealDishPrompt'
 import { buildWaitSteps, waitStatusNote } from './wait-steps'
+import { WaitingPetCompanion, petQuizLine, type PetReaction } from './WaitingPetCompanion'
 import {
   markAnalyzeTaskRecognizing,
   readAutoRecordPreference,
@@ -1324,6 +1325,7 @@ function AnalyzeLoadingPage() {
   const [lastTaskStatusText, setLastTaskStatusText] = useState('已提交')
   const [interactionIndex, setInteractionIndex] = useState(() => getNextInteractionIndex())
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null)
+  const [petReaction, setPetReaction] = useState<PetReaction | null>(null)
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [isCorrectionMode, setIsCorrectionMode] = useState(() =>
     Taro.getCurrentInstance().router?.params?.correction === '1'
@@ -1963,6 +1965,17 @@ function AnalyzeLoadingPage() {
           </View>
         </View>
 
+        {/* 伙伴陪着等：气泡里先说当前进度，之后轮播小贴士；首页藏起伙伴的人这里只看小贴士 */}
+        <WaitingPetCompanion
+          tip={HEALTH_TIPS[tipIndex]}
+          reaction={petReaction}
+          elapsedSeconds={elapsedSeconds}
+          taskType={taskType}
+          isCorrection={isCorrectionMode}
+          isPrecision={showPrecisionLongWaitNotice}
+          recognitionReady={showMealDish && recognitionReady}
+        />
+
         <View className='analyze-wait__card analyze-wait__progress'>
           {waitSteps.map((step, index) => (
             <View key={step.label} className={`analyze-wait__step analyze-wait__step--${step.state}`}>
@@ -1999,13 +2012,6 @@ function AnalyzeLoadingPage() {
         )}
 
         {!(showMealDish && mealDishVisible) && (
-          <View className='analyze-wait__card analyze-wait__tip'>
-            <Text className='analyze-wait__eyebrow'>小贴士</Text>
-            <Text className='analyze-wait__tip-text'>{HEALTH_TIPS[tipIndex]}</Text>
-          </View>
-        )}
-
-        {!(showMealDish && mealDishVisible) && (
           <View className='analyze-wait__card waiting-interaction-card'>
             <View className='waiting-interaction-head'>
               <Text className='analyze-wait__eyebrow'>{interactionCard.eyebrow}</Text>
@@ -2024,7 +2030,12 @@ function AnalyzeLoadingPage() {
                     <View
                       key={option}
                       className={`waiting-quiz-option${chosen ? ' chosen' : ''}${revealed && correct ? ' correct' : ''}`}
-                      onClick={() => setSelectedQuizOption(index)}
+                      onClick={() => {
+                        if (selectedQuizOption === null) {
+                          setPetReaction({ id: Date.now(), text: petQuizLine(correct) })
+                        }
+                        setSelectedQuizOption(index)
+                      }}
                     >
                       <Text className='waiting-quiz-option-text'>{option}</Text>
                     </View>

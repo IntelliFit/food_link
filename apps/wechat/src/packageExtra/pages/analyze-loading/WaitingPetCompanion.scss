@@ -1,0 +1,181 @@
+// 等待页的伙伴：放在 V3 白卡片里（.analyze-wait__card 给底色、圆角和内边距），左边伙伴、右边气泡，下面喂它一口。
+.waiting-pet {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.waiting-pet__row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.waiting-pet__avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 152rpx;
+  height: 152rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(40rpx) scale(0.7);
+
+  &.is-in {
+    animation: waiting-pet-pop-in 480ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  &.is-in.is-hopping {
+    animation: waiting-pet-hop 520ms ease-out;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.waiting-pet__floater {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  margin-left: -20rpx;
+  font-size: 40rpx;
+  line-height: 1;
+  pointer-events: none;
+  animation: waiting-pet-float 900ms ease-out forwards;
+}
+
+.waiting-pet__bubble {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 96rpx;
+  padding: 16rpx 22rpx;
+  border-radius: 8rpx 28rpx 28rpx 28rpx;
+  background: #f1faf4;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: -10rpx;
+    top: 50%;
+    width: 22rpx;
+    height: 22rpx;
+    margin-top: -11rpx;
+    background: #f1faf4;
+    transform: rotate(45deg);
+  }
+}
+
+.waiting-pet__name {
+  position: relative;
+  display: block;
+  color: #127a58;
+  font-size: 22rpx;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.waiting-pet__text {
+  position: relative;
+  display: block;
+  margin-top: 4rpx;
+  color: #27483d;
+  font-size: 27rpx;
+  line-height: 1.5;
+}
+
+.waiting-pet__snacks {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12rpx;
+}
+
+.waiting-pet__snacks-label {
+  margin-right: 4rpx;
+  color: #5a6b63;
+  font-size: 23rpx;
+  font-weight: 600;
+}
+
+.waiting-pet__snack {
+  width: 68rpx;
+  height: 68rpx;
+  border-radius: 50%;
+  background: #f1f3ec;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    transform: scale(0.88);
+  }
+}
+
+.waiting-pet__snack-emoji {
+  font-size: 36rpx;
+  line-height: 1;
+}
+
+// 深色模式（FlPageThemeRoot 深色时加 .fl-d）
+.fl-d {
+  .waiting-pet__bubble,
+  .waiting-pet__bubble::before {
+    background: #18332a;
+  }
+
+  .waiting-pet__name {
+    color: #7dd3b0;
+  }
+
+  .waiting-pet__text {
+    color: #f2f7f4;
+  }
+
+  .waiting-pet__snacks-label {
+    color: rgb(214 226 220 / 70%);
+  }
+
+  .waiting-pet__snack {
+    background: #2a3330;
+  }
+}
+
+@keyframes waiting-pet-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(40rpx) scale(0.7);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes waiting-pet-hop {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  25% {
+    transform: translateY(0) scale(1.08, 0.9);
+  }
+
+  55% {
+    transform: translateY(-28rpx) scale(0.96, 1.05);
+  }
+}
+
+@keyframes waiting-pet-float {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(0.8);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-72rpx) scale(1.15);
+  }
+}
