@@ -4,6 +4,7 @@ import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
 import { Ellipsis, Plus } from '@taroify/icons'
 import '@taroify/icons/style'
 import { withAuth } from '../../../utils/withAuth'
+import { AUTH_SESSION_CHANGED_EVENT, captureAuthSession, isAuthSessionCurrent, type AuthSession } from '../../../utils/auth-session'
 import { rememberMealLocation } from '../../../utils/meal-location'
 import {
   getAccessToken,
@@ -201,6 +202,8 @@ function FoodLibraryPage() {
   const [filterFatLoss, setFilterFatLoss] = useState<boolean | undefined>(undefined)
   const [searchKeyword, setSearchKeyword] = useState('')
   const [searchMerchant, setSearchMerchant] = useState('')
+  const listQueryRef = useRef({ sortBy, filterFatLoss, searchMerchant })
+  listQueryRef.current = { sortBy, filterFatLoss, searchMerchant }
   const [showFilterPanel, setShowFilterPanel] = useState(false)
 
   // 性能优化相关状态
@@ -212,6 +215,54 @@ function FoodLibraryPage() {
   const mapGestureVersionRef = useRef(0)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
+  const pageMountedRef = useRef(true)
+  const listRequestRef = useRef(0)
+  const listContextRef = useRef(false)
+  const spotContextRef = useRef(false)
+  listContextRef.current = tabMode === 'all' && viewMode === 'list' && !spotDishes
+  spotContextRef.current = tabMode === 'all' && viewMode === 'list'
+
+  const isCurrentListRequest = useCallback((requestId: number, session: AuthSession) => (
+    pageMountedRef.current && listContextRef.current
+    && requestId === listRequestRef.current && isAuthSessionCurrent(session)
+  ), [])
+  const canApplyListMutation = (requestId: number, session: AuthSession) => (
+    pageMountedRef.current && requestId === listRequestRef.current && isAuthSessionCurrent(session)
+  )
+
+  // A response belongs to both its query and its login session. Changing views,
+  // leaving this page or logging in again invalidates every previous request.
+  useEffect(() => {
+    pageMountedRef.current = true
+    const invalidateSession = () => {
+      listRequestRef.current += 1
+      spotDishRequestRef.current += 1
+      lastRefreshTime.current = 0
+      setList([])
+      setSpotDishes(null)
+      setCollectionList([])
+      setCampusList([])
+      setMineList([])
+      setLoading(false)
+      setRefreshing(false)
+      setShowSkeleton(false)
+      setLoggedIn(!!getAccessToken())
+    }
+    Taro.eventCenter.on(AUTH_SESSION_CHANGED_EVENT, invalidateSession)
+    return () => {
+      pageMountedRef.current = false
+      listRequestRef.current += 1
+      spotDishRequestRef.current += 1
+      Taro.eventCenter.off(AUTH_SESSION_CHANGED_EVENT, invalidateSession)
+    }
+  }, [])
+
+  useEffect(() => {
+    listRequestRef.current += 1
+    setLoading(false)
+    setRefreshing(false)
+    setShowSkeleton(false)
+  }, [tabMode, viewMode])
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
   const mapSpots = useMemo(
     () => buildFoodMapSpotsFromPayload(mapSpotPayloads, userLocation),
@@ -302,6 +353,14 @@ function FoodLibraryPage() {
           // 旧缓存的搜索只查商家，不用它冒充新的菜名/商家搜索结果。
           if (parsedFilters.searchMerchant && parsedFilters.searchMode !== 'keyword') return false
 
+          // React state restoration is asynchronous; a refresh in this same
+          // onShow must use the restored query rather than the old render.
+          listQueryRef.current = {
+            sortBy: parsedFilters.sortBy || 'latest',
+            filterFatLoss: parsedFilters.filterFatLoss,
+            searchMerchant: parsedFilters.searchMerchant || '',
+          }
+
           // 恢复筛选条件
           setSortBy(parsedFilters.sortBy || 'latest')
           setFilterFatLoss(parsedFilters.filterFatLoss)
@@ -370,36 +429,44 @@ function FoodLibraryPage() {
       return
     }
 
+    const session = captureAuthSession()
+    const requestId = ++listRequestRef.current
+    const query = listQueryRef.current
+
     if (!silent) setLoading(true)
     setListError(false)
 
     try {
       const res = await getPublicFoodLibraryList({
-        sort_by: sortBy,
-        suitable_for_fat_loss: filterFatLoss,
-        keyword: searchMerchant || undefined,
+        sort_by: query.sortBy,
+        suitable_for_fat_loss: query.filterFatLoss,
+        keyword: query.searchMerchant || undefined,
         limit: 50
       })
+      if (!isCurrentListRequest(requestId, session)) return
       const newList = res.list || []
       setList(newList)
 
       // 保存到缓存
-      saveToCache(newList)
+      saveToCache(newList, query)
 
       // 更新刷新时间
       lastRefreshTime.current = Date.now()
     } catch (e: any) {
+      if (!isCurrentListRequest(requestId, session)) return
       setListError(true)
       console.error('加载美食图谱失败:', e)
       if (!silent) {
         await showUnifiedApiError(e, '获取列表失败')
       }
     } finally {
-      if (!silent) setLoading(false)
-      setRefreshing(false)
-      setShowSkeleton(false)
+      if (isCurrentListRequest(requestId, session)) {
+        setLoading(false)
+        setRefreshing(false)
+        setShowSkeleton(false)
+      }
     }
-  }, [sortBy, filterFatLoss, searchMerchant, saveToCache])
+  }, [saveToCache, isCurrentListRequest])
 
   /**
    * 用户主动刷新（搜索/排序/筛选切换时）
@@ -413,6 +480,13 @@ function FoodLibraryPage() {
     }
   ) => {
     if (!getAccessToken()) return
+    const session = captureAuthSession()
+    const requestId = ++listRequestRef.current
+    listQueryRef.current = {
+      sortBy: params.sortBy,
+      filterFatLoss: params.filterFatLoss,
+      searchMerchant: params.searchMerchant || '',
+    }
     setList([])
     setLoading(true)
     setListError(false)
@@ -425,20 +499,24 @@ function FoodLibraryPage() {
         keyword: params.searchMerchant || undefined,
         limit: 50
       })
+      if (!isCurrentListRequest(requestId, session)) return
       const newList = res.list || []
       setList(newList)
       saveToCache(newList, { sortBy: params.sortBy, filterFatLoss: params.filterFatLoss, searchMerchant: params.searchMerchant || '' })
       lastRefreshTime.current = Date.now()
     } catch (e: any) {
+      if (!isCurrentListRequest(requestId, session)) return
       setListError(true)
       console.error('加载美食图谱失败:', e)
       await showUnifiedApiError(e, '获取列表失败')
     } finally {
-      setLoading(false)
-      setRefreshing(false)
-      setShowSkeleton(false)
+      if (isCurrentListRequest(requestId, session)) {
+        setLoading(false)
+        setRefreshing(false)
+        setShowSkeleton(false)
+      }
     }
-  }, [clearCache, saveToCache])
+  }, [clearCache, saveToCache, isCurrentListRequest])
 
   /** 加载收藏夹列表，force=true 时忽略缓存强制请求 */
   const loadCollectionList = useCallback(async (force = false) => {
@@ -689,21 +767,27 @@ function FoodLibraryPage() {
   }, [loggedIn, tabMode, viewMode])
 
   const loadSpotDishes = useCallback(async (source: SpotDishSource, items: PublicFoodLibraryItem[]) => {
+    const session = captureAuthSession()
+    listRequestRef.current += 1
     const requestId = ++spotDishRequestRef.current
+    const canApply = () => pageMountedRef.current && spotContextRef.current
+      && requestId === spotDishRequestRef.current && isAuthSessionCurrent(session)
     const { key, title, foodCount } = source
     setSpotDishes({ key, title, foodCount, items, loading: true, hasMore: false, error: false })
     try {
       const res = await getPublicFoodLibraryList({ spot_key: key, limit: SPOT_DISH_PAGE_SIZE, offset: items.length })
-      if (requestId !== spotDishRequestRef.current) return
+      if (!canApply()) return
       const page = res.list || []
       setSpotDishes({
         key, title, foodCount, items: [...items, ...page], loading: false,
         hasMore: page.length === SPOT_DISH_PAGE_SIZE, error: false,
       })
     } catch (e: any) {
-      if (requestId !== spotDishRequestRef.current) return
+      if (!canApply()) return
       setSpotDishes({ key, title, foodCount, items, loading: false, hasMore: false, error: true })
       await showUnifiedApiError(e, '获取餐食失败')
+    } finally {
+      if (canApply()) setRefreshing(false)
     }
   }, [])
 
@@ -742,7 +826,7 @@ function FoodLibraryPage() {
     }
     setRefreshing(true)
     if (spotDishes && tabMode === 'all') {
-      loadSpotDishes(spotDishes, []).finally(() => setRefreshing(false))
+      void loadSpotDishes(spotDishes, [])
       return
     }
     if (tabMode === 'collections') {
@@ -792,6 +876,8 @@ function FoodLibraryPage() {
 
   // 点赞/取消（乐观更新）
   const handleLike = async (item: PublicFoodLibraryItem) => {
+    const session = captureAuthSession()
+    const requestId = listRequestRef.current
     // 1. 乐观更新：立即更新 UI
     const newList = list.map(it =>
       it.id === item.id
@@ -813,6 +899,7 @@ function FoodLibraryPage() {
         await likePublicFoodLibraryItem(item.id)
       }
     } catch (e: any) {
+      if (!canApplyListMutation(requestId, session)) return
       // 3. 失败则回滚
       setList(list)
       saveToCache(list)
@@ -823,6 +910,8 @@ function FoodLibraryPage() {
   // 收藏/取消（乐观更新）
   const handleDelete = async (e: any, item: PublicFoodLibraryItem) => {
     e.stopPropagation()
+    const session = captureAuthSession()
+    const requestId = listRequestRef.current
     const { confirm } = await Taro.showModal({
       title: '删除上传',
       content: '删除后这条食物会从公共库下架，其他用户将无法再查看。',
@@ -830,10 +919,11 @@ function FoodLibraryPage() {
       cancelText: '取消',
       confirmColor: '#ef4444'
     })
-    if (!confirm) return
+    if (!confirm || !canApplyListMutation(requestId, session)) return
 
     try {
       await deletePublicFoodLibraryItem(item.id)
+      if (!canApplyListMutation(requestId, session)) return
       const newList = list.filter(it => it.id !== item.id)
       const newCollectionList = collectionList.filter(it => it.id !== item.id)
       setList(newList)
@@ -841,12 +931,15 @@ function FoodLibraryPage() {
       saveToCache(newList)
       Taro.showToast({ title: '已删除', icon: 'success' })
     } catch (e: any) {
+      if (!canApplyListMutation(requestId, session)) return
       await showUnifiedApiError(e, '删除失败')
     }
   }
 
   const handleCollect = async (e: any, item: PublicFoodLibraryItem) => {
     e.stopPropagation()
+    const session = captureAuthSession()
+    const requestId = listRequestRef.current
 
     const isUncollect = item.collected
 
@@ -876,6 +969,7 @@ function FoodLibraryPage() {
         await collectPublicFoodLibraryItem(item.id)
       }
     } catch (e: any) {
+      if (!canApplyListMutation(requestId, session)) return
       setList(list)
       saveToCache(list)
       if (tabMode === 'collections' && isUncollect) {

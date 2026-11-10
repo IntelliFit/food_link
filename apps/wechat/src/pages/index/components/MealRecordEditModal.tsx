@@ -21,7 +21,9 @@ import './MealRecordEditModal.scss'
 
 type EditableNutrientField = 'calories' | 'protein' | 'carbs' | 'fat' | 'waterMl'
 
-interface EditableFoodItem {
+interface EditableFoodItem extends Pick<FoodRecord['items'][number],
+  'manual_source' | 'manual_source_id' | 'manual_source_title' | 'manual_portion_label' | 'image_path' | 'image_paths'
+> {
   name: string
   weight: number
   grossWeight: number
@@ -237,6 +239,12 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       const items = (record.items || []).map(item => {
         const ratio = resolveRecordItemRatio(item)
         return {
+          manual_source: item.manual_source,
+          manual_source_id: item.manual_source_id,
+          manual_source_title: item.manual_source_title,
+          manual_portion_label: item.manual_portion_label,
+          image_path: item.image_path,
+          image_paths: item.image_paths,
           name: item.name,
           weight: item.weight,
           grossWeight: Number((item as any).gross_weight_grams ?? (item as any).grossWeightGrams ?? item.weight) || item.weight,

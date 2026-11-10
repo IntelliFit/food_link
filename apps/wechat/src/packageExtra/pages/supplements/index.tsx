@@ -1,6 +1,6 @@
 import { ScrollView, Text, View } from '@tarojs/components'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   deleteSupplement,
   deleteSupplementIntake,
@@ -15,6 +15,11 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { formatSupplementDose } from '../../../utils/supplements'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import RecordDateField from '../../../components/RecordDateField'
+import { getRecordDateLabel } from '../../../utils/record-date'
+import { rememberRecordReturnDate, supplementTakenAtForDate } from '../../../utils/record-navigation'
+import { captureAuthSession, isAuthSessionCurrent } from '../../../utils/auth-session'
 import './index.scss'
 
 type Tab = 'cabinet' | 'history'
@@ -28,10 +33,12 @@ function todayKey(): string {
 function scheduleText(item: UserSupplement): string {
   if (!item.schedule_enabled) return '按需记录'
   if (item.schedule_time) return `计划 ${item.schedule_time}`
-  return '今日计划'
+  return '当日计划'
 }
 
 export default function SupplementsPage() {
+  const [recordDate, setRecordDate] = useRecordDate(String(Taro.getCurrentInstance().router?.params?.date || todayKey()))
+  const requestRef = useRef(0)
   const [tab, setTab] = useState<Tab>('cabinet')
   const [loading, setLoading] = useState(true)
   const [recordingId, setRecordingId] = useState('')
@@ -40,17 +47,22 @@ export default function SupplementsPage() {
   const cabinetMutationBusyRef = useRef(false)
 
   const load = useCallback(async () => {
+    const request = ++requestRef.current
+    const owner = captureAuthSession()
     setLoading(true)
     try {
-      setDashboard(await getSupplementDashboard(todayKey()))
+      const next = await getSupplementDashboard(recordDate)
+      if (request === requestRef.current && isAuthSessionCurrent(owner)) setDashboard(next)
     } catch (error) {
+      if (request !== requestRef.current || !isAuthSessionCurrent(owner)) return
       setDashboard(null)
       await showUnifiedApiError(error, '加载补剂柜失败')
     } finally {
-      setLoading(false)
+      if (request === requestRef.current && isAuthSessionCurrent(owner)) setLoading(false)
       Taro.stopPullDownRefresh()
     }
-  }, [])
+  }, [recordDate])
+  useEffect(() => { void load(); return () => { requestRef.current++ } }, [load])
 
   useDidShow(() => { void load() })
   usePullDownRefresh(() => { void load() })
@@ -70,14 +82,18 @@ export default function SupplementsPage() {
     if (cabinetMutationBusyRef.current) return
     cabinetMutationBusyRef.current = true
     setRecordingId(item.id)
+    const owner = captureAuthSession()
     try {
       await recordSupplementIntake(item.id, {
         servings: item.default_servings,
         source: 'quick_log',
-        idempotency_key: `${item.id}:${todayKey()}:${Date.now()}`,
+        taken_at: supplementTakenAtForDate(recordDate),
+        idempotency_key: `${item.id}:${recordDate}:${Date.now()}`,
       })
-      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, { date: todayKey(), force: true })
-      Taro.showToast({ title: '已记录', icon: 'success' })
+      if (!isAuthSessionCurrent(owner)) return
+      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, { date: recordDate, force: true })
+      rememberRecordReturnDate(recordDate)
+      Taro.showToast({ title: `已记录到${getRecordDateLabel(recordDate)}`, icon: 'success' })
       await load()
     } catch (error) {
       await showUnifiedApiError(error, '记录失败')
@@ -88,11 +104,11 @@ export default function SupplementsPage() {
   }
 
   const removeIntake = async (intakeId: string) => {
-    const modal = await Taro.showModal({ title: '删除记录', content: '删除后，今日营养统计会同步扣除。', confirmColor: '#00a976' })
+    const modal = await Taro.showModal({ title: '删除记录', content: `删除后，${getRecordDateLabel(recordDate)}的营养统计会同步扣除。`, confirmColor: '#00a976' })
     if (!modal.confirm) return
     try {
       await deleteSupplementIntake(intakeId)
-      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, { date: todayKey(), force: true })
+      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, { date: recordDate, force: true })
       await load()
     } catch (error) {
       await showUnifiedApiError(error, '删除失败')
@@ -111,7 +127,7 @@ export default function SupplementsPage() {
       })
       if (!result.confirm) return
       await deleteSupplement(item.id)
-      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, { date: todayKey(), force: true })
+      Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, { date: recordDate, force: true })
       await load()
       Taro.showToast({ title: '已删除', icon: 'success' })
     } catch (error) {
@@ -141,7 +157,7 @@ export default function SupplementsPage() {
 
         <View className='supplements-summary'>
           <View className='supplements-summary-copy'>
-            <Text className='supplements-summary-label'>今日计划</Text>
+            <Text className='supplements-summary-label'>{getRecordDateLabel(recordDate)}计划</Text>
             <Text className='supplements-summary-value'>{dashboard?.completed_count || 0}<Text className='supplements-summary-total'> / {dashboard?.planned_count || 0}</Text></Text>
           </View>
           <View className='supplements-summary-progress'>
@@ -154,9 +170,10 @@ export default function SupplementsPage() {
 
         <View className='supplements-tabs'>
           <View className={`supplements-tab${tab === 'cabinet' ? ' is-active' : ''}`} onClick={() => setTab('cabinet')}><Text>补剂柜</Text></View>
-          <View className={`supplements-tab${tab === 'history' ? ' is-active' : ''}`} onClick={() => setTab('history')}><Text>今日记录</Text></View>
+          <View className={`supplements-tab${tab === 'history' ? ' is-active' : ''}`} onClick={() => setTab('history')}><Text>服用记录</Text></View>
         </View>
 
+        <RecordDateField date={recordDate} onChange={setRecordDate} disabled={Boolean(recordingId || deletingId)} unrestricted />
         <ScrollView scrollY className='supplements-scroll'>
           {loading ? (
             <View className='supplements-skeleton-list'>{[0, 1, 2].map((key) => <View key={key} className='supplements-skeleton' />)}</View>
@@ -176,7 +193,7 @@ export default function SupplementsPage() {
                     </View>
                     <View className='supplement-card-actions'>
                     <View className={`supplement-log${completed ? ' is-completed' : ''}${recordingId === item.id ? ' is-busy' : ''}`} onClick={() => { if (!completed) void record(item) }}>
-                      {recordingId === item.id ? <View className='supplement-delete-spinner' /> : <Text>{completed ? '今日已记' : '记录一次'}</Text>}
+                      {recordingId === item.id ? <View className='supplement-delete-spinner' /> : <Text>{completed ? `已记入${getRecordDateLabel(recordDate)}` : `记录到${getRecordDateLabel(recordDate)}`}</Text>}
                     </View>
                     <View className='supplement-delete' onClick={() => void removeSupplement(item)}>
                       {deletingId === item.id ? <View className='supplement-delete-spinner' /> : <Text>删除</Text>}
@@ -204,7 +221,7 @@ export default function SupplementsPage() {
                   <View className='supplement-delete' onClick={() => void removeIntake(item.id)}><Text>删除</Text></View>
                 </View>
               ))}
-              {!dashboard?.intakes?.length && <View className='supplements-empty'><Text className='supplements-empty-title'>今天还没有记录</Text><Text className='supplements-empty-sub'>回到补剂柜点击“记录一次”。</Text></View>}
+              {!dashboard?.intakes?.length && <View className='supplements-empty'><Text className='supplements-empty-title'>{getRecordDateLabel(recordDate)}还没有记录</Text><Text className='supplements-empty-sub'>回到补剂柜选择要记录的补剂。</Text></View>}
             </View>
           )}
           <View className='supplements-safe-note'><Text>仅用于记录标签信息与摄入数据，不替代医生或药师建议。</Text></View>

@@ -1,3 +1,15 @@
+.record-date-bar {
+  margin: 12rpx 0 20rpx;
+  border: 1rpx solid var(--fl-border, #d7e8df);
+  border-radius: 20rpx;
+  background: var(--fl-card-bg, #f0f8f3);
+}
+.record-date-bar--backfill {
+  border: 2rpx solid #63a98c;
+  box-shadow: 0 4rpx 14rpx rgba(28, 101, 72, .08);
+}
+.record-date-field__label { font-weight: 700; color: var(--fl-text-primary, #174d39); }
+.record-date-field__today { padding: 0 20rpx 14rpx; color: var(--fl-primary, #197455); text-align: right; font-size: 24rpx; }
 .record-date-field {
   display: flex;
   align-items: center;

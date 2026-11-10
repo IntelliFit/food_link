@@ -5,7 +5,7 @@ import {
   resolveCameraRecordDate,
 } from '../../src/packageCamera/pages/shoot/camera-entry'
 import { computeCameraFrame } from '../../src/packageCamera/pages/shoot/frame-layout'
-import { getTodayRecordDateKey } from '../../src/utils/record-date'
+import { getTodayRecordDateKey, resolveNewRecordDate } from '../../src/utils/record-date'
 
 jest.mock('@tarojs/taro', () => ({
   __esModule: true,
@@ -44,20 +44,32 @@ describe('camera frame layout', () => {
 })
 
 describe('camera entry helpers', () => {
-  it('records to the home date when it is inside the 14-day window', () => {
-    expect(resolveCameraRecordDate(daysAgo(3))).toEqual({ date: daysAgo(3), fellBackToToday: false })
+  it('defaults a new photo to today even if an old URL supplies a valid historical date', () => {
+    expect(resolveCameraRecordDate(daysAgo(3))).toEqual({ date: getTodayRecordDateKey(), fellBackToToday: false, backfill: false })
+    expect(resolveNewRecordDate(daysAgo(3))).toEqual(resolveCameraRecordDate(daysAgo(3)))
+  })
+
+  it('preserves a valid history date only after an explicit backfill choice', () => {
+    expect(resolveCameraRecordDate(daysAgo(3), true)).toEqual({ date: daysAgo(3), fellBackToToday: false, backfill: true })
   })
 
   it('falls back to today, and says so, for dates outside the window', () => {
-    expect(resolveCameraRecordDate(daysAgo(40))).toEqual({ date: getTodayRecordDateKey(), fellBackToToday: true })
-    expect(resolveCameraRecordDate('')).toEqual({ date: getTodayRecordDateKey(), fellBackToToday: false })
+    expect(resolveCameraRecordDate(daysAgo(40), true)).toEqual({ date: getTodayRecordDateKey(), fellBackToToday: true, backfill: false })
+    expect(resolveCameraRecordDate('')).toEqual({ date: getTodayRecordDateKey(), fellBackToToday: false, backfill: false })
+    expect(resolveCameraRecordDate('not-a-date', true)).toEqual({ date: getTodayRecordDateKey(), fellBackToToday: true, backfill: false })
   })
 
-  it('opens the other record modes with the same date', () => {
-    expect(buildCameraEntryUrl('text', '2026-11-08')).toBe('/packageExtra/pages/record-text/index?date=2026-11-08')
-    expect(buildCameraEntryUrl('library', '2026-11-08')).toBe('/packageExtra/pages/record-manual/index?date=2026-11-08')
-    expect(buildCameraEntryUrl('favorites', '2026-11-08')).toBe('/packageExtra/pages/recipes/index?date=2026-11-08')
-    expect(buildCameraEntryUrl('history', '2026-11-08')).toBe('/packageExtra/pages/analyze-history/index')
+  it('carries explicit backfill through the other new-record modes', () => {
+    const date = daysAgo(2)
+    expect(buildCameraEntryUrl('text', date, true)).toBe(`/packageExtra/pages/record-text/index?date=${date}&backfill=1`)
+    expect(buildCameraEntryUrl('library', date, true)).toBe(`/packageExtra/pages/record-manual/index?date=${date}&backfill=1`)
+    expect(buildCameraEntryUrl('favorites', date, true)).toBe(`/packageExtra/pages/recipes/index?date=${date}&backfill=1`)
+    expect(buildCameraEntryUrl('history', date, true)).toBe(`/packageExtra/pages/analyze-history/index?date=${date}&backfill=1`)
+  })
+
+  it('does not turn a bare date into a backfill choice when changing record modes', () => {
+    expect(buildCameraEntryUrl('text', daysAgo(2))).toBe(`/packageExtra/pages/record-text/index?date=${getTodayRecordDateKey()}`)
+    expect(buildCameraEntryUrl('library', daysAgo(40), true)).toBe(`/packageExtra/pages/record-manual/index?date=${getTodayRecordDateKey()}`)
   })
 
   it('labels the date chip', () => {

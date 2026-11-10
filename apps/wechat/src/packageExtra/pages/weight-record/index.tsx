@@ -26,6 +26,8 @@ import {
 } from '../body-metrics-shared'
 import { formatBodyMetric } from '../../../utils/number-format'
 
+import RecordDateField from '../../../components/RecordDateField'
+import { rememberRecordReturnDate } from '../../../utils/record-navigation'
 import './index.scss'
 
 function WeightRecordPage() {
@@ -45,17 +47,21 @@ function WeightRecordPage() {
     try {
       const res = await getBodyMetricsSummary('month')
       setSummary(res)
-      const sameDay = [...(res.weight_entries || [])]
-        .filter((item) => item.date === recordDate)
-        .sort((a, b) => getWeightSortKey(b).localeCompare(getWeightSortKey(a)))
-      const defaultWeight = sameDay[0]?.value ?? res.latest_weight?.value
-      setWeightInput(defaultWeight ? formatBodyMetric(defaultWeight) : '')
     } catch (err) {
       await showUnifiedApiError(err, '获取体重记录失败')
     } finally {
       setLoading(false)
     }
-  }, [recordDate])
+  }, [])
+
+  useEffect(() => {
+    if (!summary) return
+    const sameDay = [...(summary.weight_entries || [])]
+      .filter((item) => item.date === recordDate)
+      .sort((a, b) => getWeightSortKey(b).localeCompare(getWeightSortKey(a)))
+    const defaultWeight = sameDay[0]?.value ?? summary.latest_weight?.value
+    setWeightInput(defaultWeight ? formatBodyMetric(defaultWeight) : '')
+  }, [recordDate, summary])
 
   useEffect(() => {
     setRecordDate(initialDate)
@@ -85,6 +91,7 @@ function WeightRecordPage() {
     setSaving(true)
     try {
       const result = await saveBodyWeightRecord(value, recordDate, `weight-${recordDate}-${Date.now()}`)
+      rememberRecordReturnDate(recordDate)
       upsertWeightInBodyMetricsStorage(result.item)
       Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, {
         date: recordDate,
@@ -148,6 +155,7 @@ function WeightRecordPage() {
         </View>
       </View>
 
+      <RecordDateField date={recordDate} onChange={setRecordDate} unrestricted disabled={saving || !!deletingId} />
       <View className='weight-main-card'>
         <Text className='weight-main-label'>{recordDate} 的体重</Text>
         <View className='weight-main-input-row'>

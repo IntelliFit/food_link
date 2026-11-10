@@ -13,7 +13,7 @@
 .supplements-tabs { display: flex; gap: 14rpx; margin: 26rpx 0 18rpx; }
 .supplements-tab { padding: 12rpx 22rpx; border-radius: 999rpx; font-size: 24rpx; color: #73827c; background: #e9efec; }
 .supplements-tab.is-active { color: #fff; font-weight: 700; background: #264e42; }
-.supplements-scroll { height: calc(100vh - 360rpx); }
+.supplements-scroll { height: calc(100vh - 516rpx); }
 .supplements-list, .supplements-skeleton-list { display: flex; flex-direction: column; gap: 18rpx; padding-bottom: 20rpx; }
 .supplement-card, .supplement-history-card { padding: 24rpx; border-radius: 26rpx; background: #fff; box-shadow: 0 8rpx 24rpx rgb(31 41 55 / 5%); }
 .supplement-card { display: flex; align-items: center; gap: 20rpx; }

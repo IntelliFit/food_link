@@ -110,6 +110,10 @@
   &:active {
     transform: scale(0.88);
   }
+
+  &.is-full {
+    opacity: 0.55;
+  }
 }
 
 .waiting-pet__snack-emoji {

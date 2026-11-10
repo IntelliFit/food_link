@@ -28,6 +28,8 @@ import { COMMUNITY_FEED_CHANGED_EVENT, HOME_DASHBOARD_REFRESH_EVENT } from '../.
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { markRecordVisibilityNoticeDue, remindRecordVisibilityOnce } from '../../../utils/feed-share'
+import RecordDateField from '../../../components/RecordDateField'
+import { rememberRecordReturnDate } from '../../../utils/record-navigation'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -233,7 +235,9 @@ export default function ExerciseRecordPage() {
           const payload = applyExerciseTaskResult(task)
           if (task.status === 'done' && payload) {
             setPendingItems((prev) => prev.filter((p) => p.clientId !== clientId))
-            setInputValue('')
+            // The submitted draft was cleared when its task was created. The
+            // input may now belong to the next exercise, so completion only
+            // updates the finished task and its records.
             if (currentRecordDateRef.current === targetDate) {
               await loadRecordsForDate(targetDate)
             }
@@ -299,8 +303,7 @@ export default function ExerciseRecordPage() {
   }, [pendingItems, pollForTask])
 
   useDidShow(() => {
-    const params = Taro.getCurrentInstance().router?.params
-    const nextDate = normalizeRecordDate(String(params?.date || ''))
+    const nextDate = currentRecordDateRef.current
     persistRecordTargetDate(nextDate)
     currentRecordDateRef.current = nextDate
     setRecordDate(nextDate)
@@ -451,6 +454,7 @@ export default function ExerciseRecordPage() {
         distance_km: precisionEnabled && precisionDistance ? distanceKm : undefined,
         exercise_breakdown: precisionEnabled ? precisionBreakdown : undefined,
       })
+      rememberRecordReturnDate(targetRecordDate)
       markRecordVisibilityNoticeDue()
       void remindRecordVisibilityOnce()
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
@@ -571,6 +575,7 @@ export default function ExerciseRecordPage() {
         </View>
       </View>
 
+      <RecordDateField date={recordDate} disabled={submitting} onChange={date => { currentRecordDateRef.current = date; setRecordDate(date); void loadRecordsForDate(date) }} />
       <View className='input-section'>
         <View className='exercise-compose-header'>
           <View>

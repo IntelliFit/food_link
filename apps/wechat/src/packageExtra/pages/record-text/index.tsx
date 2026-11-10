@@ -1,6 +1,6 @@
 import { View, Text, Textarea, ScrollView } from '@tarojs/components'
 import { useState, useEffect, useRef } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
   getHealthProfile,
@@ -19,14 +19,19 @@ import {
 import {
   getFoodAnalysisCreditBlockMessage,
   getMembershipCreditSummary,
+  getFoodAnalysisCreditStatusForDate,
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
-import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
+import { getTodayRecordDateKey, requireAllowedRecordDate } from '../../../utils/record-date'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import EatingMoodPicker from '../../../components/EatingMoodPicker'
 import { SUBMIT_ANALYSIS_ENGINE } from '../../../utils/analysis-engine'
+import { loadAnalyzeNutritionBudget } from '../../../utils/analyze-nutrition-budget'
+import { captureAuthSession, isAuthSessionCurrent, type AuthSession } from '../../../utils/auth-session'
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import RecordDateField from '../../../components/RecordDateField'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -62,7 +67,11 @@ const readSuggestRatioPreference = (): boolean => {
 }
 
 function RecordTextPage() {
+  const [recordDate, setRecordDate] = useRecordDate(String(Taro.getCurrentInstance().router?.params?.date || getTodayRecordDateKey()))
   const mealTypeChosenRef = useRef(false)
+  const dietGoalChosenRef = useRef(false)
+  const visibleRef = useRef(true)
+  const mountedRef = useRef(true)
   const [foodText, setFoodText] = useState(() => String(Taro.getCurrentInstance().router?.params?.text || ''))
   const [foodAmount, setFoodAmount] = useState('')
   const [selectedMeal, setSelectedMeal] = useState(() => inferDefaultMealTypeFromLocalTime())
@@ -75,7 +84,9 @@ function RecordTextPage() {
   const submitLock = useRef(false)
   const [loading, setLoading] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
-  const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
+  const [membershipCreditDate, setMembershipCreditDate] = useState('')
+  const [membershipCreditOwner, setMembershipCreditOwner] = useState<AuthSession | null>(null)
+  const [targetDateStatus, setTargetDateStatus] = useState<{ date: string; status: MembershipStatus; owner: AuthSession } | null>(null)
   const [creditSheet, setCreditSheet] = useState<{ visible: boolean; message?: string; status?: MembershipStatus | null }>({
     visible: false,
     status: null,
@@ -83,14 +94,30 @@ function RecordTextPage() {
   const { hasInfo: hasCreditsInfo, max: creditsMax, used: creditsUsed, remaining: creditsRemaining } =
     getMembershipCreditSummary(membershipStatus)
 
-  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus)
+  const recordTargetDate = recordDate
+  const isBackfill = recordTargetDate !== getTodayRecordDateKey()
+  const creditStatus = getFoodAnalysisCreditStatusForDate(
+    membershipCreditDate === getTodayRecordDateKey() && membershipCreditOwner && isAuthSessionCurrent(membershipCreditOwner) ? membershipStatus : null,
+    targetDateStatus?.date === recordTargetDate && isAuthSessionCurrent(targetDateStatus.owner) ? targetDateStatus.status : null, isBackfill,
+  )
+  const isQuotaExhausted = isFoodAnalysisCreditExhausted(creditStatus)
 
   const refreshMembership = () => {
-    if (getAccessToken()) {
-      getMyMembership().then(setMembershipStatus).catch(() => {})
-      const targetDate = getStoredRecordTargetDate()
+    const owner = captureAuthSession()
+    if (owner.token) {
+      const requestedToday = getTodayRecordDateKey()
+      getMyMembership().then(status => {
+        if (mountedRef.current && isAuthSessionCurrent(owner)) {
+          setMembershipStatus(status)
+          setMembershipCreditDate(requestedToday)
+          setMembershipCreditOwner(owner)
+        }
+      }).catch(() => {})
+      const targetDate = recordDate
       if (targetDate !== getTodayRecordDateKey()) {
-        getMyMembership(targetDate).then(setTargetDateStatus).catch(() => {})
+        getMyMembership(targetDate).then(status => {
+          if (mountedRef.current && isAuthSessionCurrent(owner)) setTargetDateStatus({ date: targetDate, status, owner })
+        }).catch(() => {})
       } else {
         setTargetDateStatus(null)
       }
@@ -98,22 +125,31 @@ function RecordTextPage() {
   }
 
   useDidShow(() => {
+    visibleRef.current = true
     refreshMembership()
+  })
+  useDidHide(() => {
+    visibleRef.current = false
+    if (submitLock.current) Taro.hideLoading()
   })
 
   useEffect(() => {
-    const params = Taro.getCurrentInstance().router?.params
-    persistRecordTargetDate(String(params?.date || ''))
+    mountedRef.current = true
+    const owner = captureAuthSession()
+    // The page owns its target date; another page cannot change it through storage.
     refreshMembership()
     ;(async () => {
       try {
         const profile = getAccessToken() ? await getHealthProfile() : null
         const inferredMealType = await getRecommendedMealTypeWithFallback({ profile })
+        if (!mountedRef.current || !isAuthSessionCurrent(owner)) return
         if (!mealTypeChosenRef.current) setSelectedMeal(inferredMealType)
       } catch {
+        if (!mountedRef.current || !isAuthSessionCurrent(owner)) return
         if (!mealTypeChosenRef.current) setSelectedMeal(inferDefaultMealTypeFromLocalTime())
       }
     })()
+    return () => { mountedRef.current = false }
   }, [])
 
   const commonFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
@@ -127,52 +163,71 @@ function RecordTextPage() {
     }
 
     if (!getAccessToken()) {
-      Taro.navigateTo({ url: '/pages/login/index' })
+      Taro.navigateTo({ url: extraPkgUrl('/pages/login/index') })
       return
     }
 
-    if (isQuotaExhausted) {
+    const targetRecordDate = recordDate
+    if (!requireAllowedRecordDate(targetRecordDate)) return
+    const currentToday = getTodayRecordDateKey()
+    const currentCreditStatus = getFoodAnalysisCreditStatusForDate(
+      membershipCreditDate === currentToday && membershipCreditOwner && isAuthSessionCurrent(membershipCreditOwner) ? membershipStatus : null,
+      targetDateStatus?.date === targetRecordDate && isAuthSessionCurrent(targetDateStatus.owner) ? targetDateStatus.status : null,
+      targetRecordDate !== currentToday,
+    )
+    if (isFoodAnalysisCreditExhausted(currentCreditStatus)) {
       setCreditSheet({
         visible: true,
-        status: membershipStatus,
-        message: getFoodAnalysisCreditBlockMessage(membershipStatus),
+        status: currentCreditStatus,
+        message: getFoodAnalysisCreditBlockMessage(currentCreditStatus),
       })
       return
     }
 
     let inputText = trimmed
     if (foodAmount.trim()) inputText += `\n数量：${foodAmount.trim()}`
+    const suggestRatioEnabled = readSuggestRatioPreference()
+    const goalWasChosen = dietGoalChosenRef.current
+    const owner = captureAuthSession()
+    const canPresent = () => mountedRef.current && visibleRef.current && isAuthSessionCurrent(owner)
 
     submitLock.current = true
     setLoading(true)
     Taro.showLoading({ title: '', mask: true })
 
     try {
+      const budget = await loadAnalyzeNutritionBudget(targetRecordDate, { enabled: suggestRatioEnabled })
+      if (!canPresent()) return
+      const effectiveDietGoal = goalWasChosen ? dietGoal : budget.diet_goal || dietGoal
       // 避免沿用上一次拍照分析残留在 storage 中的图，loading 与结果页需与「文字记录」一致
       Taro.removeStorageSync('analyzeImagePath')
       Taro.removeStorageSync('analyzeImagePaths')
       Taro.setStorageSync('analyzeTextInput', inputText)
       Taro.setStorageSync('analyzeMealType', selectedMeal)
-      Taro.setStorageSync('analyzeDietGoal', dietGoal)
+      Taro.setStorageSync('analyzeDietGoal', effectiveDietGoal)
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
       const { task_id } = await submitTextAnalyzeTask({
         text: inputText,
-        date: getStoredRecordTargetDate(),
+        date: targetRecordDate,
         meal_type: selectedMeal as any,
-        diet_goal: dietGoal as any,
+        ...budget,
+        diet_goal: effectiveDietGoal as any,
+        user_goal: effectiveDietGoal === 'none' ? undefined : effectiveDietGoal as any,
         activity_timing: activityTiming as any,
         eating_mood: eatingMood || undefined,
-        suggest_ratio_enabled: readSuggestRatioPreference(),
+        suggest_ratio_enabled: suggestRatioEnabled,
         analysis_engine: analysisEngine,
         precise_micronutrients: true,
         execution_mode: executionMode,
       })
+      if (!canPresent()) return
       Taro.hideLoading()
       Taro.navigateTo({
         url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${task_id}&task_type=food_text&execution_mode=${executionMode}&analysis_engine=${analysisEngine}`
       })
     } catch (e: any) {
+      if (!canPresent()) return
       Taro.hideLoading()
       console.error('[record-text] submitTextAnalyzeTask failed', e)
       const statusCode = (e as { statusCode?: number })?.statusCode
@@ -191,21 +246,20 @@ function RecordTextPage() {
         Taro.showToast({ title: errMsg, icon: 'none' })
       }
     } finally {
+      if (canPresent()) Taro.hideLoading()
       submitLock.current = false
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     }
   }
 
   // 配额提示条文案计算
-  const recordTargetDate = getStoredRecordTargetDate()
-  const isBackfill = recordTargetDate !== getTodayRecordDateKey()
   const creditCost = 2 // 文字分析固定为 2 积分
 
   let quotaBarClass = 'record-text-quota-bar'
   let quotaBarText = ''
   let quotaBarLoading = false
   if (isBackfill) {
-    const targetSummary = targetDateStatus ? getMembershipCreditSummary(targetDateStatus) : null
+    const targetSummary = targetDateStatus?.date === recordTargetDate && isAuthSessionCurrent(targetDateStatus.owner) ? getMembershipCreditSummary(targetDateStatus.status) : null
     const targetHasInfo = targetSummary?.hasInfo ?? false
     const targetRemaining = targetSummary?.remaining ?? 0
     const monthDay = `${Number(recordTargetDate.slice(5, 7))}月${Number(recordTargetDate.slice(8, 10))}日`
@@ -250,6 +304,7 @@ function RecordTextPage() {
         </View>
       )}
       <ScrollView className='content-scroll' scrollY>
+        <RecordDateField date={recordDate} onChange={setRecordDate} disabled={loading} />
         {/* 输入区域 */}
         <View className='input-section'>
           <Text className='section-title'>吃了什么？</Text>
@@ -337,7 +392,7 @@ function RecordTextPage() {
               <View
                 key={goal.value}
                 className={`option-item ${dietGoal === goal.value ? 'active' : ''}`}
-                onClick={() => setDietGoal(goal.value)}
+                onClick={() => { dietGoalChosenRef.current = true; setDietGoal(goal.value) }}
               >
                 <Text>{goal.label}</Text>
               </View>

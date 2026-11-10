@@ -14,20 +14,34 @@ function readStorageFlag(key) {
 }
 
 const FOOD_CAMERA_PAGE = '/packageCamera/pages/shoot/index'
-/** 首页当前选中的日期，首页每次切换日期都会写入（pages/index/index.tsx 的 HOME_SELECTED_DATE_KEY） */
-const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
-
 /**
  * 底栏相机直接打开取景相机（V3：点相机直接拍，文字、食物库、常吃的在相机页下面），
- * 按首页选中的日期记；日期不对或超出可记录范围时，由相机页改记今天。
+ * 首页发起的拍摄继承实际选中日期；其他Tab独立进入默认今天，不读取旧日期缓存。
  */
 function buildFoodCameraUrl() {
-  let date = ''
   try {
-    const stored = wx.getStorageSync(HOME_SELECTED_DATE_KEY)
-    if (typeof stored === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(stored)) date = stored
+    const pages = getCurrentPages()
+    const page = pages && pages[pages.length - 1]
+    if (page && page.route === 'pages/index/index') {
+      const app = typeof getApp === 'function' ? getApp() : null
+      const readDate = app && app.eventCenter && app.eventCenter.callbacks && app.eventCenter.callbacks.getHomeRecordDate
+      const date = typeof readDate === 'function' ? readDate() : ''
+      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const earliest = new Date(today)
+        earliest.setDate(earliest.getDate() - 13)
+        const parts = date.split('-').map(Number)
+        const target = new Date(parts[0], parts[1] - 1, parts[2])
+        if (target < earliest || target > today || target.getDate() !== parts[2]) {
+          wx.showToast({ title: '仅支持近14天记录，请切换日期', icon: 'none' })
+          return ''
+        }
+        return FOOD_CAMERA_PAGE + '?date=' + encodeURIComponent(date) + '&backfill=' + (target.getTime() === today.getTime() ? '0' : '1')
+      }
+    }
   } catch (e) {}
-  return date ? FOOD_CAMERA_PAGE + '?date=' + encodeURIComponent(date) : FOOD_CAMERA_PAGE
+  return FOOD_CAMERA_PAGE
 }
 
 Component({
@@ -119,9 +133,11 @@ Component({
 
     openFoodCamera() {
       if (this.data.recordOpening) return
+      const url = buildFoodCameraUrl()
+      if (!url) return
       this.setData({ recordOpening: true })
       wx.navigateTo({
-        url: buildFoodCameraUrl(),
+        url,
         fail: () => {
           wx.showToast({ title: '打开相机失败，请重试', icon: 'none' })
         },

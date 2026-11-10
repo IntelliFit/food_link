@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 import PetChatPage from '../../src/packageExtra/pages/pet-chat/index'
-import { compressImagePathForUpload, estimatePetChat, getStatsSummary, streamGeneratePetChat, uploadAnalyzeImageFile } from '../../src/utils/api'
+import { compressImagePathForUpload, estimatePetChat, getLatestPetChatSession, getStatsSummary, streamGeneratePetChat, uploadAnalyzeImageFile } from '../../src/utils/api'
 import { rememberMealLocation } from '../../src/utils/meal-location'
 import { chooseImageWithPrivacy } from '../../src/utils/weapp-privacy'
 
@@ -59,6 +59,27 @@ describe('pet chat credit cost', () => {
 
   afterEach(() => {
     jest.useRealTimers()
+  })
+
+  it('releases the input lock on session cancellation without loading old-turn history', async () => {
+    render(<PetChatPage />)
+    fireEvent.click(screen.getByText('今天吃什么'))
+    fireEvent.click(screen.getByLabelText('发送'))
+    expect(screen.getByRole('textbox')).toBeDisabled()
+    const callbacks = (streamGeneratePetChat as jest.Mock).mock.calls[0][4]
+    act(() => { callbacks.onCancel() })
+    expect(screen.getByRole('textbox')).not.toBeDisabled()
+    expect(getLatestPetChatSession).not.toHaveBeenCalled()
+    const textbox = screen.getByRole('textbox') as unknown as Record<string, { onInput: (event: unknown) => void }>
+    const propsKey = Object.keys(textbox).find(key => key.startsWith('__reactProps')) as string
+    act(() => { textbox[propsKey].onInput({ detail: { value: '推荐食谱' } }) })
+    await act(async () => {
+      jest.advanceTimersByTime(350)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    fireEvent.click(screen.getByLabelText('发送'))
+    expect(streamGeneratePetChat).toHaveBeenCalledTimes(2)
   })
 
   it('gets location only after a tap and passes it into the recommendation request', async () => {
