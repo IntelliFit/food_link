@@ -328,7 +328,7 @@ function RecipesPage() {
         /* ignore */
       }
       Taro.showToast({ title: `已记录到${getRecordDateLabel(targetDate)}`, icon: 'success' })
-      returnHomeAfterFoodRecord()
+      returnHomeAfterFoodRecord(undefined, targetDate)
     } catch (e: any) {
       // 点击取消也会抛出错误，需区分
       if (e.errMsg && e.errMsg.includes('cancel')) return
@@ -634,7 +634,7 @@ function RecipesPage() {
                         }}
                       >
                         <Text className='iconfont icon-jishiben'></Text>
-                        <Text className='btn-text'>记录</Text>
+                        <Text className='btn-text'>记录到{getRecordDateLabel(recordDate)}</Text>
                       </View>
                     </View>
                   </View>

@@ -97,6 +97,8 @@ import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from '../../utils/food-display-image'
+import RecordDateField from '../../components/RecordDateField'
+import { consumeRecordReturnDate, HOME_RECORD_DATE_GETTER } from '../../utils/record-navigation'
 import { isAllowedRecordDate, isTodayRecordDate, getRecordDateLabel } from '../../utils/record-date'
 import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
@@ -910,6 +912,20 @@ function IndexPage() {
   const [homeGuideTransitionPending, setHomeGuideTransitionPending] = React.useState(false)
   const homeGuideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const selectedDateRef = React.useRef(selectedDate)
+  React.useEffect(() => {
+    let callbacks: Record<string, any> | undefined
+    const readDate = () => selectedDateRef.current
+    try {
+      const app = Taro.getApp() as any
+      if (app) {
+        app.eventCenter ||= {}
+        app.eventCenter.callbacks ||= {}
+        callbacks = app.eventCenter.callbacks
+        callbacks![HOME_RECORD_DATE_GETTER] = readDate
+      }
+    } catch { /* Native tab bar defaults to today until the page is ready. */ }
+    return () => { if (callbacks?.[HOME_RECORD_DATE_GETTER] === readDate) delete callbacks[HOME_RECORD_DATE_GETTER] }
+  }, [])
   const calendarMonthLoadSeqRef = React.useRef(0)
   const commitSelectedDate = React.useCallback((date: string) => {
     const nextDate = isValidHomeDate(date) ? date : formatDateKey(new Date())
@@ -1468,6 +1484,9 @@ function IndexPage() {
   useDidShow(() => {
     homeVisibleRef.current = true
     resetHomeForSession()
+    const returnedDate = consumeRecordReturnDate()
+    if (returnedDate) { commitSelectedDate(returnedDate); homeDataStaleRef.current = true }
+    saveLastHomeSelectedDate(selectedDateRef.current)
     const session = captureAuthSession()
     void promptPublicRecordsReconfirm().then(() => remindRecordVisibilityOnce())
     clearHomeAuxiliaryTimers()
@@ -2390,6 +2409,7 @@ function IndexPage() {
   }, [setIntakeData, setMeals, setExpirySummary, setExerciseBurnedKcal, setHomeAchievement, setTargetForm])
 
   const handleDateSelect = (date: string) => {
+    consumeRecordReturnDate()
     skipNextRefreshRef.current = true
     const committedDate = commitSelectedDate(date)
     // 1. 无条件从本地缓存读取并立刻渲染
@@ -2484,7 +2504,7 @@ function IndexPage() {
       redirectToLogin()
       return
     }
-    const recordDate = getLastHomeSelectedDate(selectedDateRef.current || selectedDate || formatDateKey(new Date()))
+    const recordDate = selectedDateRef.current || selectedDate || formatDateKey(new Date())
     if (waterBlurTimerRef.current) {
       clearTimeout(waterBlurTimerRef.current)
       waterBlurTimerRef.current = null
@@ -2744,7 +2764,7 @@ function IndexPage() {
     if (shouldOpenHistory) {
       Taro.removeStorageSync(ANALYZE_TASK_REMINDER_OPEN_HISTORY_KEY)
       void acknowledgeAnalyzeTaskReminders().catch(() => undefined)
-      Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze-history/index')}?date=${encodeURIComponent(selectedDateRef.current)}` })
       return
     }
     const pendingTaskId = String(Taro.getStorageSync(ANALYZE_TASK_REMINDER_OPEN_KEY) || '').trim()
@@ -2837,7 +2857,7 @@ function IndexPage() {
     }
     if (analyzeReminder.kind === 'waiting_record') {
       void acknowledgeAnalyzeTaskReminders().catch(() => undefined)
-      Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze-history/index')}?date=${encodeURIComponent(selectedDateRef.current)}` })
       return
     }
     void openAnalyzeTaskFromReminder(analyzeReminder.taskId).finally(() => {
@@ -3211,14 +3231,7 @@ function IndexPage() {
           monthLoadError={calendarMonthLoadError}
         />
 
-        {!isGuest && isAllowedRecordDate(selectedDate) && !isTodayRecordDate(selectedDate) && (
-          <View className='home-backfill-hint'>
-            <Text className='home-backfill-hint__dot' />
-            <Text className='home-backfill-hint__text'>
-              当前选择{getRecordDateLabel(selectedDate)}，直接在首页记录饮食、体重、喝水或运动，即可补录到这一天。
-            </Text>
-          </View>
-        )}
+        {!isGuest && <RecordDateField date={selectedDate} onChange={handleDateSelect} unrestricted />}
 
         <View className='home-experience-stage home-module-list'>
 
@@ -3321,7 +3334,7 @@ function IndexPage() {
         </HomeModule>
 
         <HomeModule id='supplements' layout={moduleLayout} locks={moduleLocks}>
-        {!dashboardBusy && !isGuest && <View className='home-supplement-module'><TodaySupplementsSection summary={supplementSummary} canQuickRecord={isTodayRecordDate(selectedDate)} onRecorded={setSupplementSummary} /></View>}
+        {!dashboardBusy && !isGuest && <View className='home-supplement-module'><TodaySupplementsSection summary={supplementSummary} date={selectedDate} onRecorded={(summary, date) => { if (selectedDateRef.current === date) setSupplementSummary(summary) }} /></View>}
         </HomeModule>
 
         <HomeModule id='rewards' layout={moduleLayout} locks={moduleLocks}>

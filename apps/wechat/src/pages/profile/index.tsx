@@ -589,6 +589,7 @@ function ProfilePage() {
           Taro.removeStorageSync('analyzeDebugPreview')
           Taro.removeStorageSync('analyzeShareData')
           Taro.removeStorageSync('analyze_committed_session')
+          Taro.removeStorageSync('record_return_date_v1')
           clearAnalyzeResultSessionCache()
           Taro.removeStorageSync('analyzeTaskIsRecorded')
           Taro.removeStorageSync('analyzeCommittedRecordId')

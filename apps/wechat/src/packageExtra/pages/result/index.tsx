@@ -61,6 +61,7 @@ import { getRecordDateLabel, isAllowedRecordDate, requireAllowedRecordDate } fro
 import RecordDateChip from './RecordDateChip'
 import { useRecordDate } from '../../../hooks/useRecordDate'
 import RecordDateField from '../../../components/RecordDateField'
+import { rememberRecordReturnDate } from '../../../utils/record-navigation'
 import { clearPersistedEatingMood, readPersistedEatingMood } from '../../../utils/eating-mood'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
@@ -563,9 +564,13 @@ function toSafeNumber(value: unknown, fallback = 0): number {
 export function ResultPage() {
   const [recordContext] = useState(() => ({
     date: String(Taro.getCurrentInstance().router?.params?.date || ''),
+    fromHistory: Taro.getCurrentInstance().router?.params?.history_record === '1',
+    copyRecord: Taro.getCurrentInstance().router?.params?.copy_record === '1',
     taskId: String(Taro.getCurrentInstance().router?.params?.task_id || Taro.getStorageSync('analyzeSourceTaskId') || ''),
     userId: String(Taro.getStorageSync('user_id') || ''),
   }))
+  const historyCopyRef = useRef(recordContext.fromHistory && recordContext.copyRecord)
+  const locallySavedRef = useRef(false)
   const [recordDate, setRecordDate] = useRecordDate(recordContext.date, recordContext.taskId)
   const pageAliveRef = useRef(true)
   const pageVisibleRef = useRef(true)
@@ -615,6 +620,7 @@ export function ResultPage() {
   const [committedRecordId, setCommittedRecordId] = useState<string | null>(null)
   const [taskRecorded, setTaskRecorded] = useState(false)
   const [savedShareRecord, setSavedShareRecord] = useState<FoodRecord | null>(null)
+  const isCurrentMealCommitted = () => taskRecorded || !!committedRecordId || (recordContext.fromHistory ? locallySavedRef.current : isAnalyzeSessionCommitted(recordContext.taskId))
   const mealImpact = useMealImpactSheet('result')
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [analysisEngine, setAnalysisEngine] = useState(() => normalizeAnalysisEngine(
@@ -924,7 +930,7 @@ export function ResultPage() {
       Taro.setStorageSync('analyzeSourceTaskId', nextTaskId)
     }
     if (resetCommittedState) {
-      writeAnalyzeTaskRecordState(recordContext.taskId, false)
+      if (!recordContext.fromHistory) writeAnalyzeTaskRecordState(recordContext.taskId, false)
       setTaskRecorded(false)
       setCommittedRecordId(null)
 		setSavedRecipeId(null)
@@ -1000,9 +1006,14 @@ export function ResultPage() {
 
   const hydrateCommittedRecord = useCallback(() => {
     const state = readAnalyzeTaskRecordState(recordContext.taskId)
-    setTaskRecorded(state.recorded)
-    setCommittedRecordId(state.recordId)
-  }, [recordContext.taskId])
+    if (recordContext.fromHistory) {
+      if (state.recorded) historyCopyRef.current = true
+      if (!locallySavedRef.current) { setTaskRecorded(false); setCommittedRecordId(null) }
+    } else {
+      setTaskRecorded(state.recorded)
+      setCommittedRecordId(state.recordId)
+    }
+  }, [recordContext.taskId, recordContext.fromHistory])
 
   useDidHide(() => { pageVisibleRef.current = false })
   useDidShow(() => {
@@ -1753,6 +1764,7 @@ export function ResultPage() {
   })
 
   const syncEditedAnalyzeResult = async (items: NutritionItem[]) => {
+    if (recordContext.fromHistory) return
     if (String(Taro.getStorageSync('user_id') || '') !== recordContext.userId) return
     const nextResult = buildAnalyzeResultFromItems(items)
     updateAnalyzeResultSnapshot(recordContext.taskId, nextResult)
@@ -2089,7 +2101,7 @@ export function ResultPage() {
 
     const doSave = async () => {
       if (recordSaveLock.current || !requireAllowedRecordDate(recordDate)) return
-      if (isAnalyzeSessionCommitted(recordContext.taskId)) {
+      if (isCurrentMealCommitted()) {
         Taro.showToast({ title: '该餐已记录', icon: 'none' })
         return
       }
@@ -2113,7 +2125,7 @@ export function ResultPage() {
           clearPersistedEatingMood()
         }
 
-        const sourceTaskId = recordContext.taskId || undefined
+        const sourceTaskId = historyCopyRef.current ? undefined : recordContext.taskId || undefined
         const payload: SaveFoodRecordRequest = {
           date: recordDate,
           meal_type: mealType as MealType,
@@ -2137,7 +2149,7 @@ export function ResultPage() {
           absorption_notes: absorptionDisplayText || undefined,
           context_advice: contextAdvice ?? undefined,
           source_task_id: sourceTaskId,
-          entry_type: taskType === 'food_text' ? 'food_text' : 'food_image',
+          entry_type: recordContext.fromHistory ? 'analyze_history' : taskType === 'food_text' ? 'food_text' : 'food_image',
         }
 
         /** 从记录菜单「模拟分析结果」进入时带 analyzeDebugPreview：不写库，仅预览记录详情（仅 development 构建） */
@@ -2165,6 +2177,11 @@ export function ResultPage() {
         }
 
         const saveResult = await saveFoodRecord(payload)
+        if (recordContext.fromHistory && saveResult.already_saved) {
+          historyCopyRef.current = true
+          Taro.showToast({ title: '原任务已记录，再次确认可新增一份', icon: 'none' })
+          return
+        }
         const targetDateKey = recordDate
         if (!saveResult.already_saved) {
           applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
@@ -2184,8 +2201,10 @@ export function ResultPage() {
         } catch {
           /* ignore */
         }
-        writeAnalyzeTaskRecordState(recordContext.taskId, true, saveResult.id)
+        if (sourceTaskId) writeAnalyzeTaskRecordState(recordContext.taskId, true, saveResult.id)
+        locallySavedRef.current = true
         if (!canPresentResult()) return
+        rememberRecordReturnDate(recordDate)
         setCommittedRecordId(saveResult.id)
         setTaskRecorded(true)
 
@@ -2194,7 +2213,7 @@ export function ResultPage() {
             title: saveResult.already_saved ? '该餐已记录，未重复发布' : `已记录到${getRecordDateLabel(recordDate)}`,
             icon: saveResult.already_saved ? 'none' : 'success',
           })
-          returnHomeAfterFoodRecord(800)
+          returnHomeAfterFoodRecord(800, recordDate)
           return
         }
 
@@ -2250,8 +2269,8 @@ export function ResultPage() {
     if (saving) return
     setSaving(true)
     try {
-      let rid = committedRecordId || readAnalyzeTaskRecordState(recordContext.taskId).recordId
-      if (!rid && recordContext.taskId) {
+      let rid = committedRecordId || (!recordContext.fromHistory ? readAnalyzeTaskRecordState(recordContext.taskId).recordId : null)
+      if (!rid && recordContext.taskId && !recordContext.fromHistory) {
         const task = await getAnalyzeTask(recordContext.taskId)
         if (task.id !== recordContext.taskId) throw new Error('识别任务不匹配，请重新打开当前结果')
         rid = writeAnalyzeTaskRecordState(task.id, Boolean(task.is_recorded), task.record_id).recordId
@@ -2279,7 +2298,7 @@ export function ResultPage() {
   /** 点击保存按钮：分析入口已选过餐次，直接按既有餐次保存 */
   const handleConfirmAndShare = () => {
     if (!canPresentResult()) return
-    if (taskRecorded || isAnalyzeSessionCommitted(recordContext.taskId) || committedRecordId) {
+    if (isCurrentMealCommitted()) {
       void handleShareCommittedResult()
       return
     }
@@ -2420,7 +2439,7 @@ export function ResultPage() {
   }
 
   const openFoodLibraryPicker = (intoCorrection = false) => {
-    if (isAnalyzeSessionCommitted(recordContext.taskId)) {
+    if (isCurrentMealCommitted()) {
       Taro.showToast({ title: '该餐已记录，请在记录详情修改', icon: 'none' })
       return
     }
@@ -2455,8 +2474,9 @@ export function ResultPage() {
   // 打开纠错抽屉
   /** prefill：底栏「哪里不对，直接说」里打的字，带进补充说明（直接当点击回调时会收到事件对象，忽略） */
   const openCorrectionDrawer = (prefill?: unknown) => {
+    if (recordContext.fromHistory && historyCopyRef.current && !isCurrentMealCommitted()) { Taro.showToast({ title: '请先记录新餐，再编辑这餐', icon: 'none' }); return }
     // 已记录的餐再纠错会生成新任务并可能被记第二次；与食物库入口一致，引导到记录详情修改。
-    if (taskRecorded || isAnalyzeSessionCommitted(recordContext.taskId) || committedRecordId) {
+    if (isCurrentMealCommitted()) {
       Taro.showToast({ title: '该餐已记录，请在记录详情修改', icon: 'none' })
       return
     }
@@ -2468,7 +2488,7 @@ export function ResultPage() {
 
   const submitSayText = () => {
     // 已记录的餐不能再纠错（会提示去记录详情改），这时保留输入框里的字
-    const committed = taskRecorded || isAnalyzeSessionCommitted(recordContext.taskId) || !!committedRecordId
+    const committed = isCurrentMealCommitted()
     openCorrectionDrawer(sayText)
     if (!committed) setSayText('')
   }
@@ -2762,8 +2782,8 @@ export function ResultPage() {
   const hasPhotoHero = imagePaths.length > 0
   const navOverPhoto = hasPhotoHero && !navSolid
   const navTotalRpx = Math.round((navTotalPx * 750) / navMetrics.windowWidth)
-  const mealCommitted = taskRecorded || isAnalyzeSessionCommitted(recordContext.taskId) || !!committedRecordId
-  // 日期在可记录范围里时，日期放进顶部的小胶囊；超出范围才在底栏显示完整的「请选择日期」
+  const mealCommitted = isCurrentMealCommitted()
+  // 顶部展示餐次日期，未保存时底栏始终展示可切换的记录日期。
   const recordDateValid = isAllowedRecordDate(recordDate)
   const quickCorrections = mealCommitted
     ? []
@@ -3477,7 +3497,7 @@ export function ResultPage() {
         </View>
       )}
       <View className='footer-actions result-bar'>
-        {!mealCommitted && !recordDateValid && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
+        {!mealCommitted && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
         <View className='pba-safe-area result-bar__inner'>
           {quickCorrections.length > 0 && (
             <ScrollView scrollX showScrollbar={false} className='result-bar__chips'>
@@ -3527,7 +3547,7 @@ export function ResultPage() {
                     ? '分享打卡'
                     : pendingPackagedChoiceCount > 0
                       ? '选规格'
-                      : `记录 · ${Math.round(nutritionStats.calories)}`}
+                      : `${historyCopyRef.current ? '再记一份到' : '记录到'}${getRecordDateLabel(recordDate)}`}
                 </Text>
               )}
             </View>

@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 import { RecordMenu } from '../../src/pages/index/components/RecordMenu'
 import { getAccessToken, getMyMembership } from '../../src/utils/api'
@@ -61,89 +61,37 @@ beforeEach(() => {
 
 afterEach(() => { jest.useRealTimers() })
 
-describe('record menu photo dates', () => {
-  it.each(['camera', 'album'] as const)('%s defaults a new record to today even with a stale stored date', async (mode) => {
-    const { onClose } = await clickImageEntry(mode, '2026-11-10')
+describe('record menu inherits the selected calendar day', () => {
+  it.each(['camera', 'album'] as const)('%s records the selected past day without another date-choice menu', async mode => {
+    await clickImageEntry(mode, '2026-11-08')
     expect(Taro.showActionSheet).not.toHaveBeenCalled()
-    expect(storage.get('recordTargetDate')).toBe('2026-11-10')
-    expect(Taro.navigateTo).toHaveBeenCalledWith({
-      url: `${mode === 'camera' ? '/packageCamera/pages/shoot/index' : '/packageExtra/pages/analyze/index'}?date=2026-11-10`,
-    })
-    expect(onClose).toHaveBeenCalledTimes(1)
-    expect(chooseImageWithPrivacy).toHaveBeenCalledTimes(mode === 'album' ? 1 : 0)
-  })
-
-  it.each(['camera', 'album'] as const)('%s asks whether a browsed historical day is intended, and can record today', async (mode) => {
-    dateSheet().mockResolvedValue({ tapIndex: 0 })
-    await clickImageEntry(mode, '2026-11-08')
-    expect(Taro.showActionSheet).toHaveBeenCalledWith({ itemList: ['记录今天', '补录11月8日'] })
-    expect(Taro.navigateTo).toHaveBeenCalledWith({
-      url: `${mode === 'camera' ? '/packageCamera/pages/shoot/index' : '/packageExtra/pages/analyze/index'}?date=2026-11-10`,
-    })
-    expect(storage.get('recordTargetDate')).toBe('2026-11-10')
-  })
-
-  it.each(['camera', 'album'] as const)('%s carries the past date only after an explicit backfill selection', async (mode) => {
-    dateSheet().mockResolvedValue({ tapIndex: 1 })
-    await clickImageEntry(mode, '2026-11-08')
-    expect(Taro.navigateTo).toHaveBeenCalledWith({
-      url: `${mode === 'camera' ? '/packageCamera/pages/shoot/index' : '/packageExtra/pages/analyze/index'}?date=2026-11-08&backfill=1`,
-    })
+    expect(Taro.navigateTo).toHaveBeenCalledWith({ url: `${mode === 'camera' ? '/packageCamera/pages/shoot/index' : '/packageExtra/pages/analyze/index'}?date=2026-11-08&backfill=1` })
     expect(storage.get('recordTargetDate')).toBe('2026-11-08')
   })
-
-  it.each(['camera', 'album'] as const)('%s does nothing when the date choice is cancelled', async (mode) => {
-    dateSheet().mockRejectedValue({ errMsg: 'showActionSheet:fail cancel' })
-    const { onClose } = await clickImageEntry(mode, '2026-11-08')
-    expect(Taro.navigateTo).not.toHaveBeenCalled()
-    expect(chooseImageWithPrivacy).not.toHaveBeenCalled()
-    expect(onClose).not.toHaveBeenCalled()
-    expect(Taro.setStorageSync).not.toHaveBeenCalledWith('recordTargetDate', expect.anything())
+  it.each(['camera', 'album'] as const)('%s follows the visible today instead of stale storage', async mode => {
+    await clickImageEntry(mode, '2026-11-10')
+    expect(Taro.showActionSheet).not.toHaveBeenCalled()
+    expect(Taro.navigateTo).toHaveBeenCalledWith({ url: `${mode === 'camera' ? '/packageCamera/pages/shoot/index' : '/packageExtra/pages/analyze/index'}?date=2026-11-10` })
   })
-
-  it('still requires login before offering or opening a photo flow', async () => {
+  it.each(['2020-01-01', '2026-11-11', 'bad'])('rejects %s instead of silently recording today', async date => {
+    await clickImageEntry('camera', date)
+    expect(Taro.navigateTo).not.toHaveBeenCalled()
+    expect(Taro.showToast).toHaveBeenCalled()
+  })
+  it('requires login before recording', async () => {
     ;(getAccessToken as jest.Mock).mockReturnValue('')
     await clickImageEntry('camera', '2026-11-08')
     expect(redirectToLogin).toHaveBeenCalledTimes(1)
-    expect(Taro.showActionSheet).not.toHaveBeenCalled()
     expect(Taro.navigateTo).not.toHaveBeenCalled()
   })
-
-  it('allows recording today while browsing a date outside the backfill window', async () => {
-    dateSheet().mockResolvedValue({ tapIndex: 0 })
-    await clickImageEntry('camera', '2020-01-01')
-    expect(Taro.navigateTo).toHaveBeenCalledWith({ url: '/packageCamera/pages/shoot/index?date=2026-11-10' })
+  it.each([['text','record-text'], ['manual','record-manual']])('preserves the same date for %s', async (mode,page) => {
+    const view=render(<RecordMenu visible onClose={jest.fn()} selectedDate='2026-11-08' />)
+    await act(async()=>{fireEvent.click(view.container.querySelector(`#record-menu-guide-${mode}`)! )})
+    expect(Taro.navigateTo).toHaveBeenCalledWith({url:`/packageExtra/pages/${page}/index?date=2026-11-08`})
   })
-
-  it('still rejects an expired day if the user explicitly chooses backfill', async () => {
-    dateSheet().mockResolvedValue({ tapIndex: 1 })
-    const { onClose } = await clickImageEntry('album', '2020-01-01')
-    expect(Taro.navigateTo).not.toHaveBeenCalled()
-    expect(chooseImageWithPrivacy).not.toHaveBeenCalled()
-    expect(onClose).not.toHaveBeenCalled()
-    expect(Taro.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: '请重新选择日期，仅支持近14天记录' }))
-  })
-
-  it('uses the current day when the choice remains open across midnight', async () => {
-    let choose!: (value: { tapIndex: number }) => void
-    dateSheet().mockReturnValue(new Promise(resolve => { choose = resolve }))
-    const view = render(<RecordMenu visible onClose={jest.fn()} selectedDate='2026-11-08' />)
-    await act(async () => { fireEvent.click(view.container.querySelector('#record-menu-guide-camera')!) })
-    jest.setSystemTime(new Date(2026, 10, 11, 0, 1))
-    await act(async () => { choose({ tapIndex: 0 }) })
-    await act(async () => { jest.advanceTimersByTime(80) })
-    expect(Taro.navigateTo).toHaveBeenCalledWith({ url: '/packageCamera/pages/shoot/index?date=2026-11-11' })
-  })
-
-  it.each([
-    ['text', '/packageExtra/pages/record-text/index'],
-    ['manual', '/packageExtra/pages/record-manual/index'],
-  ])('preserves the existing selected-date behavior for the %s entry', async (mode, url) => {
-    const onClose = jest.fn()
-    const view = render(<RecordMenu visible onClose={onClose} selectedDate='2026-11-08' />)
-    await act(async () => { fireEvent.click(view.container.querySelector(`#record-menu-guide-${mode}`)!) })
-    expect(Taro.showActionSheet).not.toHaveBeenCalled()
-    expect(Taro.navigateTo).toHaveBeenCalledWith({ url: `${url}?date=2026-11-08` })
-    expect(onClose).toHaveBeenCalledTimes(1)
+  it.each([['我的收藏','recipes'], ['识别记录','analyze-history']])('passes the target day through %s', async (label, page) => {
+    render(<RecordMenu visible onClose={jest.fn()} selectedDate='2026-11-08' />)
+    await act(async () => { fireEvent.click(screen.getByText(label)) })
+    expect(Taro.navigateTo).toHaveBeenCalledWith(expect.objectContaining({ url: `/packageExtra/pages/${page}/index?date=2026-11-08` }))
   })
 })

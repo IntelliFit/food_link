@@ -27,7 +27,7 @@ export function buildCameraEntryUrl(entry: CameraSideEntry, date: string, explic
     case 'favorites':
       return `${extraPkgUrl('/pages/recipes/index')}${query}`
     case 'history':
-      return extraPkgUrl('/pages/analyze-history/index')
+      return `${extraPkgUrl('/pages/analyze-history/index')}${query}`
   }
 }
 

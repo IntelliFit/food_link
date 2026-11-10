@@ -78,7 +78,7 @@ function RecipeDetailPage() {
       } catch (_) {}
       Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
       Taro.showToast({ title: `已记录到${getRecordDateLabel(targetDate)}`, icon: 'success' })
-      returnHomeAfterFoodRecord()
+      returnHomeAfterFoodRecord(undefined, targetDate)
     } catch (e) {
       await showUnifiedApiError(e, '记录失败')
     } finally {
@@ -234,7 +234,7 @@ function RecipeDetailPage() {
             loading={using}
             onClick={handleUse}
           >
-            {using ? <View className='recipe-detail-spinner' /> : <Text className='recipe-detail-primary-btn-text'>一键记录</Text>}
+            {using ? <View className='recipe-detail-spinner' /> : <Text className='recipe-detail-primary-btn-text'>记录到{getRecordDateLabel(recordDate)}</Text>}
           </Button>
         )}
       </View>

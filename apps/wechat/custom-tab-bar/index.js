@@ -16,9 +16,31 @@ function readStorageFlag(key) {
 const FOOD_CAMERA_PAGE = '/packageCamera/pages/shoot/index'
 /**
  * 底栏相机直接打开取景相机（V3：点相机直接拍，文字、食物库、常吃的在相机页下面），
- * 新拍摄始终记今天。首页浏览过的历史日期不代表用户要补录。
+ * 首页发起的拍摄继承实际选中日期；其他Tab独立进入默认今天，不读取旧日期缓存。
  */
 function buildFoodCameraUrl() {
+  try {
+    const pages = getCurrentPages()
+    const page = pages && pages[pages.length - 1]
+    if (page && page.route === 'pages/index/index') {
+      const app = typeof getApp === 'function' ? getApp() : null
+      const readDate = app && app.eventCenter && app.eventCenter.callbacks && app.eventCenter.callbacks.getHomeRecordDate
+      const date = typeof readDate === 'function' ? readDate() : ''
+      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const earliest = new Date(today)
+        earliest.setDate(earliest.getDate() - 13)
+        const parts = date.split('-').map(Number)
+        const target = new Date(parts[0], parts[1] - 1, parts[2])
+        if (target < earliest || target > today || target.getDate() !== parts[2]) {
+          wx.showToast({ title: '仅支持近14天记录，请切换日期', icon: 'none' })
+          return ''
+        }
+        return FOOD_CAMERA_PAGE + '?date=' + encodeURIComponent(date) + '&backfill=' + (target.getTime() === today.getTime() ? '0' : '1')
+      }
+    }
+  } catch (e) {}
   return FOOD_CAMERA_PAGE
 }
 
@@ -111,9 +133,11 @@ Component({
 
     openFoodCamera() {
       if (this.data.recordOpening) return
+      const url = buildFoodCameraUrl()
+      if (!url) return
       this.setData({ recordOpening: true })
       wx.navigateTo({
-        url: buildFoodCameraUrl(),
+        url,
         fail: () => {
           wx.showToast({ title: '打开相机失败，请重试', icon: 'none' })
         },

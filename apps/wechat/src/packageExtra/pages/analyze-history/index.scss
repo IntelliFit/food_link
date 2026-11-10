@@ -6,6 +6,17 @@
   padding-bottom: 48rpx;
 }
 
+.history-record-action {
+  margin: -4rpx 24rpx 20rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 0 0 18rpx 18rpx;
+  background: var(--fl-card-bg, #e5f3eb);
+  color: var(--fl-primary, #187454);
+  font-size: 27rpx;
+  font-weight: 600;
+  text-align: right;
+}
+
 .search-bar {
   padding: 16rpx 24rpx;
   box-sizing: border-box;

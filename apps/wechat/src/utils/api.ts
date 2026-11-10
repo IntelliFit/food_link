@@ -5415,6 +5415,7 @@ export function clearTokens() {
 export function clearAllStorage() {
   rememberMealLocation('')
   try {
+    Taro.removeStorageSync('record_return_date_v1')
     // 清除 token 相关
     clearTokens()
 

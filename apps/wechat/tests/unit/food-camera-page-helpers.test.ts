@@ -64,7 +64,7 @@ describe('camera entry helpers', () => {
     expect(buildCameraEntryUrl('text', date, true)).toBe(`/packageExtra/pages/record-text/index?date=${date}&backfill=1`)
     expect(buildCameraEntryUrl('library', date, true)).toBe(`/packageExtra/pages/record-manual/index?date=${date}&backfill=1`)
     expect(buildCameraEntryUrl('favorites', date, true)).toBe(`/packageExtra/pages/recipes/index?date=${date}&backfill=1`)
-    expect(buildCameraEntryUrl('history', date, true)).toBe('/packageExtra/pages/analyze-history/index')
+    expect(buildCameraEntryUrl('history', date, true)).toBe(`/packageExtra/pages/analyze-history/index?date=${date}&backfill=1`)
   })
 
   it('does not turn a bare date into a backfill choice when changing record modes', () => {

@@ -70,6 +70,7 @@ import {
 } from '../../../utils/analysis-engine'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { openFoodCameraForResult, takeFoodCameraResult } from '../../../utils/food-camera'
+import RecordDateField from '../../../components/RecordDateField'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 import OnboardingGuide from '../../../components/OnboardingGuide'
@@ -437,7 +438,7 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
 }
 
 export function AnalyzePage() {
-  const [recordDateInput] = useState(() => {
+  const [recordDateInput, setRecordDateInput] = useState(() => {
     const params = Taro.getCurrentInstance().router?.params
     return { date: String(params?.date || ''), backfill: params?.backfill === '1' }
   })
@@ -1609,6 +1610,7 @@ export function AnalyzePage() {
           </View>
         )}
 
+        <RecordDateField date={recordTargetDate} disabled={isAnalyzing} onChange={date => setRecordDateInput({ date, backfill: date !== getTodayRecordDateKey() })} />
         <View className='analyze-guide-quality-zone' id='analyze-guide-quality-zone'>
         {/* 识别方式：普通 / 精准，营养数据统一由智能匹配完成 */}
         <View className='multiview-compact'>

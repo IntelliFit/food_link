@@ -10,6 +10,7 @@ jest.mock('@tarojs/components', () => {
   return {
     View: ({ children, className, onClick, style }: any) => React.createElement('div', { className, onClick, style }, children),
     Text: ({ children, className, onClick }: any) => React.createElement('span', { className, onClick }, children),
+    Picker: ({ children }: any) => React.createElement('div', {}, children),
     Image: ({ src, className }: any) => React.createElement('img', { src, className }),
     Textarea: ({ value, className }: any) => React.createElement('textarea', { value, className, readOnly: true }),
     PageMeta: () => null,

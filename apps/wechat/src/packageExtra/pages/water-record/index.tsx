@@ -27,6 +27,8 @@ import {
   normalizeRouteDate,
 } from '../body-metrics-shared'
 
+import RecordDateField from '../../../components/RecordDateField'
+import { rememberRecordReturnDate } from '../../../utils/record-navigation'
 import './index.scss'
 
 const WATER_PRESETS = [150, 250, 350, 500]
@@ -84,6 +86,7 @@ function WaterRecordPage() {
     setSavingAmount(marker)
     try {
       const result = await addBodyWaterLog(Math.round(amount), recordDate)
+      rememberRecordReturnDate(recordDate)
       addWaterToBodyMetricsStorage(recordDate, Math.round(amount), result.item)
       Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT, {
         date: recordDate,
@@ -183,6 +186,7 @@ function WaterRecordPage() {
         </View>
       </View>
 
+      <RecordDateField date={recordDate} onChange={setRecordDate} unrestricted disabled={savingAmount !== null || clearing || !!deletingLogId} />
       <View className='water-progress-card'>
         <View className='water-total-row'>
           <Text className='water-total-value'>{Math.round(currentTotal)}</Text>

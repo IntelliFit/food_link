@@ -143,21 +143,11 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 }
 
-/** Browsing a past day is not permission to date a newly taken photo to that day. */
+/** New records inherit the day visibly selected on their entry page. */
 async function chooseImageRecordDate(selectedDate: string): Promise<{ date: string; backfill: boolean } | null> {
   const today = getTodayRecordDateKey()
-  const selectedLabel = getRecordDateLabel(selectedDate)
-  if (!selectedDate || selectedDate >= today || selectedLabel === '请选择日期') {
-    return { date: today, backfill: false }
-  }
-  try {
-    const choice = await Taro.showActionSheet({ itemList: ['记录今天', `补录${selectedLabel}`] })
-    if (choice.tapIndex === 0) return { date: getTodayRecordDateKey(), backfill: false }
-    if (choice.tapIndex === 1) return { date: selectedDate, backfill: true }
-    return null
-  } catch {
-    return null
-  }
+  if (!requireAllowedRecordDate(selectedDate)) return null
+  return { date: selectedDate, backfill: selectedDate !== today }
 }
 
 export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
@@ -365,7 +355,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
         target = `${extraPkgUrl('/pages/recipes/index')}?date=${encodeURIComponent(selectedDate)}`
         break
       case 'history':
-        target = extraPkgUrl('/pages/analyze-history/index')
+        target = `${extraPkgUrl('/pages/analyze-history/index')}?date=${encodeURIComponent(selectedDate)}`
         break
     }
     if (!target) return
