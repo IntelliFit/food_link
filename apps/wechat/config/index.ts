@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'fs'
-import { join } from 'path'
+import { join, relative, resolve } from 'path'
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
 
 import devConfig from './dev'
@@ -96,7 +96,9 @@ export default defineConfig<'vite'>(async (merge) => {
       828: 1.81 / 2
     },
     sourceRoot: 'src',
-    outputRoot: process.env.FOODLINK_WEAPP_OUTPUT_ROOT || 'dist',
+    outputRoot: process.env.FOODLINK_WEAPP_OUTPUT_ROOT
+      ? relative(appRoot, resolve(appRoot, process.env.FOODLINK_WEAPP_OUTPUT_ROOT)).replace(/\\/g, '/')
+      : 'dist',
     plugins: [
       "@tarojs/plugin-generator"
     ],
