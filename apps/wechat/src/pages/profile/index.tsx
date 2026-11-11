@@ -1,3 +1,4 @@
+import { clearAnalyzeResultSessionCache } from '../../utils/analyze-result-session'
 import { LifespanEntry } from '../../components/LifespanEntry'
 import { WeeklyRecapEntry } from '../../components/WeeklyRecapEntry'
 import { resetSocialInbox } from '../../utils/social-inbox'
@@ -333,7 +334,7 @@ function ProfilePage() {
     {
       id: 17,
       iconClass: 'icon-duoren',
-      title: '高校共建',
+      title: '高校伙伴计划',
       desc: '和健身社团一起称食堂的饭，扫社团的码加入',
       path: extraPkgUrl('/pages/campus-campaign/index')
     },
@@ -587,6 +588,9 @@ function ProfilePage() {
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzeDebugPreview')
           Taro.removeStorageSync('analyzeShareData')
+          Taro.removeStorageSync('analyze_committed_session')
+          Taro.removeStorageSync('record_return_date_v1')
+          clearAnalyzeResultSessionCache()
           Taro.removeStorageSync('analyzeTaskIsRecorded')
           Taro.removeStorageSync('analyzeCommittedRecordId')
 

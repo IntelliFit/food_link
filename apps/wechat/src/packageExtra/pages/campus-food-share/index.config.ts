@@ -1,5 +1,5 @@
 ﻿export default definePageConfig({
-  navigationBarTitleText: '上传食堂菜品',
+  navigationBarTitleText: '食堂菜品共建',
   navigationBarBackgroundColor: '#f9fafb',
   navigationBarTextStyle: 'black',
   backgroundColor: '#f9fafb'

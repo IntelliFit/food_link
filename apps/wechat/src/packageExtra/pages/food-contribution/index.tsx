@@ -10,7 +10,7 @@ import './index.scss'
 const TYPES = [
   { key: 'standard', icon: 'icon-shiwu', title: '标准食物', desc: '米饭、鸡蛋、土豆等每100g营养数据' },
   { key: 'packaged', icon: 'icon-picture', title: '包装食品', desc: '拍包装正面、营养成分表和配料表' },
-  { key: 'public', icon: 'icon-foodshop', title: '公共餐食', desc: '普通餐食或校园食堂真实菜品' },
+  { key: 'public', icon: 'icon-foodshop', title: '公共餐食', desc: '普通餐食，或食堂菜品共建' },
 ] as const
 
 export default function FoodContributionPage() {
@@ -28,7 +28,7 @@ export default function FoodContributionPage() {
       return
     }
     try {
-      const result = await Taro.showActionSheet({ itemList: ['普通公共餐食', '校园餐食'] })
+      const result = await Taro.showActionSheet({ itemList: ['普通公共餐食', '食堂菜品共建'] })
       Taro.navigateTo({
         url: result.tapIndex === 1
           ? extraPkgUrl('/pages/campus-food-share/index?task_mode=contribution')

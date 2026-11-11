@@ -139,7 +139,7 @@ export function FoodContributionScreen() {
               }}
             />
             <SheetChoice
-              title="校园餐食"
+              title="食堂菜品共建"
               description="学校、校区、食堂和档口菜品"
               palette={palette}
               onPress={() => {

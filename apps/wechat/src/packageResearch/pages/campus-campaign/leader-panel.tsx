@@ -83,7 +83,7 @@ export function LeaderPanel({ leader, onChange, onStationCreated }: LeaderPanelP
       <View className='rw-card'>
         <Text className='rw-card__title'>邀请成员</Text>
         <Text className='cc-code-big'>加入码 {campaign.join_code}</Text>
-        <Text className='rw-tip'>成员在「我的 → 科研共建 → 高校共建」输入加入码，或点你转发的卡片加入。</Text>
+        <Text className='rw-tip'>成员在「我的 → 科研共建 → 高校伙伴计划」输入加入码，或点你转发的卡片加入。</Text>
         <Button className='rw-submit cc-share' openType='share'>转发活动卡片给成员</Button>
       </View>
       <View className='rw-card'>

@@ -62,13 +62,15 @@ import {
 } from '../../../utils/membership'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import EatingMoodPicker from '../../../components/EatingMoodPicker'
-import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
+import { persistRecordTargetDate, getTodayRecordDateKey, resolveNewRecordDate } from '../../../utils/record-date'
+import { useLocalToday } from '../../../hooks/useLocalToday'
 import {
   defaultAnalysisEngineForMode,
   normalizeAnalysisEngine,
 } from '../../../utils/analysis-engine'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { openFoodCameraForResult, takeFoodCameraResult } from '../../../utils/food-camera'
+import RecordDateField from '../../../components/RecordDateField'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 import OnboardingGuide from '../../../components/OnboardingGuide'
@@ -435,10 +437,15 @@ const persistImagePathsImmediately = async (paths: string[]): Promise<string[]> 
   return persistedPaths
 }
 
-function AnalyzePage() {
-  const today = getTodayRecordDateKey()
-  const recordTargetDate = getStoredRecordTargetDate()
-  const resolveCurrentRecordDate = () => getStoredRecordTargetDate()
+export function AnalyzePage() {
+  const [recordDateInput, setRecordDateInput] = useState(() => {
+    const params = Taro.getCurrentInstance().router?.params
+    return { date: String(params?.date || ''), backfill: params?.backfill === '1' }
+  })
+  const today = useLocalToday()
+  const dateChoice = resolveNewRecordDate(recordDateInput.date, recordDateInput.backfill)
+  const recordTargetDate = dateChoice.backfill ? dateChoice.date : today
+  const resolveCurrentRecordDate = () => resolveNewRecordDate(recordDateInput.date, recordDateInput.backfill).date
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const mealTypeChosenRef = useRef(false)
@@ -506,7 +513,7 @@ function AnalyzePage() {
       },
       suggest_ratio: {
         title: 'AI摄入比例',
-        content: '结果页自动给出每项食物的滑块比例。开启后，AI 会根据你的剩余热量和饮食目标，为每个识别出的食物建议一个摄入比例（0-100%），你可以在结果页通过滑块快速调整。'
+        content: '开启后，普通识别会结合记录当天的剩余热量和饮食目标给出摄入建议。有单项建议时，可在结果页点击“应用建议”。滑块表示实际吃下的比例，不会自动替你更改；未取得建议时会如实提示。'
       },
       analysis_mode: {
         title: '识别方式',
@@ -636,8 +643,27 @@ function AnalyzePage() {
     setPrecisionInteractiveEnabled(value => !value)
   }
 
+  // 从取景相机返回：只把拍到的照片放回原位置，不用存储里的旧图覆盖当前这一顿。
+  // 相机页 navigateBack 回来时本页不会重新挂载，所以必须在 useDidShow 里取回照片。
+  const takeBackFoodCameraPhotos = async (target: FoodCameraTarget) => {
+    const shotPaths = takeFoodCameraResult()
+    if (shotPaths.length === 0) return
+    try {
+      if (target.kind === 'append') await appendImagePaths(shotPaths)
+      else await placePrecisionImage(target.role, shotPaths[0])
+    } catch (error) {
+      console.error('[analyze] take back food camera photos failed', error)
+      Taro.showToast({ title: '照片没放进来，请重拍', icon: 'none' })
+    }
+  }
+
   // 每次进入拍照页都刷新配额（从分析结果页返回时）；无图时按当前时间刷新默认餐次
   useDidShow(() => {
+    const cameraTarget = foodCameraTargetRef.current
+    if (cameraTarget) {
+      foodCameraTargetRef.current = null
+      void takeBackFoodCameraPhotos(cameraTarget)
+    }
     const params = Taro.getCurrentInstance().router?.params
     const nextSessionId = String(params?.precision_session_id || '').trim()
     const requestedCaptureMode = String(params?.capture_mode || '').trim()
@@ -677,7 +703,7 @@ function AnalyzePage() {
     const params = Taro.getCurrentInstance().router?.params
     const nextSessionId = String(params?.precision_session_id || '').trim()
     const requestedCaptureMode = String(params?.capture_mode || '').trim()
-    persistRecordTargetDate(String(params?.date || ''))
+    persistRecordTargetDate(resolveCurrentRecordDate())
     const requestedAnalysisEngine = String(params?.analysis_engine || '').trim()
     routeSessionSignatureRef.current = `${nextSessionId}|${requestedAnalysisEngine}|${requestedCaptureMode}`
     setPrecisionSessionId(nextSessionId)
@@ -723,16 +749,6 @@ function AnalyzePage() {
     // 2. 从本地存储获取图片路径 (用于拍照/相册后的跳转)
     const initStoredImagePath = async () => {
       try {
-        // 从取景相机返回：只把拍到的照片放回原位置，不用存储里的旧图覆盖当前这一顿。
-        const cameraTarget = foodCameraTargetRef.current
-        if (cameraTarget) {
-          foodCameraTargetRef.current = null
-          const shotPaths = takeFoodCameraResult()
-          if (shotPaths.length === 0) return
-          if (cameraTarget.kind === 'append') await appendImagePaths(shotPaths)
-          else await placePrecisionImage(cameraTarget.role, shotPaths[0])
-          return
-        }
         if (nextSessionId) {
           if (requestedCaptureMode === 'video') {
             setImagePaths([])
@@ -1129,6 +1145,8 @@ function AnalyzePage() {
 
     try {
       let targetRecordDate = resolveCurrentRecordDate()
+      // Fetch the selected day's current budget while photos upload, without
+      // letting dashboard availability block recognition or invent a zero budget.
       const nutritionBudgetPromise = loadAnalyzeNutritionBudget(targetRecordDate, { enabled: suggestRatioEnabled })
       // 1. 并行上传图片并保持原始顺序，避免多角度识别把上传耗时串行叠加。
       const imageUrls = await Promise.all(submitImagePaths.map(async path => {
@@ -1226,7 +1244,8 @@ function AnalyzePage() {
         Taro.setStorageSync('analyzeImagePaths', submitImagePaths)
       }
       Taro.setStorageSync('analyzeMealType', mealType)
-      Taro.removeStorageSync('analyzeDietGoal')
+      if (nutritionBudget.diet_goal) Taro.setStorageSync('analyzeDietGoal', nutritionBudget.diet_goal)
+      else Taro.removeStorageSync('analyzeDietGoal')
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
       Taro.setStorageSync('analyzePrecisionCaptureMode', isVideoCaptureSelected ? 'video' : 'photos')
@@ -1552,13 +1571,14 @@ function AnalyzePage() {
             <Text className='precision-capture-note'>两张必须是同一餐，且不能重复使用同一图片。</Text>
           </View>
         ) : imagePaths.length > 0 ? (
+          // 照片统一按方形预览，一排三个，满三个换到第二排；「再拍一张」占下一个格子。
           <View className='image-grid'>
             {imagePaths.map((path, index) => (
-              <View key={index} className='grid-item'>
+              <View key={index} className='image-grid__item'>
                 <Image
                   src={path}
                   mode='aspectFill'
-                  className='grid-image'
+                  className='image-grid__image'
                   onClick={() => handlePreviewImage(path)}
                 />
 
@@ -1572,9 +1592,11 @@ function AnalyzePage() {
               </View>
             ))}
             {imagePaths.length < MAX_ANALYZE_IMAGES && (
-              <View className='grid-item add-btn' onClick={handleChooseImage}>
-                <Text className='add-icon'>+</Text>
-                <Text className='add-text'>添加</Text>
+              <View className='image-grid__add' onClick={handleChooseImage}>
+                <View className='image-grid__add-inner'>
+                  <Text className='image-grid__add-icon'>+</Text>
+                  <Text className='image-grid__add-text'>再拍一张</Text>
+                </View>
               </View>
             )}
           </View>
@@ -1588,6 +1610,7 @@ function AnalyzePage() {
           </View>
         )}
 
+        <RecordDateField date={recordTargetDate} disabled={isAnalyzing} onChange={date => setRecordDateInput({ date, backfill: date !== getTodayRecordDateKey() })} />
         <View className='analyze-guide-quality-zone' id='analyze-guide-quality-zone'>
         {/* 识别方式：普通 / 精准，营养数据统一由智能匹配完成 */}
         <View className='multiview-compact'>
@@ -1891,8 +1914,8 @@ function AnalyzePage() {
                     : isStrictBaseModeSelected && !precisionCaptureComplete
                       ? (isVideoCaptureSelected ? '请重新录制有效视频' : '请补齐两个拍摄角度')
                       : isVideoCaptureSelected
-                        ? `分析 ${selectedImagePaths.length} 个关键帧 · 消耗 ${creditCost} 积分`
-                        : `分析 ${selectedImagePaths.length} 张 · 消耗 ${creditCost} 积分`}
+                        ? `开始识别 ${selectedImagePaths.length} 个关键帧 · 消耗 ${creditCost} 积分`
+                        : `开始识别 ${selectedImagePaths.length} 张 · 消耗 ${creditCost} 积分`}
             </Text>
           )}
         </View>

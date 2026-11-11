@@ -13,43 +13,35 @@ function readStorageFlag(key) {
   }
 }
 
-function triggerRecordMenu(pages) {
+const FOOD_CAMERA_PAGE = '/packageCamera/pages/shoot/index'
+/**
+ * 底栏相机直接打开取景相机（V3：点相机直接拍，文字、食物库、常吃的在相机页下面），
+ * 首页发起的拍摄继承实际选中日期；其他Tab独立进入默认今天，不读取旧日期缓存。
+ */
+function buildFoodCameraUrl() {
   try {
-    const app = typeof getApp === 'function' ? getApp() : null
-    const callback = app &&
-      app.eventCenter &&
-      app.eventCenter.callbacks &&
-      app.eventCenter.callbacks.showRecordMenu
-    if (typeof callback === 'function') {
-      callback()
-      return true
+    const pages = getCurrentPages()
+    const page = pages && pages[pages.length - 1]
+    if (page && page.route === 'pages/index/index') {
+      const app = typeof getApp === 'function' ? getApp() : null
+      const readDate = app && app.eventCenter && app.eventCenter.callbacks && app.eventCenter.callbacks.getHomeRecordDate
+      const date = typeof readDate === 'function' ? readDate() : ''
+      if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const earliest = new Date(today)
+        earliest.setDate(earliest.getDate() - 13)
+        const parts = date.split('-').map(Number)
+        const target = new Date(parts[0], parts[1] - 1, parts[2])
+        if (target < earliest || target > today || target.getDate() !== parts[2]) {
+          wx.showToast({ title: '仅支持近14天记录，请切换日期', icon: 'none' })
+          return ''
+        }
+        return FOOD_CAMERA_PAGE + '?date=' + encodeURIComponent(date) + '&backfill=' + (target.getTime() === today.getTime() ? '0' : '1')
+      }
     }
   } catch (e) {}
-
-  try {
-    const app = typeof getApp === 'function' ? getApp() : null
-    const trigger = app &&
-      app.__taroAppInstance &&
-      app.__taroAppInstance.eventCenter &&
-      app.__taroAppInstance.eventCenter.trigger
-    if (typeof trigger === 'function') {
-      trigger('showRecordMenu')
-      return true
-    }
-  } catch (e) {}
-
-  try {
-    const currentPage = pages && pages[pages.length - 1]
-    const component = currentPage &&
-      currentPage.selectComponent &&
-      currentPage.selectComponent('.record-menu-trigger')
-    if (component && typeof component.showMenu === 'function') {
-      component.showMenu()
-      return true
-    }
-  } catch (e) {}
-
-  return false
+  return FOOD_CAMERA_PAGE
 }
 
 Component({
@@ -104,7 +96,6 @@ Component({
 
     detached() {
       this.stopPolling()
-      this.clearRecordOpenTimers()
     }
   },
 
@@ -140,47 +131,20 @@ Component({
       this._pollTimer = null
     },
 
-    clearRecordOpenTimers() {
-      const timers = Array.isArray(this._recordOpenTimers) ? this._recordOpenTimers : []
-      timers.forEach((timer) => clearTimeout(timer))
-      this._recordOpenTimers = []
-    },
-
-    finishRecordOpening(opened) {
-      this.clearRecordOpenTimers()
-      if (opened) {
-        try {
-          wx.removeStorageSync('showRecordMenuModal')
-        } catch (e) {}
-      }
-      if (this.data.recordOpening) {
-        this.setData({ recordOpening: false })
-      }
-    },
-
-    openRecordMenuWithRetry() {
-      this.clearRecordOpenTimers()
-      // 页面切换和 React effect 注册存在先后顺序；用有界重试替代首页 50ms、持续 60 秒的轮询。
-      // 真机冷启动/页面重建时首页回调可能晚于 1 秒才注册，所以重试窗口放宽到约 6 秒。
-      const retryDelays = [0, 80, 180, 350, 650, 1000, 1500, 2000]
-      const attempt = (index) => {
-        if (triggerRecordMenu(getCurrentPages())) {
-          this.finishRecordOpening(true)
-          return
-        }
-        if (index >= retryDelays.length - 1) {
-          // 不再兜底直接进入分析页：那会跳过四个记录选项，并带出 storage 里上一次的旧图片。
-          try {
-            wx.removeStorageSync('showRecordMenuModal')
-          } catch (e) {}
-          this.finishRecordOpening(false)
-          wx.showToast({ title: '记录入口打开失败，请重试', icon: 'none' })
-          return
-        }
-        const timer = setTimeout(() => attempt(index + 1), retryDelays[index + 1])
-        this._recordOpenTimers.push(timer)
-      }
-      attempt(0)
+    openFoodCamera() {
+      if (this.data.recordOpening) return
+      const url = buildFoodCameraUrl()
+      if (!url) return
+      this.setData({ recordOpening: true })
+      wx.navigateTo({
+        url,
+        fail: () => {
+          wx.showToast({ title: '打开相机失败，请重试', icon: 'none' })
+        },
+        complete: () => {
+          this.setData({ recordOpening: false })
+        },
+      })
     },
 
     updateSelected() {
@@ -344,28 +308,8 @@ Component({
       const { index, path, iscenter } = e.currentTarget.dataset
 
       if (iscenter) {
-        if (this.data.recordOpening) return
-        this.setData({ recordOpening: true })
-        wx.setStorageSync('showRecordMenuModal', true)
-
-        const pages = getCurrentPages()
-        const isAlreadyHome = pages.length > 0 && pages[pages.length - 1].route === 'pages/index/index'
-        
-        if (isAlreadyHome) {
-          this.openRecordMenuWithRetry()
-          return
-        }
-
-        wx.switchTab({ 
-          url: '/pages/index/index',
-          success: () => {
-            this.openRecordMenuWithRetry()
-          },
-          fail: () => {
-            this.finishRecordOpening(false)
-            wx.showToast({ title: '首页打开失败，请重试', icon: 'none' })
-          },
-        })
+        // 记录面板（四种方式 + 收藏 + 识别记录）仍由首页「记一笔」、某天记录页和伙伴页打开。
+        this.openFoodCamera()
         return
       }
 

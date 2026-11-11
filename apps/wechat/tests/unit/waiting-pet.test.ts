@@ -2,6 +2,9 @@ import {
   PET_FULL_LINE,
   PET_MAX_SNACKS,
   PET_SNACKS,
+  PET_SNACK_TRAY_SIZE,
+  createPetSnackTray,
+  replacePetSnack,
   petQuizLine,
   petSnackLine,
   petTapLine,
@@ -52,6 +55,42 @@ describe('waiting pet copy', () => {
     expect(petSnackLine(PET_SNACKS[0], 0)).toBe(PET_SNACKS[0].fact)
     expect(petSnackLine(PET_SNACKS[0], PET_MAX_SNACKS - 1)).toBe(PET_SNACKS[0].fact)
     expect(petSnackLine(PET_SNACKS[0], PET_MAX_SNACKS)).toBe(PET_FULL_LINE)
+  })
+
+  it('draws four unique snacks from a larger pool and changes the opening tray', () => {
+    const first = createPetSnackTray(() => 0)
+    const another = createPetSnackTray(() => 0.999)
+    expect(PET_SNACKS.length).toBeGreaterThan(PET_SNACK_TRAY_SIZE * 2)
+    expect(first).toHaveLength(PET_SNACK_TRAY_SIZE)
+    expect(new Set(first.map(snack => snack.id)).size).toBe(PET_SNACK_TRAY_SIZE)
+    expect(first.map(snack => snack.id)).not.toEqual(another.map(snack => snack.id))
+  })
+
+  it('replaces the eaten snack without repeating any visible snack', () => {
+    const original = createPetSnackTray(() => 0)
+    let tray = original
+    for (let i = 0; i < PET_MAX_SNACKS; i += 1) {
+      const previousIds = tray.map(snack => snack.id)
+      tray = replacePetSnack(tray, tray[0].id, () => 0)
+      expect(tray).toHaveLength(PET_SNACK_TRAY_SIZE)
+      expect(previousIds).not.toContain(tray[0].id)
+      expect(tray.slice(1)).toEqual(original.slice(1))
+      expect(new Set(tray.map(snack => snack.id)).size).toBe(PET_SNACK_TRAY_SIZE)
+    }
+    expect(original.map(snack => snack.id)).toEqual(createPetSnackTray(() => 0).map(snack => snack.id))
+  })
+
+  it('keeps the tray valid when a random source returns an edge value', () => {
+    for (const value of [NaN, -1, 1]) {
+      const tray = createPetSnackTray(() => value)
+      expect(tray).toHaveLength(PET_SNACK_TRAY_SIZE)
+      expect(new Set(tray.map(snack => snack.id)).size).toBe(PET_SNACK_TRAY_SIZE)
+    }
+  })
+
+  it('varies the reply before the existing full limit', () => {
+    expect(petSnackLine(PET_SNACKS[0], 1)).not.toBe(petSnackLine(PET_SNACKS[0], 0))
+    expect(petSnackLine(PET_SNACKS[0], 1)).toContain(PET_SNACKS[0].label)
   })
 
   it('reacts to quiz answers', () => {

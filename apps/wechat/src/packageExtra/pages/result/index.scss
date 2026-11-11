@@ -2830,3 +2830,856 @@ transitiontransition
 }
 
 @keyframes food-recalculation-spin { to { transform: rotate(360deg); } }
+
+// ===================================================================
+// V3（2026-11）：照片通顶满宽、透明导航压在照片上、底部「直接说」栏、
+// 一句话纠正胶囊、AI 分析手风琴。新元素在这里定义；旧元素的浅色改动
+// 用 :not(.result-page--dark) 限定，深色模式仍走上面的 .result-page--dark。
+// ===================================================================
+$v3-page: #f4f4ec;
+$v3-ink: #163e32;
+$v3-ink-strong: #0b3b2e;
+$v3-muted: #5a6b63;
+$v3-accent: #1a6549;
+$v3-accent-text: #127a58;
+$v3-accent-soft: #f1faf4;
+$v3-line: #e0e5dc;
+$v3-cream: #fffdf1;
+
+.result-page--v3 {
+  // ---------- 自定义导航 ----------
+  .result-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    box-sizing: content-box;
+    display: flex;
+    align-items: center;
+    transition: background 180ms ease, box-shadow 180ms ease;
+  }
+
+  .result-nav--over-photo {
+    background: transparent;
+
+    .result-nav__back-icon,
+    .result-nav__title {
+      color: #fff;
+      text-shadow: 0 2rpx 10rpx rgb(0 0 0 / 30%);
+    }
+  }
+
+  .result-nav--solid {
+    background: $v3-page;
+    box-shadow: 0 2rpx 0 rgb(22 62 50 / 6%);
+
+    .result-nav__back-icon,
+    .result-nav__title {
+      color: $v3-ink-strong;
+    }
+  }
+
+  .result-nav__back {
+    position: relative;
+    z-index: 1;
+    width: 88rpx;
+    height: 88rpx;
+    margin-left: 8rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .result-nav__back-icon {
+    font-size: 40rpx;
+  }
+
+  .result-nav__title {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 88rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 33rpx;
+    font-weight: 800;
+    pointer-events: none;
+  }
+
+  // ---------- 照片：满宽、固定高度，随内容滚动 ----------
+  .result-hero {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    background: #1a2620;
+  }
+
+  .result-hero__swiper,
+  .result-hero__image {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  // 顶部压暗，让白色返回和标题看得清；底部压暗，衬托食物标签
+  .result-hero__shade {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgb(20 30 24 / 50%) 0%, rgb(20 30 24 / 0%) 30%),
+      linear-gradient(0deg, rgb(20 30 24 / 46%) 0%, rgb(20 30 24 / 0%) 34%);
+  }
+
+  .result-hero__count {
+    position: absolute;
+    right: 24rpx;
+    padding: 4rpx 16rpx;
+    border-radius: 999rpx;
+    background: rgb(11 20 16 / 52%);
+    color: #fff;
+    font-size: 22rpx;
+    font-weight: 700;
+  }
+
+  // bottom / height 由 index.tsx 给（RESULT_HERO_LABELS_*），和导航变实底的时机对齐
+  .result-hero__labels-wrap {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    overflow: hidden;
+  }
+
+  .result-hero__labels {
+    width: 100%;
+    white-space: nowrap;
+  }
+
+  .result-hero__labels-track {
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 12rpx;
+    padding: 0 24rpx;
+  }
+
+  .result-hero__label {
+    flex-shrink: 0;
+    height: 60rpx;
+    padding: 0 20rpx 0 8rpx;
+    border-radius: 30rpx;
+    background: rgb(255 255 255 / 96%);
+    box-shadow: 0 10rpx 28rpx rgb(0 0 0 / 24%);
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    animation: result-pin-in 420ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+  }
+
+  .result-hero__label-num,
+  .ingredient-index {
+    width: 42rpx;
+    height: 42rpx;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: $v3-accent;
+    color: $v3-cream;
+    font-size: 23rpx;
+    font-weight: 800;
+    line-height: 42rpx;
+    text-align: center;
+  }
+
+  .result-hero__label-name {
+    color: $v3-ink;
+    font-size: 25rpx;
+    font-weight: 800;
+  }
+
+  .result-hero__label-weight {
+    color: $v3-accent-text;
+    font-size: 25rpx;
+    font-weight: 800;
+  }
+
+  .content-container--over-photo {
+    margin-top: -44rpx;
+    border-radius: 44rpx 44rpx 0 0;
+    box-shadow: none;
+  }
+
+  .execution-mode-meal {
+    flex-shrink: 0;
+    color: $v3-muted;
+    font-size: 24rpx;
+  }
+
+  // ---------- AI 饮食分析：手风琴 ----------
+  .insight-accordion {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .insight-row {
+    border-bottom: 2rpx solid #eef0ea;
+
+    &.is-last {
+      border-bottom: none;
+    }
+  }
+
+  .insight-row__head {
+    min-height: 84rpx;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .insight-row__label {
+    color: $v3-ink;
+    font-size: 27rpx;
+    font-weight: 800;
+  }
+
+  .insight-row__chevron {
+    color: $v3-muted;
+    font-size: 34rpx;
+    line-height: 1;
+    transform: rotate(90deg);
+    transition: transform 180ms ease;
+  }
+
+  .insight-row.is-open .insight-row__chevron {
+    transform: rotate(-90deg);
+  }
+
+  .insight-row__content {
+    display: block;
+    margin: 0 0 22rpx;
+    color: #3e4a42;
+    font-size: 26rpx;
+    line-height: 40rpx;
+    animation: result-rise 200ms ease-out;
+  }
+
+  .ingredient-index {
+    margin-right: -4rpx;
+  }
+
+  // 编号、名称、操作三样排一行：名称占满中间，靠左
+  .ingredient-header--title-row .ingredient-name {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // ---------- 一句话纠正后的撤销条 ----------
+  .result-undo-toast {
+    position: fixed;
+    left: 24rpx;
+    right: 24rpx;
+    bottom: calc(330rpx + env(safe-area-inset-bottom));
+    z-index: 160;
+    min-height: 88rpx;
+    padding: 10rpx 10rpx 10rpx 28rpx;
+    box-sizing: border-box;
+    border-radius: 44rpx;
+    background: #173f31;
+    box-shadow: 0 20rpx 48rpx rgb(16 30 22 / 30%);
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+    animation: result-rise 240ms ease-out;
+  }
+
+  .result-undo-toast__text {
+    flex: 1;
+    min-width: 0;
+    color: $v3-cream;
+    font-size: 26rpx;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  .result-undo-toast__action {
+    flex-shrink: 0;
+    height: 68rpx;
+    padding: 0 26rpx;
+    border-radius: 34rpx;
+    background: rgb(237 212 156 / 20%);
+    display: flex;
+    align-items: center;
+  }
+
+  .result-undo-toast__action-text {
+    color: #edd49c;
+    font-size: 25rpx;
+    font-weight: 800;
+  }
+
+  // ---------- 底栏 ----------
+  .result-bar {
+    border-top: 2rpx solid #e8e8de;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .result-bar__inner {
+    padding: 14rpx 24rpx calc(20rpx + env(safe-area-inset-bottom));
+    gap: 14rpx;
+  }
+
+  .result-bar__chips {
+    width: 100%;
+    white-space: nowrap;
+  }
+
+  .result-bar__chips-track {
+    display: inline-flex;
+    gap: 12rpx;
+  }
+
+  .result-bar__chip {
+    flex-shrink: 0;
+    height: 64rpx;
+    padding: 0 24rpx;
+    border: 2rpx solid rgb(47 143 111 / 26%);
+    border-radius: 32rpx;
+    background: $v3-accent-soft;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+
+    &:active {
+      opacity: 0.75;
+    }
+  }
+
+  .result-bar__chip-text {
+    color: #1f6b4d;
+    font-size: 25rpx;
+    font-weight: 700;
+  }
+
+  .result-bar__row {
+    display: flex;
+    align-items: center;
+    gap: 14rpx;
+  }
+
+  .result-bar__fav {
+    width: 88rpx;
+    height: 88rpx;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #f1f3ec;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &.loading {
+      pointer-events: none;
+    }
+
+    .btn-spinner {
+      width: 30rpx;
+      height: 30rpx;
+      border: 3rpx solid rgb(26 101 73 / 25%);
+      border-top-color: $v3-accent;
+      border-radius: 50%;
+      animation: result-spin 0.8s linear infinite;
+    }
+  }
+
+  .result-bar__fav-icon {
+    color: #a67a23;
+    font-size: 40rpx;
+  }
+
+  .result-bar__fav.is-favorited .result-bar__fav-icon {
+    color: #e3a92c;
+  }
+
+  .result-bar__say {
+    flex: 1;
+    min-width: 0;
+    height: 88rpx;
+    padding: 0 8rpx 0 26rpx;
+    box-sizing: border-box;
+    border: 2rpx solid rgb(41 102 78 / 16%);
+    border-radius: 44rpx;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+  }
+
+  .result-bar__say-input {
+    flex: 1;
+    min-width: 0;
+    height: 80rpx;
+    color: $v3-ink;
+    font-size: 27rpx;
+  }
+
+  .result-bar__say-placeholder {
+    color: #7b8a82;
+    font-size: 26rpx;
+  }
+
+  .result-bar__say-send {
+    width: 68rpx;
+    height: 68rpx;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: #eef2ec;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .result-bar__say-send-icon {
+    color: #1f6b4d;
+    font-size: 30rpx;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .result-bar__record {
+    flex: none;
+    height: 88rpx;
+    padding: 0 30rpx;
+    border-radius: 44rpx;
+
+    .btn-text {
+      font-size: 28rpx;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+  }
+}
+
+// 浅色模式下旧元素换成 V3 配色（深色模式不受影响）
+.result-page--v3:not(.result-page--dark) {
+  background: $v3-page;
+
+  // 文字记录没有照片：头图用浅绿底、底部过渡到页面底色，不再压黑
+  .scanner-hero-section {
+    background: $v3-page;
+  }
+
+  .scanner-hero-placeholder {
+    background: linear-gradient(160deg, #f1faf4 0%, #e3f1e8 100%);
+  }
+
+  .scanner-hero-gradient {
+    height: 40%;
+    background: linear-gradient(to top, rgb(244 244 236 / 92%) 0%, rgb(244 244 236 / 0%) 100%);
+  }
+
+  .placeholder-text {
+    color: $v3-muted;
+  }
+
+  .content-container {
+    background: $v3-page;
+  }
+
+  .execution-mode-tag {
+    background: #fff;
+    border-color: $v3-line;
+  }
+
+  .execution-mode-default-link,
+  .quick-ratio-btn,
+  .ratio-suggestion-apply {
+    color: $v3-accent-text;
+  }
+
+  .nutrition-overview-card,
+  .insight-card,
+  .ingredient-card {
+    background: #fff;
+    border: none;
+    border-radius: 36rpx;
+    box-shadow: 0 12rpx 30rpx rgb(46 79 65 / 6%);
+  }
+
+  .nutrition-overview-card {
+    padding: 30rpx 32rpx 28rpx;
+  }
+
+  .nutrition-header {
+    margin-bottom: 28rpx;
+  }
+
+  .calories-value {
+    color: #073d2f;
+    font-size: 92rpx;
+    font-weight: 900;
+  }
+
+  .calories-unit {
+    color: #3e4a42;
+    font-size: 26rpx;
+    font-weight: 700;
+  }
+
+  .calories-label {
+    color: $v3-muted;
+  }
+
+  .total-weight-badge {
+    border: 2rpx solid #cfe3d7;
+    border-radius: 24rpx;
+    background: $v3-accent-soft;
+  }
+
+  .weight-icon,
+  .weight-text {
+    color: #0c4535;
+    font-weight: 900;
+  }
+
+  // 三大营养素：顶部一条色线，长度是这一项的供能占比
+  .macro-bar {
+    height: 6rpx;
+    background: #eef0ea;
+  }
+
+  .macro-item.protein .macro-progress { background: #6f95c9; }
+  .macro-item.carbs .macro-progress { background: #d2a54a; }
+  .macro-item.fat .macro-progress { background: #e58d5e; }
+  .macro-item.protein .macro-label { color: #40669b; }
+  .macro-item.carbs .macro-label { color: #8a6816; }
+  .macro-item.fat .macro-label { color: #a9562b; }
+
+  .macro-value {
+    color: $v3-ink;
+    font-weight: 900;
+  }
+
+  .insight-card {
+    padding: 22rpx 30rpx 8rpx;
+  }
+
+  .insight-card-header-toggle {
+    margin-bottom: 4rpx;
+  }
+
+  .card-title {
+    color: $v3-ink-strong;
+    font-size: 29rpx;
+    font-weight: 900;
+  }
+
+  .section-title {
+    color: $v3-ink-strong;
+    font-weight: 900;
+  }
+
+  .ingredient-main,
+  .ingredient-nutrition-strip {
+    border-bottom-color: #eef0ea;
+  }
+
+  .ingredient-name {
+    color: #0c4535;
+    font-size: 30rpx;
+    font-weight: 900;
+  }
+
+  .edit-icon-wrapper {
+    background: #f1f3ec;
+  }
+
+  .delete-icon-wrapper {
+    background: #fbede6;
+  }
+
+  .adjust-btn.plus {
+    background: #e9f7ef;
+    color: $v3-accent;
+  }
+
+  .ratio-display {
+    color: $v3-accent;
+  }
+
+  .footer-actions {
+    background: #fffef9;
+  }
+
+  .primary-btn.result-bar__record {
+    background: $v3-accent;
+    box-shadow: 0 12rpx 28rpx rgb(17 94 67 / 24%);
+
+    &:active {
+      background: #12563f;
+    }
+
+    &.needs-spec {
+      background: #c56a2c;
+    }
+
+    &.is-committed {
+      background: $v3-accent-soft;
+      border: 2rpx solid $v3-accent;
+      box-shadow: none;
+
+      .btn-text {
+        color: $v3-accent;
+      }
+    }
+  }
+}
+
+// 深色模式下的新元素
+.result-page--v3.result-page--dark {
+  .result-nav--solid {
+    background: #101716;
+    box-shadow: 0 2rpx 0 rgb(255 255 255 / 6%);
+
+    .result-nav__back-icon,
+    .result-nav__title {
+      color: #f2f7f4;
+    }
+  }
+
+  .result-hero__label {
+    background: rgb(30 38 36 / 94%);
+  }
+
+  .result-hero__label-name {
+    color: #f2f7f4;
+  }
+
+  .result-hero__label-weight {
+    color: #7dd3b0;
+  }
+
+  .execution-mode-meal,
+  .insight-row__chevron {
+    color: rgb(214 226 220 / 60%);
+  }
+
+  .insight-row {
+    border-bottom-color: #2a3330;
+  }
+
+  .insight-row__label {
+    color: #f2f7f4;
+  }
+
+  .insight-row__content {
+    color: rgb(214 226 220 / 80%);
+  }
+
+  .result-bar {
+    border-top-color: #2a3330;
+  }
+
+  .result-bar__chip {
+    border-color: #3d5d51;
+    background: #18332a;
+  }
+
+  .result-bar__chip-text,
+  .result-bar__say-send-icon {
+    color: #7dd3b0;
+  }
+
+  .result-bar__fav,
+  .result-bar__say-send {
+    background: #2a3330;
+  }
+
+  .result-bar__say {
+    border-color: #3d5d51;
+    background: #1e2624;
+  }
+
+  .result-bar__say-input {
+    color: #f2f7f4;
+  }
+
+  .result-bar__say-placeholder {
+    color: rgb(214 226 220 / 45%);
+  }
+}
+
+@keyframes result-pin-in {
+  0% { opacity: 0; transform: scale(0.55) translateY(12rpx); }
+  70% { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes result-rise {
+  from { opacity: 0; transform: translateY(16rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes result-spin {
+  to { transform: rotate(360deg); }
+}
+
+// ===================================================================
+// 2026-11-09 减字：顶部一个模式胶囊 + 日期餐次胶囊；食物卡片默认三行，
+// 其余收进「详情」；AI 饮食分析默认只露第一句。
+// ===================================================================
+.result-page--v3 {
+  .execution-mode-left {
+    gap: 12rpx;
+  }
+
+  .execution-mode-tag {
+    gap: 4rpx;
+    border-radius: 999rpx;
+  }
+
+  .execution-mode-tag-arrow,
+  .result-date-chip__arrow {
+    color: #7b8a82;
+    font-size: 24rpx;
+    line-height: 1;
+  }
+
+  .result-date-chip {
+    height: 52rpx;
+    padding: 0 18rpx;
+    box-sizing: border-box;
+    border-radius: 26rpx;
+    display: inline-flex;
+    align-items: center;
+    gap: 6rpx;
+    background: #fff;
+    border: 1rpx solid #e0e5dc;
+
+    &.is-disabled {
+      background: transparent;
+      border-color: transparent;
+    }
+  }
+
+  .result-date-chip__text {
+    color: #3e4a42;
+    font-size: 24rpx;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  // 卡片默认：名称一行、热量和三大营养素一行、实际摄入一行
+  .ingredient-card:not(.is-open) .ingredient-main {
+    padding-bottom: 6rpx;
+    border-bottom: none;
+  }
+
+  .ingredient-card:not(.is-open) .ingredient-controls {
+    padding-top: 8rpx;
+    padding-bottom: 4rpx;
+  }
+
+  .ingredient-brief {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6rpx 10rpx;
+    margin-top: 10rpx;
+  }
+
+  .ingredient-brief__kcal {
+    color: #0c4535;
+    font-size: 34rpx;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+
+  .ingredient-brief__unit {
+    margin-left: -4rpx;
+    color: #5a6b63;
+    font-size: 22rpx;
+    font-weight: 700;
+  }
+
+  .ingredient-brief__meta {
+    color: #5a6b63;
+    font-size: 24rpx;
+    line-height: 1.5;
+  }
+
+  .ingredient-fold {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6rpx;
+    padding: 4rpx 24rpx 16rpx;
+  }
+
+  .ingredient-fold__text {
+    color: #127a58;
+    font-size: 23rpx;
+    font-weight: 700;
+  }
+
+  .ingredient-fold__chevron {
+    color: #127a58;
+    font-size: 26rpx;
+    line-height: 1;
+    transform: rotate(90deg);
+    transition: transform 180ms ease;
+
+    &.is-open {
+      transform: rotate(-90deg);
+    }
+  }
+
+  // AI 饮食分析收起时只露第一句建议，最多两行，点一下展开
+  .insight-preview {
+    display: -webkit-box;
+    margin: 4rpx 0 22rpx;
+    overflow: hidden;
+    color: #3e4a42;
+    font-size: 26rpx;
+    line-height: 40rpx;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}
+
+.result-page--v3.result-page--dark {
+  .result-date-chip {
+    background: #1e2624;
+    border-color: #3d5d51;
+
+    &.is-disabled {
+      background: transparent;
+      border-color: transparent;
+    }
+  }
+
+  .result-date-chip__text,
+  .insight-preview {
+    color: rgb(214 226 220 / 80%);
+  }
+
+  .ingredient-brief__kcal {
+    color: #f2f7f4;
+  }
+
+  .ingredient-brief__unit,
+  .ingredient-brief__meta {
+    color: rgb(214 226 220 / 65%);
+  }
+
+  .ingredient-fold__text,
+  .ingredient-fold__chevron {
+    color: #7dd3b0;
+  }
+}
+
+.result-preparing { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f8fafc; }
+.result-preparing-spinner { width: 48rpx; height: 48rpx; border: 5rpx solid #d1fae5; border-top-color: #168060; border-radius: 50%; animation: result-preparing-spin .8s linear infinite; }
+@keyframes result-preparing-spin { to { transform: rotate(360deg); } }

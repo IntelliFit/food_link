@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAccessToken, showUnifiedApiError } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
 import { buildSleepInput, deleteSleepRecord, getSleepRecord, saveSleepRecord, shiftSleepDate, SLEEP_CHANGED_EVENT, SLEEP_QUALITIES, sleepDurationLabel, sleepLocalParts, sleepToday, type SleepQuality, type SleepRecord } from '../../../utils/sleep-record'
+import { rememberRecordReturnDate } from '../../../utils/record-navigation'
+import RecordDateField from '../../../components/RecordDateField'
 import './index.scss'
 
 function SleepRecordPage() {
@@ -42,6 +44,7 @@ function SleepRecordPage() {
     try {
       const input = buildSleepInput(date, bedDate, bedTime, wakeTime, quality, note)
       setRecord(await saveSleepRecord(date, input))
+      rememberRecordReturnDate(date)
       Taro.eventCenter.trigger(SLEEP_CHANGED_EVENT)
       Taro.showToast({ title: '已保存', icon: 'success' })
     } catch (e) { await showUnifiedApiError(e, '保存睡眠记录失败') }
@@ -64,7 +67,7 @@ function SleepRecordPage() {
   return <View className='sleep-editor'>
     <Text className='sleep-editor__title'>昨晚睡得怎么样</Text>
     <Text className='sleep-editor__hint'>按起床当天记录。夜里零点后入睡，入睡日期选当天。</Text>
-    <Picker mode='date' value={date} start='1900-01-01' end={sleepToday()} disabled={saving} onChange={event => setDate(event.detail.value)}><View className='sleep-editor__row'><Text>起床日期</Text><Text>{date} ›</Text></View></Picker>
+    <RecordDateField date={date} onChange={setDate} unrestricted disabled={saving} />
     {loading ? <View className='sleep-editor__skeleton' /> : error ? <View className='sleep-editor__error' onClick={() => { void load() }}>记录未能读取，点此重试</View> : <>
       <View className='sleep-editor__card'>
         <Picker mode='date' value={bedDate} start={shiftSleepDate(date, -1)} end={date} disabled={saving} onChange={event => setBedDate(event.detail.value)}><View className='sleep-editor__row'><Text>入睡日期</Text><Text>{bedDate} ›</Text></View></Picker>

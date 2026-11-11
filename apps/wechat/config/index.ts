@@ -96,7 +96,7 @@ export default defineConfig<'vite'>(async (merge) => {
       828: 1.81 / 2
     },
     sourceRoot: 'src',
-    outputRoot: 'dist',
+    outputRoot: process.env.FOODLINK_WEAPP_OUTPUT_ROOT || 'dist',
     plugins: [
       "@tarojs/plugin-generator"
     ],

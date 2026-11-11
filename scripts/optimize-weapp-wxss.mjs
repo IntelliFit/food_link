@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import postcss from 'postcss'
 
-const distDir = path.resolve(process.cwd(), process.argv[2] || 'dist')
+const distDir = path.resolve(process.cwd(), process.argv[2] || process.env.FOODLINK_WEAPP_OUTPUT_ROOT || 'dist')
 
 function walkWxssFiles(dir) {
   if (!fs.existsSync(dir)) return []

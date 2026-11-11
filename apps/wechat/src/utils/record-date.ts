@@ -46,6 +46,21 @@ export function getTodayRecordDateKey(): string {
   return formatDateKey(new Date())
 }
 
+/** A new capture belongs to today unless the user explicitly chose backfill.
+ * A date left by a calendar, old URL, or another record flow is not consent to
+ * backfill. Resolve at the action time so background suspension cannot pin it. */
+export function resolveNewRecordDate(raw?: string | null, explicitBackfill = false): {
+  date: string
+  fellBackToToday: boolean
+  backfill: boolean
+} {
+  const today = getTodayRecordDateKey()
+  const value = String(raw || '').trim()
+  if (!explicitBackfill || !value) return { date: today, fellBackToToday: false, backfill: false }
+  if (isAllowedRecordDate(value)) return { date: value, fellBackToToday: false, backfill: true }
+  return { date: today, fellBackToToday: true, backfill: false }
+}
+
 export function listAllowedRecordDates(baseDate = new Date()): string[] {
   const dates: string[] = []
   for (let offset = 0; offset < RECORD_BACKFILL_WINDOW_DAYS; offset += 1) {

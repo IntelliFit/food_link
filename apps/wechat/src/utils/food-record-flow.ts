@@ -1,11 +1,13 @@
 import Taro from '@tarojs/taro'
+import { rememberRecordReturnDate } from './record-navigation'
 import type { CreateRecipeRequest, FoodRecord } from './api'
 import { buildFoodRecordItemPayloadFromResultItem } from './food-record-item-payload'
 import { markRecordVisibilityNoticeDue } from './feed-share'
 
 const HOME_TAB_URL = '/pages/index/index'
 
-export const returnHomeAfterFoodRecord = (delay = 600): ReturnType<typeof setTimeout> => {
+export const returnHomeAfterFoodRecord = (delay = 600, date?: string): ReturnType<typeof setTimeout> => {
+  if (date) rememberRecordReturnDate(date)
   // 记录已保存：回到首页后提醒一次谁能看到。
   markRecordVisibilityNoticeDue()
   return setTimeout(() => {

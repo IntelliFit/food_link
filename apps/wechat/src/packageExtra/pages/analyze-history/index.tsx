@@ -36,8 +36,13 @@ import { buildFoodRecordItemPayloadFromAnalyzeItem } from '../../../utils/food-r
 import { needsPrecisionUserAction } from '../../../utils/precision-mode'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { acknowledgeAnalyzeTaskReminders } from '../../../utils/analyze-task-reminder'
-import { requireAllowedRecordDate, getRecordDateLabel } from '../../../utils/record-date'
+import RecordDateField from '../../../components/RecordDateField'
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import { rememberRecordReturnDate } from '../../../utils/record-navigation'
+import { captureAuthSession, isAuthSessionCurrent } from '../../../utils/auth-session'
+import { requireAllowedRecordDate, getRecordDateLabel, getTodayRecordDateKey } from '../../../utils/record-date'
 import { openAnalyzeTaskFromReminder } from '../../../utils/open-analyze-task'
+import { writeAnalyzeTaskRecordState } from '../../../utils/analyze-result-session'
 import {
   MealTypeSelectSheet,
   normalizeSelectableMealType,
@@ -363,9 +368,11 @@ interface TaskCardProps {
   task: AnalyzeTaskSummary
   onTap: (task: AnalyzeTaskSummary) => void
   onMore: (task: AnalyzeTaskSummary) => void
+  recordDate: string
+  onRecord: (task: AnalyzeTaskSummary) => void
 }
 
-const TaskCard = React.memo(function TaskCard({ task, onTap, onMore }: TaskCardProps) {
+const TaskCard = React.memo(function TaskCard({ task, onTap, onMore, recordDate, onRecord }: TaskCardProps) {
   const mode = pickExecutionMode(task)
   const recognitionOutcome = task.result_summary?.recognition_outcome || ''
   const canShare = task.status === 'done' && task.has_result && !isPrecisionActionRequired(task)
@@ -412,7 +419,7 @@ const TaskCard = React.memo(function TaskCard({ task, onTap, onMore }: TaskCardP
               <Text className='calories'>{totalCalories > 0 ? `${Math.round(totalCalories)} kcal` : '--'}</Text>
               <Text className='meta'>{meta}</Text>
               <View className='time-row'>
-                <Text className='time'>{timeInfo.text}</Text>
+                <Text className='time'>识别于 {timeInfo.text}</Text>
                 {(() => {
                   const ds = pickDisplayStatus(task)
                   return (
@@ -443,12 +450,15 @@ const TaskCard = React.memo(function TaskCard({ task, onTap, onMore }: TaskCardP
 
 
       </View>
+      {canShare && <View className='history-record-action' role='button' onClick={e => { e.stopPropagation(); onRecord(task) }}><Text>{task.is_recorded ? '再记一份到' : '记录到'}{getRecordDateLabel(recordDate)} ›</Text></View>}
     </View>
   )
 })
 
 function AnalyzeHistoryPage() {
   const router = useRouter()
+  const [recordDate, setRecordDate] = useRecordDate(String(router.params?.date || getTodayRecordDateKey()))
+  const quickRecordLock = React.useRef(false)
   const [waitingDate] = React.useState(() => router.params?.waiting_record === '1'
     ? String(router.params?.date || '') : '')
   const { scheme } = useAppColorScheme()
@@ -1032,10 +1042,6 @@ function AnalyzeHistoryPage() {
       Taro.showToast({ title: '只能记录已完成的任务', icon: 'none' })
       return
     }
-    if (summary.is_recorded) {
-      Taro.showToast({ title: '该餐已记录', icon: 'none' })
-      return
-    }
     if (!getAccessToken()) {
       Taro.showToast({ title: '请先登录', icon: 'none' })
       return
@@ -1046,10 +1052,6 @@ function AnalyzeHistoryPage() {
       if (!task) return
       if (task.status !== 'done' || !task.result) {
         Taro.showToast({ title: '任务尚未完成，请刷新后重试', icon: 'none' })
-        return
-      }
-      if (task.is_recorded) {
-        Taro.showToast({ title: '该餐已记录', icon: 'none' })
         return
       }
       const result = task.result as AnalyzeResponse
@@ -1069,21 +1071,26 @@ function AnalyzeHistoryPage() {
 
   const confirmQuickRecordMealType = () => {
     const task = quickRecordTask
-    if (!task || task.status !== 'done' || !task.result || task.is_recorded || isPrecisionActionRequired(task)) {
+    if (!task || task.status !== 'done' || !task.result || isPrecisionActionRequired(task)) {
       closeQuickRecordMealSelector()
       return
     }
-    if (!requireAllowedRecordDate(getTaskRecordDate(task) || '')) {
+    if (!requireAllowedRecordDate(recordDate)) {
       closeQuickRecordMealSelector()
       void openAnalyzeTaskFromReminder(task.id)
       return
     }
+    if (quickRecordLock.current) return
+    quickRecordLock.current = true
+    const targetDate = recordDate
+    const owner = captureAuthSession()
     const mealType = quickRecordMealType
     closeQuickRecordMealSelector()
 
     const result = task.result as AnalyzeResponse
     const items = buildTaskFoodItems(result)
     if (items.length === 0) {
+      quickRecordLock.current = false
       Taro.showToast({ title: '没有可记录的食物', icon: 'none' })
       return
     }
@@ -1110,11 +1117,14 @@ function AnalyzeHistoryPage() {
           pfc_ratio_comment: result.pfc_ratio_comment || undefined,
           absorption_notes: result.absorption_notes || undefined,
           context_advice: result.context_advice || undefined,
-          source_task_id: task.id,
-          date: getTaskRecordDate(task),
+          source_task_id: task.is_recorded ? undefined : task.id,
+          date: targetDate,
           entry_type: 'analyze_history' as const,
         }
         const saveResult = await saveFoodRecord(payload)
+        if (!isAuthSessionCurrent(owner)) return
+        if (!task.is_recorded) writeAnalyzeTaskRecordState(task.id, true, saveResult.id)
+        if (!saveResult.already_saved) rememberRecordReturnDate(targetDate)
         Taro.hideLoading()
         markRecordVisibilityNoticeDue()
         void remindRecordVisibilityOnce()
@@ -1123,7 +1133,7 @@ function AnalyzeHistoryPage() {
           applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
         }
         setTasks(prev => prev.map(item => (
-          item.id === task.id
+          item.id === task.id && !task.is_recorded
             ? { ...item, is_recorded: true, record_id: saveResult.id }
             : item
         )))
@@ -1146,7 +1156,7 @@ function AnalyzeHistoryPage() {
         Taro.hideLoading()
         await showUnifiedApiError(e, '记录失败')
       }
-    })()
+    })().finally(() => { quickRecordLock.current = false })
   }
 
   const actionSheetDelete = () => {
@@ -1167,6 +1177,7 @@ function AnalyzeHistoryPage() {
   }
 
   const openTaskDetail = (task: AnalysisTask) => {
+    writeAnalyzeTaskRecordState(task.id, Boolean(task.is_recorded), task.record_id)
     // 违规任务不允许查看详情
     if (task.status === 'violated' || task.is_violated) {
       Taro.showModal({
@@ -1222,16 +1233,8 @@ function AnalyzeHistoryPage() {
       }
       Taro.setStorageSync('analyzeSourceTaskId', task.id)
       Taro.setStorageSync('analyzeTaskType', sourceTaskType)
-      if (task.is_recorded) {
-        Taro.setStorageSync('analyzeTaskIsRecorded', '1')
-        if (task.record_id) {
-          Taro.setStorageSync('analyzeCommittedRecordId', task.record_id)
-        }
-      } else {
-        Taro.removeStorageSync('analyzeTaskIsRecorded')
-        Taro.removeStorageSync('analyzeCommittedRecordId')
-      }
-      Taro.navigateTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(getTaskRecordDate(task) || '')}&task_id=${encodeURIComponent(task.id)}` })
+      writeAnalyzeTaskRecordState(task.id, Boolean(task.is_recorded), task.record_id)
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/result/index')}?date=${encodeURIComponent(recordDate)}&task_id=${encodeURIComponent(task.id)}&history_record=1&copy_record=${task.is_recorded ? '1' : '0'}` })
       return
     }
     if (task.status === 'pending' || task.status === 'processing') {
@@ -1298,6 +1301,7 @@ function AnalyzeHistoryPage() {
         color={scheme === 'dark' ? '#f3f7f4' : '#0f172a'}
         background={scheme === 'dark' ? '#101716' : '#f6faf8'}
       />
+      <RecordDateField date={recordDate} onChange={setRecordDate} disabled={Boolean(quickRecordTask)} />
       <View className='search-bar'>
         <View className='search-input-wrap'>
           <Text className='iconfont icon-sousuo search-icon' />
@@ -1320,7 +1324,7 @@ function AnalyzeHistoryPage() {
         scrollY
         lowerThreshold={120}
         onScrollToLower={handleLoadMore}
-        style={{ height: `calc(100vh - ${navBarHeight}px - 96rpx)` }}
+        style={{ height: `calc(100vh - ${navBarHeight}px - 216rpx)` }}
       >
         {loading ? (
           <View className='loading-wrap'><View className='loading-spinner-md' /></View>
@@ -1357,6 +1361,8 @@ function AnalyzeHistoryPage() {
                 task={t}
                 onTap={onTaskTap}
                 onMore={handleMore}
+                recordDate={recordDate}
+                onRecord={task => { void (async () => { const detail = await loadTaskDetail(task.id); if (detail?.result && !isPrecisionActionRequired(detail)) { setQuickRecordTask(detail); setQuickRecordMealType(getDetailQuickRecordMealTypeByProfile(detail)) } })() }}
               />
             ))}
             {loadingMore && (
@@ -1375,12 +1381,12 @@ function AnalyzeHistoryPage() {
           <View className='action-sheet-content'>
             <View className='action-sheet-actions'>
               <View
-                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result && !activeTask.is_recorded && !isPrecisionActionRequired(activeTask) ? '' : 'action-sheet-item--disabled'}`}
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.has_result && !isPrecisionActionRequired(activeTask) ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetQuickRecord}
               >
                 <Text className='iconfont icon-canciguanli action-sheet-icon action-sheet-icon--record' />
                 <Text className='action-sheet-label'>
-                  {`快速记录到${MEAL_TYPE_LABELS[getSummaryQuickRecordMealTypeByProfile(activeTask)] || '餐食'}`}
+                  {`${activeTask.is_recorded ? '再记一份到' : '记录到'}${getRecordDateLabel(recordDate)} · ${MEAL_TYPE_LABELS[getSummaryQuickRecordMealTypeByProfile(activeTask)]}`}
                 </Text>
               </View>
               <View className='action-sheet-divider' />
@@ -1452,8 +1458,8 @@ function AnalyzeHistoryPage() {
       <MealTypeSelectSheet
         visible={Boolean(quickRecordTask)}
         value={quickRecordMealType}
-        title='记录到哪个餐次'
-        confirmText='记录'
+        title={`${quickRecordTask?.is_recorded ? '新增一份到' : '记录到'}${getRecordDateLabel(recordDate)} · 选择餐次`}
+        confirmText={`确认记到${getRecordDateLabel(recordDate)}`}
         onChange={setQuickRecordMealType}
         onCancel={closeQuickRecordMealSelector}
         onConfirm={confirmQuickRecordMealType}

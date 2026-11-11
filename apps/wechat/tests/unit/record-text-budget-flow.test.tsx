@@ -10,6 +10,7 @@ jest.mock('@tarojs/components', () => {
     View: ({ children, className, onClick }: any) => React.createElement('div', { className, onClick }, children),
     Text: ({ children, className, onClick }: any) => React.createElement('span', { className, onClick }, children),
     ScrollView: ({ children }: any) => React.createElement('div', {}, children),
+    Picker: ({ children }: any) => React.createElement('div', {}, children),
     Textarea: ({ value, className, onInput }: any) => React.createElement('textarea', {
       value, className, onChange: (e: any) => onInput({ detail: { value: e.target.value } }),
     }),
@@ -83,6 +84,22 @@ it('submits historical text using that day budget even if today has no credits',
   }))
   expect(Taro.navigateTo).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining('task_id=text-task') }))
   expect(screen.queryByTestId('credit-shortage')).toBeNull()
+})
+
+it('keeps its visible date when another page changes shared storage before submission', async () => {
+  const view = await mount()
+  storage.set('recordTargetDate', '2026-11-10')
+  await submit(view)
+  expect(submitTextAnalyzeTask).toHaveBeenCalledWith(expect.objectContaining({ date: '2026-11-09' }))
+  expect(view.container).toHaveTextContent('正在补录 · 11月9日')
+})
+
+it.each(['2020-01-01', '2026-11-11'])('rejects unavailable date %s without silently submitting today', async date => {
+  route = { date }
+  const view = await mount()
+  await submit(view)
+  expect(submitTextAnalyzeTask).not.toHaveBeenCalled()
+  expect(Taro.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining('近14天') }))
 })
 
 it('preserves an explicitly chosen diet goal while still passing the real calorie budget', async () => {

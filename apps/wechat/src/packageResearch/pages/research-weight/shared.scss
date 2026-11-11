@@ -6,6 +6,8 @@
 .rw-hero__title { margin-top: 10px; font-size: 40px; font-weight: 700; }
 .rw-hero__desc { margin-top: 14px; color: #66746f; font-size: 26px; line-height: 1.55; }
 .rw-hero__reward { margin-top: 12px; color: #00a875; font-size: 24px; }
+/* 三个数据计划的关系：一行小字 */
+.rw-hero__relation { display: block; margin-top: 10px; color: #8a9792; font-size: 22px; line-height: 1.5; }
 
 .rw-stats { display: flex; gap: 16px; margin-top: 24px; }
 .rw-stat { flex: 1; padding: 18px 0; border-radius: 18px; background: rgb(255 255 255 / 70%); text-align: center; }
@@ -154,7 +156,7 @@
 .research-weight-page--dark .rw-saved { border-color: #26342f; }
 .research-weight-page--dark .rw-saved__photo { background: #1b2824; }
 
-/* 高校共建：从活动页进入时的计入提示 */
+/* 高校伙伴计划：从活动页进入时的计入提示 */
 .rw-campus { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding: 18px 24px; border-radius: 16px; background: #e8f7f1; }
 .rw-campus__text { flex: 1; color: #00875f; font-size: 25px; }
 .rw-campus__clear { color: #7b8a85; font-size: 23px; }

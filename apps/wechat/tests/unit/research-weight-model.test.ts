@@ -3,6 +3,7 @@ import {
   checkDraft,
   containerNet,
   containersToSave,
+  defaultTareSource,
   draftHasContent,
   emptyDraft,
   itemIncrements,
@@ -60,6 +61,14 @@ describe('research weight draft v2', () => {
     expect(draft.containers).toHaveLength(1)
     expect(draft.containers[0].tareSource).toBe('after_meal')
     expect(draftHasContent(draft)).toBe(false)
+  })
+
+  it('weighs the empty bowl after eating wherever the food comes served', () => {
+    expect(defaultTareSource('takeout')).toBe('after_meal')
+    expect(defaultTareSource('canteen')).toBe('after_meal')
+    expect(defaultTareSource('restaurant')).toBe('after_meal')
+    expect(defaultTareSource('home')).toBe('measured')
+    expect(defaultTareSource('other')).toBe('measured')
   })
 
   it('computes each box from its own tare source', () => {

@@ -22,6 +22,7 @@ jest.mock('@tarojs/components', () => {
   return {
     View: ({ children, ...props }: any) => R.createElement('div', props, children),
     Text: ({ children, ...props }: any) => R.createElement('span', props, children),
+    Picker: ({ children, range, onChange }: any) => R.createElement('div', {}, children, R.createElement('select', { 'aria-label': '记录日期', onChange: (event: any) => onChange({ detail: { value: Number(event.target.value) } }) }, range.map((label: string, value: number) => R.createElement('option', { key: value, value }, label)))),
     ScrollView: ({ children, ...props }: any) => R.createElement('div', props, children),
     Image: () => null, Input: () => null,
     Textarea: ({ onInput, value, className, disabled }: any) => R.createElement('textarea', {
@@ -78,4 +79,17 @@ test.each(['done', 'failed'])('旧任务%s时保留下一条尚未提交的运�
   expect(input.value).toBe(draft)
   expect(createExerciseLog).toHaveBeenCalledTimes(1)
   if (status === 'done') expect(Taro.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: '已记录 123 kcal' }))
+})
+
+test('运动按日期栏选择的历史日提交，返回页面时不恢复成原路由日期', async () => {
+  let show: () => void = () => {}
+  ;(Taro.useDidShow as jest.Mock).mockImplementation(callback => { show = callback })
+  ;(getAnalyzeTask as jest.Mock).mockReturnValue(new Promise(() => {}))
+  const view = render(<ExerciseRecordPage />); await act(flush)
+  fireEvent.change(view.getByLabelText('记录日期'), { target: { value: '2' } })
+  await act(async () => { show(); await flush() })
+  fireEvent.change(view.container.querySelector('textarea.chat-input')!, { target: { value: '散步20分钟' } })
+  await act(async () => { fireEvent.click(view.container.querySelector('.exercise-send-trigger')!); await flush() })
+  expect(createExerciseLog).toHaveBeenCalledWith(expect.objectContaining({ date: '2026-11-08', exercise_desc: '散步20分钟' }))
+  expect(view.container).toHaveTextContent('正在补录 · 11月8日')
 })

@@ -13,7 +13,9 @@ describe('mini program interaction responsiveness guards', () => {
   it('does not keep hidden tab bars or the home record menu on aggressive polling loops', () => {
     expect(tabBarSource).toContain('pageLifetimes')
     expect(tabBarSource).toMatch(/hide\(\)\s*\{\s*this\.stopPolling\(\)/)
-    expect(tabBarSource).toContain('openRecordMenuWithRetry()')
+    // 底栏相机直接打开取景相机，不再等首页注册记录面板，也不会兜底跳到带旧照片的识别页。
+    expect(tabBarSource).toContain('openFoodCamera()')
+    expect(tabBarSource).not.toContain('setTimeout(() => attempt')
     expect(tabBarSource).not.toContain("url: '/packageExtra/pages/analyze/index'")
     expect(homeSource).not.toContain('const maxChecks = 1200')
     expect(homeSource).not.toContain('}, 50)')

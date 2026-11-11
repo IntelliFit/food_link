@@ -8,6 +8,7 @@ jest.mock('@tarojs/components', () => {
   return {
     View: ({ children, ...props }: any) => React.createElement('div', props, children),
     Text: ({ children, ...props }: any) => React.createElement('span', props, children),
+    Picker: ({ children }: any) => React.createElement('div', {}, children),
     Image: ({ mode: _mode, ...props }: any) => React.createElement('img', props),
     Input: ({ onInput, onBlur, confirmType: _confirmType, type: _type, ...props }: any) => React.createElement('input', {
       ...props, onChange: (event: any) => onInput?.({ detail: { value: event.target.value } }), onBlur: (event: any) => onBlur?.({ detail: { value: event.target.value } }),
@@ -102,7 +103,7 @@ describe('food library page detail and custom editor integration', () => {
     const add = await screen.findByLabelText(`添加${title}到本餐`)
     for (let index = 0; index < clicks; index++) fireEvent.click(add)
     fireEvent.click(screen.getByText('选好了，核对本餐'))
-    fireEvent.click(screen.getByText('确认提交本餐'))
+    fireEvent.click(screen.getByText(/^确认记录到今天/))
     await waitFor(() => expect(saveFoodRecord).toHaveBeenCalledTimes(1))
     expect(saveFoodRecord).toHaveBeenCalledWith(expect.objectContaining({
       total_calories: calories, total_weight_grams: grams,
@@ -177,7 +178,7 @@ describe('food library page detail and custom editor integration', () => {
     fireEvent.click(add)
     fireEvent.click(add)
     fireEvent.click(screen.getByText('选好了，核对本餐'))
-    fireEvent.click(screen.getByText('确认提交本餐'))
+    fireEvent.click(screen.getByText(/^确认记录到今天/))
     await waitFor(() => expect(saveFoodRecord).toHaveBeenCalledTimes(1))
     expect(saveFoodRecord).toHaveBeenCalledWith(expect.objectContaining({ total_calories: 60, total_weight_grams: 12, items: [expect.objectContaining({ weight: 12, measurement: expect.objectContaining({ amount: 2, unit: 'serving' }) })] }))
   })

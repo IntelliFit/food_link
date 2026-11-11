@@ -33,7 +33,7 @@ import {
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { useMealImpactSheet } from '../../../components/MealImpactCard'
-import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { getTodayRecordDateKey, getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
@@ -66,6 +66,8 @@ import {
 import { CustomFoodEditor, type CustomFoodEditorDraft } from './CustomFoodEditor'
 import { ManualFoodCard } from './ManualFoodCard'
 import { ManualFoodDetailSheet } from './ManualFoodDetailSheet'
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import RecordDateField from '../../../components/RecordDateField'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -575,6 +577,7 @@ function selectedFoodPayload(item: SelectedItem) {
 }
 
 function RecordManualPage() {
+  const [recordDate, setRecordDate] = useRecordDate(String(Taro.getCurrentInstance().router?.params?.date || getTodayRecordDateKey()))
   const { scheme } = useAppColorScheme()
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
   const pickerMode = Taro.getCurrentInstance().router?.params?.picker === '1'
@@ -660,7 +663,7 @@ function RecordManualPage() {
     }
     const params = Taro.getCurrentInstance().router?.params
     if (!pickerMode) {
-      persistRecordTargetDate(String(params?.date || ''))
+      // Keep this page date independent of other record flows.
       void getRecommendedMealTypeWithFallback().then(meal => {
         if (!mealTypeChosenRef.current) setSelectedMeal(meal)
       }).catch(() => {})
@@ -1477,6 +1480,7 @@ function RecordManualPage() {
       return
     }
     
+    if (!requireAllowedRecordDate(recordDate)) return
     mealSaveLock.current = true
     setSaving(true)
     try {
@@ -1490,7 +1494,7 @@ function RecordManualPage() {
       }), { calories: 0, protein: 0, carbs: 0, fat: 0 })
       const hasCustomItems = selectedItems.some(item => item.source === 'custom')
       const saveResult = await saveFoodRecord({
-        date: getStoredRecordTargetDate(),
+        date: recordDate,
         meal_type: selectedMeal as any,
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any,
@@ -1505,7 +1509,7 @@ function RecordManualPage() {
         entry_type: entryTypeRef.current,
       })
 
-      const targetDate = getStoredRecordTargetDate()
+      const targetDate = recordDate
       try {
         Taro.removeStorageSync('campus_quick_record_source')
       } catch {
@@ -1527,7 +1531,7 @@ function RecordManualPage() {
         /* ignore */
       }
 
-      Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : '记录成功', icon: saveResult.already_saved ? 'none' : 'success' })
+      Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : `已记录到${getRecordDateLabel(targetDate)}`, icon: saveResult.already_saved ? 'none' : 'success' })
       const mealSummary = {
         title: selectedItems.map(i => i.title).join('、'),
         calories: savedTotals.calories,
@@ -1536,7 +1540,7 @@ function RecordManualPage() {
         date: targetDate,
       }
       mealImpact.show(saveResult.id, mealSummary, (shown) => {
-        returnHomeAfterFoodRecord(shown ? 0 : undefined)
+        returnHomeAfterFoodRecord(shown ? 0 : undefined, targetDate)
       })
     } catch (e: any) {
       await showUnifiedApiError(e, '保存失败')
@@ -1675,6 +1679,7 @@ function RecordManualPage() {
         lowerThreshold={160}
         onScrollToLower={handleLoadMoreCatalog}
       >
+        {!pickerMode && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
         <View className='workspace-card'>
           <View className='workspace-header'>
             <View>
@@ -1922,7 +1927,7 @@ function RecordManualPage() {
                 className={`selected-drawer-primary ${saving ? 'loading' : ''}`}
                 onClick={handleSave}
               >
-                {saving ? <View className='custom-image-btn-spinner' /> : <Text>{pickerMode ? '确认添加到本餐' : '确认提交本餐'}</Text>}
+                {saving ? <View className='custom-image-btn-spinner' /> : <Text>{pickerMode ? '确认添加到本餐' : `确认记录到${getRecordDateLabel(recordDate)}`}</Text>}
               </View>
             </View>
           </View>

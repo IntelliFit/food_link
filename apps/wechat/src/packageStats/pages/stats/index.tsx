@@ -1,8 +1,7 @@
-import { View, Text, ScrollView, Switch, Image } from '@tarojs/components'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { View, Text, ScrollView } from '@tarojs/components'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { readStatsPageCache, writeStatsPageCache } from '../../../utils/stats-page-cache'
-import { showDietDecisionEvidence } from '../../../utils/diet-decision-evidence'
 import {
   getStatsSummary,
   getBodyMetricsSummary,
@@ -20,17 +19,12 @@ import {
 } from '../../../utils/api'
 import {
   applyEngineFocus,
-  coverageLines,
-  evidenceGapViews,
-  evidenceRoute,
+  focusCardKey,
   normalizeNutritionState,
   overallDelta,
-  scoreToTone,
   splitWeekDeltas,
-  weekCountText,
   weekDayLabels,
   weekHabitRows,
-  type EvidenceGapView,
 } from '../../../utils/nutrition-state-view'
 import {
   localFocusKeys,
@@ -40,16 +34,26 @@ import {
   splitFocusCards,
 } from './focus-selection'
 import {
-  EvidenceGapsCard,
-  FocusSpotlightCard,
-  WeekHabitsCard,
-  type FocusSpotlightItem,
-} from '../../../components/StatsNutritionState'
+  calorieChartView,
+  focusPillTone,
+  gateHeadline,
+  macroSplit,
+  rangeLabel,
+  recordedDayDots,
+  SCORE_MIN_DAYS,
+  sodiumGapNote,
+  splitAction,
+  summaryNote,
+  weightTrendView,
+  type StatsRange,
+} from './analysis-view'
+import { FixFirstCard, FocusScoresCard, GateSummaryCard, RangeSegment, SummaryCard, type FocusRowView } from './AnalysisCards'
+import { AnalysisSkeleton, CaloriesCard, WeightCard } from './AnalysisCharts'
+import { WeekHabitsCard } from '../../../components/StatsNutritionState'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
-import { FocusSheet } from '../../../components/FocusSheet'
 import { builtinFocusLabel } from '../../../components/FocusSheet/focus-options'
 import { experiments } from '../../../utils/experiments'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { openPetFocusSheet } from '../../../utils/pet-navigation'
 import {
   customFocusCardFromTask,
   readPendingCustomFocusTasks,
@@ -57,21 +61,12 @@ import {
   savePendingCustomFocusTask,
   type PendingCustomFocusTask,
 } from '../../../utils/custom-focus-task'
-import { IconExpand, IconCollapse } from '../../../components/iconfont'
-import healthScoreForest from '../../../assets/stats/health-score-forest.webp'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
-const MEAL_NAMES: Record<string, string> = {
-  breakfast: '早餐',
-  morning_snack: '上午加餐',
-  lunch: '午餐',
-  afternoon_snack: '下午加餐',
-  dinner: '晚餐',
-  evening_snack: '晚间加餐',
-  snack: '下午加餐'
-}
+/** 二级页原生导航栏的颜色，和页面底色一致 */
+const NAV_BAR_COLORS = { lightBackground: '#f5f2e8', darkBackground: '#161f1b' }
 
 function formatLocalDate(date: Date = new Date()): string {
   const year = date.getFullYear()
@@ -80,24 +75,8 @@ function formatLocalDate(date: Date = new Date()): string {
   return `${year}-${month}-${day}`
 }
 
-type HeatmapCell = {
-  date: string
-  calories: number
-  delta: number
-  level: 1 | 2
-  state: 'none' | 'surplus' | 'deficit'
-}
-
-// 「饮食解读」（AI 风险解读）已去掉，由宠物每天那句话和宠物聊天替代。
-// 分析页只管回头看：今天还差什么、宠物那句话都在底栏「伙伴」页，这里不再重复。
-type AnalysisPanelKey = 'health' | 'structure'
-
-function analysisPanelTabs(range: 'week' | 'month'): Array<{ key: AnalysisPanelKey; label: string }> {
-  return [
-    { key: 'health', label: range === 'week' ? '本周' : '本月' },
-    { key: 'structure', label: '趋势' },
-  ]
-}
+// 完整分析页只回答「这一周吃得怎么样，先改哪一点」：只回头看，不放记录入口；
+// 今天还差什么、伙伴那句话都在底栏「伙伴」页，「我在意的」也只在伙伴页改。
 
 /** 关注以服务器为准；这两个本地键只做离线兜底和“还没传上去”的标记 */
 const RISK_PREF_STORAGE_KEY = 'stats_risk_focus_keys'
@@ -145,10 +124,6 @@ function toSafeNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback
 }
 
-function clampPercent(value: number): number {
-  return Math.max(0, Math.min(100, value))
-}
-
 function scoreToLabel(score: number): string {
   if (score >= 78) return '偏保护'
   if (score >= 60) return '基本中性'
@@ -192,21 +167,6 @@ function scoreToFocusOverview(score: number, hasCustomFocus: boolean): string {
     ? '你当前关注的指标处在较高压力区，先从最可执行的一项小步调整。'
     : '你当前关注的核心指标处在较高压力区，先从最可执行的一项小步调整。'
 }
-
-function riskCardIcon(key: string): string {
-  switch (key) {
-    case 'hypertension': return 'tianpingzuo'
-    case 'diabetes': return 'tanshui-dabiao'
-    case 'cardio': return 'dumbbell'
-    case 'weight': return 'weight-scale'
-    case 'colorectal': return 'a-144-lvye'
-    case 'longevity': return 'shangzhang'
-    case 'micronutrient': return 'yiliaohangyedeICON-'
-    default: return 'target'
-  }
-}
-
-
 
 function customRiskCardToOption(card: RiskCard): RiskOption {
   return {
@@ -337,30 +297,23 @@ async function loadNutritionState(): Promise<DailyNutritionState | null> {
 
 function StatsPage() {
   const { scheme } = useAppColorScheme()
-  const [range, setRange] = useState<'week' | 'month'>('week')
-  const [analysisPanel, setAnalysisPanel] = useState<AnalysisPanelKey>('health')
+  const [range, setRange] = useState<StatsRange>('week')
   const rangeRef = useRef(range)
   rangeRef.current = range
   const [riskDetailModal, setRiskDetailModal] = useState<{ visible: boolean; card: RiskCard | null }>({ visible: false, card: null })
-  const [riskPickerVisible, setRiskPickerVisible] = useState(false)
-  const [overviewExpanded, setOverviewExpanded] = useState(false)
-  const [actionsExpanded, setActionsExpanded] = useState(false)
-  const [issuesExpanded, setIssuesExpanded] = useState(false)
-  const [othersExpanded, setOthersExpanded] = useState(false)
-  const [mealValuesInCalories, setMealValuesInCalories] = useState(false)
 
   // 二级页用原生导航栏（带返回），颜色跟着深浅色
   useEffect(() => {
-    applyThemeNavigationBar(scheme, { lightBackground: '#f8f6e9', darkBackground: '#161f1b' })
+    applyThemeNavigationBar(scheme, NAV_BAR_COLORS)
   }, [scheme])
   useDidShow(() => {
-    applyThemeNavigationBar(scheme, { lightBackground: '#f8f6e9', darkBackground: '#161f1b' })
+    applyThemeNavigationBar(scheme, NAV_BAR_COLORS)
   })
 
   // 自定义 tabBar 显隐同步：弹窗打开时隐藏底栏
   useEffect(() => {
     try {
-      if (riskDetailModal.visible || riskPickerVisible) {
+      if (riskDetailModal.visible) {
         Taro.setStorageSync('stats_risk_detail_visible', '1')
       } else {
         Taro.removeStorageSync('stats_risk_detail_visible')
@@ -375,20 +328,11 @@ function StatsPage() {
         // ignore
       }
     }
-  }, [riskDetailModal.visible, riskPickerVisible])
+  }, [riskDetailModal.visible])
   // 服务器的关注到之前先用本机存的（最多 3 项）；没存过就是还没选
   const [selectedRiskKeys, setSelectedRiskKeys] = useState<string[]>(() => localFocusKeys(readStoredFocus()) ?? [])
   const selectedRiskKeysRef = useRef(selectedRiskKeys)
   selectedRiskKeysRef.current = selectedRiskKeys
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    heatmap: true,
-    calories: true,
-    macro: true,
-    meals: true,
-    streak: false,
-    body: false,
-    ai: false,
-  })
 
   const [loading, setLoading] = useState(() => {
     if (!hasAuthToken()) return false
@@ -401,7 +345,6 @@ function StatsPage() {
   const [error, setError] = useState<string | null>(null)
   /** 未登录：可进入分析 Tab 浏览引导，不拉取需登录接口 */
   const [guestBrowse, setGuestBrowse] = useState(() => !hasAuthToken())
-  const [showCalories, setShowCalories] = useState(false)
   const [customFocusRefreshingKey, setCustomFocusRefreshingKey] = useState<string | null>(null)
 
   const fetchIdRef = useRef(0)
@@ -415,7 +358,6 @@ function StatsPage() {
   const [statsShowCount, setStatsShowCount] = useState(0)
 
   const focusSaveRef = useRef<{ saving: boolean; queued: string[] | null }>({ saving: false, queued: null })
-  const focusEditSeqRef = useRef(0)
 
   useDidShow(() => {
     statsPageVisibleRef.current = true
@@ -461,15 +403,12 @@ function StatsPage() {
       return
     }
     const seq = ++nutritionSeqRef.current
-    const editSeqAtStart = focusEditSeqRef.current
     const state = await loadNutritionState().catch((e: unknown) => {
       console.warn('[stats] nutrition state unavailable:', e)
       return null
     })
     if (seq !== nutritionSeqRef.current) return
     setNutritionState(state)
-    // 拉取期间用户改过关注，以用户刚改的为准
-    if (focusEditSeqRef.current !== editSeqAtStart) return
     const resolution = resolveFocusKeys({
       serverFocus: state?.focus,
       localStored: readStoredFocus(),
@@ -495,8 +434,8 @@ function StatsPage() {
 
   useEffect(() => {
     if (statsShowCount === 0 || guestBrowse) return
-    experiments.track('stats_view', { tab: analysisPanel })
-  }, [analysisPanel, guestBrowse, statsShowCount])
+    experiments.track('stats_view', { range })
+  }, [range, guestBrowse, statsShowCount])
   useDidHide(() => {
     statsPageVisibleRef.current = false
   })
@@ -644,18 +583,6 @@ function StatsPage() {
     }
   }, [])
 
-  /** 「我在意的」弹窗已经写好服务器：这里只同步页面和本机，再拉一次新的分数和自定义关注 */
-  const handleFocusSheetSaved = useCallback((next: string[]) => {
-    setRiskPickerVisible(false)
-    focusEditSeqRef.current += 1
-    selectedRiskKeysRef.current = next
-    setSelectedRiskKeys(next)
-    writeStoredFocus(next)
-    writeFocusPending(false)
-    void refreshFromNetwork(rangeRef.current, true)
-    void refreshNutritionState()
-  }, [refreshFromNetwork, refreshNutritionState])
-
   useEffect(() => {
     if (!hasAuthToken()) {
       setGuestBrowse(true)
@@ -787,126 +714,69 @@ function StatsPage() {
     }
   }, [customFocusRefreshingKey, mergeCustomFocusCard, pollCustomFocusTask, range])
 
-  // 周期切换只重置展示状态，不改变个人关注、缓存或生成规则。
+  // 周期切换只关掉详情弹窗，不改变个人关注、缓存或生成规则。
   useEffect(() => {
-    setOverviewExpanded(false)
-    setActionsExpanded(false)
-    setIssuesExpanded(false)
-    setMealValuesInCalories(false)
-    setRiskPickerVisible(false)
     setRiskDetailModal({ visible: false, card: null })
   }, [range])
 
+  const pageClass = `sa-page ${scheme === 'dark' ? 'sa-page--dark' : ''}`
+  const selectRange = (next: StatsRange) => {
+    if (loading || next === rangeRef.current) return
+    setRange(next)
+  }
+
   if (guestBrowse) {
     return (
-      <View className={`stats-page stats-page--guest ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
-        <View className='stats-guest-card'>
-          <Text className='stats-guest-title'>登录后查看饮食分析</Text>
-          <Text className='stats-guest-desc'>可先浏览首页热量与营养概览，需要账号同步时再登录</Text>
-          <View className='stats-guest-btn' onClick={() => redirectToLogin()}>
-            <Text className='stats-guest-btn-text'>去登录</Text>
+      <View className={`${pageClass} sa-page--static`}>
+        <View className='sa-app'>
+          <View className='sa-brief'>
+            <Text className='sa-brief__day'>饮食分析</Text>
+            <Text className='sa-brief__line'>登录后查看饮食分析</Text>
+            <Text className='sa-brief__note'>可先浏览首页热量与营养概览，需要账号同步时再登录</Text>
+            <View className='sa-btn sa-btn--gold' aria-role='button' onClick={() => redirectToLogin()}>
+              <Text>去登录</Text>
+            </View>
           </View>
         </View>
       </View>
     )
   }
 
-  if (loading && !data) {
-    return (
-      <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
-        <View className='loading-wrap'>
-          <View className='loading-spinner-md' />
+  /** 一页滚动：最上面是周期切换，弹窗放在滚动区外面 */
+  const renderShell = (content: ReactNode, overlay: ReactNode = null) => (
+    <View className={pageClass}>
+      <ScrollView className='sa-scroll' scrollY={!riskDetailModal.visible} enhanced showScrollbar={false}>
+        <View className='sa-app'>
+          <RangeSegment range={range} disabled={loading} onChange={selectRange} />
+          {content}
         </View>
-      </View>
-    )
+      </ScrollView>
+      {overlay}
+    </View>
+  )
+
+  if (loading && !data) {
+    return renderShell(<AnalysisSkeleton />)
   }
 
   if (error && !data) {
-    return (
-      <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
-        <View className='error-wrap'>
-          <Text className='iconfont icon-jiesuo error-icon' />
-          <Text className='error-text'>{error}</Text>
-          <View className='btn-primary' onClick={() => void refreshFromNetwork(range, false)}>
-            <Text className='btn-text'>重试</Text>
-          </View>
+    return renderShell(
+      <View className='sa-card sa-card--center'>
+        <Text className='sa-card__empty'>{error}</Text>
+        <View className='sa-btn' aria-role='button' onClick={() => void refreshFromNetwork(range, false)}>
+          <Text>重试</Text>
         </View>
-      </View>
+      </View>,
     )
   }
 
   const d = data!
-  const totalCalories = toSafeNumber(d.total_calories)
+  const today = formatLocalDate()
   const tdee = toSafeNumber(d.tdee)
   const avgCaloriesPerDay = toSafeNumber(d.avg_calories_per_day)
-  const totalProtein = toSafeNumber(d.total_protein)
-  const totalCarbs = toSafeNumber(d.total_carbs)
-  const totalFat = toSafeNumber(d.total_fat)
   const recordedDays = Math.max(0, toSafeNumber(d.recorded_days, 0))
   const hasAnyDietData = recordedDays > 0
-  const bodyMetrics = d.body_metrics
-  const macroPercent = {
-    protein: toSafeNumber(d.macro_percent?.protein),
-    carbs: toSafeNumber(d.macro_percent?.carbs),
-    fat: toSafeNumber(d.macro_percent?.fat)
-  }
-  const byMeal = {
-    breakfast: toSafeNumber(d.by_meal?.breakfast),
-    morning_snack: toSafeNumber(d.by_meal?.morning_snack),
-    lunch: toSafeNumber(d.by_meal?.lunch),
-    afternoon_snack: toSafeNumber(d.by_meal?.afternoon_snack ?? d.by_meal?.snack),
-    dinner: toSafeNumber(d.by_meal?.dinner),
-    evening_snack: toSafeNumber(d.by_meal?.evening_snack)
-  } as const
-  const chartDays = range === 'week' ? d.daily_calories.slice(-7) : d.daily_calories.slice(-14)
-
-  // Calculate max calories for the chart scaling
-  const maxDailyCalories = Math.max(tdee, ...chartDays.map(i => Math.max(toSafeNumber(i.calories), toSafeNumber(i.target?.snapshot.targets.calorie_target))), 1) * 1.12
-  const weightTrend = bodyMetrics?.weight_entries || []
-  const latestWeight = bodyMetrics?.latest_weight || null
-  const previousWeight = bodyMetrics?.previous_weight || null
-  const weightChange = bodyMetrics?.weight_change
-  const waterDaily = bodyMetrics?.water_daily || []
-  const waterGoalMl = toSafeNumber(bodyMetrics?.water_goal_ml, 2000)
-  const avgDailyWaterMl = toSafeNumber(bodyMetrics?.avg_daily_water_ml)
-  const totalWaterMl = toSafeNumber(bodyMetrics?.total_water_ml)
-  const waterRecordedDays = toSafeNumber(bodyMetrics?.water_recorded_days)
-  const waterTrend = range === 'week' ? waterDaily.slice(-7) : waterDaily.slice(-14)
-  const maxWaterValue = waterTrend.length > 0
-    ? Math.max(waterGoalMl, ...waterTrend.map(item => toSafeNumber(item.total)))
-    : waterGoalMl
-  const weightChartEntries = weightTrend.slice(-(range === 'week' ? 7 : 10))
-  const weightChartValues = weightChartEntries.map(item => toSafeNumber(item.value))
-  const weightChartMin = weightChartValues.length > 0 ? Math.min(...weightChartValues) : 0
-  const weightChartMax = weightChartValues.length > 0 ? Math.max(...weightChartValues) : 0
-  const weightChartRange = Math.max(weightChartMax - weightChartMin, 1)
-  const weightChartPoints = weightChartEntries.map((item, index) => {
-    const x = weightChartEntries.length <= 1
-      ? 300
-      : 32 + (index / (weightChartEntries.length - 1)) * 536
-    const y = 154 - ((toSafeNumber(item.value) - weightChartMin) / weightChartRange) * 112
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-  const weightChartGridColor = scheme === 'dark' ? '#2f3d39' : '#e2e8f0'
-  const weightChartSvg = weightChartEntries.length > 1
-    ? `url("data:image/svg+xml,${encodeURIComponent(
-      `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 180'><line x1='32' y1='42' x2='568' y2='42' stroke='${weightChartGridColor}' stroke-width='2'/><line x1='32' y1='98' x2='568' y2='98' stroke='${weightChartGridColor}' stroke-width='2'/><line x1='32' y1='154' x2='568' y2='154' stroke='${weightChartGridColor}' stroke-width='2'/><polyline points='${weightChartPoints}' fill='none' stroke='#5cb896' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>`
-    )}")`
-    : ''
-  const heatmapCells: HeatmapCell[] = d.daily_calories.map((item) => {
-    const hasRecord = item.calories > 0
-    const delta = hasRecord ? item.calories - tdee : 0
-    const deltaRatio = hasRecord ? Math.abs(delta) / Math.max(tdee, 1) : 0
-    const level: HeatmapCell['level'] = deltaRatio > 0.15 ? 2 : 1
-
-    return {
-      date: item.date,
-      calories: item.calories,
-      delta,
-      level,
-      state: !hasRecord ? 'none' : delta > 0 ? 'surplus' : 'deficit'
-    }
-  })
+  const dailyCalories = Array.isArray(d.daily_calories) ? d.daily_calories : []
   const healthIndex = d.health_index
   const hasEnoughHealthIndexData = healthIndex?.has_enough_data ?? false
   const ns = nutritionState
@@ -914,25 +784,12 @@ function StatsPage() {
   const engineWeek = ns && range === 'week' ? ns : null
   const engineOverallScore = engineWeek?.scores.overall ?? null
   const engineOverallDelta = engineWeek && engineOverallScore !== null ? overallDelta(engineWeek.scores) : null
-  const engineCoverageLines = engineWeek ? coverageLines(engineWeek.coverage) : []
-  const overallRiskScore = engineOverallScore ?? healthIndex?.overall_score ?? 0
-  const projectedOverallScore = healthIndex?.projected_score ?? 0
-  const signalChips = healthIndex?.signal_chips ?? []
+  const overallRiskScore = Math.round(engineOverallScore ?? healthIndex?.overall_score ?? 0)
   const engineFocus = engineWeek?.scores.focus ?? []
   const riskCards = applyEngineFocus(healthIndex?.risk_cards ?? [], engineFocus)
   const weekRows = ns ? weekHabitRows(ns.week) : []
-  const weekCounts = ns ? ns.week.counts.map(weekCountText) : []
   const weekDeltas = ns ? splitWeekDeltas(ns.week.vs_last_week) : { headline: null, rest: [] }
-  const showWeekCard = weekRows.length > 0 || weekCounts.length > 0 || weekDeltas.headline !== null
-  const evidenceGaps = ns ? evidenceGapViews(ns.evidence_gaps) : []
 
-  const openEvidenceGap = (gap: EvidenceGapView) => {
-    experiments.track('stats_evidence_click', { action: gap.action })
-    const route = evidenceRoute(gap.action, ns?.date || formatLocalDate())
-    if (!route) return
-    if (route.kind === 'tab') void Taro.switchTab({ url: route.url })
-    else void Taro.navigateTo({ url: extraPkgUrl(route.url) })
-  }
   const openRiskDetail = (card: RiskCard) => {
     experiments.track('stats_focus_open', { key: card.is_custom ? 'custom' : card.key })
     setRiskDetailModal({ visible: true, card })
@@ -963,653 +820,221 @@ function StatsPage() {
     .map(key => allRiskOptions.find(item => item.key === key))
     .filter((option): option is RiskOption => Boolean(option?.is_custom))
     .map(pendingCustomRiskCardFromOption)
-  const { focusCards, otherCards } = splitFocusCards([...allDisplayRiskCards, ...pendingFocusCards], selectedRiskKeys)
+  const { focusCards } = splitFocusCards([...allDisplayRiskCards, ...pendingFocusCards], selectedRiskKeys)
   const isPendingRiskCard = (card: RiskCard) => Boolean(card.is_custom && !customRiskCards.some(item => item.key === card.key))
   const hasRiskScore = (card: RiskCard) => !isPendingRiskCard(card) && card.score_available !== false
   const hasVisibleCustomFocus = focusCards.some(card => card.is_custom)
-  const focusItems: FocusSpotlightItem[] = focusCards.map(card => ({
+  const customBadge = (card: RiskCard) => (card.is_custom ? (card.score_available === false ? '支持建议' : '支持参考') : '')
+  const scoredFocusRows: FocusRowView[] = focusCards.map(card => ({
     key: card.key,
     title: builtinFocusLabel(card.key) || card.title,
-    iconClass: `icon-${riskCardIcon(card.key)}`,
-    scoreText: hasRiskScore(card) ? String(card.score) : '—',
-    tone: hasRiskScore(card) ? scoreToTone(card.score) : 'pending',
     reason: card.brief,
-    evidence: card.evidence ?? [],
-    badge: card.is_custom ? (card.score_available === false ? '支持建议' : '支持参考') : '',
+    scoreText: hasRiskScore(card) ? String(card.score) : '—',
+    tone: focusPillTone(hasRiskScore(card) ? card.score : null),
+    badge: customBadge(card),
     refreshing: customFocusRefreshingKey === card.key,
   }))
-  const focusOverallScore = overallRiskScore
-  const focusProjectedScore = projectedOverallScore
-  const focusOverviewCopy = scoreToFocusOverview(focusOverallScore, hasVisibleCustomFocus)
-  const focusScoreHint = hasVisibleCustomFocus
-    ? '仅纳入可评分的支持参考；旧专项分已停用，不代表身体变化'
-    : '基于已记录数据的应用参考，不代表身体健康评分'
-  const topIssues = healthIndex?.top_issues ?? []
-  const actionList = Array.from(new Set([
-    ...(d.diet_decision_basis?.food_group_priorities?.length ? d.diet_decision_basis.actions : []),
-    ...(healthIndex?.action_list ?? []),
-  ]))
-  const toggleSection = (key: string) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [key]: !prev[key],
+  // 记录不到 2 天时可能还没有关注卡，按选了哪几项列出来，分数先空着
+  const focusTitle = (key: string): string => builtinFocusLabel(key)
+    || focusCards.find(card => card.key === key)?.title
+    || allRiskOptions.find(item => item.key === key)?.title
+    || ns?.focus?.find(item => focusCardKey(item.key) === key)?.title
+    || ''
+  const gateFocusRows: FocusRowView[] = selectedRiskKeys
+    .map(key => ({
+      key,
+      title: focusTitle(key),
+      reason: `记满 ${SCORE_MIN_DAYS} 天后出分`,
+      scoreText: '—',
+      tone: focusPillTone(null),
+      badge: '',
+      refreshing: false,
     }))
-  }
-
-  const openRangeSelector = () => {
-    if (loading) return
-    Taro.showActionSheet({
-      itemList: ['近一周', '近一个月'],
-    }).then(res => {
-      const nextRange = res.tapIndex === 1 ? 'month' : 'week'
-      if (nextRange !== rangeRef.current) {
-        setRange(nextRange)
-      }
-    }).catch(() => {
-      // 用户取消选择
-    })
-  }
-
+    .filter(row => row.title)
+  const focusRows = hasEnoughHealthIndexData ? scoredFocusRows : gateFocusRows
   const openFocusItem = (key: string) => {
+    if (!hasEnoughHealthIndexData) return
     const card = focusCards.find(item => item.key === key)
     if (card) openRiskDetail(card)
   }
 
-  return (
-    <View className={`stats-page stats-page--editorial ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
-      {/* 标题在原生导航栏里；周期选择和分页签放同一行 */}
-      <View className='analysis-tabs-container'>
+  const actionList = Array.from(new Set([
+    ...(d.diet_decision_basis?.food_group_priorities?.length ? d.diet_decision_basis.actions : []),
+    ...(healthIndex?.action_list ?? []),
+  ]))
+  const fixFirst = actionList.slice(0, 2).map(splitAction).filter(action => action.lead)
+  const periodLabel = rangeLabel(range, d.start_date, d.end_date)
+  const engineMeals = engineWeek ? engineWeek.coverage.meals : null
+  const summaryReason = engineWeek?.headline
+    || healthIndex?.overview_copy
+    || scoreToFocusOverview(overallRiskScore, hasVisibleCustomFocus)
+  const calorieChart = hasAnyDietData
+    ? calorieChartView({ daily: dailyCalories, tdee, avgCalories: avgCaloriesPerDay, range, today })
+    : null
+  const macro = macroSplit({
+    protein: toSafeNumber(d.macro_percent?.protein),
+    carbs: toSafeNumber(d.macro_percent?.carbs),
+    fat: toSafeNumber(d.macro_percent?.fat),
+  })
+  const weightTrend = weightTrendView(d.body_metrics?.weight_entries ?? [], d.start_date, d.end_date)
+
+  // 关注详情底部弹窗（含自定义关注卡的生成/更新）
+  const riskDetailNode = (
+    <>
+      {riskDetailModal.visible && riskDetailModal.card && (
         <View
-          className={`stats-range-dropdown ${loading ? 'is-loading' : ''}`}
-          onClick={openRangeSelector}
+          className='risk-detail-modal'
+          onClick={() => setRiskDetailModal({ visible: false, card: null })}
         >
-          <Text className='stats-range-dropdown__label'>{range === 'week' ? '近一周' : '近一个月'}</Text>
-          <Text className='iconfont icon-right-arrow stats-range-dropdown__arrow' />
-        </View>
-        <View className={`segmented-control analysis-panel-control ${loading ? 'is-loading' : ''}`}>
-          {analysisPanelTabs(range).map(item => (
-            <View
-              key={item.key}
-              className={`segment-item ${analysisPanel === item.key ? 'active' : ''}`}
-              aria-role='button'
-              aria-label={`${item.label}${analysisPanel === item.key ? '，已选中' : ''}`}
-              onClick={() => { if (!loading) setAnalysisPanel(item.key) }}
-            >
-              <Text>{item.label}</Text>
-            </View>
-          ))}
-          {loading ? <View className='tabs-loading'><View className='loading-spinner-md' /></View> : null}
-        </View>
-      </View>
-      <ScrollView className='scroll-wrap' scrollY={!riskPickerVisible && !riskDetailModal.visible} enhanced showScrollbar={false}>
-        {error && data ? <View className='analysis-error'><Text>{error}</Text></View> : null}
-        {analysisPanel === 'health' && hasEnoughHealthIndexData ? (
-          <FocusSpotlightCard
-            items={focusItems}
-            maxCount={MAX_HEALTH_FOCUS}
-            footnote={engineFocus.length > 0 ? '分数按钠、糖、纤维等营养素和你的目标算，点开能看到全部依据。' : ''}
-            onOpen={openFocusItem}
-            onManage={() => setRiskPickerVisible(true)}
-          />
-        ) : null}
-        {analysisPanel === 'health' && !hasEnoughHealthIndexData ? (
-          <View className='stats-card health-index-gate-card'>
-            <View className='health-index-gate-icon'>
-              <Text className='iconfont icon-shangzhang health-index-gate-icon-text' />
-            </View>
-            <View className='health-index-gate-copy'>
-              <Text className='health-index-gate-title'>记录至少 2 天后显示饮食参考分</Text>
-              <Text className='health-index-gate-desc'>
-                当前已记录 {recordedDays} 天。继续记录后，这里会展示饮食趋势和关注方向。
-              </Text>
-            </View>
-          </View>
-        ) : analysisPanel === 'health' ? (
-          <>
-            <View className='stats-card risk-overview-card'>
-              <Image className='risk-overview-background' src={healthScoreForest} mode='aspectFill' aria-hidden />
-              <View className='risk-overview-top'>
-                <View className='risk-overview-copy'>
-                  <View className='risk-overview-title-line'>
-                    <Text className='risk-overview-title'>饮食综合分</Text>
-                    <View className='stats-info-button' aria-role='button' aria-label='查看综合分依据' onClick={() => setOverviewExpanded(value => !value)}>
-                      <Text className='iconfont icon-target' />
-                    </View>
-                  </View>
-                </View>
-                <View className='risk-overview-actions'>
-                  <View className={`risk-overview-badge tone-${scoreToTone(focusOverallScore)}`}>
-                    <Text className='risk-overview-badge-label'>{scoreToLabel(focusOverallScore)}</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View className='risk-overview-compact-row'>
-                <View className='risk-overview-score-column'>
-                  <View className='risk-overview-score-row'>
-                    <Text className='risk-overview-score'>{focusOverallScore}</Text>
-                    <Text className='risk-overview-score-unit'>/ 100</Text>
-                  </View>
-                  <View className='risk-overview-scale' aria-hidden>
-                    <View className='risk-overview-scale-track'>
-                      <View className='risk-overview-scale-fill' style={{ width: `${clampPercent(focusOverallScore)}%` }} />
-                    </View>
-                    <View className='risk-overview-scale-labels'><Text>0</Text><Text>100</Text></View>
-                  </View>
-                </View>
-                <View className='risk-overview-records'>
-                  {engineOverallDelta ? <Text className={`risk-overview-delta is-${engineOverallDelta.direction}`}>{engineOverallDelta.text}</Text> : null}
-                  {engineCoverageLines.length > 0 ? engineCoverageLines.map(line => (
-                    <Text key={line} className='risk-overview-record-caption'>{line}</Text>
-                  )) : <>
-                    <Text className='risk-overview-record-days'>已记录 {recordedDays} 天</Text>
-                    <Text className='risk-overview-record-caption'>基于可评分的记录</Text>
-                  </>}
-                </View>
-              </View>
-              {overviewExpanded ? <View className='risk-overview-expanded'>
-                <Text className='risk-overview-score-hint'>{focusScoreHint}</Text>
-                <Text className='risk-overview-summary'>{focusOverviewCopy}</Text>
-                <View className='risk-overview-chip-row'>
-                {signalChips.map((chip) => (
-                  <View key={chip.label} className='risk-overview-chip'>
-                    <Text className='risk-overview-chip-label'>{chip.label}</Text>
-                    <Text className='risk-overview-chip-value'>{chip.value}</Text>
-                  </View>
-                ))}
-                </View>
-                {/* 预估分是 health_index 按它自己的分数算的，换成引擎分数后不再对得上 */}
-                {engineOverallScore === null ? <Text className='risk-overview-estimate'>改善后的综合分估计：{focusOverallScore} → {focusProjectedScore}，不代表实际健康变化。</Text> : null}
-              </View> : null}
-            </View>
-          </>
-        ) : null}
-
-        {analysisPanel === 'health' && ns && showWeekCard ? (
-        <WeekHabitsCard
-          dayLabels={weekDayLabels(ns.week.days, ns.date)}
-          rows={weekRows}
-          countTexts={weekCounts}
-          headlineDelta={weekDeltas.headline}
-          otherDeltas={weekDeltas.rest}
-        />
-        ) : null}
-        {analysisPanel === 'health' && hasEnoughHealthIndexData ? (
-          <>
-        <View className='stats-card stats-actions-card'>
-          <Text className='card-title'>优先调整</Text>
-          {actionList.length > 0 ? (actionsExpanded ? actionList : actionList.slice(0, 2)).map((action, index) => {
-            const separatorIndex = action.search(/[，。；,;]/)
-            const emphasisEnd = separatorIndex > 0 ? separatorIndex + 1 : action.length
-            return (
-              <View className='stats-priority-item' key={`${index}-${action}`}>
-                <Text className='stats-priority-number'>{index + 1}</Text>
-                <View className='stats-priority-text'>
-                  <Text className='stats-priority-headline'>{action.slice(0, emphasisEnd)}</Text>
-                  {emphasisEnd < action.length ? <Text className='stats-priority-followup'>{action.slice(emphasisEnd)}</Text> : null}
-                </View>
-              </View>
-            )
-          }) : <Text className='stats-empty-copy'>暂无额外调整建议，继续记录即可。</Text>}
-          {actionList.length > 2 ? <View className='stats-text-action' onClick={() => setActionsExpanded(value => !value)}><Text>{actionsExpanded ? '收起' : `展开全部 ${actionList.length} 项`}</Text><Text className='iconfont icon-right-arrow' /></View> : null}
-          {d.diet_decision_basis ? <View className='stats-decision-actions'>
-            <View className='stats-text-action' onClick={() => void showDietDecisionEvidence(d.diet_decision_basis!).catch(() => {})}><Text>查看依据</Text></View>
-            <View className='stats-text-action' onClick={() => void Taro.switchTab({ url: '/pages/index/index' })}><Text>看看下一餐</Text><Text className='iconfont icon-right-arrow' /></View>
-          </View> : null}
-        </View>
-            {otherCards.length > 0 ? (
-              <View
-                className='stats-ns-others-toggle'
-                aria-role='button'
-                aria-label={othersExpanded ? '收起其他方面' : '展开其他方面'}
-                onClick={() => setOthersExpanded(value => !value)}
-              >
-                <Text>其他方面</Text>
-                <View className='stats-ns-others-toggle__meta'>
-                  <Text>{otherCards.length} 项</Text>
-                  {othersExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}
-                </View>
-              </View>
-            ) : null}
-            {othersExpanded && otherCards.length > 0 ? (
-              <View className='risk-card-grid'>
-                {otherCards.map((card) => (
-                  <View
-                    key={card.key}
-                    className='stats-card risk-card'
-                    aria-role='button'
-                    aria-label={`查看${card.title}的饮食参考依据`}
-                    onClick={() => openRiskDetail(card)}
-                  >
-                    <View className='risk-card-icon-circle'><Text className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`} /></View>
-                    <View className='risk-card-copy'>
-                    <Text className='risk-card-title'>{card.title}</Text>
-                    {card.is_custom ? (
-                      <View className='risk-card-ai-badge-row'>
-                        <Text className='risk-card-ai-badge'>{card.score_available === false ? '支持建议' : '支持参考'}</Text>
-                        <Text className='risk-card-ai-confidence'>{customFocusConfidenceLabel(card.confidence)}</Text>
-                        {customFocusRefreshingKey === card.key ? (
-                          <Text className='iconfont icon-jiazaixiao risk-card-ai-refresh-spinner' />
-                        ) : card.needs_refresh ? (
-                          <Text className='risk-card-ai-refresh-hint'>待更新</Text>
-                        ) : null}
-                      </View>
-                    ) : null}
-                    <Text className='risk-card-summary'>{card.brief}</Text>
-                    </View>
-                    <View className={`risk-card-score-wrap tone-${hasRiskScore(card) ? scoreToTone(card.score) : 'pending'}`}>
-                      <Text className='risk-card-score'>{hasRiskScore(card) ? card.score : '—'}</Text>
-                      {hasRiskScore(card) ? <Text className='risk-card-score-unit'>分</Text> : null}
-                    </View>
-                    <Text className='iconfont icon-right-arrow risk-card-chevron' />
-                  </View>
-                ))}
-              </View>
-            ) : null}
-        {topIssues.length > 0 ? <View className='stats-card stats-issues-card'>
-          <View className='card-header card-header--collapsible' onClick={() => setIssuesExpanded(value => !value)}><Text className='card-title'>记录中值得留意的地方</Text>{issuesExpanded ? <IconCollapse size={20} color='#718078' /> : <IconExpand size={20} color='#718078' />}</View>
-          {issuesExpanded ? topIssues.map((issue, index) => <View key={`${index}-${issue.title}`} className='stats-issue-item'><Text className='stats-issue-title'>{issue.title}</Text><Text className='stats-issue-detail'>{issue.detail}</Text></View>) : null}
-        </View> : null}
-
-        {/* 友好度详情底部弹窗 */}
-        {riskDetailModal.visible && riskDetailModal.card && (
+          <View className='risk-detail-backdrop' />
           <View
-            className='risk-detail-modal'
-            onClick={() => setRiskDetailModal({ visible: false, card: null })}
+            className='risk-detail-panel'
+            onClick={(e) => e.stopPropagation()}
           >
-            <View className='risk-detail-backdrop' />
-            <View
-              className='risk-detail-panel'
-              onClick={(e) => e.stopPropagation()}
-            >
-              <View className='risk-detail-handle' />
-              <View className='risk-detail-header'>
-                <View className='risk-detail-title-row'>
-                  <Text className='risk-detail-title'>{riskDetailModal.card.title}</Text>
-                  {riskDetailModal.card.is_custom ? (
-                    <Text className='risk-detail-ai-badge'>{riskDetailModal.card.score_available === false ? '支持建议' : '支持参考'}</Text>
-                  ) : null}
-                </View>
-                <View className='risk-detail-score-row'>
-                  <Text className='risk-detail-score'>{hasRiskScore(riskDetailModal.card) ? riskDetailModal.card.score : '—'}</Text>
-                  {hasRiskScore(riskDetailModal.card) ? <>
-                  <Text className='risk-detail-score-unit'>分</Text>
-                  <View className={`risk-detail-badge tone-${riskDetailModal.card.tone}`}>
-                    <Text className='risk-detail-badge-text'>{scoreToLabel(riskDetailModal.card.score)}</Text>
-                  </View>
-                  </> : null}
-                </View>
-              </View>
-              <ScrollView className='risk-detail-body' scrollY showScrollbar={false}>
-                {riskDetailModal.card.action ? <View className='risk-detail-priority'><Text className='risk-detail-section-label'>可以先这样调整</Text><Text className='risk-detail-section-text'>{riskDetailModal.card.action}</Text></View> : null}
+            <View className='risk-detail-handle' />
+            <View className='risk-detail-header'>
+              <View className='risk-detail-title-row'>
+                <Text className='risk-detail-title'>{riskDetailModal.card.title}</Text>
                 {riskDetailModal.card.is_custom ? (
-                  <>
-                    <Text className='risk-detail-ai-disclaimer'>
-                      基于饮食与记录证据的支持度，不代表真实力量、皮肤状态或医学诊断。
-                    </Text>
-                    <View className='risk-detail-meta-row'>
-                      <Text className={`risk-detail-confidence is-${riskDetailModal.card.confidence || 'unknown'}`}>
-                        {customFocusConfidenceLabel(riskDetailModal.card.confidence)}
-                      </Text>
-                      {customFocusScoreChangeLabel(riskDetailModal.card.score_change) ? (
-                        <Text className='risk-detail-score-change'>{customFocusScoreChangeLabel(riskDetailModal.card.score_change)}</Text>
-                      ) : null}
-                    </View>
-                  </>
+                  <Text className='risk-detail-ai-badge'>{riskDetailModal.card.score_available === false ? '支持建议' : '支持参考'}</Text>
                 ) : null}
-                {riskDetailModal.card.summary ? <Text className='risk-detail-section-text'>{riskDetailModal.card.summary}</Text> : null}
-                {riskDetailModal.card.is_custom && riskDetailModal.card.score_reason ? (
-                  <>
-                    <View className='risk-detail-divider' />
-                    <Text className='risk-detail-section-label'>评分方法</Text>
-                    <Text className='risk-detail-section-text'>{riskDetailModal.card.score_reason}</Text>
-                  </>
-                ) : null}
-                {riskDetailModal.card.is_custom && riskDetailModal.card.change_reason ? (
-                  <>
-                    <View className='risk-detail-divider' />
-                    <Text className='risk-detail-section-label'>与上次相比</Text>
-                    <Text className='risk-detail-section-text'>{riskDetailModal.card.change_reason}</Text>
-                  </>
-                ) : null}
-                {riskDetailModal.card.basis ? <>
-                <View className='risk-detail-divider' />
-                <Text className='risk-detail-section-label'>判断依据</Text>
-                <Text className='risk-detail-section-text'>{riskDetailModal.card.basis}</Text>
+              </View>
+              <View className='risk-detail-score-row'>
+                <Text className='risk-detail-score'>{hasRiskScore(riskDetailModal.card) ? riskDetailModal.card.score : '—'}</Text>
+                {hasRiskScore(riskDetailModal.card) ? <>
+                <Text className='risk-detail-score-unit'>分</Text>
+                <View className={`risk-detail-badge tone-${riskDetailModal.card.tone}`}>
+                  <Text className='risk-detail-badge-text'>{scoreToLabel(riskDetailModal.card.score)}</Text>
+                </View>
                 </> : null}
-                {!riskDetailModal.card.is_custom && (riskDetailModal.card.evidence?.length || 0) > 0 ? (
-                  <>
-                    <View className='risk-detail-divider' />
-                    <Text className='risk-detail-section-label'>每一项依据</Text>
-                  </>
-                ) : null}
-                {(riskDetailModal.card.evidence?.length || 0) > 0 ? (
-                  <View className='risk-detail-evidence-list'>
-                    {riskDetailModal.card.evidence!.map(item => (
-                      <View key={item} className='risk-detail-evidence-item'>
-                        <Text className='risk-detail-evidence-bullet'>•</Text>
-                        <Text className='risk-detail-evidence-text'>{item}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-                {riskDetailModal.card.is_custom && (riskDetailModal.card.missing_evidence?.length || 0) > 0 ? (
-                  <>
-                    <View className='risk-detail-divider' />
-                    <Text className='risk-detail-section-label'>还缺哪些证据</Text>
-                    <Text className='risk-detail-section-text'>{riskDetailModal.card.missing_evidence!.join('、')}</Text>
-                  </>
-                ) : null}
-                {hasRiskScore(riskDetailModal.card) && !riskDetailModal.card.is_custom ? <View className='risk-detail-delta'>
-                  <Text className='risk-detail-delta-text'>饮食参考分预计可提升 {riskDetailModal.card.delta} 分，并非实际健康结果。</Text>
-                </View> : null}
-                {riskDetailModal.card.is_custom && riskDetailModal.card.needs_refresh ? (
-                  <View
-                    className={`risk-detail-refresh-btn${customFocusRefreshingKey === riskDetailModal.card.key ? ' is-loading' : ''}`}
-                    onClick={() => {
-                      if (customFocusRefreshingKey !== riskDetailModal.card?.key) {
-                        void handleRefreshCustomFocus(riskDetailModal.card!)
-                      }
-                    }}
-                  >
-                    <Text className='risk-detail-refresh-text'>
-                      {customFocusRefreshingKey === riskDetailModal.card.key ? (
-                        <Text className='iconfont icon-jiazaixiao risk-detail-refresh-spinner' />
-                      ) : `更新 · ${customFocusCost} 积分`}
-                    </Text>
-                  </View>
-                ) : null}
-              </ScrollView>
-              <View
-                className='risk-detail-close-btn'
-                onClick={() => setRiskDetailModal({ visible: false, card: null })}
-              >
-                <Text className='risk-detail-close-text'>关闭</Text>
               </View>
             </View>
-          </View>
-        )}
-          </>
-        ) : null}
-
-        {analysisPanel === 'health' && evidenceGaps.length > 0 ? (
-          <EvidenceGapsCard gaps={evidenceGaps} onAction={openEvidenceGap} />
-        ) : null}
-
-        <FocusSheet
-          visible={riskPickerVisible}
-          current={selectedRiskKeys}
-          dark={scheme === 'dark'}
-          source='stats'
-          onClose={() => setRiskPickerVisible(false)}
-          onSaved={handleFocusSheetSaved}
-        />
-
-        {analysisPanel === 'structure' ? (
-          hasAnyDietData ? (
-            <>
-        <View className='stats-card chart-card evidence-card'>
-          <View className='card-header chart-card-header card-header--collapsible' onClick={() => toggleSection('calories')}>
-            <View className='chart-title-group'>
-              <Text className='iconfont icon-shangzhang chart-title-icon' />
-              <View className='card-header-copy'>
-                <Text className='card-title'>热量摄入 <Text className='stats-unit'>(kcal)</Text></Text>
-                <Text className='card-subtitle'>{range === 'week' ? '最近 7 天' : '近一个月统计 · 图示最近 14 天'}</Text>
-              </View>
-            </View>
-            <View className='card-header-actions'>
-              {expandedSections.calories ? <View className='chart-switch-wrap' onClick={(e) => e.stopPropagation()}>
-                <Text className='chart-switch-label'>数值</Text>
-                <Switch
-                  className='chart-switch'
-                  checked={showCalories}
-                  color='#5cb896'
-                  onChange={(event) => setShowCalories(event.detail.value)}
-                />
-              </View> : null}
-              <View className='card-header-arrow'>{expandedSections.calories ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
-            </View>
-          </View>
-          {expandedSections.calories ? (
-            <View className='card-collapsible-content'>
-              {chartDays.length > 0 ? (
-                <View className='bar-chart-container'>
-                  {tdee > 0 ? <View className='calorie-reference-line' style={{ bottom: `${44 + clampPercent(tdee / maxDailyCalories * 100) * 2.6}rpx` }}><Text>参考消耗 {Math.round(tdee)}</Text></View> : null}
-                  {chartDays.map((item) => {
-                    const heightPct = clampPercent(toSafeNumber(item.calories) / maxDailyCalories * 100)
-                    return (
-                      <View key={item.date} className='chart-col'>
-                        {showCalories ? (
-                          <Text className='bar-calorie-text'>{item.calories > 0 ? Math.round(item.calories) : '—'}</Text>
-                        ) : null}
-                        <View className='bar-wrapper'>
-                          {item.target && <View className='nutrition-plan-chart-target' style={{ bottom: `${clampPercent(toSafeNumber(item.target.snapshot.targets.calorie_target) / maxDailyCalories * 100)}%` }} />}
-                          <View
-                            className={`bar-fill ${item.calories > tdee ? 'over' : ''}`}
-                            style={{ height: `${heightPct}%` }}
-                          />
-                          {item.calories <= 0 ? <Text className='stats-chart-no-data'>—</Text> : null}
-                        </View>
-                        <Text className='bar-label'>{range === 'week' ? item.date.slice(5) : item.date.slice(8)}</Text>
-                      </View>
-                    )
-                  })}
-                </View>
-              ) : (
-                <View className='chart-empty-state'>
-                  <Text className='empty-text'>暂无数据</Text>
-                </View>
-              )}
-              <Text className='stats-chart-note'>{chartDays[0]?.date.slice(5)} — {chartDays[chartDays.length - 1]?.date.slice(5)} · 横线表示无摄入数据；参考消耗为估算值。</Text>
-              {d.recorded_target_totals && <Text className='stats-chart-note'>绿短线为每日饮食目标；仅有记录的 {d.recorded_days} 天：摄入 {Math.round(d.total_calories)} / 计划 {Math.round(d.recorded_target_totals.calorie_target || 0)} kcal。{chartDays.some(item => item.target?.historical_reference) ? '部分旧日期使用参考目标。' : ''}</Text>}
-            </View>
-          ) : null}
-        </View>
-
-        <View className='stats-card macro-card evidence-card'>
-          <View className='card-header card-header--collapsible' onClick={() => toggleSection('macro')}>
-            <Text className='iconfont icon-tianpingzuo chart-title-icon' />
-            <View className='card-header-copy stats-inline-heading'>
-              <Text className='card-title'>营养构成</Text>
-              <Text className='card-subtitle'>本{range === 'week' ? '周' : '月'}累计 · 能量占比</Text>
-            </View>
-            <View className='card-header-arrow'>{expandedSections.macro ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
-          </View>
-          {expandedSections.macro ? (
-            <View className='card-collapsible-content'>
-              <View className='macro-list'>
-                <View className='macro-row stats-macro-row'>
-                  <Text className='macro-name'>蛋白质</Text>
-                  <View className='progress-track'>
-                    <View className='progress-fill protein' style={{ width: `${clampPercent(macroPercent.protein)}%` }}></View>
-                  </View>
-                  <Text className='stats-macro-grams'>{totalProtein.toFixed(0)}g</Text>
-                  <Text className='stats-macro-percent'>{macroPercent.protein}%</Text>
-                </View>
-
-                <View className='macro-row stats-macro-row'>
-                  <Text className='macro-name'>碳水</Text>
-                  <View className='progress-track'>
-                    <View className='progress-fill carbs' style={{ width: `${clampPercent(macroPercent.carbs)}%` }}></View>
-                  </View>
-                  <Text className='stats-macro-grams'>{totalCarbs.toFixed(0)}g</Text>
-                  <Text className='stats-macro-percent'>{macroPercent.carbs}%</Text>
-                </View>
-
-                <View className='macro-row stats-macro-row'>
-                  <Text className='macro-name'>脂肪</Text>
-                  <View className='progress-track'>
-                    <View className='progress-fill fat' style={{ width: `${clampPercent(macroPercent.fat)}%` }}></View>
-                  </View>
-                  <Text className='stats-macro-grams'>{totalFat.toFixed(0)}g</Text>
-                  <Text className='stats-macro-percent'>{macroPercent.fat}%</Text>
-                </View>
-              </View>
-            </View>
-          ) : null}
-        </View>
-
-        <View className='stats-card meal-structure-card evidence-card'>
-          <View className='card-header card-header--collapsible' onClick={() => toggleSection('meals')}>
-            <Text className='iconfont icon-canciguanli chart-title-icon' />
-            <View className='card-header-copy'>
-              <Text className='card-title'>餐次分布</Text>
-              <Text className='card-subtitle'>本周期热量占比</Text>
-            </View>
-            {expandedSections.meals ? <View
-              className='stats-meal-value-toggle'
-              aria-role='button'
-              aria-label={mealValuesInCalories ? '切换显示餐次热量占比' : '切换显示餐次摄入热量'}
-              onClick={(event) => { event.stopPropagation(); setMealValuesInCalories(value => !value) }}
-            ><Text>{mealValuesInCalories ? '看占比' : '看热量'}</Text></View> : null}
-            <View className='card-header-arrow'>{expandedSections.meals ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
-          </View>
-          {expandedSections.meals ? (
-            <View className='card-collapsible-content'>
-              <View className='stats-meal-list'>
-                {(['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'] as const).map((key) => {
-                  const cal = byMeal[key]
-                  const pct = totalCalories > 0 ? (cal / totalCalories) * 100 : 0
-                  return (
-                    <View key={key} className={`stats-meal-row ${mealValuesInCalories ? 'shows-calories' : ''}`}>
-                      <Text className='stats-meal-name'>{MEAL_NAMES[key]}</Text>
-                      <View className='progress-track'><View className='progress-fill' style={{ width: `${clampPercent(pct)}%` }} /></View>
-                      <Text className='stats-meal-percent'>{mealValuesInCalories ? `${Math.round(cal)} kcal` : totalCalories > 0 ? `${pct.toFixed(1)}%` : '—'}</Text>
-                    </View>
-                  )
-                })}
-              </View>
-            </View>
-          ) : null}
-        </View>
-
-        <View className='stats-card body-metrics-card evidence-card'>
-          <View className='card-header card-header--collapsible' onClick={() => toggleSection('body')}>
-            <Text className='iconfont icon-shangzhang chart-title-icon' />
-            <View className='card-header-copy'>
-              <Text className='card-title'>体重与喝水</Text>
-              <Text className='card-subtitle'>体重最近 {range === 'week' ? '7' : '10'} 次 · 饮水最近 {range === 'week' ? '7' : '14'} 天</Text>
-            </View>
-            <View className='card-header-arrow'>{expandedSections.body ? <IconCollapse size={24} color='#94a3b8' /> : <IconExpand size={24} color='#94a3b8' />}</View>
-          </View>
-          {expandedSections.body ? (
-            <View className='card-collapsible-content'>
-              <View className='body-metrics-grid'>
-                <View className='body-metric-panel'>
-                  <View className='body-metric-panel-header'>
-                    <Text className='body-metric-title'>体重趋势</Text>
-                    {latestWeight ? (
-                      <Text className='body-metric-main'>
-                        {latestWeight.value.toFixed(1)} kg
-                      </Text>
-                    ) : (
-                      <Text className='body-metric-empty'>还没有云端体重记录</Text>
-                    )}
-                  </View>
-                  {latestWeight ? (
-                    <Text className='body-metric-sub'>
-                      {previousWeight
-                        ? `${weightChange && weightChange > 0 ? '+' : ''}${toSafeNumber(weightChange).toFixed(1)} kg，较上次`
-                        : '已开始累计体重趋势'}
-                    </Text>
-                  ) : null}
-                  {weightChartEntries.length > 0 ? (
-                    <View className='weight-line-chart-wrap'>
-                      <View
-                        className={`weight-line-chart ${weightChartEntries.length <= 1 ? 'single-point' : ''}`}
-                        style={weightChartSvg ? { backgroundImage: weightChartSvg } : undefined}
-                      >
-                        {weightChartEntries.length === 1 ? (
-                          <View className='weight-line-single-dot' />
-                        ) : null}
-                        <View className='weight-line-point-layer'>
-                          {weightChartEntries.map((item, index) => {
-                            const left = weightChartEntries.length <= 1
-                              ? 50
-                              : 5.3 + (index / (weightChartEntries.length - 1)) * 89.4
-                            const top = weightChartEntries.length <= 1
-                              ? 50
-                              : 23.3 + (1 - ((toSafeNumber(item.value) - weightChartMin) / weightChartRange)) * 62.2
-                            return (
-                              <View
-                                key={item.date}
-                                className='weight-line-point'
-                                style={{ left: `${left}%`, top: `${top}%` }}
-                              >
-                                <Text className='weight-line-point-value'>{item.value.toFixed(1)}</Text>
-                              </View>
-                            )
-                          })}
-                        </View>
-                      </View>
-                      <View className='weight-line-label-row'>
-                        {weightChartEntries.map((item) => (
-                          <Text key={item.date} className='weight-line-label'>{item.date.slice(5)}</Text>
-                        ))}
-                      </View>
-                    </View>
-                  ) : null}
-                </View>
-
-                <View className='body-metric-panel water-panel'>
-                  <View className='body-metric-panel-header'>
-                    <Text className='body-metric-title'>喝水趋势</Text>
-                    {waterRecordedDays > 0 ? (
-                    <Text className='body-metric-main'>
-                      {avgDailyWaterMl.toFixed(0)} ml
-                    </Text>
-                    ) : <Text className='body-metric-empty'>暂无喝水记录</Text>}
-                  </View>
-                  <Text className='body-metric-sub'>
-                    {waterRecordedDays > 0 ? `日均 ${avgDailyWaterMl.toFixed(0)} ml，目标 ${waterGoalMl} ml，累计 ${totalWaterMl.toFixed(0)} ml` : `饮水目标 ${waterGoalMl} ml`}
+            <ScrollView className='risk-detail-body' scrollY showScrollbar={false}>
+              {riskDetailModal.card.action ? <View className='risk-detail-priority'><Text className='risk-detail-section-label'>可以先这样调整</Text><Text className='risk-detail-section-text'>{riskDetailModal.card.action}</Text></View> : null}
+              {riskDetailModal.card.is_custom ? (
+                <>
+                  <Text className='risk-detail-ai-disclaimer'>
+                    基于饮食与记录证据的支持度，不代表真实力量、皮肤状态或医学诊断。
                   </Text>
-                  {waterRecordedDays > 0 && waterTrend.length > 0 ? (
-                    <View className='water-trend-chart'>
-                      {waterTrend.map((item) => {
-                        const pct = maxWaterValue > 0 ? clampPercent(toSafeNumber(item.total) / maxWaterValue * 100) : 0
-                        return (
-                          <View key={item.date} className='water-trend-col'>
-                            <View className='water-trend-bar-wrap'>
-                              <View className='water-trend-bar' style={{ height: `${pct}%` }} />
-                              {toSafeNumber(item.total) <= 0 ? <Text className='stats-chart-no-data'>—</Text> : null}
-                            </View>
-                            <Text className='water-trend-label'>{item.date.slice(5)}</Text>
-                          </View>
-                        )
-                      })}
-                    </View>
-                  ) : null}
-                  <View className='water-metric-footer'>
-                    <Text className='water-metric-note'>
-                      {waterRecordedDays > 0 ? `已有 ${waterRecordedDays} 天饮水记录` : '还没有云端喝水记录'}
+                  <View className='risk-detail-meta-row'>
+                    <Text className={`risk-detail-confidence is-${riskDetailModal.card.confidence || 'unknown'}`}>
+                      {customFocusConfidenceLabel(riskDetailModal.card.confidence)}
                     </Text>
+                    {customFocusScoreChangeLabel(riskDetailModal.card.score_change) ? (
+                      <Text className='risk-detail-score-change'>{customFocusScoreChangeLabel(riskDetailModal.card.score_change)}</Text>
+                    ) : null}
                   </View>
+                </>
+              ) : null}
+              {riskDetailModal.card.summary ? <Text className='risk-detail-section-text'>{riskDetailModal.card.summary}</Text> : null}
+              {riskDetailModal.card.is_custom && riskDetailModal.card.score_reason ? (
+                <>
+                  <View className='risk-detail-divider' />
+                  <Text className='risk-detail-section-label'>评分方法</Text>
+                  <Text className='risk-detail-section-text'>{riskDetailModal.card.score_reason}</Text>
+                </>
+              ) : null}
+              {riskDetailModal.card.is_custom && riskDetailModal.card.change_reason ? (
+                <>
+                  <View className='risk-detail-divider' />
+                  <Text className='risk-detail-section-label'>与上次相比</Text>
+                  <Text className='risk-detail-section-text'>{riskDetailModal.card.change_reason}</Text>
+                </>
+              ) : null}
+              {riskDetailModal.card.basis ? <>
+              <View className='risk-detail-divider' />
+              <Text className='risk-detail-section-label'>判断依据</Text>
+              <Text className='risk-detail-section-text'>{riskDetailModal.card.basis}</Text>
+              </> : null}
+              {!riskDetailModal.card.is_custom && (riskDetailModal.card.evidence?.length || 0) > 0 ? (
+                <>
+                  <View className='risk-detail-divider' />
+                  <Text className='risk-detail-section-label'>每一项依据</Text>
+                </>
+              ) : null}
+              {(riskDetailModal.card.evidence?.length || 0) > 0 ? (
+                <View className='risk-detail-evidence-list'>
+                  {riskDetailModal.card.evidence!.map(item => (
+                    <View key={item} className='risk-detail-evidence-item'>
+                      <Text className='risk-detail-evidence-bullet'>•</Text>
+                      <Text className='risk-detail-evidence-text'>{item}</Text>
+                    </View>
+                  ))}
                 </View>
-              </View>
+              ) : null}
+              {riskDetailModal.card.is_custom && (riskDetailModal.card.missing_evidence?.length || 0) > 0 ? (
+                <>
+                  <View className='risk-detail-divider' />
+                  <Text className='risk-detail-section-label'>还缺哪些证据</Text>
+                  <Text className='risk-detail-section-text'>{riskDetailModal.card.missing_evidence!.join('、')}</Text>
+                </>
+              ) : null}
+              {hasRiskScore(riskDetailModal.card) && !riskDetailModal.card.is_custom ? <View className='risk-detail-delta'>
+                <Text className='risk-detail-delta-text'>饮食参考分预计可提升 {riskDetailModal.card.delta} 分，并非实际健康结果。</Text>
+              </View> : null}
+              {riskDetailModal.card.is_custom && riskDetailModal.card.needs_refresh ? (
+                <View
+                  className={`risk-detail-refresh-btn${customFocusRefreshingKey === riskDetailModal.card.key ? ' is-loading' : ''}`}
+                  onClick={() => {
+                    if (customFocusRefreshingKey !== riskDetailModal.card?.key) {
+                      void handleRefreshCustomFocus(riskDetailModal.card!)
+                    }
+                  }}
+                >
+                  <Text className='risk-detail-refresh-text'>
+                    {customFocusRefreshingKey === riskDetailModal.card.key ? (
+                      <Text className='iconfont icon-jiazaixiao risk-detail-refresh-spinner' />
+                    ) : `更新 · ${customFocusCost} 积分`}
+                  </Text>
+                </View>
+              ) : null}
+            </ScrollView>
+            <View
+              className='risk-detail-close-btn'
+              onClick={() => setRiskDetailModal({ visible: false, card: null })}
+            >
+              <Text className='risk-detail-close-text'>关闭</Text>
             </View>
-          ) : null}
+          </View>
         </View>
-            </>
-          ) : (
-            <View className='stats-card stats-data-gate-card'>
-              <View className='health-index-gate-icon'>
-                <Text className='iconfont icon-canciguanli health-index-gate-icon-text' />
-              </View>
-              <View className='health-index-gate-copy'>
-                <Text className='health-index-gate-title'>记录饮食后查看营养结构</Text>
-                <Text className='health-index-gate-desc'>
-                  当前统计周期还没有饮食记录。先记录一餐后，这里会展示热量趋势、宏量营养占比和餐次分布。
-                </Text>
-              </View>
-            </View>
-          )
-        ) : null}
+      )}
+    </>
+  )
 
-        <View className='stats-page-disclaimer'>
-          <Text className='stats-page-disclaimer__text'>结果仅供参考，不代替医学判断</Text>
-        </View>
-      </ScrollView>
-    </View>
+  return renderShell(
+    <>
+      {error ? <View className='sa-error'><Text>{error}</Text></View> : null}
+      {hasEnoughHealthIndexData ? (
+        <SummaryCard
+          label={periodLabel}
+          score={overallRiskScore}
+          delta={engineOverallDelta?.text ?? ''}
+          reason={summaryReason}
+          note={summaryNote(recordedDays, engineMeals, engineWeek ? sodiumGapNote(engineWeek.evidence_gaps) : '')}
+        />
+      ) : (
+        <GateSummaryCard
+          label={periodLabel}
+          headline={gateHeadline(range, recordedDays)}
+          dots={recordedDayDots(dailyCalories)}
+          note={summaryNote(recordedDays, engineMeals)}
+        />
+      )}
+      <FocusScoresCard
+        rows={focusRows}
+        emptyText={`还没选在意的，在伙伴页选 1–${MAX_HEALTH_FOCUS} 项`}
+        onOpen={openFocusItem}
+        onEdit={openPetFocusSheet}
+      />
+      {hasEnoughHealthIndexData && ns && weekRows.length > 0 ? (
+        <WeekHabitsCard dayLabels={weekDayLabels(ns.week.days, ns.date)} rows={weekRows} headlineDelta={weekDeltas.headline} />
+      ) : null}
+      {hasEnoughHealthIndexData && fixFirst.length > 0 ? <FixFirstCard actions={fixFirst} /> : null}
+      {hasEnoughHealthIndexData && calorieChart ? <CaloriesCard chart={calorieChart} macro={macro} /> : null}
+      {weightTrend ? <WeightCard trend={weightTrend} /> : null}
+      <Text className='sa-disclaimer'>结果仅供参考，不代替医学判断</Text>
+    </>,
+    riskDetailNode,
   )
 }
 

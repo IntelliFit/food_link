@@ -24,12 +24,14 @@ import {
 } from '../../../utils/membership'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
-import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
+import { getTodayRecordDateKey, requireAllowedRecordDate } from '../../../utils/record-date'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import EatingMoodPicker from '../../../components/EatingMoodPicker'
 import { SUBMIT_ANALYSIS_ENGINE } from '../../../utils/analysis-engine'
 import { loadAnalyzeNutritionBudget } from '../../../utils/analyze-nutrition-budget'
 import { captureAuthSession, isAuthSessionCurrent, type AuthSession } from '../../../utils/auth-session'
+import { useRecordDate } from '../../../hooks/useRecordDate'
+import RecordDateField from '../../../components/RecordDateField'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -65,6 +67,7 @@ const readSuggestRatioPreference = (): boolean => {
 }
 
 function RecordTextPage() {
+  const [recordDate, setRecordDate] = useRecordDate(String(Taro.getCurrentInstance().router?.params?.date || getTodayRecordDateKey()))
   const mealTypeChosenRef = useRef(false)
   const dietGoalChosenRef = useRef(false)
   const visibleRef = useRef(true)
@@ -91,7 +94,7 @@ function RecordTextPage() {
   const { hasInfo: hasCreditsInfo, max: creditsMax, used: creditsUsed, remaining: creditsRemaining } =
     getMembershipCreditSummary(membershipStatus)
 
-  const recordTargetDate = getStoredRecordTargetDate()
+  const recordTargetDate = recordDate
   const isBackfill = recordTargetDate !== getTodayRecordDateKey()
   const creditStatus = getFoodAnalysisCreditStatusForDate(
     membershipCreditDate === getTodayRecordDateKey() && membershipCreditOwner && isAuthSessionCurrent(membershipCreditOwner) ? membershipStatus : null,
@@ -110,7 +113,7 @@ function RecordTextPage() {
           setMembershipCreditOwner(owner)
         }
       }).catch(() => {})
-      const targetDate = getStoredRecordTargetDate()
+      const targetDate = recordDate
       if (targetDate !== getTodayRecordDateKey()) {
         getMyMembership(targetDate).then(status => {
           if (mountedRef.current && isAuthSessionCurrent(owner)) setTargetDateStatus({ date: targetDate, status, owner })
@@ -133,8 +136,7 @@ function RecordTextPage() {
   useEffect(() => {
     mountedRef.current = true
     const owner = captureAuthSession()
-    const params = Taro.getCurrentInstance().router?.params
-    persistRecordTargetDate(String(params?.date || ''))
+    // The page owns its target date; another page cannot change it through storage.
     refreshMembership()
     ;(async () => {
       try {
@@ -165,7 +167,8 @@ function RecordTextPage() {
       return
     }
 
-    const targetRecordDate = getStoredRecordTargetDate()
+    const targetRecordDate = recordDate
+    if (!requireAllowedRecordDate(targetRecordDate)) return
     const currentToday = getTodayRecordDateKey()
     const currentCreditStatus = getFoodAnalysisCreditStatusForDate(
       membershipCreditDate === currentToday && membershipCreditOwner && isAuthSessionCurrent(membershipCreditOwner) ? membershipStatus : null,
@@ -301,6 +304,7 @@ function RecordTextPage() {
         </View>
       )}
       <ScrollView className='content-scroll' scrollY>
+        <RecordDateField date={recordDate} onChange={setRecordDate} disabled={loading} />
         {/* 输入区域 */}
         <View className='input-section'>
           <Text className='section-title'>吃了什么？</Text>

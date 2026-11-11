@@ -11,7 +11,7 @@ const DEFAULT_TOTAL_MAX_KB = 20 * 1024
 
 function parseArgs(argv) {
   const options = {
-    dist: 'dist',
+    dist: process.env.FOODLINK_WEAPP_OUTPUT_ROOT || 'dist',
     maxKb: DEFAULT_MAX_KB,
     budgetKb: DEFAULT_BUDGET_KB,
     warnKb: DEFAULT_WARN_KB,

@@ -1,4 +1,6 @@
 import type { CampaignRole, CampaignStation, CampusCampaign } from '../../../utils/campus-campaign-api'
+import type { ResearchSample } from '../../../utils/research-weight-api'
+import { checkDraft, draftHasContent, type ResearchDraft } from '../research-weight/model'
 
 export const MEAL_LABELS: Record<CampaignStation['meal_period'], string> = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', other: '加餐' }
 export const ROLE_LABELS: Record<CampaignRole, string> = { leader: '活动负责人', core: '核心成员', member: '成员' }
@@ -40,6 +42,28 @@ export function closedNote(campaign: Pick<CampusCampaign, 'status' | 'starts_at'
   const startsAt = isoMs(campaign.starts_at)
   if (campaign.status === 'active' && now < startsAt) return `活动${formatChinaDay(campaign.starts_at)}开始，到时再来加入`
   return '活动已结束'
+}
+
+/** 称重页「先保存，吃完再来」之后，活动页的按钮要能接着称。 */
+export function scaleButtonLabel(draft: ResearchDraft): string {
+  if (!draftHasContent(draft)) return '用秤记一顿'
+  return checkDraft(draft, {}).waitingForMeal ? '继续：吃完称空盒' : '继续记这一顿'
+}
+
+/** 计入活动的称重（自己称、称重日、同菜多份），个人科研计划的不算。 */
+export function isCampaignWeighing(sample: Pick<ResearchSample, 'collection_channel'>): boolean {
+  return String(sample.collection_channel || '').startsWith('campus_')
+}
+
+/** 一次称重的结果，一整串文字：多少克、审核到哪一步、加了多少分。 */
+export function weighingResult(sample: Pick<ResearchSample, 'status' | 'quality_tier' | 'reward_credits' | 'review_note' | 'total_net_grams'>): string {
+  const grams = `${sample.total_net_grams}g`
+  if (sample.status === 'pending') return `${grams} · 自动审核中，几秒出结果`
+  if (sample.status === 'rejected') return `${grams} · ${sample.review_note || '没通过'}`
+  const tier = sample.quality_tier ? `${sample.quality_tier} 级` : '已通过'
+  if (sample.reward_credits > 0) return `${grams} · ${tier} · +${sample.reward_credits} 积分`
+  if (sample.review_note.includes('不再计分')) return `${grams} · ${tier} · 今天加分的份数已满`
+  return `${grams} · ${tier} · 不加分`
 }
 
 /** 扫小程序码进来时加入码在 scene 里，分享链接里是 code。 */

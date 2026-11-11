@@ -11,10 +11,10 @@ type TabBarInstance = Record<string, any> & {
 }
 
 const HOME_ROUTE = 'pages/index/index'
+const CAMERA_PAGE = '/packageCamera/pages/shoot/index'
 
-describe('custom tab bar record button', () => {
+describe('custom tab bar camera button', () => {
   let storage: Record<string, unknown>
-  let app: { eventCenter?: { callbacks: Record<string, () => void> } }
   let wxMock: {
     navigateTo: jest.Mock
     switchTab: jest.Mock
@@ -44,14 +44,13 @@ describe('custom tab bar record button', () => {
     return instance
   }
 
-  const tapRecordButton = (tabBar: TabBarInstance) => {
+  const tapCameraButton = (tabBar: TabBarInstance) => {
     tabBar.switchTab({ currentTarget: { dataset: { index: 2, path: '/pages/index/index', iscenter: true } } })
   }
 
   beforeEach(() => {
-    jest.useFakeTimers()
+    jest.useFakeTimers(); jest.setSystemTime(new Date(2026, 10, 10, 12))
     storage = {}
-    app = {}
     wxMock = {
       navigateTo: jest.fn(),
       switchTab: jest.fn(),
@@ -61,7 +60,7 @@ describe('custom tab bar record button', () => {
       removeStorageSync: jest.fn((key: string) => { delete storage[key] }),
     }
     ;(global as any).wx = wxMock
-    ;(global as any).getApp = () => app
+    ;(global as any).getApp = () => ({})
     ;(global as any).getCurrentPages = () => [{ route: HOME_ROUTE }]
   })
 
@@ -73,33 +72,71 @@ describe('custom tab bar record button', () => {
     delete (global as any).getCurrentPages
   })
 
-  it('keeps waiting for a late home listener instead of jumping to the analyze page', () => {
+  it('starts a new camera session without carrying a stale home date', () => {
+    storage.home_selected_date_v1 = '2026-11-06'
     const tabBar = loadTabBar()
-    const showMenu = jest.fn()
 
-    tapRecordButton(tabBar)
-    jest.advanceTimersByTime(1500)
-    expect(wxMock.navigateTo).not.toHaveBeenCalled()
+    tapCameraButton(tabBar)
 
-    app.eventCenter = { callbacks: { showRecordMenu: showMenu } }
-    jest.advanceTimersByTime(1000)
-
-    expect(showMenu).toHaveBeenCalledTimes(1)
-    expect(wxMock.navigateTo).not.toHaveBeenCalled()
-    expect(tabBar.data.recordOpening).toBe(false)
+    expect(wxMock.navigateTo).toHaveBeenCalledTimes(1)
+    expect(wxMock.navigateTo.mock.calls[0][0].url).toBe(CAMERA_PAGE)
+    expect(wxMock.getStorageSync).not.toHaveBeenCalledWith('home_selected_date_v1')
+    expect(wxMock.switchTab).not.toHaveBeenCalled()
     expect(storage.showRecordMenuModal).toBeUndefined()
+    expect(tabBar.data.recordOpening).toBe(true)
+
+    wxMock.navigateTo.mock.calls[0][0].complete()
+    expect(tabBar.data.recordOpening).toBe(false)
   })
 
-  it('never opens the analyze page with leftover photos when the home listener is missing', () => {
+  it('leaves the date to the camera page when home has none or a broken one', () => {
+    storage.home_selected_date_v1 = 'yesterday'
     const tabBar = loadTabBar()
+
+    tapCameraButton(tabBar)
+
+    expect(wxMock.navigateTo.mock.calls[0][0].url).toBe(CAMERA_PAGE)
+  })
+
+  it('ignores a second tap while the camera is opening and never reuses old photos', () => {
     storage.analyzeImagePaths = ['wxfile://old-meal.jpg']
+    const tabBar = loadTabBar()
 
-    tapRecordButton(tabBar)
-    jest.advanceTimersByTime(20000)
+    tapCameraButton(tabBar)
+    tapCameraButton(tabBar)
 
-    expect(wxMock.navigateTo).not.toHaveBeenCalled()
-    expect(wxMock.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: '记录入口打开失败，请重试' }))
-    expect(tabBar.data.recordOpening).toBe(false)
-    expect(storage.showRecordMenuModal).toBeUndefined()
+    expect(wxMock.navigateTo).toHaveBeenCalledTimes(1)
+    expect(wxMock.navigateTo.mock.calls[0][0].url.startsWith(CAMERA_PAGE)).toBe(true)
   })
+
+  it('tells the user when the camera page cannot open', () => {
+    const tabBar = loadTabBar()
+
+    tapCameraButton(tabBar)
+    const call = wxMock.navigateTo.mock.calls[0][0]
+    call.fail()
+    call.complete()
+
+    expect(wxMock.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: '打开相机失败，请重试' }))
+    expect(tabBar.data.recordOpening).toBe(false)
+  })
+  it('takes the actual home day, even when storage disagrees', () => {
+    storage.home_selected_date_v1='2026-11-09'
+    ;(global as any).getApp=()=>({eventCenter:{callbacks:{getHomeRecordDate:()=> '2026-11-08'}}})
+    tapCameraButton(loadTabBar())
+    expect(wxMock.navigateTo.mock.calls[0][0].url).toBe(CAMERA_PAGE+'?date=2026-11-08&backfill=1')
+  })
+  it('never borrows a hidden home date from another tab', () => {
+    ;(global as any).getCurrentPages=()=>[{route:'pages/profile/index'}]
+    ;(global as any).getApp=()=>({eventCenter:{callbacks:{getHomeRecordDate:()=> '2026-11-08'}}})
+    tapCameraButton(loadTabBar())
+    expect(wxMock.navigateTo.mock.calls[0][0].url).toBe(CAMERA_PAGE)
+  })
+  it('blocks an expired selected day without changing it to today', () => {
+    ;(global as any).getApp=()=>({eventCenter:{callbacks:{getHomeRecordDate:()=> '2020-01-01'}}})
+    tapCameraButton(loadTabBar())
+    expect(wxMock.navigateTo).not.toHaveBeenCalled()
+    expect(wxMock.showToast).toHaveBeenCalledWith(expect.objectContaining({title:'仅支持近14天记录，请切换日期'}))
+  })
+
 })

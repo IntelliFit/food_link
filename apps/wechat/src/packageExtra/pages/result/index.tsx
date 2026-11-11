@@ -1,6 +1,6 @@
-import { View, Text, Image, ScrollView, Slider, Input, Textarea } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Slider, Input, Textarea, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
+import Taro, { useDidHide, useDidShow } from '@tarojs/taro'
 import { getResultRecordError } from './record-validation'
 import {
   AnalyzeResponse,
@@ -11,6 +11,7 @@ import {
   type FoodRecordItemPayload,
   saveFoodRecord,
   getFoodRecordById,
+  getAnalyzeTask,
   getAccessToken,
   createUserRecipe,
   updateAnalysisTaskResult,
@@ -36,10 +37,11 @@ import {
   showUnifiedApiError,
 } from '../../../utils/api'
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
-import { analysisEngineLabel, normalizeAnalysisEngine } from '../../../utils/analysis-engine'
+import { normalizeAnalysisEngine } from '../../../utils/analysis-engine'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { MealRecordPosterModal } from '../../../pages/index/components/MealRecordPosterModal'
-import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
+import { readCustomNavMetrics, rpxToPx } from '../../../utils/custom-nav-metrics'
+import { buildQuickCorrections, quickCorrectionSavedKcal, type QuickCorrection } from './quick-corrections'
 import MealDishPrompt from '../../../components/MealDishPrompt'
 import { getRecommendedMealTypeWithFallback, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
@@ -55,14 +57,15 @@ import { applyEnergyEdit } from '../../../utils/nutrition-edit'
 import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { mealSummaryFromSavePayload, useMealImpactSheet } from '../../../components/MealImpactCard'
-import { getRecordDateLabel, requireAllowedRecordDate } from '../../../utils/record-date'
+import { getRecordDateLabel, isAllowedRecordDate, requireAllowedRecordDate } from '../../../utils/record-date'
+import RecordDateChip from './RecordDateChip'
 import { useRecordDate } from '../../../hooks/useRecordDate'
 import RecordDateField from '../../../components/RecordDateField'
+import { rememberRecordReturnDate } from '../../../utils/record-navigation'
 import { clearPersistedEatingMood, readPersistedEatingMood } from '../../../utils/eating-mood'
 import { getFoodCorrectionCreditCost } from '../../../utils/membership'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
-import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import {
   getMealTypeLabel,
   MealTypeSelectSheet,
@@ -90,6 +93,10 @@ import {
 
 import { FOOD_LIBRARY_PICKED_EVENT, libraryItemToAnalyzeItem } from '../../../utils/food-library-picker'
 import { mealRecordAdvice } from '../../../utils/meal-record-advice'
+import { resultRatioAdvice } from './ratio-advice'
+import { loadAnalyzeNutritionBudget } from '../../../utils/analyze-nutrition-budget'
+import { loadAnalysisRetryDate } from '../../../utils/analysis-retry-date'
+import { readAnalyzeTaskRecordState, writeAnalyzeTaskRecordState, loadAnalyzeResultSnapshot, updateAnalyzeResultSnapshot } from '../../../utils/analyze-result-session'
 import './index.scss'
 
 
@@ -103,18 +110,8 @@ const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 5
 /** 用户在分析结果页停留超过此时间且未调整摄入比例，则视为疑似不信任识别结果 */
 const SUSPECT_DISTRUST_TIMEOUT_MS = 15000
-/** 判断当前识别会话是否已保存为饮食记录。
- * 优先读取 analyze-history 列表传入的 analyzeTaskIsRecorded 标记；
- * 不再依赖本地 analyze_committed_session 缓存，状态由后端返回。 */
-/** 按 analyzeSourceTaskId 记录已保存的 food record id，用于返回结果页时显示「查看结果」 */
-const ANALYZE_COMMITTED_SESSION_KEY = 'analyze_committed_session'
-
-function isAnalyzeSessionCommitted(): boolean {
-  try {
-    return Taro.getStorageSync('analyzeTaskIsRecorded') === '1'
-  } catch {
-    return false
-  }
+function isAnalyzeSessionCommitted(taskId: string): boolean {
+  return readAnalyzeTaskRecordState(taskId).recorded
 }
 
 const readSuggestRatioPreference = (): boolean => {
@@ -543,6 +540,16 @@ const RESULT_HERO_MIN_RPX = 240
 const RESULT_HERO_SHRINK_SCROLL_PX = 350
 /** 初始圆角（rpx），随上滑收至 0 */
 const RESULT_HERO_INNER_RADIUS_MAX_RPX = 24
+/** V3：照片通顶、满宽、固定高度（不是全屏），随内容一起滚走 */
+const RESULT_PHOTO_HERO_RPX = 600
+/** 照片上那一排食物标签：离照片底 64rpx、行高 76rpx。导航在标签滑到它底下之前就变成实底，避免标签压住标题和胶囊。 */
+const RESULT_HERO_LABELS_BOTTOM_RPX = 64
+const RESULT_HERO_LABELS_HEIGHT_RPX = 76
+const RESULT_HERO_LABELS_TOP_RPX = RESULT_PHOTO_HERO_RPX - RESULT_HERO_LABELS_BOTTOM_RPX - RESULT_HERO_LABELS_HEIGHT_RPX
+const QUICK_UNDO_MS = 6000
+
+/** AI 饮食分析的手风琴：一次展开一项 */
+type InsightKey = 'ratio-advice' | 'ratio' | 'eating-order' | 'absorption' | 'context'
 
 const normalizePrecisionStringList = (value: unknown): string[] => (
   Array.isArray(value)
@@ -559,12 +566,22 @@ function toSafeNumber(value: unknown, fallback = 0): number {
   return fallback
 }
 
-function ResultPage() {
+export function ResultPage() {
   const [recordContext] = useState(() => ({
     date: String(Taro.getCurrentInstance().router?.params?.date || ''),
+    fromHistory: Taro.getCurrentInstance().router?.params?.history_record === '1',
+    copyRecord: Taro.getCurrentInstance().router?.params?.copy_record === '1',
     taskId: String(Taro.getCurrentInstance().router?.params?.task_id || Taro.getStorageSync('analyzeSourceTaskId') || ''),
+    userId: String(Taro.getStorageSync('user_id') || ''),
   }))
+  const historyCopyRef = useRef(recordContext.fromHistory && recordContext.copyRecord)
+  const locallySavedRef = useRef(false)
   const [recordDate, setRecordDate] = useRecordDate(recordContext.date, recordContext.taskId)
+  const pageAliveRef = useRef(true)
+  const pageVisibleRef = useRef(true)
+  const analysisContextRef = useRef({ mealType: '', dietGoal: 'none', activityTiming: 'none', textInput: '' })
+  const canPresentResult = useCallback(() => pageAliveRef.current && pageVisibleRef.current
+    && String(Taro.getStorageSync('user_id') || '') === recordContext.userId, [recordContext.userId])
   const { scheme } = useAppColorScheme()
   const [taskType, setTaskType] = useState<'food' | 'food_text'>('food')
   const [textRecordInput, setTextRecordInput] = useState('')
@@ -573,6 +590,7 @@ function ResultPage() {
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
   const [invalidAnalysisError, setInvalidAnalysisError] = useState('')
+  const [resultReady, setResultReady] = useState(false)
   const originalItemsRef = useRef<NutritionItem[]>([])
   const weightAdjustedRef = useRef(false)
   const nutritionAdjustedRef = useRef(false)
@@ -582,6 +600,8 @@ function ResultPage() {
   const devFeedbackLogsRef = useRef<Array<{ type: AnalysisFeedbackType; state: AnalysisResolutionState; at: number; ok: boolean; disabled?: boolean; err?: string; sourceTaskId?: string; sourceRecordId?: string }>>([])
   const [devFeedbackPanelOpen, setDevFeedbackPanelOpen] = useState(false)
   const [expandedNutritionDetailIds, setExpandedNutritionDetailIds] = useState<Record<number, boolean>>({})
+  /** 食物卡片默认只露三行（名称、热量和三大营养素、实际摄入），点「详情」再展开其余 */
+  const [openCardIds, setOpenCardIds] = useState<Record<number, boolean>>({})
   const [nutritionStats, setNutritionStats] = useState({
     calories: 0,
     protein: 0,
@@ -589,8 +609,9 @@ function ResultPage() {
     fat: 0
   })
   const [healthAdvice, setHealthAdvice] = useState('')
+  const [suggestRatioStatus, setSuggestRatioStatus] = useState('')
   const [description, setDescription] = useState('')
-  const [eatingMood] = useState(() => readPersistedEatingMood())
+  const [eatingMood, setEatingMood] = useState(() => readPersistedEatingMood())
   const [pfcRatioComment, setPfcRatioComment] = useState<string | null>(null)
   const [eatingOrderAdvice, setEatingOrderAdvice] = useState<string | null>(null)
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
@@ -602,7 +623,9 @@ function ResultPage() {
 	const recipeSaveInFlightRef = useRef(false)
   /** 当前识别会话是否已保存为饮食记录（可跳转详情，不再重复写入/发动态） */
   const [committedRecordId, setCommittedRecordId] = useState<string | null>(null)
+  const [taskRecorded, setTaskRecorded] = useState(false)
   const [savedShareRecord, setSavedShareRecord] = useState<FoodRecord | null>(null)
+  const isCurrentMealCommitted = () => taskRecorded || !!committedRecordId || (recordContext.fromHistory ? locallySavedRef.current : isAnalyzeSessionCommitted(recordContext.taskId))
   const mealImpact = useMealImpactSheet('result')
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [analysisEngine, setAnalysisEngine] = useState(() => normalizeAnalysisEngine(
@@ -636,7 +659,7 @@ function ResultPage() {
   const [precisionReferenceHeight, setPrecisionReferenceHeight] = useState('0.8')
   const [precisionReferencePlacement, setPrecisionReferencePlacement] = useState('')
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
-  const [insightCollapsed, setInsightCollapsed] = useState(false)
+  const [insightCollapsed, setInsightCollapsed] = useState(() => getAiInsightCollapsed())
 
   // 餐次选择弹窗状态
   const mealTypeChosenRef = useRef(false)
@@ -652,6 +675,16 @@ function ResultPage() {
   const currentItemsRef = useRef(nutritionItems)
   currentItemsRef.current = nutritionItems
   const [additionalContext, setAdditionalContext] = useState('')
+  // V3：透明导航压在照片上，滚过照片后变成实底
+  const navMetrics = useMemo(readCustomNavMetrics, [])
+  const navTotalPx = navMetrics.statusBarHeight + navMetrics.navHeight
+  const [navSolid, setNavSolid] = useState(false)
+  const navSolidRef = useRef(false)
+  const [heroIndex, setHeroIndex] = useState(0)
+  const [openInsightKey, setOpenInsightKey] = useState<InsightKey | ''>('ratio-advice')
+  const [sayText, setSayText] = useState('')
+  const [quickUndo, setQuickUndo] = useState<{ itemId: number; prevRatio: number; text: string } | null>(null)
+  const quickUndoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isResubmitting, setIsResubmitting] = useState(false)
   const [snackDraft, setSnackDraft] = useState<SnackContributionDraft | null>(null)
   const [savingSnackDraft, setSavingSnackDraft] = useState(false)
@@ -681,6 +714,19 @@ function ResultPage() {
     })
   }, [])
 
+  const handlePhotoScroll = useCallback((e: { detail?: { scrollTop?: number } }) => {
+    const st = typeof e.detail?.scrollTop === 'number' ? Math.max(0, e.detail.scrollTop) : 0
+    const threshold = rpxToPx(RESULT_HERO_LABELS_TOP_RPX, navMetrics.windowWidth) - navTotalPx - 8
+    const solid = st > threshold
+    if (solid === navSolidRef.current) return
+    navSolidRef.current = solid
+    setNavSolid(solid)
+  }, [navMetrics.windowWidth, navTotalPx])
+
+  useEffect(() => () => {
+    if (quickUndoTimerRef.current) clearTimeout(quickUndoTimerRef.current)
+  }, [])
+
   useEffect(() => {
     const loadMealTypeProfile = async () => {
       try {
@@ -706,16 +752,26 @@ function ResultPage() {
         cancelAnimationFrame(resultScrollRafRef.current)
       }
       clearSuspectDistrustTimer()
-      // 页面卸载时清除识别记录导航标记，避免影响其他入口
-      try {
-        Taro.removeStorageSync('analyzeTaskIsRecorded')
-        Taro.removeStorageSync('analyzeCommittedRecordId')
-      } catch {}
+      pageAliveRef.current = false
+      pageVisibleRef.current = false
     }
   }, [])
 
+  // 自定义导航：状态栏字色跟着导航底色走（压在照片上用白字，实底浅色用黑字）。
+  // withAuth 在 onShow 里也会设一次颜色，这里稍后再设，以本页为准。
+  const statusBarLight = scheme === 'dark' || (imagePaths.length > 0 && !navSolid)
+  const statusBarLightRef = useRef(statusBarLight)
+  statusBarLightRef.current = statusBarLight
+  const applyStatusBarColor = useCallback((light: boolean) => {
+    void Taro.setNavigationBarColor({
+      frontColor: light ? '#ffffff' : '#000000',
+      backgroundColor: scheme === 'dark' ? '#101716' : '#f4f4ec',
+      animation: { duration: 0, timingFunc: 'linear' },
+    }).catch(() => { /* 颜色设不上不影响页面 */ })
+  }, [scheme])
+
   useDidShow(() => {
-    applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
+    setTimeout(() => applyStatusBarColor(statusBarLightRef.current), 60)
   })
 
   useDidShow(() => {
@@ -758,8 +814,8 @@ function ResultPage() {
   })
 
   useEffect(() => {
-    applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
-  }, [scheme])
+    applyStatusBarColor(statusBarLight)
+  }, [applyStatusBarColor, statusBarLight])
 
   useEffect(() => {
     setInsightCollapsed(getAiInsightCollapsed())
@@ -840,6 +896,7 @@ function ResultPage() {
     fallbackPrecisionSessionId = precisionSessionId,
     resetCommittedState = Boolean(nextTaskId),
   ) => {
+    setSuggestRatioStatus(result.suggest_ratio_status || '')
     setDescription(result.description || '')
     setHealthAdvice(result.insight || '保持健康饮食！')
     setPfcRatioComment(result.pfc_ratio_comment ?? null)
@@ -871,13 +928,15 @@ function ResultPage() {
     // 启动“疑似不信任”停留检测：15 秒内未调整摄入比例则上报
     startSuspectDistrustTimer()
 
-    Taro.setStorageSync('analyzeResult', JSON.stringify(result))
+    if (String(Taro.getStorageSync('analyzeSourceTaskId') || '') === recordContext.taskId) {
+      Taro.setStorageSync('analyzeResult', JSON.stringify(result))
+    }
     if (nextTaskId) {
       Taro.setStorageSync('analyzeSourceTaskId', nextTaskId)
     }
     if (resetCommittedState) {
-      Taro.removeStorageSync('analyzeTaskIsRecorded')
-      Taro.removeStorageSync('analyzeCommittedRecordId')
+      if (!recordContext.fromHistory) writeAnalyzeTaskRecordState(recordContext.taskId, false)
+      setTaskRecorded(false)
       setCommittedRecordId(null)
 		setSavedRecipeId(null)
     }
@@ -951,100 +1010,95 @@ function ResultPage() {
   }, [clearSuspectDistrustTimer, submitFeedbackDeduped])
 
   const hydrateCommittedRecord = useCallback(() => {
-    // 状态由 analyze-history 列表传入的 analyzeTaskIsRecorded 标记决定，
-    // 不再查询后端或维护本地 analyze_committed_session 缓存。
-    try {
-      if (Taro.getStorageSync('analyzeTaskIsRecorded') === '1') {
-        setCommittedRecordId('history')
-      } else {
-        setCommittedRecordId(null)
-      }
-    } catch {
-      setCommittedRecordId(null)
+    const state = readAnalyzeTaskRecordState(recordContext.taskId)
+    if (recordContext.fromHistory) {
+      if (state.recorded) historyCopyRef.current = true
+      if (!locallySavedRef.current) { setTaskRecorded(false); setCommittedRecordId(null) }
+    } else {
+      setTaskRecorded(state.recorded)
+      setCommittedRecordId(state.recordId)
     }
-  }, [])
+  }, [recordContext.taskId, recordContext.fromHistory])
 
+  useDidHide(() => { pageVisibleRef.current = false })
   useDidShow(() => {
-    void hydrateCommittedRecord()
+    if (String(Taro.getStorageSync('user_id') || '') !== recordContext.userId) {
+      pageVisibleRef.current = false
+      setInvalidAnalysisError('登录状态已变化，请重新打开这次识别结果。')
+      return
+    }
+    pageVisibleRef.current = true
+    hydrateCommittedRecord()
   })
 
   useEffect(() => {
-    // 获取传递的图片路径和分析结果
-    try {
-      const storedPaths = Taro.getStorageSync('analyzeImagePaths')
-      const storedPath = Taro.getStorageSync('analyzeImagePath')
-      const storedMode = Taro.getStorageSync('analyzeExecutionMode')
-      const storedTaskType = normalizeTaskType(Taro.getStorageSync('analyzeTaskType'))
-      const storedTextInput = String(Taro.getStorageSync('analyzeTextInput') || '').trim()
-      const storedPrecisionSessionId = String(Taro.getStorageSync('analyzePrecisionSessionId') || '').trim()
-      setTaskType(storedTaskType)
-      setTextRecordInput(storedTextInput)
-      const normalizedStoredMode = normalizeExecutionMode(storedMode)
-      setExecutionMode(normalizedStoredMode)
-      setAnalysisEngine(normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY), normalizedStoredMode))
-      setPrecisionSessionId(storedPrecisionSessionId)
-
-      if (storedTaskType === 'food_text') {
-        setImagePaths([])
-        setImagePath('')
-        Taro.removeStorageSync('analyzeImagePaths')
-        Taro.removeStorageSync('analyzeImagePath')
-      } else if (storedPaths && Array.isArray(storedPaths) && storedPaths.length > 0) {
-        setImagePaths(storedPaths)
-        setImagePath(storedPaths[0]) // Primary for compatibility
-      } else if (storedPath) {
-        setImagePath(storedPath)
-        setImagePaths([storedPath])
-      }
-
-      const storedResult = Taro.getStorageSync('analyzeResult')
-      if (storedResult) {
-        const result: AnalyzeResponse = JSON.parse(storedResult)
-        applyAnalyzeResultToPage(result, undefined, storedPrecisionSessionId)
-        void hydrateCommittedRecord()
-        if (getAccessToken() && !Taro.getStorageSync(ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY)) {
-          void getHealthProfile()
-            .then((profile) => {
-              const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
-              if (status === 'completed') return
-
-              Taro.setStorageSync(ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY, true)
-              Taro.showModal({
-                title: '让分析建议更贴合你',
-                content: '完善健康档案后，食物分析会结合你的过敏/忌口、饮食偏好和每日消耗，给出更安全、更适合你的建议。',
-                confirmText: '去完善',
-                cancelText: '暂不填写',
-                confirmColor: '#238c6d',
-                success: ({ confirm }) => {
-                  if (confirm) {
-                    Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') })
-                  }
-                },
-              })
-            })
-            .catch(() => {
-              // 档案提示读取失败不影响分析结果展示。
-            })
+    let active = true
+    const load = async () => {
+      try {
+        const snapshot = await loadAnalyzeResultSnapshot(recordContext.taskId)
+        if (!active) return
+        if (String(Taro.getStorageSync('user_id') || '') !== recordContext.userId) {
+          setInvalidAnalysisError('登录状态已变化，请重新打开这次识别结果。')
+          return
         }
-      } else {
-        Taro.showModal({
-          title: '提示',
-          content: '未找到分析结果，请重新分析',
-          showCancel: false,
-          confirmText: '确定',
-          success: () => {
-            Taro.navigateBack()
-          }
-        })
+        analysisContextRef.current = {
+          mealType: snapshot.mealType || '',
+          dietGoal: snapshot.dietGoal || 'none',
+          activityTiming: snapshot.activityTiming || 'none',
+          textInput: snapshot.textInput,
+        }
+        setTaskType(snapshot.taskType)
+        setTextRecordInput(snapshot.textInput)
+        setExecutionMode(snapshot.executionMode)
+        setAnalysisEngine(snapshot.analysisEngine)
+        setPrecisionSessionId(snapshot.precisionSessionId)
+        setEatingMood(snapshot.eatingMood || null)
+        setImagePaths(snapshot.imagePaths)
+        setImagePath(snapshot.imagePaths[0] || '')
+        if (snapshot.mealType) {
+          mealTypeChosenRef.current = true
+          setSelectedMealType(normalizeSelectableMealType(snapshot.mealType, defaultMealType))
+        }
+        applyAnalyzeResultToPage(snapshot.result, undefined, snapshot.precisionSessionId)
+        setResultReady(true)
+        hydrateCommittedRecord()
+        if (getAccessToken() && !Taro.getStorageSync(ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY)) {
+          void getHealthProfile().then(profile => {
+            if (!active || !canPresentResult()) return
+            const status = profile.onboarding_status || (profile.onboarding_completed === true ? 'completed' : 'pending')
+            if (status === 'completed') return
+            Taro.setStorageSync(ANALYSIS_HEALTH_PROFILE_PROMPT_SHOWN_KEY, true)
+            Taro.showModal({
+              title: '让分析建议更贴合你',
+              content: '完善健康档案后，食物分析会结合你的过敏/忌口、饮食偏好和每日消耗，给出更安全、更适合你的建议。',
+              confirmText: '去完善', cancelText: '暂不填写', confirmColor: '#238c6d',
+              success: ({ confirm }) => { if (confirm && canPresentResult()) Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile/index') }) },
+            })
+          }).catch(() => { /* 档案提示读取失败不影响分析。 */ })
+        }
+      } catch (error) {
+        if (!active) return
+        setInvalidAnalysisError('无法读取这次识别结果，请从识别记录重新打开。')
+        console.error('获取当前任务结果失败:', error)
       }
-    } catch (error) {
-      console.error('获取数据失败:', error)
-      void showUnifiedApiError(error, '数据加载失败')
     }
-  }, [hydrateCommittedRecord])
+    void load()
+    return () => { active = false }
+  }, [hydrateCommittedRecord, recordContext.taskId])
 
   const handleDefaultModeEdit = () => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
+  }
+
+  /** 顶部「普通 / 精准」点开：设为默认收在这里，不再单独占一个链接 */
+  const openModeMenu = () => {
+    Taro.showActionSheet({ itemList: ['设为默认识别方式'] })
+      .then((res) => { if (res.tapIndex === 0) handleDefaultModeEdit() })
+      .catch(() => { /* 取消 */ })
+  }
+
+  const toggleCardDetails = (id: number) => {
+    setOpenCardIds(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
   const isStrictMode = executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search'
@@ -1160,9 +1214,9 @@ function ResultPage() {
     setContinuingPrecision(true)
     Taro.showLoading({ title: '继续精准估计...', mask: true })
     try {
-      const savedMealType = Taro.getStorageSync('analyzeMealType') as MealType | undefined
-      const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
-      const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
+      const savedMealType = analysisContextRef.current.mealType as MealType | undefined
+      const savedDietGoal = analysisContextRef.current.dietGoal
+      const savedActivityTiming = analysisContextRef.current.activityTiming
       const nextReferenceDefaults = buildNextPrecisionReferenceDefaults()
       setSavedPrecisionReferenceDefaults(nextReferenceDefaults)
       updateHealthProfile({
@@ -1172,7 +1226,7 @@ function ResultPage() {
       })
       const payload = {
         source_type: taskType === 'food_text' ? 'text' as const : 'image' as const,
-        text: taskType === 'food_text' ? String(Taro.getStorageSync('analyzeTextInput') || '').trim() || description : undefined,
+        text: taskType === 'food_text' ? textRecordInput || description : undefined,
         additionalContext: precisionFollowupText.trim() || undefined,
         meal_type: savedMealType,
         diet_goal: savedDietGoal,
@@ -1193,9 +1247,29 @@ function ResultPage() {
     }
   }
 
-  const handleRetakePrecision = () => {
+  const handleRetakePrecision = async () => {
     if (!precisionSessionId) return
-    Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?precision_session_id=${precisionSessionId}` })
+    try {
+      const date = await loadAnalysisRetryDate(recordDate, recordContext.taskId)
+      if (!date || !canPresentResult()) return
+      await Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?precision_session_id=${encodeURIComponent(precisionSessionId)}&date=${encodeURIComponent(date)}&backfill=1` })
+    } catch (error) {
+      if (canPresentResult()) await showUnifiedApiError(error, '读取任务日期失败，请稍后重试')
+    }
+  }
+
+  const handleRetryAnalysis = async () => {
+    try {
+      const date = await loadAnalysisRetryDate(recordDate, recordContext.taskId)
+      if (!date || !canPresentResult()) return
+      await Taro.redirectTo({
+        url: taskType === 'food_text'
+          ? `${extraPkgUrl('/pages/record-text/index')}?text=${encodeURIComponent(textRecordInput)}&date=${encodeURIComponent(date)}`
+          : `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(date)}&backfill=1`,
+      })
+    } catch (error) {
+      if (canPresentResult()) await showUnifiedApiError(error, '读取任务日期失败，请稍后重试')
+    }
   }
 
   /** 概览区三色柱高度：按该成分供能在「蛋白+碳水+脂肪」总供能中的占比（4/4/9 kcal·g⁻¹） */
@@ -1223,16 +1297,7 @@ function ResultPage() {
 
   const showInsightContext = Boolean(contextAdvice?.trim()) && !isDebugInsightText(contextAdvice)
 
-  const ratioAdviceItems = useMemo(() => {
-    return nutritionItems
-      .filter(item => item.suggestedRatioSource === 'ai' && typeof item.suggestedRatio === 'number' && item.suggestedRatio < 100)
-      .slice(0, 3)
-      .map(item => `${item.name}建议 ${item.suggestedRatio}%${item.suggestedRatioReason ? `，${item.suggestedRatioReason}` : ''}`)
-  }, [nutritionItems])
-
-  const ratioAdviceText = ratioAdviceItems.length > 0
-    ? `${ratioAdviceItems.join('；')}。`
-    : '本餐暂无需要特别下调的食物，默认按实际食用量记录即可。'
+  const ratioAdviceText = resultRatioAdvice(suggestRatioStatus, nutritionItems)
 
   const mealSuggestionContext = useMemo(() => {
     const matchNames = (pattern: RegExp) => nutritionItems
@@ -1711,8 +1776,13 @@ function ResultPage() {
   })
 
   const syncEditedAnalyzeResult = async (items: NutritionItem[]) => {
+    if (recordContext.fromHistory) return
+    if (String(Taro.getStorageSync('user_id') || '') !== recordContext.userId) return
     const nextResult = buildAnalyzeResultFromItems(items)
-    Taro.setStorageSync('analyzeResult', JSON.stringify(nextResult))
+    updateAnalyzeResultSnapshot(recordContext.taskId, nextResult)
+    if (String(Taro.getStorageSync('analyzeSourceTaskId') || '') === recordContext.taskId) {
+      Taro.setStorageSync('analyzeResult', JSON.stringify(nextResult))
+    }
     // 用本页打开时的任务：纠错后旧结果页仍在栈中，全局缓存已指向新任务。
     const sourceTaskId = recordContext.taskId
     if (!sourceTaskId) return
@@ -1929,7 +1999,7 @@ function ResultPage() {
   /** 保存记录：saveOnly=true 仅保存，false 保存后预览打卡图 */
   const openSnackContribution = (item: NutritionItem) => {
     const unit = nutrientPer100FromItem(item)
-    const sourceTaskId = String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim()
+    const sourceTaskId = recordContext.taskId
     Taro.setStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY, {
       itemId: item.id,
       sourceTaskId: sourceTaskId || undefined,
@@ -2040,9 +2110,9 @@ function ResultPage() {
       return
     }
     // 从缓存获取分析时选择的状态
-    const savedMealType = Taro.getStorageSync('analyzeMealType')
-    const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
-    const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
+    const savedMealType = analysisContextRef.current.mealType
+    const savedDietGoal = analysisContextRef.current.dietGoal
+    const savedActivityTiming = analysisContextRef.current.activityTiming
 
     // 确定餐次：优先使用确认过的餐次，否则尝试从缓存读取，最后按当前时间推断
     const mealType = confirmedMealType || normalizeSelectableMealType(savedMealType, defaultMealType)
@@ -2054,7 +2124,7 @@ function ResultPage() {
 
     const doSave = async () => {
       if (recordSaveLock.current || !requireAllowedRecordDate(recordDate)) return
-      if (isAnalyzeSessionCommitted()) {
+      if (isCurrentMealCommitted()) {
         Taro.showToast({ title: '该餐已记录', icon: 'none' })
         return
       }
@@ -2070,13 +2140,15 @@ function ResultPage() {
       }
       setSaving(true)
       try {
-        // 清除相关缓存
-        Taro.removeStorageSync('analyzeMealType')
-        Taro.removeStorageSync('analyzeDietGoal')
-        Taro.removeStorageSync('analyzeActivityTiming')
-        clearPersistedEatingMood()
+        // 旧页面保存晚到时，不清除另一轮识别正在使用的上下文。
+        if (String(Taro.getStorageSync('analyzeSourceTaskId') || '') === recordContext.taskId) {
+          Taro.removeStorageSync('analyzeMealType')
+          Taro.removeStorageSync('analyzeDietGoal')
+          Taro.removeStorageSync('analyzeActivityTiming')
+          clearPersistedEatingMood()
+        }
 
-        const sourceTaskId = recordContext.taskId || undefined
+        const sourceTaskId = historyCopyRef.current ? undefined : recordContext.taskId || undefined
         const payload: SaveFoodRecordRequest = {
           date: recordDate,
           meal_type: mealType as MealType,
@@ -2093,14 +2165,14 @@ function ResultPage() {
           total_carbs: nutritionStats.carbs,
           total_fat: nutritionStats.fat,
           total_weight_grams: totalWeight,
-          diet_goal: dietGoal,
-          activity_timing: activityTiming,
+          diet_goal: dietGoal as SaveFoodRecordRequest['diet_goal'],
+          activity_timing: activityTiming as SaveFoodRecordRequest['activity_timing'],
           eating_mood: eatingMood || undefined,
           pfc_ratio_comment: pfcRatioDisplayText || undefined,
           absorption_notes: absorptionDisplayText || undefined,
           context_advice: contextAdvice ?? undefined,
           source_task_id: sourceTaskId,
-          entry_type: taskType === 'food_text' ? 'food_text' : 'food_image',
+          entry_type: recordContext.fromHistory ? 'analyze_history' : taskType === 'food_text' ? 'food_text' : 'food_image',
         }
 
         /** 从记录菜单「模拟分析结果」进入时带 analyzeDebugPreview：不写库，仅预览记录详情（仅 development 构建） */
@@ -2120,14 +2192,19 @@ function ResultPage() {
           }
 
           setCommittedRecordId(record.id)
-          Taro.setStorageSync('analyzeTaskIsRecorded', '1')
-          Taro.setStorageSync('analyzeCommittedRecordId', record.id)
+          writeAnalyzeTaskRecordState(recordContext.taskId, true, record.id)
+          setTaskRecorded(true)
           // 调试预览也走记录后反馈；接口拿不到数据就照旧弹打卡图
           mealImpact.show(record.id, mealSummaryFromSavePayload(payload), () => setSavedShareRecord(record))
           return
         }
 
         const saveResult = await saveFoodRecord(payload)
+        if (recordContext.fromHistory && saveResult.already_saved) {
+          historyCopyRef.current = true
+          Taro.showToast({ title: '原任务已记录，再次确认可新增一份', icon: 'none' })
+          return
+        }
         const targetDateKey = recordDate
         if (!saveResult.already_saved) {
           applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
@@ -2147,27 +2224,19 @@ function ResultPage() {
         } catch {
           /* ignore */
         }
-        const tidForCommit = sourceTaskId || String(Taro.getStorageSync('analyzeSourceTaskId') || '')
-        if (tidForCommit) {
-          try {
-            const raw = Taro.getStorageSync(ANALYZE_COMMITTED_SESSION_KEY)
-            const map = raw ? (JSON.parse(raw) as Record<string, { record_id?: string; at?: number }>) : {}
-            map[String(tidForCommit)] = { record_id: saveResult.id, at: Date.now() }
-            Taro.setStorageSync(ANALYZE_COMMITTED_SESSION_KEY, JSON.stringify(map))
-          } catch (e) {
-            console.error('写入已记录会话失败:', e)
-          }
-        }
+        if (sourceTaskId) writeAnalyzeTaskRecordState(recordContext.taskId, true, saveResult.id)
+        locallySavedRef.current = true
+        if (!canPresentResult()) return
+        rememberRecordReturnDate(recordDate)
         setCommittedRecordId(saveResult.id)
-        Taro.setStorageSync('analyzeTaskIsRecorded', '1')
-        Taro.setStorageSync('analyzeCommittedRecordId', saveResult.id)
+        setTaskRecorded(true)
 
         if (saveOnly) {
           Taro.showToast({
             title: saveResult.already_saved ? '该餐已记录，未重复发布' : `已记录到${getRecordDateLabel(recordDate)}`,
             icon: saveResult.already_saved ? 'none' : 'success',
           })
-          returnHomeAfterFoodRecord(800)
+          returnHomeAfterFoodRecord(800, recordDate)
           return
         }
 
@@ -2184,7 +2253,9 @@ function ResultPage() {
             record_time: `${recordDate}T${new Date().toTimeString().slice(0, 8)}`,
           }
         // 先告诉用户这一餐让今天变了什么，再照原样弹打卡图
+        if (!canPresentResult()) return
         mealImpact.show(saveResult.id, mealSummaryFromSavePayload(payload), () => {
+          if (!canPresentResult()) return
           if (previewRecord) {
             setSavedShareRecord(previewRecord)
           } else {
@@ -2219,31 +2290,42 @@ function ResultPage() {
   /** 已保存的结果直接打开打卡图，复用真实记录，不重复写入。 */
   const handleShareCommittedResult = useCallback(async () => {
     if (saving) return
+    setSaving(true)
     try {
-      const rid = committedRecordId && committedRecordId !== 'history'
-        ? committedRecordId
-        : Taro.getStorageSync('analyzeCommittedRecordId')
-      if (!rid || rid === 'history') {
-        Taro.showToast({ title: '未找到已保存记录', icon: 'none' })
+      let rid = committedRecordId || (!recordContext.fromHistory ? readAnalyzeTaskRecordState(recordContext.taskId).recordId : null)
+      if (!rid && recordContext.taskId && !recordContext.fromHistory) {
+        const task = await getAnalyzeTask(recordContext.taskId)
+        if (task.id !== recordContext.taskId) throw new Error('识别任务不匹配，请重新打开当前结果')
+        rid = writeAnalyzeTaskRecordState(task.id, Boolean(task.is_recorded), task.record_id).recordId
+      }
+      if (!canPresentResult()) return
+      if (!rid) {
+        Taro.showToast({ title: '当前识别的记录信息尚未就绪，请稍后重试', icon: 'none' })
         return
       }
-      setSaving(true)
-      const { record } = await getFoodRecordById(String(rid))
+      const { record } = await getFoodRecordById(rid)
+      if (!canPresentResult()) return
+      if (record.id !== rid || (record.source_task_id && record.source_task_id !== recordContext.taskId)) {
+        throw new Error('记录与这次识别不匹配，请重新打开当前结果')
+      }
+      setCommittedRecordId(rid)
+      setTaskRecorded(true)
       setSavedShareRecord(record)
     } catch (error) {
-      await showUnifiedApiError(error, '打开打卡图失败')
+      if (canPresentResult()) await showUnifiedApiError(error, '打开打卡图失败')
     } finally {
-      setSaving(false)
+      if (pageAliveRef.current) setSaving(false)
     }
-  }, [committedRecordId, saving])
+  }, [canPresentResult, committedRecordId, recordContext.taskId, saving])
 
   /** 点击保存按钮：分析入口已选过餐次，直接按既有餐次保存 */
   const handleConfirmAndShare = () => {
-    if (isAnalyzeSessionCommitted() || committedRecordId) {
+    if (!canPresentResult()) return
+    if (isCurrentMealCommitted()) {
       void handleShareCommittedResult()
       return
     }
-    saveRecord(false, getSavedSelectableMealType(defaultMealType))
+    saveRecord(false, normalizeSelectableMealType(analysisContextRef.current.mealType, defaultMealType))
   }
 
   const handleOpenLibraryUpload = () => {
@@ -2284,7 +2366,7 @@ function ResultPage() {
     }
 
     // 获取餐次信息
-    const savedMealType = Taro.getStorageSync('analyzeMealType')
+    const savedMealType = analysisContextRef.current.mealType
     const mealType = normalizeSelectableMealType(savedMealType, defaultMealType)
     // 与“记录”后展示在圈子中的标题保持一致：优先使用识别描述。
     // 当识别描述缺失时，再用本次识别到的食物名称兜底，确保弹窗始终预填一个可编辑名称。
@@ -2380,7 +2462,7 @@ function ResultPage() {
   }
 
   const openFoodLibraryPicker = (intoCorrection = false) => {
-    if (isAnalyzeSessionCommitted()) {
+    if (isCurrentMealCommitted()) {
       Taro.showToast({ title: '该餐已记录，请在记录详情修改', icon: 'none' })
       return
     }
@@ -2413,16 +2495,58 @@ function ResultPage() {
   // --- 二次纠错功能相关方法 ---
 
   // 打开纠错抽屉
-  const openCorrectionDrawer = () => {
+  /** prefill：底栏「哪里不对，直接说」里打的字，带进补充说明（直接当点击回调时会收到事件对象，忽略） */
+  const openCorrectionDrawer = (prefill?: unknown) => {
+    if (recordContext.fromHistory && historyCopyRef.current && !isCurrentMealCommitted()) { Taro.showToast({ title: '请先记录新餐，再编辑这餐', icon: 'none' }); return }
     // 已记录的餐再纠错会生成新任务并可能被记第二次；与食物库入口一致，引导到记录详情修改。
-    if (isAnalyzeSessionCommitted() || committedRecordId) {
+    if (isCurrentMealCommitted()) {
       Taro.showToast({ title: '该餐已记录，请在记录详情修改', icon: 'none' })
       return
     }
     // 拷贝当前营养项到纠错列表
     setCorrectionItems(JSON.parse(JSON.stringify(nutritionItems)))
-    setAdditionalContext('')
+    setAdditionalContext(typeof prefill === 'string' ? prefill.trim().slice(0, 200) : '')
     setShowCorrectionDrawer(true)
+  }
+
+  const submitSayText = () => {
+    // 已记录的餐不能再纠错（会提示去记录详情改），这时保留输入框里的字
+    const committed = isCurrentMealCommitted()
+    openCorrectionDrawer(sayText)
+    if (!committed) setSayText('')
+  }
+
+  const showQuickUndo = (next: { itemId: number; prevRatio: number; text: string }) => {
+    if (quickUndoTimerRef.current) clearTimeout(quickUndoTimerRef.current)
+    setQuickUndo(next)
+    quickUndoTimerRef.current = setTimeout(() => setQuickUndo(null), QUICK_UNDO_MS)
+  }
+
+  const applyQuickCorrection = (chip: QuickCorrection) => {
+    const target = nutritionItems.find(item => item.id === chip.itemId)
+    if (!target) return
+    const saved = quickCorrectionSavedKcal({ id: target.id, name: target.name, calorie: target.calorie, ratio: target.ratio }, chip.ratio)
+    handleRatioAdjust(chip.itemId, chip.ratio)
+    showQuickUndo({ itemId: chip.itemId, prevRatio: target.ratio, text: `${chip.toast}，这餐少 ${saved} kcal` })
+  }
+
+  const undoQuickCorrection = () => {
+    if (!quickUndo) return
+    handleRatioAdjust(quickUndo.itemId, quickUndo.prevRatio)
+    if (quickUndoTimerRef.current) clearTimeout(quickUndoTimerRef.current)
+    setQuickUndo(null)
+  }
+
+  const handleNavBack = () => {
+    if (Taro.getCurrentPages().length > 1) {
+      void Taro.navigateBack()
+      return
+    }
+    void Taro.switchTab({ url: '/pages/index/index' })
+  }
+
+  const previewHeroPhoto = (current: string) => {
+    void Taro.previewImage({ current, urls: imagePaths })
   }
 
   // 修改纠错项的名称
@@ -2513,12 +2637,16 @@ function ResultPage() {
           setCorrectionItems(resolvedCorrectionItems)
 
           // 2. 获取原请求的基础配置
-          const savedMealType = Taro.getStorageSync('analyzeMealType') as MealType | undefined
-          const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
-          const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
-          const savedExecutionMode = normalizeRuntimeExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
-          const savedAnalysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY), savedExecutionMode)
+          const savedMealType = analysisContextRef.current.mealType as MealType | undefined
+          const savedDietGoal = analysisContextRef.current.dietGoal
+          const savedActivityTiming = analysisContextRef.current.activityTiming
+          const savedExecutionMode = normalizeRuntimeExecutionMode(executionMode)
+          const savedAnalysisEngine = normalizeAnalysisEngine(analysisEngine, savedExecutionMode)
           const correctionSourceTaskId = recordContext.taskId
+          const nutritionBudget = await loadAnalyzeNutritionBudget(recordDate, { enabled: readSuggestRatioPreference() })
+          if (isAnalyzeSessionCommitted(recordContext.taskId) && nutritionBudget.remaining_calories !== undefined) {
+            nutritionBudget.remaining_calories += nutritionStats.calories
+          }
           const previousResult: AnalyzeResponse = {
             description,
             insight: healthAdvice,
@@ -2593,14 +2721,15 @@ function ResultPage() {
               execution_mode: savedExecutionMode,
               analysis_engine: savedAnalysisEngine,
               suggest_ratio_enabled: readSuggestRatioPreference(),
+              ...nutritionBudget,
               previousResult,
               correction_source_task_id: correctionSourceTaskId || undefined,
               correctionItems: correctionPayload,
             })
             taskId = res.task_id
           } else {
-            const originalText = String(Taro.getStorageSync('analyzeTextInput') || '').trim()
-            const previousCorrectionContext = String(Taro.getStorageSync('analyzeTextAdditionalContext') || '').trim()
+            const originalText = textRecordInput
+            const previousCorrectionContext = ''
             const textContextParts = [
               previousCorrectionContext ? `上一轮纠错上下文：${previousCorrectionContext}` : '',
               finalCorrectionContext,
@@ -2620,6 +2749,7 @@ function ResultPage() {
               eating_mood: eatingMood || undefined,
               execution_mode: savedExecutionMode,
               suggest_ratio_enabled: readSuggestRatioPreference(),
+              ...nutritionBudget,
               previousResult,
               correction_source_task_id: correctionSourceTaskId || undefined,
               correctionItems: correctionPayload,
@@ -2655,6 +2785,10 @@ function ResultPage() {
 
   const pendingPackagedChoiceCount = nutritionItems.filter(isPackagedChoicePending).length
 
+  if (!resultReady && !invalidAnalysisError) {
+    return <View className='result-preparing'><View className='result-preparing-spinner' /></View>
+  }
+
   if (invalidAnalysisError) {
     return (
       <View className='result-invalid-state'>
@@ -2664,20 +2798,44 @@ function ResultPage() {
         <Text className='result-invalid-note'>这份结果不会被记录，也不会计入摄入。</Text>
         <View
           className='result-invalid-retry'
-          onClick={() => Taro.redirectTo({
-            url: taskType === 'food_text'
-              ? `${extraPkgUrl('/pages/record-text/index')}?text=${encodeURIComponent(textRecordInput)}&date=${recordDate}`
-              : extraPkgUrl('/pages/analyze/index'),
-          })}
+          onClick={handleRetryAnalysis}
         ><Text>重新分析</Text></View>
       </View>
     )
   }
 
+  const hasPhotoHero = imagePaths.length > 0
+  const navOverPhoto = hasPhotoHero && !navSolid
+  const navTotalRpx = Math.round((navTotalPx * 750) / navMetrics.windowWidth)
+  const mealCommitted = isCurrentMealCommitted()
+  // 顶部展示餐次日期，未保存时底栏始终展示可切换的记录日期。
+  const recordDateValid = isAllowedRecordDate(recordDate)
+  const quickCorrections = mealCommitted
+    ? []
+    : buildQuickCorrections(nutritionItems.map(item => ({ id: item.id, name: item.name, calorie: item.calorie, ratio: item.ratio })))
+  const toggleInsight = (key: InsightKey) => setOpenInsightKey(prev => (prev === key ? '' : key))
+  const insightRows: Array<{ key: InsightKey; label: string; content: string }> = [
+    { key: 'ratio-advice', label: '饮食比例建议', content: ratioAdviceText },
+    { key: 'ratio', label: '营养比例', content: pfcRatioDisplayText },
+    { key: 'eating-order', label: '进食顺序', content: eatingOrderDisplayText },
+    { key: 'absorption', label: '吸收与利用', content: absorptionDisplayText },
+    ...(showInsightContext ? [{ key: 'context' as InsightKey, label: '情境建议', content: contextAdvice || '' }] : []),
+  ]
+
   return (
-    <View className={`result-page ${scheme === 'dark' ? 'result-page--dark' : ''}`}>
+    <View className={`result-page result-page--v3 ${scheme === 'dark' ? 'result-page--dark' : ''}`}>
+      <View
+        className={`result-nav ${navOverPhoto ? 'result-nav--over-photo' : 'result-nav--solid'}`}
+        style={{ paddingTop: `${navMetrics.statusBarHeight}px`, height: `${navMetrics.navHeight}px` }}
+      >
+        <View className='result-nav__back' onClick={handleNavBack} aria-label='返回'>
+          <Text className='iconfont icon-left result-nav__back-icon' />
+        </View>
+        <Text className='result-nav__title'>分析结果</Text>
+      </View>
+
       {imagePaths.length === 0 && (
-        <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx` }}>
+        <View className='scanner-hero-section' style={{ height: `${resultHeroRpx}rpx`, top: `${navTotalPx}px` }}>
           <View
             className='scanner-hero-inner'
             style={{
@@ -2705,32 +2863,72 @@ function ResultPage() {
         scrollWithAnimation={false}
         enhanced={false}
         showScrollbar={false}
-        onScroll={imagePaths.length === 0 ? handleResultScroll : undefined}
+        onScroll={hasPhotoHero ? handlePhotoScroll : handleResultScroll}
       >
         <View
           className='result-scroll-inner'
-          style={{ paddingTop: imagePaths.length > 0 ? '24rpx' : `${resultScrollPaddingTopRpx}rpx` }}
+          style={{ paddingTop: hasPhotoHero ? '0' : `${resultScrollPaddingTopRpx + navTotalRpx}rpx` }}
         >
-        <View className='content-container'>
-          <AdaptiveImageGrid urls={imagePaths} className='result-photo-gallery' presentation='detail' />
+        {hasPhotoHero && (
+          <View className='result-hero' style={{ height: `${RESULT_PHOTO_HERO_RPX}rpx` }}>
+            {imagePaths.length > 1 ? (
+              <Swiper className='result-hero__swiper' current={heroIndex} onChange={(e) => setHeroIndex(e.detail.current)}>
+                {imagePaths.map((url, index) => (
+                  <SwiperItem key={`${url}-${index}`}>
+                    <Image className='result-hero__image' src={url} mode='aspectFill' onClick={() => previewHeroPhoto(url)} />
+                  </SwiperItem>
+                ))}
+              </Swiper>
+            ) : (
+              <Image className='result-hero__image' src={imagePaths[0]} mode='aspectFill' onClick={() => previewHeroPhoto(imagePaths[0])} />
+            )}
+            <View className='result-hero__shade' />
+            {imagePaths.length > 1 && (
+              <Text className='result-hero__count' style={{ top: `${navTotalRpx + 12}rpx` }}>{heroIndex + 1}/{imagePaths.length}</Text>
+            )}
+            {nutritionItems.length > 0 && (
+              // 外层 View 定位、scroll-view 给死高度：真机上不定高的 scroll-view 会撑满整张照片，标签跑到最上面压住导航
+              <View
+                className='result-hero__labels-wrap'
+                style={{ bottom: `${RESULT_HERO_LABELS_BOTTOM_RPX}rpx`, height: `${RESULT_HERO_LABELS_HEIGHT_RPX}rpx` }}
+              >
+              <ScrollView scrollX showScrollbar={false} className='result-hero__labels' style={{ height: `${RESULT_HERO_LABELS_HEIGHT_RPX}rpx` }}>
+                <View className='result-hero__labels-track'>
+                  {nutritionItems.map((item, index) => (
+                    <View key={item.id} className='result-hero__label' style={{ animationDelay: `${200 + index * 140}ms` }}>
+                      <Text className='result-hero__label-num'>{index + 1}</Text>
+                      <Text className='result-hero__label-name'>{item.name}</Text>
+                      <Text className='result-hero__label-weight'>约 {Math.round(item.intake)}g</Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+              </View>
+            )}
+          </View>
+        )}
+        <View className={`content-container ${hasPhotoHero ? 'content-container--over-photo' : ''}`}>
           {taskType === 'food' && recordContext.taskId && imagePaths.length > 0 && (
             <MealDishPrompt taskId={recordContext.taskId} surface='result' photoUrl={imagePaths[0]} />
           )}
           <View className='execution-mode-row'>
             <View className='execution-mode-left'>
-              <View className={`execution-mode-tag ${executionMode}`}>
+              <View className={`execution-mode-tag ${executionMode}`} onClick={openModeMenu}>
                 <Text className='execution-mode-tag-text'>
                   {getExecutionModeLabel(executionMode)}
                 </Text>
+                <Text className='execution-mode-tag-arrow'>›</Text>
               </View>
-              <View className='analysis-engine-result-tag'>
-                <Text className='analysis-engine-result-tag-text'>
-                  {analysisEngineLabel(analysisEngine)}
-                </Text>
-              </View>
-              <Text className='execution-mode-default-link' onClick={handleDefaultModeEdit}>
-                设为默认
-              </Text>
+              {recordDateValid ? (
+                <RecordDateChip
+                  date={recordDate}
+                  mealLabel={getMealTypeLabel(selectedMealType)}
+                  onChange={setRecordDate}
+                  disabled={saving || mealCommitted}
+                />
+              ) : (
+                <Text className='execution-mode-meal'>{getMealTypeLabel(selectedMealType)}</Text>
+              )}
             </View>
             {hasUploadableImage ? (
               <View
@@ -2976,21 +3174,21 @@ function ResultPage() {
             <View className='macro-grid'>
               <View className='macro-item protein'>
                 <View className='macro-bar'>
-                  <View className='macro-progress' style={{ height: `${macroEnergyBarPercents.protein}%` }}></View>
+                  <View className='macro-progress' style={{ width: `${macroEnergyBarPercents.protein}%` }}></View>
                 </View>
                 <Text className='macro-value'>{Math.round(nutritionStats.protein * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>蛋白质</Text>
               </View>
               <View className='macro-item carbs'>
                 <View className='macro-bar'>
-                  <View className='macro-progress' style={{ height: `${macroEnergyBarPercents.carbs}%` }}></View>
+                  <View className='macro-progress' style={{ width: `${macroEnergyBarPercents.carbs}%` }}></View>
                 </View>
                 <Text className='macro-value'>{Math.round(nutritionStats.carbs * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>碳水</Text>
               </View>
               <View className='macro-item fat'>
                 <View className='macro-bar'>
-                  <View className='macro-progress' style={{ height: `${macroEnergyBarPercents.fat}%` }}></View>
+                  <View className='macro-progress' style={{ width: `${macroEnergyBarPercents.fat}%` }}></View>
                 </View>
                 <Text className='macro-value'>{Math.round(nutritionStats.fat * 10) / 10}<Text className='macro-unit'>g</Text></Text>
                 <Text className='macro-label'>脂肪</Text>
@@ -3027,60 +3225,32 @@ function ResultPage() {
                 </View>
               </View>
 
-              {!insightCollapsed && (
-                <>
-                  <View className='insight-item ratio-advice'>
-                <View className='insight-icon-wrapper orange'>
-                  <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>饮食比例建议</Text>
-                  <Text className='insight-content'>{ratioAdviceText}</Text>
-                </View>
-              </View>
-
-              <View className='insight-item ratio'>
-                <View className='insight-icon-wrapper orange'>
-                  <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>营养比例</Text>
-                  <Text className='insight-content'>{pfcRatioDisplayText}</Text>
-                </View>
-              </View>
-
-              <View className='insight-item eating-order'>
-                <View className='insight-icon-wrapper teal'>
-                  <Text className='insight-icon iconfont icon-shizhong'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>进食顺序</Text>
-                  <Text className='insight-content'>{eatingOrderDisplayText}</Text>
-                </View>
-              </View>
-
-              <View className='insight-item absorption'>
-                <View className='insight-icon-wrapper purple'>
-                  <Text className='insight-icon iconfont icon-huore'></Text>
-                </View>
-                <View className='insight-body'>
-                  <Text className='insight-label'>吸收与利用</Text>
-                  <Text className='insight-content'>{absorptionDisplayText}</Text>
-                </View>
-              </View>
-
-              {showInsightContext && (
-                <View className='insight-item context'>
-                  <View className='insight-icon-wrapper teal'>
-                    <Text className='insight-icon iconfont icon-shizhong'></Text>
-                  </View>
-                  <View className='insight-body'>
-                    <Text className='insight-label'>情境建议</Text>
-                    <Text className='insight-content'>{contextAdvice}</Text>
-                  </View>
-                </View>
+              {insightCollapsed && !!ratioAdviceText && (
+                <Text
+                  className='insight-preview'
+                  onClick={() => {
+                    setInsightCollapsed(false)
+                    setAiInsightCollapsed(false)
+                  }}
+                >
+                  {ratioAdviceText}
+                </Text>
               )}
-                </>
+              {!insightCollapsed && (
+                <View className='insight-accordion'>
+                  {insightRows.map((row, index) => {
+                    const open = openInsightKey === row.key
+                    return (
+                      <View key={row.key} className={`insight-row ${open ? 'is-open' : ''} ${index === insightRows.length - 1 ? 'is-last' : ''}`}>
+                        <View className='insight-row__head' onClick={() => toggleInsight(row.key)}>
+                          <Text className='insight-row__label'>{row.label}</Text>
+                          <Text className='insight-row__chevron'>›</Text>
+                        </View>
+                        {open && <Text className='insight-row__content'>{row.content}</Text>}
+                      </View>
+                    )
+                  })}
+                </View>
               )}
             </View>
           )}
@@ -3096,10 +3266,8 @@ function ResultPage() {
               <Text className='quick-ratio-btn' onClick={() => setQuickRatioSheetVisible(true)}>快捷比例</Text>
             </View>
 
-            <Text className='section-ratio-hint'>每种食物可单独调整实际食用比例</Text>
-
             <View className='ingredients-list'>
-              {nutritionItems.map((item) => {
+              {nutritionItems.map((item, itemIndex) => {
                 const detailRows = getNutrientDetailRows(item)
                 const per100 = item.measurement ? normalizeItemNutrients({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, ...item.measurement.nutrients_per_basis }, 0) : item.unitNutritionPer100g || nutrientPer100FromItem(item)
                 const basisLabel = item.measurement ? formatFoodMeasurementBasis(item.measurement) : '每100g'
@@ -3107,10 +3275,13 @@ function ResultPage() {
                 const ediblePortionHint = getEdiblePortionHint(item)
                 const packageChoicePending = isPackagedChoicePending(item)
                 const packagedCandidates = item.packagedCandidates || []
+                const cardOpen = !!openCardIds[item.id]
+                const intakeShare = item.ratio / 100
                 return (
-                <View key={item.id} className='ingredient-card'>
+                <View key={item.id} className={`ingredient-card ${cardOpen ? 'is-open' : ''}`}>
                   <View className='ingredient-main'>
                     <View className='ingredient-header ingredient-header--title-row'>
+                      {hasPhotoHero && <Text className='ingredient-index'>{itemIndex + 1}</Text>}
                       <Text className='ingredient-name'>{item.name}</Text>
                       <View className='ingredient-header-actions'>
                         <View className='edit-icon-wrapper edit-icon-wrapper--with-label' onClick={() => openFoodEditDrawer(item)}>
@@ -3122,12 +3293,25 @@ function ResultPage() {
                         </View>
                       </View>
                     </View>
-                    <Text className='ingredient-basis-label'>当前整份营养（{resultMeasurementAmountText(item)}）</Text>
-                    <Text className='ingredient-per100-label'>{basisLabel}参考：{Math.round(per100.calories || 0)} kcal · 蛋白 {formatMacroDisplay(per100.protein || 0)}g · 碳水 {formatMacroDisplay(per100.carbs || 0)}g · 脂肪 {formatMacroDisplay(per100.fat || 0)}g</Text>
-                    {ediblePortionHint && (
-                      <View className='ingredient-edible-portion-hint'>
-                        <Text className='ingredient-edible-portion-hint-text'>{ediblePortionHint}</Text>
+                    {!packageChoicePending && (
+                      <View className='ingredient-brief' onClick={() => toggleCardDetails(item.id)}>
+                        <Text className='ingredient-brief__kcal'>{Math.round(item.calorie * intakeShare)}</Text>
+                        <Text className='ingredient-brief__unit'>kcal</Text>
+                        <Text className='ingredient-brief__meta'>
+                          {resultMeasurementAmountText(item, true)} · 蛋白 {formatMacroDisplay(item.protein * intakeShare)}g · 碳水 {formatMacroDisplay(item.carbs * intakeShare)}g · 脂肪 {formatMacroDisplay(item.fat * intakeShare)}g
+                        </Text>
                       </View>
+                    )}
+                    {cardOpen && (
+                      <>
+                        <Text className='ingredient-basis-label'>当前整份营养（{resultMeasurementAmountText(item)}）</Text>
+                        <Text className='ingredient-per100-label'>{basisLabel}参考：{Math.round(per100.calories || 0)} kcal · 蛋白 {formatMacroDisplay(per100.protein || 0)}g · 碳水 {formatMacroDisplay(per100.carbs || 0)}g · 脂肪 {formatMacroDisplay(per100.fat || 0)}g</Text>
+                        {ediblePortionHint && (
+                          <View className='ingredient-edible-portion-hint'>
+                            <Text className='ingredient-edible-portion-hint-text'>{ediblePortionHint}</Text>
+                          </View>
+                        )}
+                      </>
                     )}
                   </View>
 
@@ -3196,6 +3380,8 @@ function ResultPage() {
 
                   {!packageChoicePending && (
                     <>
+                  {cardOpen && (
+                  <>
                   <View className='ingredient-nutrition-strip'>
                     <View
                       className='ingredient-summary-cell ingredient-summary-cell--cal'
@@ -3254,14 +3440,19 @@ function ResultPage() {
                     </View>
                   )}
 
+                  </>
+                  )}
+
                   <View className='ingredient-controls'>
+                    {cardOpen && (
                     <ResultQuantityControl item={item} onAdjust={(delta) => handleWeightAdjust(item.id, delta)} />
+                    )}
 
                     <View className='ratio-control'>
                       <View className='ratio-control-main'>
                         <View className='ratio-label-wrap'>
                           <Text className='control-label'>实际摄入</Text>
-                          <Text className='control-sub-label'>{resultMeasurementAmountText(item, true)}</Text>
+                          {cardOpen && <Text className='control-sub-label'>{resultMeasurementAmountText(item, true)}</Text>}
                         </View>
                         <View className='ratio-control-right'>
                           <View className='ratio-slider-shell'>
@@ -3272,7 +3463,7 @@ function ResultPage() {
                                 min={0}
                                 max={100}
                                 step={1}
-                                activeColor='#00bc7d'
+                                activeColor={scheme === 'dark' ? '#3e8f73' : '#1a6549'}
                                 backgroundColor={scheme === 'dark' ? '#2d3935' : '#dbe4dd'}
                                 blockSize={24}
                                 blockColor='#ffffff'
@@ -3287,11 +3478,15 @@ function ResultPage() {
                       </View>
                       {item.suggestedRatioSource === 'ai' && typeof item.suggestedRatio === 'number' && item.suggestedRatio !== item.ratio && (
                         <View className='ratio-suggestion-row' onClick={() => applySuggestedRatio(item.id)}>
-                          <Text className='ratio-suggestion-text'>AI识别比例 {item.suggestedRatio}%</Text>
-                          <Text className='ratio-suggestion-apply'>一键应用</Text>
+                          <Text className='ratio-suggestion-text'>AI建议摄入 {item.suggestedRatio}%</Text>
+                          <Text className='ratio-suggestion-apply'>应用建议</Text>
                         </View>
                       )}
                     </View>
+                  </View>
+                  <View className='ingredient-fold' onClick={() => toggleCardDetails(item.id)}>
+                    <Text className='ingredient-fold__text'>{cardOpen ? '收起' : '详情'}</Text>
+                    <Text className={`ingredient-fold__chevron ${cardOpen ? 'is-open' : ''}`}>›</Text>
                   </View>
                     </>
                   )}
@@ -3305,38 +3500,69 @@ function ResultPage() {
       </ScrollView>
 
       {/* 底部固定栏：必须放在 scroll-view 外，避免 iOS 上 fixed 相对滚动容器失效 */}
-      <View className='footer-actions'>
-        {!isAnalyzeSessionCommitted() && !committedRecordId && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
-        <View className='pba-safe-area'>
-          <View className='action-grid'>
+      {quickUndo && (
+        <View className='result-undo-toast'>
+          <Text className='result-undo-toast__text'>{quickUndo.text}</Text>
+          <View className='result-undo-toast__action' onClick={undoQuickCorrection}>
+            <Text className='result-undo-toast__action-text'>撤销</Text>
+          </View>
+        </View>
+      )}
+      <View className='footer-actions result-bar'>
+        {!mealCommitted && <RecordDateField date={recordDate} onChange={setRecordDate} disabled={saving} />}
+        <View className='pba-safe-area result-bar__inner'>
+          {quickCorrections.length > 0 && (
+            <ScrollView scrollX showScrollbar={false} className='result-bar__chips'>
+              <View className='result-bar__chips-track'>
+                {quickCorrections.map(chip => (
+                  <View key={`${chip.itemId}-${chip.ratio}`} className='result-bar__chip' onClick={() => applyQuickCorrection(chip)}>
+                    <Text className='result-bar__chip-text'>{chip.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          )}
+          <View className='result-bar__row'>
             <View
-              className={`secondary-btn ${savingRecipe ? 'loading' : ''} ${savedRecipeId ? 'is-favorited' : ''}`}
+              className={`result-bar__fav ${savingRecipe ? 'loading' : ''} ${savedRecipeId ? 'is-favorited' : ''}`}
               onClick={handleSaveAsRecipe}
+              aria-label={savedRecipeId ? '已收藏' : '收藏餐食'}
             >
-			  {savingRecipe ? <View className='btn-spinner' /> : <Text className='btn-text'>{savedRecipeId ? '已收藏' : '收藏餐食'}</Text>}
+              {savingRecipe
+                ? <View className='btn-spinner' />
+                : <Text className={`iconfont ${savedRecipeId ? 'icon-collection_fill' : 'icon-collection'} result-bar__fav-icon`} />}
+            </View>
+            <View className='result-bar__say'>
+              <Input
+                className='result-bar__say-input'
+                value={sayText}
+                placeholder={shouldShowFollowupCard ? '补充这些信息，再重新分析' : '哪里不对，直接说'}
+                placeholderClass='result-bar__say-placeholder'
+                confirmType='send'
+                maxlength={200}
+                onInput={(e: any) => setSayText(e.detail.value)}
+                onConfirm={submitSayText}
+              />
+              <View className='result-bar__say-send' onClick={submitSayText} aria-label='去纠错'>
+                <Text className='result-bar__say-send-icon'>↑</Text>
+              </View>
             </View>
             <View
-              className={`primary-btn ${saving ? 'loading' : ''} ${pendingPackagedChoiceCount > 0 ? 'needs-spec' : ''} ${isAnalyzeSessionCommitted() || committedRecordId ? 'is-committed' : ''}`}
+              className={`primary-btn result-bar__record ${saving ? 'loading' : ''} ${pendingPackagedChoiceCount > 0 ? 'needs-spec' : ''} ${mealCommitted ? 'is-committed' : ''}`}
               onClick={handleConfirmAndShare}
             >
               {saving ? (
                 <View className='btn-spinner' />
               ) : (
                 <Text className='btn-text'>
-                  {isAnalyzeSessionCommitted() || committedRecordId
+                  {mealCommitted
                     ? '分享打卡'
                     : pendingPackagedChoiceCount > 0
                       ? '选规格'
-                    : '记录'}
+                      : `${historyCopyRef.current ? '再记一份到' : '记录到'}${getRecordDateLabel(recordDate)}`}
                 </Text>
               )}
             </View>
-          </View>
-
-          <View className='footer-correction-link' onClick={openCorrectionDrawer}>
-            <Text className='footer-correction-link-text'>
-              {shouldShowFollowupCard ? '补充这些信息，再重新分析' : '识别有误？点击纠错'}
-            </Text>
           </View>
         </View>
       </View>
