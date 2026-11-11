@@ -218,6 +218,9 @@ export default defineConfig<'vite'>(async (merge) => {
                 if (/[\\/]src[\\/]packageExtra[\\/]pages[\\/]result[\\/](?:ResultQuantityControl|result-measurement|result-item-converter)\.tsx?$/.test(id)) {
                   return 'common'
                 }
+                if (/[\\/]src[\\/]packageExtra[\\/]pages[\\/]food-library[\\/]food-map-share(?:-cover)?\.ts$/.test(id)) {
+                  return 'common'
+                }
                 if (/node_modules[\\/]weapp-qrcode-canvas-2d[\\/]/.test(id)) {
                   return 'profile-qrcode-vendor'
                 }
