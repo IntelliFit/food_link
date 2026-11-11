@@ -47,13 +47,15 @@ func TestAccountDeletionLifecycle(t *testing.T) {
 		db := testdb.New(t)
 		require.NoError(t, db.Exec(`CREATE TABLE weapp_user(id uuid PRIMARY KEY,openid text,nickname text,searchable boolean,public_records boolean,friends_can_view_records boolean,public_favorite_recipes boolean);
 CREATE TABLE user_food_records(id uuid PRIMARY KEY,user_id uuid,image_path text);
-CREATE TABLE public_food_library(id uuid PRIMARY KEY,user_id uuid,status text);
+CREATE TABLE public_food_library(id uuid PRIMARY KEY,user_id uuid,status text CHECK(status IN ('pending','published','rejected','user_deleted','deleted')));
+CREATE TABLE user_custom_foods(id uuid PRIMARY KEY,user_id uuid,public_status text CHECK(public_status IN ('private','pending','published','rejected')));
 CREATE TABLE user_pro_memberships(id uuid PRIMARY KEY,user_id uuid);
 CREATE TABLE pro_membership_payment_records(id uuid PRIMARY KEY,user_id uuid,order_no text,status text,amount numeric,wx_open_id text,notify_payload text);`).Error)
 		id, other := uuid.NewString(), uuid.NewString()
 		require.NoError(t, db.Exec(`INSERT INTO weapp_user VALUES(?,?,'first',true,false,true,NULL),(?,?,'other',true,true,true,true)`, id, "openid-first", other, "openid-other").Error)
 		require.NoError(t, db.Exec(`INSERT INTO user_food_records VALUES(?,?,?),(?,?,?)`, uuid.NewString(), id, "original.jpg", uuid.NewString(), other, "other.jpg").Error)
 		require.NoError(t, db.Exec(`INSERT INTO public_food_library VALUES(?,?,'published')`, uuid.NewString(), id).Error)
+		require.NoError(t, db.Exec(`INSERT INTO user_custom_foods VALUES(?,?,'published')`, uuid.NewString(), id).Error)
 		require.NoError(t, migration.MigrateAccountDeletion(ctx, db, "public"))
 		require.NoError(t, migration.MigrateAccountDeletion(ctx, db, "public"))
 		s := NewAccountDeletionService(repo.NewUserRepo(db), &deletionObjects{}, 30)
@@ -69,6 +71,11 @@ CREATE TABLE pro_membership_payment_records(id uuid PRIMARY KEY,user_id uuid,ord
 		require.NoError(t, err)
 		require.True(t, start.Add(7*24*time.Hour).Equal(*status.ExecuteAt))
 		require.True(t, status.CanCancel)
+		var hiddenFood, hiddenCustom string
+		require.NoError(t, db.Table("public_food_library").Select("status").Where("user_id = ?", id).Scan(&hiddenFood).Error)
+		require.NoError(t, db.Table("user_custom_foods").Select("public_status").Where("user_id = ?", id).Scan(&hiddenCustom).Error)
+		require.Equal(t, "user_deleted", hiddenFood)
+		require.Equal(t, "private", hiddenCustom)
 		var flags struct {
 			Searchable, PublicRecords, FriendsCanViewRecords *bool
 			PublicFavoriteRecipes                            *bool
@@ -93,6 +100,8 @@ CREATE TABLE pro_membership_payment_records(id uuid PRIMARY KEY,user_id uuid,ord
 		var foodState string
 		require.NoError(t, db.Table("public_food_library").Select("status").Where("user_id = ?", id).Scan(&foodState).Error)
 		require.Equal(t, "published", foodState)
+		require.NoError(t, db.Table("user_custom_foods").Select("public_status").Where("user_id = ?", id).Scan(&hiddenCustom).Error)
+		require.Equal(t, "published", hiddenCustom)
 		require.ErrorIs(t, s.users.CheckAccountAccess(ctx, id, start.UnixNano()+1, "/api/user/profile", "GET"), repo.ErrDeletionSession)
 		require.NoError(t, s.users.CheckAccountAccess(ctx, id, s.now().UnixNano()+1, "/api/user/profile", "GET"))
 		require.NoError(t, db.Exec("INSERT INTO user_food_records VALUES(?,?,?)", uuid.NewString(), id, "restored.jpg").Error)

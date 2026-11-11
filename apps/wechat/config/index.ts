@@ -210,6 +210,14 @@ export default defineConfig<'vite'>(async (merge) => {
               if (!o || typeof o !== 'object') return
               const prevManual = o.manualChunks
               o.manualChunks = (id: string, ctx: unknown) => {
+                // Keep the expanded food editor below the subpackage budget. Taro
+                // already loads common.js/common.wxss for every page.
+                if (/[\\/]src[\\/]packageExtra[\\/]pages[\\/]record-manual[\\/](?:CustomFoodEditor|ManualFoodCard|ManualFoodDetailSheet|custom-food-import|custom-food-portion|manual-food-detail|custom-food-editor)\.(?:tsx?|scss)$/.test(id)) {
+                  return 'common'
+                }
+                if (/[\\/]src[\\/]packageExtra[\\/]pages[\\/]result[\\/](?:ResultQuantityControl|result-measurement|result-item-converter)\.tsx?$/.test(id)) {
+                  return 'common'
+                }
                 if (/node_modules[\\/]weapp-qrcode-canvas-2d[\\/]/.test(id)) {
                   return 'profile-qrcode-vendor'
                 }

@@ -95,9 +95,9 @@ func (r *UserRepo) RequestDeletion(ctx context.Context, id string, days int, now
 			snap.Privacy[key] = value
 		}
 		for _, item := range []struct {
-			table, column string
-			dest          map[string]string
-		}{{"public_food_library", "status", snap.Foods}, {"user_custom_foods", "public_status", snap.CustomFoods}} {
+			table, column, hidden string
+			dest                  map[string]string
+		}{{"public_food_library", "status", "user_deleted", snap.Foods}, {"user_custom_foods", "public_status", "private", snap.CustomFoods}} {
 			if !tx.Migrator().HasColumn(item.table, item.column) {
 				continue
 			}
@@ -108,7 +108,7 @@ func (r *UserRepo) RequestDeletion(ctx context.Context, id string, days int, now
 			for _, row := range rows {
 				item.dest[row.ID] = row.Value
 			}
-			if err := tx.Table(item.table).Where("user_id = ?", id).Update(item.column, "account_deletion").Error; err != nil {
+			if err := tx.Table(item.table).Where("user_id = ?", id).Update(item.column, item.hidden).Error; err != nil {
 				return err
 			}
 		}
@@ -178,11 +178,11 @@ func (r *UserRepo) CancelDeletion(ctx context.Context, id string, now time.Time)
 			}
 		}
 		for _, item := range []struct {
-			table, column string
-			values        map[string]string
-		}{{"public_food_library", "status", snap.Foods}, {"user_custom_foods", "public_status", snap.CustomFoods}} {
+			table, column, hidden string
+			values                map[string]string
+		}{{"public_food_library", "status", "user_deleted", snap.Foods}, {"user_custom_foods", "public_status", "private", snap.CustomFoods}} {
 			for foodID, status := range item.values {
-				if err := tx.Table(item.table).Where("id = ? AND user_id = ? AND "+item.column+" = ?", foodID, id, "account_deletion").Update(item.column, status).Error; err != nil {
+				if err := tx.Table(item.table).Where("id = ? AND user_id = ? AND "+item.column+" = ?", foodID, id, item.hidden).Update(item.column, status).Error; err != nil {
 					return err
 				}
 			}
