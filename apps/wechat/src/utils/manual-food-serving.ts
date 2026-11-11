@@ -1,6 +1,9 @@
+import { convertFoodAmount, formatFoodMeasurementAmount, foodMeasurementGrams, type FoodMeasurement } from './food-measure'
+
 export type ManualFoodDisplayUnit = 'g' | 'ml' | 'serving' | 'piece'
 
 export interface ManualFoodServingLike {
+  measurement?: FoodMeasurement
   source?: string
   default_weight_grams?: number
   display_unit?: ManualFoodDisplayUnit
@@ -9,6 +12,7 @@ export interface ManualFoodServingLike {
 }
 
 export interface SelectedManualFoodServingLike {
+  measurement?: FoodMeasurement
   weight: number
   defaultWeight: number
   displayUnit: ManualFoodDisplayUnit
@@ -31,6 +35,7 @@ export function formatManualFoodWeight(value: number, precision = 1) {
  * 包装食品/自定义食物可能确实有 12.5g 这类标签值，因此只把营养库默认量取整到可操作的整克。
  */
 export function practicalManualFoodDefaultWeight(item: ManualFoodServingLike, fallback = 100) {
+  if (item.measurement) return item.measurement.amount
   const raw = positiveNumber(item.default_weight_grams, fallback)
   if (item.source === 'nutrition_library' && (item.display_unit === 'g' || !item.display_unit)) {
     return Math.max(1, Math.round(raw))
@@ -39,6 +44,7 @@ export function practicalManualFoodDefaultWeight(item: ManualFoodServingLike, fa
 }
 
 export function manualFoodResultPortionText(item: ManualFoodServingLike) {
+  if (item.measurement) return formatFoodMeasurementAmount(item.measurement.amount, item.measurement.unit)
   const weight = practicalManualFoodDefaultWeight(item)
   switch (item.display_unit) {
     case 'piece':
@@ -57,6 +63,14 @@ export function manualFoodResultPortionText(item: ManualFoodServingLike) {
 }
 
 export function selectedManualFoodAmountText(item: SelectedManualFoodServingLike) {
+  if (item.measurement) {
+    const amount = convertFoodAmount(item.measurement, item.weight, item.measurement.unit, item.displayUnit)
+    if (amount === null) return '单位换算待补充'
+    const text = formatFoodMeasurementAmount(amount, item.displayUnit)
+    const grams = foodMeasurementGrams(item.measurement, item.weight)
+    return (item.displayUnit === 'piece' || item.displayUnit === 'serving') && grams !== null
+      ? `${text}（${formatManualFoodWeight(grams)}g）` : text
+  }
   const weight = positiveNumber(item.weight, item.defaultWeight)
   const base = positiveNumber(item.defaultWeight, 1)
   switch (item.displayUnit) {
@@ -78,6 +92,12 @@ export function selectedManualFoodAmountText(item: SelectedManualFoodServingLike
 }
 
 export function manualFoodDisplayInput(item: SelectedManualFoodServingLike, nextWeight = item.weight) {
+  if (item.measurement) {
+    const amount = convertFoodAmount(item.measurement, nextWeight, item.measurement.unit, item.displayUnit)
+    // This value is also submitted when the input is untouched: do not round
+    // native quantities such as 0.25 piece or 12.55g into a different amount.
+    return amount === null ? '' : String(amount)
+  }
   const weight = positiveNumber(nextWeight, item.defaultWeight)
   if (item.displayUnit === 'serving') {
     return formatManualFoodWeight(weight / positiveNumber(item.defaultWeight, 1))
@@ -85,13 +105,15 @@ export function manualFoodDisplayInput(item: SelectedManualFoodServingLike, next
   return formatManualFoodWeight(weight)
 }
 
-export function manualFoodWeightFromInput(item: Pick<SelectedManualFoodServingLike, 'defaultWeight' | 'displayUnit'>, value: number) {
+export function manualFoodWeightFromInput(item: Pick<SelectedManualFoodServingLike, 'defaultWeight' | 'displayUnit' | 'measurement'>, value: number) {
+  if (item.measurement) return convertFoodAmount(item.measurement, value, item.displayUnit, item.measurement.unit) ?? NaN
   if (item.displayUnit === 'serving') {
     return positiveNumber(item.defaultWeight, 1) * value
   }
   return value
 }
 
-export function manualFoodWeightInputUnit(item: Pick<SelectedManualFoodServingLike, 'displayUnit' | 'displayUnitLabel'>) {
+export function manualFoodWeightInputUnit(item: Pick<SelectedManualFoodServingLike, 'displayUnit' | 'displayUnitLabel' | 'measurement'>) {
+  if (item.measurement) return item.displayUnitLabel
   return item.displayUnit === 'piece' ? 'g' : item.displayUnitLabel
 }

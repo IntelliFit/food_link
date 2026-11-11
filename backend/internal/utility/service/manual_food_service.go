@@ -72,6 +72,10 @@ func (s *ManualFoodService) ListCustomFoods(ctx context.Context, userID string, 
 	return s.repo.ListCustomFoods(ctx, userID, limit, offset)
 }
 
+func (s *ManualFoodService) ListOwnedFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error) {
+	return s.repo.ListOwnedFoods(ctx, userID, limit, offset)
+}
+
 func (s *ManualFoodService) SaveCustomFood(ctx context.Context, userID string, input repo.CustomFoodInput) (domain.ManualFoodResult, error) {
 	logger.Info(ctx, "保存自定义食物", slog.String("user_id", userID), slog.String("food_id", input.ID))
 	item, err := s.repo.SaveCustomFood(ctx, userID, input)

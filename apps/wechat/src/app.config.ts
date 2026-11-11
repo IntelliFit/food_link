@@ -10,6 +10,7 @@ const mainPages = [
 ]
 
 const extraSubpackagePages = [
+  'pages/account-deletion/index',
   'pages/checkin-leaderboard/index',
   'pages/record-text/index',
   'pages/record-manual/index',

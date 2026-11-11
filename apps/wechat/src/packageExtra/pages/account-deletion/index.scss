@@ -1,0 +1,11 @@
+.account-deletion-page { min-height:100vh; box-sizing:border-box; padding:40rpx 28rpx; background:var(--fl-page-bg, #f7f8fa); color:var(--fl-text-primary,#1f2937); }
+.account-deletion-title { display:block; font-size:42rpx; font-weight:650; margin:12rpx 0 32rpx; }
+.account-deletion-card { padding:28rpx; border-radius:24rpx; background:var(--fl-card-bg,#fff); margin-bottom:28rpx; line-height:1.75; font-size:28rpx; text { display:block; margin-bottom:16rpx; } }
+.account-deletion-choice { font-size:30rpx; text-align:left; margin-bottom:20rpx; border:2rpx solid #d1d5db; border-radius:20rpx; &.selected { border-color:#00a86b; background:#eaf9f2; color:#11613c; } }
+.account-deletion-note { display:block; line-height:1.65; font-size:27rpx; margin:24rpx 0; }
+.account-deletion-input { padding:24rpx; border:2rpx solid #cbd5e1; border-radius:16rpx; margin:28rpx 0; }
+.account-deletion-danger { background:#dc2626; color:#fff; font-size:28rpx; &[disabled] { opacity:.45; } }
+.account-deletion-restore { background:#008d60; color:#fff; }
+.account-deletion-spinner { width:36rpx; height:36rpx; margin:20rpx auto; border:4rpx solid #d1d5db; border-top-color:#00a86b; border-radius:50%; animation:deletion-spin .8s linear infinite; }
+@keyframes deletion-spin { to { transform:rotate(360deg); } }
+.fl-d .account-deletion-page { background:#0d1312; color:#eef5f1; .account-deletion-card { background:#19241f; } .account-deletion-choice { background:#19241f; color:#eef5f1; &.selected { background:#143b2b; border-color:#49d69e; } } }

@@ -13,6 +13,7 @@ import {
 import * as React from 'react'
 import Taro, { useDidHide, useDidShow, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { useLocalToday } from '../../hooks/useLocalToday'
+import { AUTH_SESSION_CHANGED_EVENT, captureAuthSession, isAuthSessionCurrent, type AuthSession } from '../../utils/auth-session'
 import { promptPublicRecordsReconfirm, remindRecordVisibilityOnce } from '../../utils/feed-share'
 import {
   getHomeDashboard,
@@ -899,7 +900,8 @@ function IndexPage() {
   /** 防止并发重复请求：切日同步专用的 pending ref */
   const syncDashboardPendingRef = React.useRef<{ date: string; seq: number } | null>(null)
   /** 最近一次成功拉取 dashboard 的日期与时间戳（用于回到首页时跳过重复请求） */
-  const homeLastLoadRef = React.useRef<{ date: string; ts: number } | null>(null)
+  const homeLastLoadRef = React.useRef<{ date: string; ts: number; session: AuthSession } | null>(null)
+  const homeSessionRef = React.useRef(captureAuthSession())
   /** 为 true 时下次「今日」展示必须重拉（饮食/运动/保质期等变更） */
   const homeDataStaleRef = React.useRef(true)
 
@@ -999,9 +1001,9 @@ function IndexPage() {
   const showOnboardingWelcome = welcomeEligible && !welcomeClosed && onboardingExperiment.ready && onboardingExperiment.variant === ONBOARDING_PET_FLOW
 
   const promptLoginCheckIn = React.useCallback(async (center: RewardCenterResponse | null) => {
+    const session = captureAuthSession()
     const checkIn = center?.check_in
     if (!checkIn || checkIn.claimed_today || isOnboardingFirstDay()) return
-    const token = getAccessToken()
     const snoozeKey = `home_check_in_snooze_v1:${homeLayoutOwner()}`
     const promptKey = `${homeLayoutOwner()}:${checkIn.today}`
     if (promptedLoginCheckInDateRef.current === promptKey || Taro.getStorageSync(snoozeKey) === checkIn.today) return
@@ -1013,20 +1015,23 @@ function IndexPage() {
       cancelText: '稍后再签',
       confirmColor: '#0fb47c',
     })
-    if (getAccessToken() !== token) return
+    if (!isAuthSessionCurrent(session)) return
     if (!confirm) { try { Taro.setStorageSync(snoozeKey, checkIn.today) } catch { /* This visit still stays quiet. */ } return }
     try {
       const result = await claimLoginCheckIn()
+      if (!isAuthSessionCurrent(session)) return
       Taro.showToast({ title: `签到成功，+${result.reward_amount}积分`, icon: 'success' })
       const refreshed = await getRewardCenter().catch(() => null)
-      if (refreshed) setRewardCenter(refreshed)
+      if (refreshed && isAuthSessionCurrent(session)) setRewardCenter(refreshed)
     } catch (error: any) {
+      if (!isAuthSessionCurrent(session)) return
       console.error('[home] login check-in failed:', error)
       Taro.showToast({ title: error?.message || '签到失败，请稍后重试', icon: 'none' })
     }
   }, [])
 
   const loadRewardHintData = React.useCallback(async () => {
+    const session = captureAuthSession()
     if (!getAccessToken()) {
       setMembershipStatus(null)
       setRewardCenter(null)
@@ -1037,6 +1042,7 @@ function IndexPage() {
         getMyMembership().catch(() => null),
         getRewardCenter().catch(() => null),
       ])
+      if (!isAuthSessionCurrent(session)) return
       setMembershipStatus(membership)
       setRewardCenter(center)
       await promptLoginCheckIn(center)
@@ -1137,6 +1143,7 @@ function IndexPage() {
 
   // 加载指定日期的首页数据
   const loadDashboard = React.useCallback(async (targetDate?: string, silent = false, force = false) => {
+    const session = captureAuthSession()
     const resolvedDate =
       targetDate !== undefined && targetDate !== ''
         ? targetDate
@@ -1182,7 +1189,7 @@ function IndexPage() {
       // 首页主数据是首屏唯一硬依赖；先让它独占首轮网络与渲染时机，
       // 再启动统计、身体指标和运动增强，避免页面显示瞬间同时回调多个大对象。
       const res = await getHomeDashboard(resolvedDate)
-      if (seq !== loadDashboardSeqRef.current) {
+      if (seq !== loadDashboardSeqRef.current || !isAuthSessionCurrent(session)) {
         return
       }
       const intake = res.intakeData
@@ -1229,15 +1236,15 @@ function IndexPage() {
         nutritionTarget: nextSnapshot.nutritionTarget || null,
         supplementSummary: nextSnapshot.supplementSummary || DEFAULT_SUPPLEMENT_SUMMARY,
       })) {
-        saveHomeDashboardSnapshot(nextSnapshot)
+        saveHomeDashboardSnapshot(nextSnapshot, session)
       } else {
-        saveHomeDashboardSnapshot({ ...currentSnapshot, updatedAt: Date.now() })
+        saveHomeDashboardSnapshot({ ...currentSnapshot, updatedAt: Date.now() }, session)
       }
 
       // 主接口完成后立即展示首屏；周统计、身体指标和运动在下方继续后台合并。
       setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
 
-      homeLastLoadRef.current = { date: resolvedDate, ts: Date.now() }
+      homeLastLoadRef.current = { date: resolvedDate, ts: Date.now(), session }
       homeDataStaleRef.current = false
       setLoading(false)
       setIsSwitchingDate(false)
@@ -1260,7 +1267,7 @@ function IndexPage() {
         bodyMetricsPromise,
         exerciseLogsPromise
       ]).then(([stats, bodyMetricsRes, exerciseLogsRes]) => {
-        if (seq !== loadDashboardSeqRef.current) return
+        if (seq !== loadDashboardSeqRef.current || !isAuthSessionCurrent(session)) return
 
         if (exerciseLogsRes) {
           nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(
@@ -1275,7 +1282,7 @@ function IndexPage() {
                 ...latestSnapshot,
                 updatedAt: Date.now(),
                 exerciseBurnedKcal: nextExerciseKcal
-              })
+              }, session)
             }
           }
         }
@@ -1311,6 +1318,7 @@ function IndexPage() {
 
         if (bodyMetricsRes && bodyMetricsSeq === bodyMetricsSeqRef.current) {
           setBodyMetrics(prev => {
+            if (!isAuthSessionCurrent(session)) return prev
             const next = applyCloudBodyMetrics(prev, {
               weight_entries: bodyMetricsRes.weight_entries,
               water_daily: bodyMetricsRes.water_daily,
@@ -1325,11 +1333,12 @@ function IndexPage() {
       })
 
     } catch (error) {
-      if (seq !== loadDashboardSeqRef.current) {
+      if (seq !== loadDashboardSeqRef.current || !isAuthSessionCurrent(session)) {
         return
       }
       console.error('首页 dashboard 加载失败:', error)
       await showUnifiedApiError(error, '获取首页数据失败')
+      if (!isAuthSessionCurrent(session)) return
       const localFallback = getStoredHomeDashboardSnapshotByDate(resolvedDate)
       if (localFallback) {
         setIntakeData(localFallback.intakeData)
@@ -1358,7 +1367,7 @@ function IndexPage() {
       if (loadDashboardPendingRef.current?.seq === seq) {
         loadDashboardPendingRef.current = null
       }
-      if (seq === loadDashboardSeqRef.current) {
+      if (seq === loadDashboardSeqRef.current && isAuthSessionCurrent(session)) {
         setLoading(false)
         setIsSwitchingDate(false)
       }
@@ -1377,8 +1386,90 @@ function IndexPage() {
     void loadDashboard(targetDate)
   })
 
+  // Tab pages survive logout and switchTab. Clear their private in-memory state
+  // synchronously on auth changes, before the calendar/cache early returns.
+  const resetHomeForSession = React.useCallback(() => {
+    if (isAuthSessionCurrent(homeSessionRef.current)) return false
+    homeSessionRef.current = captureAuthSession()
+    loadDashboardSeqRef.current += 1
+    syncDashboardSeqRef.current += 1
+    bodyMetricsSeqRef.current += 1
+    calendarMonthLoadSeqRef.current += 1
+    petSummarySeqRef.current += 1
+    mealGuidanceRequestSeq.current += 1
+    loadDashboardPendingRef.current = null
+    syncDashboardPendingRef.current = null
+    homeLastLoadRef.current = null
+    homeDataStaleRef.current = true
+    skipNextRefreshRef.current = false
+    clearHomeAuxiliaryTimers()
+    if (homeGuideTimerRef.current) clearTimeout(homeGuideTimerRef.current)
+    homeGuideTimerRef.current = null
+    commitSelectedDate(formatDateKey(new Date()))
+    setIntakeData(DEFAULT_INTAKE)
+    setNutritionTarget(null)
+    setMeals([])
+    setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
+    setSupplementSummary(DEFAULT_SUPPLEMENT_SUMMARY)
+    setExerciseBurnedKcal(0)
+    setHomeAchievement({ streak_days: 0, green_days: 0 })
+    setTargetForm(createTargetForm(DEFAULT_INTAKE))
+    setWeekHeatmapCells(createWeekHeatmapCells())
+    setCalendarHistoryCells([])
+    setCalendarMonthLoading(false)
+    setCalendarMonthLoadError(false)
+    setBodyMetrics(getStoredBodyMetrics())
+    setMembershipStatus(null)
+    setRewardCenter(null)
+    setPetSummary(null)
+    setAnalyzeReminder(readAnalyzeTaskReminderState())
+    setShowHomeModuleManager(false)
+    setModuleLayout(readHomeModuleLayout())
+    moduleOwner.current = homeLayoutOwner()
+    setShowRecordEditModal(false)
+    setShowRecordPosterModal(false)
+    setShowDailyPosterModal(false)
+    setDailyPosterImageUrl(null)
+    setMealActionSheetVisible(false)
+    setMealActionRecordId(null)
+    setMealActionRecord(null)
+    setMealRecordsDialogVisible(false)
+    setMealRecordsDialogMeal(null)
+    setShowWeightEditor(false)
+    setShowWaterEditor(false)
+    setWeightInput('')
+    setWaterInput('')
+    setShowTargetEditor(false)
+    setShowPlanPicker(false)
+    setPlanUndo(null)
+    setShowHomeOnboardingGuide(false)
+    setHomeGuideTransitionPending(false)
+    setShowHealthProfilePrompt(false)
+    setShowRecordMenu(false)
+    showRecordPosterModalRef.current = false
+    showDailyPosterModalRef.current = false
+    mealPosterShareForAppMessageRef.current = null
+    dailyPosterShareForAppMessageRef.current = null
+    setLoading(false)
+    setIsSwitchingDate(false)
+    return true
+  }, [clearHomeAuxiliaryTimers, commitSelectedDate])
+
+  React.useEffect(() => {
+    const onAuthChanged = () => {
+      if (resetHomeForSession() && homeVisibleRef.current) {
+        void loadDashboard(selectedDateRef.current, false, true)
+      }
+    }
+    Taro.eventCenter.on(AUTH_SESSION_CHANGED_EVENT, onAuthChanged)
+    onAuthChanged()
+    return () => { Taro.eventCenter.off(AUTH_SESSION_CHANGED_EVENT, onAuthChanged) }
+  }, [loadDashboard, resetHomeForSession])
+
   useDidShow(() => {
     homeVisibleRef.current = true
+    resetHomeForSession()
+    const session = captureAuthSession()
     void promptPublicRecordsReconfirm().then(() => remindRecordVisibilityOnce())
     clearHomeAuxiliaryTimers()
     setPetHidden(getStoredPetHidden())
@@ -1447,6 +1538,7 @@ function IndexPage() {
     scheduleHomeAuxiliaryTask(async () => {
       try {
         const expiry = await getFoodExpiryDashboard().catch(() => null)
+        if (!isAuthSessionCurrent(session)) return
         // 计算 profile tab badge 总数：食物保质期待办 + 好友请求
         const expiryTodo = expiry
           ? (expiry.expired_count || 0) + (expiry.today_count || 0) + (expiry.soon_count || 0)
@@ -1479,6 +1571,7 @@ function IndexPage() {
     const canCache =
       !homeDataStaleRef.current &&
       last !== null &&
+      isAuthSessionCurrent(last.session) &&
       last.date === targetDate &&
       Date.now() - last.ts < HOME_DASHBOARD_CACHE_TTL_MS &&
       !localSnapshotChangedAfterLastLoad
@@ -1573,12 +1666,14 @@ function IndexPage() {
   }, [showDailyPosterModal, showHomeModuleManager])
 
   const refreshBodyMetrics = React.useCallback(async () => {
+    const session = captureAuthSession()
     if (!getAccessToken()) return
     const seq = ++bodyMetricsSeqRef.current
     try {
       const res = await getBodyMetricsSummary('week')
-      if (seq !== bodyMetricsSeqRef.current) return
+      if (seq !== bodyMetricsSeqRef.current || !isAuthSessionCurrent(session)) return
       setBodyMetrics(prev => {
+        if (!isAuthSessionCurrent(session)) return prev
         const next = applyCloudBodyMetrics(prev, {
           weight_entries: res.weight_entries,
           water_daily: res.water_daily,
@@ -2217,6 +2312,7 @@ function IndexPage() {
 
   // 切日专用轻量同步：仅拉取该日 dashboard + 运动，不重复请求周统计/身体指标
   const syncDashboardForDate = React.useCallback(async (date: string) => {
+    const session = captureAuthSession()
     // 若同日期请求已在进行中，跳过本次调用
     if (
       syncDashboardPendingRef.current &&
@@ -2235,7 +2331,7 @@ function IndexPage() {
         getHomeDashboard(date),
         getExerciseLogs({ date }).catch(() => null)
       ])
-      if (seq !== syncDashboardSeqRef.current) return
+      if (seq !== syncDashboardSeqRef.current || !isAuthSessionCurrent(session)) return
       const intake = res.intakeData
       const nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
       const nextAchievement = res.achievement ?? { streak_days: 0, green_days: 0 }
@@ -2257,7 +2353,7 @@ function IndexPage() {
         expirySummary: res.expirySummary || DEFAULT_EXPIRY_SUMMARY,
         exerciseBurnedKcal: nextExerciseKcal,
         achievement: nextAchievement
-      })
+      }, session)
       setCalendarHistoryCells(prev => {
         const nextCell = createCalendarHeatmapCell(
           normalizedDate,
@@ -2283,7 +2379,7 @@ function IndexPage() {
           hasRecord
         }
       }))
-      homeLastLoadRef.current = { date, ts: Date.now() }
+      homeLastLoadRef.current = { date, ts: Date.now(), session }
       homeDataStaleRef.current = false
     } catch (err) {
       // 静默失败，不打扰用户；本地缓存已保证基本可用性
@@ -2588,6 +2684,7 @@ function IndexPage() {
   const exerciseAnimTarget = dashboardBusy ? 0 : exerciseBurnedKcal
   const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey, true)
   const loadPetSummary = React.useCallback(async (date: string) => {
+    const session = captureAuthSession()
     if (!getAccessToken()) {
       setPetSummary(null)
       return
@@ -2595,28 +2692,32 @@ function IndexPage() {
     const seq = ++petSummarySeqRef.current
     try {
       const summary = await getPetSummary(date)
-      if (seq === petSummarySeqRef.current) {
+      if (seq === petSummarySeqRef.current && isAuthSessionCurrent(session)) {
         setPetSummary(summary)
       }
     } catch (error) {
       console.warn('宠物状态加载失败，暂不显示宠物:', error)
-      if (seq === petSummarySeqRef.current) {
+      if (seq === petSummarySeqRef.current && isAuthSessionCurrent(session)) {
         setPetSummary(null)
       }
     }
   }, [])
 
   const refreshAnalyzeReminder = React.useCallback(async () => {
+    const session = captureAuthSession()
     try {
-      setAnalyzeReminder(await syncAnalyzeTaskReminderState())
+      const reminder = await syncAnalyzeTaskReminderState()
+      if (isAuthSessionCurrent(session)) setAnalyzeReminder(reminder)
     } catch (error) {
       console.warn('识别提醒状态同步失败:', error)
-      setAnalyzeReminder(readAnalyzeTaskReminderState())
+      if (isAuthSessionCurrent(session)) setAnalyzeReminder(readAnalyzeTaskReminderState())
     }
   }, [])
 
   React.useEffect(() => {
-    const handleReminderChanged = (state: AnalyzeTaskReminderState) => setAnalyzeReminder(state)
+    const handleReminderChanged = (state: AnalyzeTaskReminderState) => {
+      if (state.userId === captureAuthSession().userId) setAnalyzeReminder(state)
+    }
     const handleReminderOpen = (taskId: string) => void openAnalyzeTaskFromReminder(taskId)
     Taro.eventCenter.on(ANALYZE_TASK_REMINDER_CHANGED_EVENT, handleReminderChanged)
     Taro.eventCenter.on(ANALYZE_TASK_REMINDER_OPEN_EVENT, handleReminderOpen)

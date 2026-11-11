@@ -32,6 +32,7 @@ import {
 import { RECORD_DETAIL_ONBOARDING_STEPS } from './record-detail-onboarding-steps'
 
 import './index.scss'
+import { foodRecordAmountText } from '../../../utils/food-record-measurement'
 
 
 const MEAL_TYPE_NAMES: Record<string, string> = {
@@ -87,7 +88,7 @@ const normalizeDisplayNumber = (value: number) => {
 
 const resolveRecordItemRatio = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
   const ratio = Number(item.ratio)
-  if (Number.isFinite(ratio) && ratio > 0) return Math.min(100, ratio)
+  if (item.ratio != null && Number.isFinite(ratio) && ratio >= 0) return Math.min(100, ratio)
   const intake = Number(item.intake)
   const weight = Number(item.weight)
   if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
@@ -607,7 +608,7 @@ function RecordDetailPage() {
                 <View className='food-info'>
                   <Text className='food-name'>{item.name}</Text>
                   <Text className='food-meta'>
-                    摄入 {item.intake ?? 0}g
+                    摄入 {foodRecordAmountText(item)}
                   </Text>
                   <View className={`food-ratio-badge ${ratio > 100 ? 'food-ratio-badge--over' : ''}`}>
                     <Text className='iconfont icon-tubiao-zhuzhuangtu food-ratio-icon' />

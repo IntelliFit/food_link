@@ -69,4 +69,22 @@ describe('manual-food-serving', () => {
       display_unit: 'g',
     })).toBe(12.5)
   })
+
+  it('edits native piece quantities directly without inventing grams', () => {
+    const item = { weight: 2, defaultWeight: 1, displayUnit: 'piece' as const, displayUnitLabel: '个', measurement: { amount: 1, unit: 'piece' as const, basis_amount: 1, basis_unit: 'piece' as const, nutrients_per_basis: { calories: 80 } } }
+    expect(manualFoodDisplayInput(item)).toBe('2')
+    expect(manualFoodWeightInputUnit(item)).toBe('个')
+    expect(manualFoodWeightFromInput(item, 3)).toBe(3)
+    expect(selectedManualFoodAmountText(item)).toBe('2个')
+    expect(manualFoodResultPortionText({ measurement: item.measurement, default_weight_grams: 0 })).toBe('1个')
+  })
+
+  it.each([['piece', 0.25], ['g', 12.55]] as const)('preserves the unedited %s quantity %s in the input submitted on save', (unit, amount) => {
+    const item = {
+      weight: amount, defaultWeight: amount, displayUnit: unit, displayUnitLabel: unit,
+      measurement: { amount, unit, basis_amount: 1, basis_unit: unit, nutrients_per_basis: { calories: 80 } },
+    }
+    const input = manualFoodDisplayInput(item)
+    expect(manualFoodWeightFromInput(item, Number(input))).toBe(amount)
+  })
 })

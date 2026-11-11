@@ -1564,6 +1564,7 @@ type UserCustomFoodDO struct {
 	Title              string         `gorm:"column:title;type:text;not null"`
 	NormalizedTitle    string         `gorm:"column:normalized_title;type:text;not null;uniqueIndex:idx_user_custom_foods_user_title,priority:2"`
 	Category           string         `gorm:"column:category;type:text;not null;default:'custom';index:idx_user_custom_foods_category"`
+	Measurement        map[string]any `gorm:"column:measurement;type:jsonb;serializer:json"`
 	DefaultWeightGrams float64        `gorm:"column:default_weight_grams;type:numeric;not null;default:100"`
 	TotalCalories      float64        `gorm:"column:total_calories;type:numeric;not null;default:0"`
 	TotalProtein       float64        `gorm:"column:total_protein;type:numeric;not null;default:0"`
@@ -2172,6 +2173,8 @@ func (ProductUpdateAcknowledgementDO) TableName() string { return "product_updat
 
 func AllModels() []any {
 	return []any{
+		&AccountDeletionDO{},
+		&AccountDeletionRetainedDO{},
 		&ProductUpdateDO{},
 		&ProductUpdateAcknowledgementDO{},
 		&PushPreferencesDO{},

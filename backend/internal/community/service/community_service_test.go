@@ -49,6 +49,10 @@ type mockFeedRepo struct {
 	profilesErr                error
 	checkinCounts              map[string]int
 	checkinCountsErr           error
+	contributionCounts         map[string]repo.ContributionCounts
+	contributionErr            error
+	contributionStart          *time.Time
+	contributionEnd            *time.Time
 	nutrientFoods              []repo.NutrientFoodRow
 	nutrientFoodsErr           error
 	createdFeedReport          *domain.FeedReport

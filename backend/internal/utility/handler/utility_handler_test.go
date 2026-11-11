@@ -72,6 +72,8 @@ type mockManualFoodService struct {
 	searchPackagedErr    error
 	searchPackagedCalled bool
 	customItems          []domain.ManualFoodResult
+	ownedItems           []domain.ManualFoodResult
+	ownedCalled          bool
 	customHasMore        bool
 	customErr            error
 	saveCustomItem       domain.ManualFoodResult
@@ -94,6 +96,28 @@ func (m *mockManualFoodService) SearchPackaged(ctx context.Context, keyword stri
 }
 func (m *mockManualFoodService) ListCustomFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error) {
 	return m.customItems, m.customHasMore, m.customErr
+}
+func (m *mockManualFoodService) ListOwnedFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error) {
+	m.ownedCalled = true
+	return m.ownedItems, m.customHasMore, m.customErr
+}
+
+func TestManualFoodCustomListImportOptIn(t *testing.T) {
+	for _, query := range []string{"", "&include_imports=1"} {
+		t.Run(query, func(t *testing.T) {
+			svc := &mockManualFoodService{customItems: []domain.ManualFoodResult{{ID: "custom", Source: "custom"}}, ownedItems: []domain.ManualFoodResult{{ID: "package", Source: "packaged_food"}}}
+			router := setupRouter(NewUtilityHandler(nil, nil, svc))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/manual-food/custom?limit=120&offset=0"+query, nil))
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, query != "", svc.ownedCalled)
+			if query == "" {
+				assert.Contains(t, w.Body.String(), `"source":"custom"`)
+			} else {
+				assert.Contains(t, w.Body.String(), `"source":"packaged_food"`)
+			}
+		})
+	}
 }
 func (m *mockManualFoodService) SaveCustomFood(ctx context.Context, userID string, input repo.CustomFoodInput) (domain.ManualFoodResult, error) {
 	m.saveCustomInput = input

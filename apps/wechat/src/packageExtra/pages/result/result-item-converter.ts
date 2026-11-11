@@ -1,6 +1,8 @@
 import type { FoodItem, Nutrients } from '../../../utils/api'
+import { analyzeItemMeasurement, matchingPackagedCandidate, packagedCandidateMeasurement, withResultMeasurement } from './result-measurement'
 
 export interface NutritionItem {
+  measurement?: FoodItem['measurement']
   id: number
   manual_source?: FoodItem['manual_source']
   manual_source_id?: string
@@ -140,9 +142,13 @@ export const convertApiFoodItemsToNutritionItems = (items: FoodItem[]): Nutritio
     const packageMatchStatus = item.package_match_status ?? item.packageMatchStatus
     const packageWeightApplied = item.package_weight_applied ?? item.packageWeightApplied
     const packagedCandidates = item.packaged_candidates ?? item.packagedCandidates
-    const packagedPending = isPackagedCandidatePending(packageMatchStatus, packageWeightApplied, packagedCandidates)
+    const measurement = analyzeItemMeasurement(item)
+    const matchedCandidate = matchingPackagedCandidate(item)
+    const unresolvedVolume = !measurement && matchedCandidate && packagedCandidateMeasurement(matchedCandidate)?.basis_unit === 'ml'
+    const packagedPending = isPackagedCandidatePending(packageMatchStatus, packageWeightApplied, packagedCandidates) || !!unresolvedVolume
 
-    return {
+    return withResultMeasurement({
+      measurement: measurement || undefined,
       id: itemId,
       sourceItemId: itemId,
       sourceName: item.name,
@@ -190,6 +196,6 @@ export const convertApiFoodItemsToNutritionItems = (items: FoodItem[]): Nutritio
       fat: nutrients.fat,
       waterMl,
       nutrients
-    }
+    })
   })
 )

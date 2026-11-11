@@ -88,6 +88,32 @@
   color: #3f4c46;
 }
 
+.contribution-periods {
+  display: flex;
+  gap: 14rpx;
+  margin-top: 18rpx;
+
+  > view {
+    padding: 12rpx 30rpx;
+    border-radius: 18rpx;
+    background: #edf3ef;
+    color: #66736d;
+    font-size: 25rpx;
+
+    &.active { background: #3f7657; color: #fff; font-weight: 600; }
+  }
+}
+
+.contribution-ranking-rule {
+  display: block;
+  margin-top: 14rpx;
+  font-size: 23rpx;
+  line-height: 1.5;
+  color: #66736d;
+}
+
+.contribution-create-link { flex: 0 0 auto; color: #3f7657; font-size: 26rpx; }
+
 .leaderboard-period-icon {
   font-size: 28rpx;
   color: #4f8163;

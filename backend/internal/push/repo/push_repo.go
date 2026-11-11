@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	authrepo "food_link/backend/internal/auth/repo"
 	migrationdo "food_link/backend/internal/migration/do"
 	"food_link/backend/internal/push/domain"
 	"github.com/google/uuid"
@@ -115,6 +116,15 @@ func (r *Repository) Revoke(ctx context.Context, userID, id string) error {
 
 func (r *Repository) Devices(ctx context.Context, userID string) ([]migrationdo.PushDeviceDO, error) {
 	var rows []migrationdo.PushDeviceDO
+	if r.db.Migrator().HasTable("account_deletions") {
+		var count int64
+		if err := r.db.WithContext(ctx).Table("account_deletions").Where("user_id = ? AND state <> ?", userID, "cancelled").Count(&count).Error; err != nil {
+			return nil, err
+		}
+		if count > 0 {
+			return rows, nil
+		}
+	}
 	err := r.db.WithContext(ctx).Where("user_id = ? AND active AND last_seen_at > ?", userID, time.Now().AddDate(0, 0, -30)).Find(&rows).Error
 	return rows, err
 }
@@ -125,12 +135,28 @@ func (r *Repository) Device(ctx context.Context, id string) (*migrationdo.PushDe
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
+	if err == nil && r.db.Migrator().HasTable("account_deletions") {
+		var count int64
+		if checkErr := r.db.WithContext(ctx).Table("account_deletions").Where("user_id = ? AND state <> ?", row.UserID, "cancelled").Count(&count).Error; checkErr != nil {
+			return nil, checkErr
+		}
+		if count > 0 {
+			return nil, nil
+		}
+	}
 	return &row, err
 }
 
 func TokenHash(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+func (r *Repository) WithActiveAccountNotification(ctx context.Context, id string, send func() error) error {
+	if !r.db.Migrator().HasTable("account_deletions") {
+		return send()
+	}
+	return authrepo.NewUserRepo(r.db).WithActiveAccountWrite(ctx, id, send)
 }
 
 func (r *Repository) HasRecord(ctx context.Context, userID, meal string, start, end time.Time) (bool, error) {

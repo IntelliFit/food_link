@@ -1,0 +1,133 @@
+.custom-food-editor {
+  .custom-editor-basis {
+    display: flex;
+    align-items: center;
+    gap: 14rpx;
+  }
+
+  .custom-editor-basis .custom-field-label {
+    margin-bottom: 0;
+  }
+
+  .custom-editor-category .custom-field-label {
+    margin-bottom: 0;
+  }
+
+  .custom-editor-basis-input {
+    width: 144rpx;
+    text-align: center;
+  }
+
+  .custom-editor-unit {
+    font-size: 25rpx;
+    color: #475569;
+  }
+
+  .custom-editor-unit-options {
+    flex-wrap: wrap;
+  }
+
+  .custom-editor-toggle {
+    padding-top: 14rpx;
+    padding-bottom: 14rpx;
+    gap: 18rpx;
+  }
+
+  .custom-editor-toggle-copy {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .custom-editor-toggle .custom-more-arrow {
+    flex: 0 0 auto;
+  }
+
+  .custom-editor-toggle .custom-editor-summary {
+    display: block;
+    margin-top: 6rpx;
+    font-size: 21rpx;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #64748b;
+  }
+
+  .custom-editor-micro-toggle {
+    display: flex;
+    justify-content: space-between;
+    gap: 16rpx;
+    margin-top: 18rpx;
+    padding: 10rpx 0;
+    color: #64748b;
+    font-size: 23rpx;
+  }
+
+  .custom-editor-portion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16rpx;
+    margin-top: 22rpx;
+    font-size: 23rpx;
+    color: #64748b;
+  }
+
+  .custom-editor-portion-action {
+    flex: 0 0 auto;
+    color: #059669;
+  }
+
+  .custom-editor-portion-title {
+    display: block;
+    margin-bottom: 8rpx;
+    font-size: 25rpx;
+    font-weight: 600;
+    color: #334155;
+  }
+
+  .custom-editor-portion .custom-editor-summary {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+
+  .custom-editor-portion-settings {
+    margin-top: 18rpx;
+  }
+
+  .custom-editor-package-calculator {
+    margin-top: 16rpx;
+    padding: 18rpx;
+    border-radius: 16rpx;
+    background: rgba(16, 185, 129, 0.06);
+  }
+
+  .custom-editor-package-calculator > .custom-editor-portion-action {
+    display: block;
+    padding: 4rpx 0 12rpx;
+  }
+
+  .custom-editor-package-result {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 14rpx;
+    font-size: 23rpx;
+    overflow-wrap: anywhere;
+  }
+
+  .custom-editor-package-apply {
+    flex: 0 0 auto;
+    padding: 10rpx 18rpx;
+    border-radius: 24rpx;
+    background: #059669;
+    color: #fff;
+
+    &.disabled {
+      opacity: 0.4;
+    }
+  }
+
+  .custom-editor-save-disabled {
+    opacity: 0.55;
+  }
+}

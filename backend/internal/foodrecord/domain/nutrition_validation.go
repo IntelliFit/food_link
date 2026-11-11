@@ -77,9 +77,19 @@ func ValidateFoodItemsForRecording(items []FoodItem) error {
 		return fmt.Errorf("没有可记录的食物，请重新分析")
 	}
 	for _, item := range items {
+		if item.Measurement != nil {
+			if err := validateMeasuredFoodItem(item); err != nil {
+				return err
+			}
+			if err := ApplyFoodItemMeasurement(&item); err != nil {
+				return err
+			}
+		}
 		n := item.Nutrients
-		if err := ValidateFoodNutritionValues(item.Name, item.Weight, n.Calories, n.Protein, n.Carbs, n.Fat); err != nil {
-			return err
+		if item.Measurement == nil {
+			if err := ValidateFoodNutritionValues(item.Name, item.Weight, n.Calories, n.Protein, n.Carbs, n.Fat); err != nil {
+				return err
+			}
 		}
 		if hasModelNutritionSource(item) && n.Protein+n.Carbs+n.Fat == 0 && !ZeroEnergyFood(item.Name) {
 			return fmt.Errorf("食物「%s」缺少有效三大营养素，请重新分析", item.Name)

@@ -59,6 +59,7 @@ export type LocationSelection = {
 }
 
 export type RootStackParamList = {
+  AccountDeletion: undefined
   Login: {
     inviteCode?: string
     fi?: string

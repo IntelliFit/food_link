@@ -1,6 +1,7 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
 import * as React from 'react'
 import Taro from '@tarojs/taro'
+import { foodRecordAmountText } from '../../../utils/food-record-measurement'
 import {
   communityGetComments,
   communityGetFeedContext,
@@ -196,7 +197,7 @@ const MICRO_COLOR_MAP: Record<MicroNutrientKey, string> = {
 
 function resolveRecordItemRatio(item: Pick<ManualFoodSourceItem, 'ratio' | 'intake' | 'weight'>): number {
   const ratio = Number(item.ratio)
-  if (Number.isFinite(ratio) && ratio > 0) return Math.min(100, ratio)
+  if (item.ratio != null && Number.isFinite(ratio) && ratio >= 0) return Math.min(100, ratio)
   const intake = Number(item.intake)
   const weight = Number(item.weight)
   if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
@@ -1051,9 +1052,9 @@ export function InteractionFeedDetailPage() {
               <Text className='manual-food-detail-title'>{manualFoodDetail.displayName}</Text>
               <Text className='manual-food-detail-meta'>{[manualFoodDetail.sourceLabel, '本次记录'].filter(Boolean).join(' · ')}</Text>
               {manualFoodDetail.manual_portion_label && <Text className='manual-food-detail-meta'>{manualFoodDetail.manual_portion_label}</Text>}
-              {manualFoodDetail.weight != null && (
+              {(manualFoodDetail.measurement != null || manualFoodDetail.weight != null) && (
                 <Text className='manual-food-detail-meta'>
-                  摄入 {formatMicroValue(manualFoodDetail.weight * manualFoodRatio / 100)}g
+                  摄入 {foodRecordAmountText(manualFoodDetail)}
                 </Text>
               )}
               <View className='manual-food-detail-nutrients'>

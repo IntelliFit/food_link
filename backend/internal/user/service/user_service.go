@@ -635,6 +635,15 @@ func (s *UserService) GetRecordDays(ctx context.Context, userID string) (int64, 
 
 // GetPublicProfile 返回其他用户的公开信息（脱敏）
 func (s *UserService) GetPublicProfile(ctx context.Context, viewerUserID, targetUserID string) (map[string]any, error) {
+	if s.users.AccountDeletionEnabled() {
+		d, err := s.users.DeletionStatus(ctx, targetUserID)
+		if err != nil {
+			return nil, repo.ErrDeletionUnavailable
+		}
+		if d != nil && d.State != "cancelled" {
+			return nil, commonerrors.ErrNotFound
+		}
+	}
 	viewerUserID = strings.TrimSpace(viewerUserID)
 	targetUserID = strings.TrimSpace(targetUserID)
 	if viewerUserID != "" && viewerUserID != targetUserID && s.blockChecker != nil {
@@ -685,12 +694,14 @@ func (s *UserService) DeleteAccount(ctx context.Context, userID string) error {
 		return commonerrors.ErrNotFound
 	}
 
-	if err := s.users.DeleteByID(ctx, userID); err != nil {
-		logger.Error(ctx, "注销账号失败", err, slog.String("user_id", userID))
+	// Legacy callers also enter the reversible lifecycle; only the cleanup
+	// worker may remove account-owned data after the deadline.
+	if _, err := s.users.RequestDeletion(ctx, userID, 7, time.Now()); err != nil {
+		logger.Error(ctx, "注销账号申请失败", err, slog.String("user_id", userID))
 		return err
 	}
 
-	logger.Info(ctx, "注销账号完成", slog.String("user_id", userID))
+	logger.Info(ctx, "注销账号申请已受理", slog.String("user_id", userID))
 	return nil
 }
 

@@ -42,6 +42,14 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.Exec(`
 		ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()
 	`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE reward_task_uploads (
+        id TEXT PRIMARY KEY, user_id TEXT, task_type TEXT, status TEXT,
+        packaged_food_id TEXT, created_at TIMESTAMPTZ
+    )`).Error)
+	require.NoError(t, db.Exec(`CREATE TABLE analysis_tasks (
+        id TEXT PRIMARY KEY, user_id TEXT, task_type TEXT, status TEXT,
+        result JSONB, created_at TIMESTAMPTZ
+    )`).Error)
 	return db
 }
 
@@ -247,10 +255,10 @@ func TestManualFoodServingProfile(t *testing.T) {
 		KcalPer100g:   2,
 	}, 0)
 	assert.Equal(t, "beverage", coffee.Category)
-	assert.Equal(t, "ml", coffee.DisplayUnit)
-	assert.Equal(t, 350.0, coffee.DefaultWeightGrams)
-	require.Len(t, coffee.ServingPresets, 3)
-	assert.Equal(t, "450ml", coffee.ServingPresets[1].Label)
+	assert.Equal(t, "g", coffee.DisplayUnit, "每100g营养不能仅因名称是咖啡就推断毫升密度")
+	assert.Equal(t, 100.0, coffee.DefaultWeightGrams)
+	assert.Empty(t, coffee.ServingPresets)
+	require.NotNil(t, coffee.Measurement)
 }
 
 func TestManualFoodServingProfileUsesWholeEggPortionForTeaEgg(t *testing.T) {
@@ -569,7 +577,9 @@ func TestManualFoodResultFromPackagedBeverageCapsAbnormalNetContent(t *testing.T
 
 	assert.Equal(t, "beverage", item.Category)
 	assert.Equal(t, "ml", item.DisplayUnit)
-	assert.Equal(t, 500.0, item.DefaultWeightGrams)
+	assert.Zero(t, item.DefaultWeightGrams, "500ml不是500g")
+	require.NotNil(t, item.Measurement)
+	assert.Equal(t, 500.0, item.Measurement.Amount)
 	assert.Equal(t, "500ml", item.PortionLabel)
 	assert.InDelta(t, 180, item.TotalCalories, 0.01)
 	assert.InDelta(t, 45, item.TotalCarbs, 0.01)
@@ -590,7 +600,9 @@ func TestManualFoodResultFromPackagedBeverageCapsAbnormalServingWeight(t *testin
 
 	assert.Equal(t, "beverage", item.Category)
 	assert.Equal(t, "ml", item.DisplayUnit)
-	assert.Equal(t, 500.0, item.DefaultWeightGrams)
+	assert.Zero(t, item.DefaultWeightGrams, "没有明确密度时不能把毫升写成克")
+	require.NotNil(t, item.Measurement)
+	assert.Equal(t, 500.0, item.Measurement.Amount)
 	assert.Equal(t, "500ml", item.PortionLabel)
 	assert.InDelta(t, 457.5, item.TotalCalories, 0.01)
 }

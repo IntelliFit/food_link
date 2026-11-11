@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	authrepo "food_link/backend/internal/auth/repo"
 	commonerrors "food_link/backend/internal/common/errors"
 	migrationdo "food_link/backend/internal/migration/do"
 	"food_link/backend/internal/push/domain"
@@ -332,10 +334,19 @@ func (s *Service) Dispatch(ctx context.Context, now time.Time) (bool, error) {
 		slog.String("kind", job.Kind), slog.String("meal_type", job.MealType),
 		slog.String("push_provider", providerName(job.Provider)), slog.String("push_priority", message.Priority), slog.Int("ttl_seconds", message.TTL))
 	var ticket, code string
-	if providerName(job.Provider) == "honor" {
-		ticket, code = s.honor.Send(ctx, message)
-	} else {
-		ticket, code = s.expo.Send(ctx, message)
+	err = s.repo.WithActiveAccountNotification(ctx, job.UserID, func() error {
+		if providerName(job.Provider) == "honor" {
+			ticket, code = s.honor.Send(ctx, message)
+		} else {
+			ticket, code = s.expo.Send(ctx, message)
+		}
+		return nil
+	})
+	if errors.Is(err, authrepo.ErrAccountDeleting) || errors.Is(err, authrepo.ErrDeletionSession) {
+		return true, nil
+	}
+	if err != nil {
+		return true, s.storageError(ctx, "check_account", job.UserID)
 	}
 	if code == "" {
 		if providerName(job.Provider) == "honor" {

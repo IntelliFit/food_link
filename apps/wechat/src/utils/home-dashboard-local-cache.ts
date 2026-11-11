@@ -1,8 +1,9 @@
 /**
- * 首页 dashboard 本地快照（v4）：与 `pages/index` 共用 storage。
+ * 首页 dashboard 本地快照（v5）：与 `pages/index` 共用 storage。
  * 饮食记录保存成功后拉取当日 dashboard 写入缓存，回首页可先读到新摄入，无需等整页重拉。
  */
 import Taro from '@tarojs/taro'
+import { captureAuthSession, isAuthSessionCurrent, type AuthSession } from './auth-session'
 import {
   type BodyMetricWaterDay,
   type BodyMetricWaterLogItem,
@@ -28,6 +29,8 @@ export const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache'
 export const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 14
 
 export interface HomeDashboardLocalSnapshot {
+  /** v5 rejects old snapshots which may have been stamped with the wrong owner. */
+  schema_version?: number
   /** 本地缓存必须与当前登录账号绑定，避免切换账号后展示上一账号的数据。 */
   user_id?: string
   date: string
@@ -126,6 +129,7 @@ export function getStoredHomeDashboardSnapshots(): HomeDashboardLocalSnapshot[] 
     const valid = raw
       .filter((item): item is HomeDashboardLocalSnapshot => {
         if (!item || typeof item !== 'object') return false
+        if (item.schema_version !== 5) return false
         const date = (item as { date?: unknown }).date
         if (typeof date !== 'string' || date.length === 0) return false
         return (item as { user_id?: unknown }).user_id === userId
@@ -148,11 +152,13 @@ export function getStoredHomeDashboardSnapshotByDate(date: string): HomeDashboar
   return snapshots.find((item) => item.date === normalizedDate) || null
 }
 
-export function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot): void {
+export function saveHomeDashboardSnapshot(snapshot: HomeDashboardLocalSnapshot, session?: AuthSession): void {
   const userId = currentUserId()
-  if (!userId) return
+  if (!userId || (session && !isAuthSessionCurrent(session))) return
+  if (snapshot.user_id && snapshot.user_id !== userId) return
   const cleanedSnapshot = {
     ...snapshot,
+    schema_version: 5,
     user_id: userId,
     meals: stripMealFullRecords(snapshot.meals || [])
   }
@@ -539,6 +545,7 @@ export function applyOptimisticFoodRecordToHomeDashboardSnapshot(
  * @param calendarDate `formatDateKey` 口径 YYYY-MM-DD
  */
 export async function refreshHomeDashboardLocalSnapshotFromCloud(calendarDate: string): Promise<boolean> {
+  const session = captureAuthSession()
   if (!getAccessToken()) {
     return false
   }
@@ -548,6 +555,7 @@ export async function refreshHomeDashboardLocalSnapshotFromCloud(calendarDate: s
       getHomeDashboard(calendarDate),
       getExerciseLogs({ date: calendarDate }).catch(() => null)
     ])
+    if (!isAuthSessionCurrent(session)) return false
     const intake = res.intakeData
     const nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(
       res.exerciseBurnedKcal,
@@ -563,7 +571,7 @@ export async function refreshHomeDashboardLocalSnapshotFromCloud(calendarDate: s
       exerciseBurnedKcal: nextExerciseKcal,
       achievement: nextAchievement,
       nutritionTarget: res.nutritionTarget || null
-    })
+    }, session)
     return true
   } catch (e) {
     console.error('[home-dashboard-local-cache] refresh from cloud failed:', e)

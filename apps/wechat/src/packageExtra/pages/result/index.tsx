@@ -71,12 +71,17 @@ import {
 } from '../../../components/MealTypeSelector'
 import {
   buildCorrectionItemsPayload,
-  formatCorrectionWeight,
   hasCorrectionChanges,
   hasCorrectionWeightChanged,
   normalizeFoodNameForCorrection,
 } from './correction-payload'
 import { scaleCaloriesForWeight } from './weight-adjust'
+import { ResultQuantityControl } from './ResultQuantityControl'
+import { foodMeasureUnitLabel, foodMeasurementGrams, formatFoodMeasurementBasis } from '../../../utils/food-measure'
+import {
+  packagedCandidateMeasurement, resizeResultMeasurement, resultMeasurementAmountText,
+  resultMeasurementStep, rewriteResultMeasurementNutrients, withResultMeasurement,
+} from './result-measurement'
 import {
   convertApiFoodItemsToNutritionItems,
   normalizeItemNutrients,
@@ -295,6 +300,7 @@ const EDIBLE_PORTION_HINT_KEYWORDS = [
 ]
 
 const getEdiblePortionHint = (item: NutritionItem): string | null => {
+  if (item.measurement) return null
   if (item.ediblePortionRatio > 0 && item.ediblePortionRatio < 99) {
     const reason = item.ediblePortionReason ? `：${item.ediblePortionReason}` : ''
     return `可食部 ${Math.round(item.ediblePortionRatio)}%，原始约 ${Math.round(item.grossWeight)}g，计入 ${Math.round(item.weight)}g${reason}`
@@ -327,7 +333,6 @@ const formatIngredientMetricDisplay = (field: IngredientMetricField, value: numb
   field === 'waterMl' || field === 'calories' ? formatWaterDisplay(value) : formatMacroDisplay(value)
 )
 
-const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
 
 type NutrientDetailKey = keyof Pick<Nutrients,
   'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg' |
@@ -1348,6 +1353,10 @@ function ResultPage() {
     setNutritionItems(items => {
       const updatedItems = items.map(item => {
         if (item.id === id) {
+          if (item.measurement) {
+            const step = resultMeasurementStep(item)
+            return resizeResultMeasurement(item, Math.max(0.01, item.measurement.amount + (delta < 0 ? -step : step)))
+          }
           // 调节的是 weight（AI 估算的食物总重量）
           const newWeight = Math.max(10, item.weight + delta) // 最小 10g
           const weightScale = item.weight > 0 ? newWeight / item.weight : 1
@@ -1460,7 +1469,7 @@ function ResultPage() {
             fat: nextItem.fat
           }
         }
-      })
+      }).map((item) => item.id === id && item.measurement ? rewriteResultMeasurementNutrients(item, item.nutrients) : item)
 
       calculateNutritionStats(updatedItems)
       refreshEditedMealAdvice(updatedItems)
@@ -1586,6 +1595,7 @@ function ResultPage() {
   }
 
   const applyPackagedCandidate = (id: number, candidate: Record<string, unknown>) => {
+    const measurement = packagedCandidateMeasurement(candidate)
     const weight = candidateWeightForNutrition(candidate)
     if (weight <= 0) {
       Taro.showToast({ title: '该规格缺少净含量', icon: 'none' })
@@ -1603,9 +1613,10 @@ function ResultPage() {
     setNutritionItems(items => {
       const updatedItems = items.map(item => {
         if (item.id !== id) return item
-        const ratio = item.ratio > 0 ? item.ratio : 100
-        return {
+        const ratio = Number.isFinite(item.ratio) ? Math.max(0, Math.min(100, item.ratio)) : 100
+        return withResultMeasurement({
           ...item,
+          measurement: measurement || undefined,
           name: nextName,
           weight,
           originalWeight: weight,
@@ -1641,7 +1652,7 @@ function ResultPage() {
           nutritionSourceCategory: 'database',
           isUnresolved: false,
           packagedPending: false
-        } as NutritionItem
+        } as NutritionItem)
       })
       calculateNutritionStats(updatedItems)
       refreshEditedMealAdvice(updatedItems)
@@ -1655,6 +1666,7 @@ function ResultPage() {
     items: items.map(item => ({
       itemId: item.sourceItemId ?? item.id,
       name: item.name,
+      measurement: item.measurement,
       intakeRatio: item.ratio,
       intakeGrams: item.intake,
       manual_source: item.manual_source,
@@ -1716,12 +1728,12 @@ function ResultPage() {
     setFoodEditDraft({
       itemId: item.id,
       name: item.name,
-      weight: String(roundToSingleDecimal(item.weight || 0)),
-      calories: String(Math.round(item.calorie || 0)),
-      protein: formatMacroDisplay(item.protein || 0),
-      carbs: formatMacroDisplay(item.carbs || 0),
-      fat: formatMacroDisplay(item.fat || 0),
-      waterMl: String(Math.round(item.waterMl || 0))
+      weight: item.measurement ? String(item.measurement.amount) : String(roundToSingleDecimal(item.weight || 0)),
+      calories: item.measurement ? String(item.calorie || 0) : String(Math.round(item.calorie || 0)),
+      protein: item.measurement ? String(item.protein || 0) : formatMacroDisplay(item.protein || 0),
+      carbs: item.measurement ? String(item.carbs || 0) : formatMacroDisplay(item.carbs || 0),
+      fat: item.measurement ? String(item.fat || 0) : formatMacroDisplay(item.fat || 0),
+      waterMl: item.measurement ? String(item.waterMl || 0) : String(Math.round(item.waterMl || 0))
     })
   }
 
@@ -1772,13 +1784,13 @@ function ResultPage() {
       return
     }
     if (weight == null || weight <= 0) {
-      Taro.showToast({ title: '请输入大于0的重量', icon: 'none' })
+      Taro.showToast({ title: '请输入大于0的数量', icon: 'none' })
       return
     }
     const targetIndex = nutritionItems.findIndex(item => item.id === foodEditDraft.itemId)
     const original = nutritionItems[targetIndex]
     if (!original) return
-    if (name !== original.name.trim()) {
+    if (name !== original.name.trim() && !original.measurement) {
       foodRecalculationBusyRef.current = true
       try {
         if (!await confirmSingleItemRecalculation(name) || !foodEditorMountedRef.current) return
@@ -1828,7 +1840,7 @@ function ResultPage() {
     const nextItems = nutritionItems.map(item => {
         if (item.id !== foodEditDraft.itemId) return item
 
-        const weightChanged = Math.abs(weight - item.weight) > 0.001
+        const weightChanged = Math.abs(weight - (item.measurement?.amount ?? item.weight)) > 0.001
         const isPendingPackagedChoice = isPackagedChoicePending(item)
         const nutritionChanged =
           Math.abs(calories - item.calorie) > 0.001 ||
@@ -1836,6 +1848,17 @@ function ResultPage() {
           Math.abs(carbs - item.carbs) > 0.001 ||
           Math.abs(fat - item.fat) > 0.001 ||
           Math.abs(waterMl - item.waterMl) > 0.001
+        if (item.measurement) {
+          const resized = resizeResultMeasurement(item, weight)
+          const corrected = nutritionChanged ? rewriteResultMeasurementNutrients(resized, {
+            ...resized.nutrients, calories, protein, carbs, fat, waterMl, water_ml: waterMl,
+          }) : resized
+          return {
+            ...corrected, name, nutritionEdited: nutritionChanged || item.nutritionEdited,
+            nutritionSource: nutritionChanged ? 'user_correction_context' : item.nutritionSource,
+            nutritionSourceCategory: nutritionChanged ? 'user_correction_context' : item.nutritionSourceCategory,
+          }
+        }
         const weightScale = item.weight > 0 ? weight / item.weight : 1
         const nextProtein = nutritionChanged ? roundToSingleDecimal(protein) : roundToSingleDecimal(item.protein * weightScale)
         const nextCarbs = nutritionChanged ? roundToSingleDecimal(carbs) : roundToSingleDecimal(item.carbs * weightScale)
@@ -2411,7 +2434,7 @@ function ResultPage() {
   const handleCorrectionWeightChange = (id: number, val: string) => {
     const parsed = Number(val)
     const num = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
-    setCorrectionItems(prev => prev.map(item => item.id === id ? { ...item, weight: num } : item))
+    setCorrectionItems(prev => prev.map(item => item.id === id ? (item.measurement ? resizeResultMeasurement(item, num) : { ...item, weight: num }) : item))
   }
 
   // 删除纠错项
@@ -2518,15 +2541,17 @@ function ResultPage() {
             if (baseline) {
               const nameChanged = normalizeFoodNameForCorrection(item.name.trim()) !== normalizeFoodNameForCorrection(baseline.name.trim())
               const weightChanged = hasCorrectionWeightChanged(item.weight, baseline.weight)
+                || item.measurement?.amount !== baseline.measurement?.amount
+                || item.measurement?.unit !== baseline.measurement?.unit
               if (nameChanged && weightChanged) {
-                editDescriptions.push(`将"${baseline.name}"改为"${item.name.trim()}"，重量改为${formatCorrectionWeight(item.weight)}g`)
+                editDescriptions.push(`将"${baseline.name}"改为"${item.name.trim()}"，份量改为${resultMeasurementAmountText(item)}`)
               } else if (nameChanged) {
                 editDescriptions.push(`将"${baseline.name}"改为"${item.name.trim()}"`)
               } else if (weightChanged) {
-                editDescriptions.push(`将"${item.name.trim()}"的重量改为${formatCorrectionWeight(item.weight)}g`)
+                editDescriptions.push(`将"${item.name.trim()}"的份量改为${resultMeasurementAmountText(item)}`)
               }
             } else {
-              editDescriptions.push(`新增食物"${item.name.trim()}" ${formatCorrectionWeight(item.weight)}g`)
+              editDescriptions.push(`新增食物"${item.name.trim()}" ${resultMeasurementAmountText(item)}`)
             }
           }
           for (const baseline of nutritionItems) {
@@ -2942,7 +2967,9 @@ function ResultPage() {
               </View>
               <View className='total-weight-badge'>
                 <Text className='weight-icon iconfont icon-tianpingzuo'></Text>
-                <Text className='weight-text'>约 {totalWeight}g</Text>
+                {!(totalWeight === 0 && nutritionItems.some(item => item.measurement && foodMeasurementGrams(item.measurement) === null)) && (
+                  <Text className='weight-text'>{nutritionItems.some(item => item.measurement && foodMeasurementGrams(item.measurement) === null) ? '已知重量 ' : '约 '}{totalWeight}g</Text>
+                )}
               </View>
             </View>
 
@@ -3074,7 +3101,8 @@ function ResultPage() {
             <View className='ingredients-list'>
               {nutritionItems.map((item) => {
                 const detailRows = getNutrientDetailRows(item)
-                const per100 = item.unitNutritionPer100g || nutrientPer100FromItem(item)
+                const per100 = item.measurement ? normalizeItemNutrients({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, ...item.measurement.nutrients_per_basis }, 0) : item.unitNutritionPer100g || nutrientPer100FromItem(item)
+                const basisLabel = item.measurement ? formatFoodMeasurementBasis(item.measurement) : '每100g'
                 const detailsExpanded = !!expandedNutritionDetailIds[item.id]
                 const ediblePortionHint = getEdiblePortionHint(item)
                 const packageChoicePending = isPackagedChoicePending(item)
@@ -3094,8 +3122,8 @@ function ResultPage() {
                         </View>
                       </View>
                     </View>
-                    <Text className='ingredient-basis-label'>当前整份营养（约 {Math.round(item.weight)}g）</Text>
-                    <Text className='ingredient-per100-label'>每100g参考：{Math.round(per100.calories || 0)} kcal · 蛋白 {formatMacroDisplay(per100.protein || 0)}g · 碳水 {formatMacroDisplay(per100.carbs || 0)}g · 脂肪 {formatMacroDisplay(per100.fat || 0)}g</Text>
+                    <Text className='ingredient-basis-label'>当前整份营养（{resultMeasurementAmountText(item)}）</Text>
+                    <Text className='ingredient-per100-label'>{basisLabel}参考：{Math.round(per100.calories || 0)} kcal · 蛋白 {formatMacroDisplay(per100.protein || 0)}g · 碳水 {formatMacroDisplay(per100.carbs || 0)}g · 脂肪 {formatMacroDisplay(per100.fat || 0)}g</Text>
                     {ediblePortionHint && (
                       <View className='ingredient-edible-portion-hint'>
                         <Text className='ingredient-edible-portion-hint-text'>{ediblePortionHint}</Text>
@@ -3227,29 +3255,13 @@ function ResultPage() {
                   )}
 
                   <View className='ingredient-controls'>
-                    <View className='weight-control'>
-                      <Text className='control-label'>估算重量</Text>
-                      {item.ediblePortionRatio > 0 && item.ediblePortionRatio < 99 && (
-                        <Text className='control-sub-label'>原始约 {Math.round(item.grossWeight)}g · 可食 {Math.round(item.ediblePortionRatio)}%</Text>
-                      )}
-                      <View className='weight-adjuster'>
-                        <View
-                          className='adjust-btn minus'
-                          onClick={() => handleWeightAdjust(item.id, -10)}
-                        >–</View>
-                        <Text className='weight-display'>{formatWeightDisplay(item.weight)}</Text>
-                        <View
-                          className='adjust-btn plus'
-                          onClick={() => handleWeightAdjust(item.id, 10)}
-                        >+</View>
-                      </View>
-                    </View>
+                    <ResultQuantityControl item={item} onAdjust={(delta) => handleWeightAdjust(item.id, delta)} />
 
                     <View className='ratio-control'>
                       <View className='ratio-control-main'>
                         <View className='ratio-label-wrap'>
                           <Text className='control-label'>实际摄入</Text>
-                          <Text className='control-sub-label'>约 {formatWeightDisplay(item.intake)}</Text>
+                          <Text className='control-sub-label'>{resultMeasurementAmountText(item, true)}</Text>
                         </View>
                         <View className='ratio-control-right'>
                           <View className='ratio-slider-shell'>
@@ -3357,7 +3369,7 @@ function ResultPage() {
             <ScrollView className='drawer-scroll food-edit-drawer-scroll' scrollY>
               <View className='food-edit-section'>
                 <Text className='food-edit-section-title'>基础信息</Text>
-                <Text className='food-edit-recalculation-hint'>修改名称后，保存时按当前重量重算这一项；其他食物和摄入比例保留。</Text>
+                <Text className='food-edit-recalculation-hint'>{nutritionItems.find(item => item.id === foodEditDraft.itemId)?.measurement ? '按当前份量确认名称和营养，其他食物和摄入比例保留。' : '修改名称后，保存时按当前重量重算这一项；其他食物和摄入比例保留。'}</Text>
                 <View className='food-edit-field'>
                   <Text className='food-edit-label'>名称</Text>
                   <Input
@@ -3368,15 +3380,15 @@ function ResultPage() {
                   />
                 </View>
                 <View className='food-edit-field food-edit-field--with-unit'>
-                  <Text className='food-edit-label'>估算重量</Text>
+                  <Text className='food-edit-label'>整份数量</Text>
                   <Input
                     className='food-edit-input'
                     type='digit'
                     value={foodEditDraft.weight}
-                    placeholder='重量'
+                    placeholder='数量'
                     onInput={(e: any) => updateFoodEditDraftField('weight', e.detail.value)}
                   />
-                  <Text className='food-edit-unit'>g</Text>
+                  <Text className='food-edit-unit'>{foodMeasureUnitLabel(nutritionItems.find(item => item.id === foodEditDraft.itemId)?.measurement?.unit || 'g')}</Text>
                 </View>
               </View>
               <View className='food-edit-section'>
@@ -3553,11 +3565,11 @@ function ResultPage() {
                     <View className='weight-input-wrapper'>
                       <Input
                         className='correction-input weight-input'
-                        type='number'
-                        value={item.weight.toString()}
+                        type='digit'
+                        value={String(item.measurement?.amount ?? item.weight)}
                         onInput={(e: any) => handleCorrectionWeightChange(item.id, e.detail.value)}
                       />
-                      <Text className='weight-unit'>g</Text>
+                      <Text className='weight-unit'>{foodMeasureUnitLabel(item.measurement?.unit || 'g')}</Text>
                     </View>
                   </View>
                   {taskType !== 'food_text' && (

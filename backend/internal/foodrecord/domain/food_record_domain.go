@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
+	"food_link/backend/internal/foodmeasure"
+
 	"gorm.io/datatypes"
 )
 
@@ -43,36 +45,37 @@ type FoodRecord struct {
 func (FoodRecord) TableName() string { return "user_food_records" }
 
 type FoodItem struct {
-	Name                    string               `json:"name"`
-	Weight                  float64              `json:"weight"`
-	Ratio                   float64              `json:"ratio"`
-	Intake                  float64              `json:"intake"`
-	ImagePath               *string              `json:"image_path,omitempty"`
-	ImagePaths              []string             `json:"image_paths,omitempty"`
-	GrossWeightGrams        float64              `json:"gross_weight_grams,omitempty"`
-	EdiblePortionRatio      float64              `json:"edible_portion_ratio,omitempty"`
-	EdiblePortionReason     *string              `json:"edible_portion_reason,omitempty"`
-	EdiblePortionSource     *string              `json:"edible_portion_source,omitempty"`
-	SuggestedRatio          *float64             `json:"suggested_ratio,omitempty"`
-	SuggestedRatioReason    *string              `json:"suggested_ratio_reason,omitempty"`
-	SuggestedRatioSource    *string              `json:"suggested_ratio_source,omitempty"`
-	WaterMl                 float64              `json:"water_ml,omitempty"`
-	NutritionSource         *string              `json:"nutrition_source,omitempty"`
-	NutritionSourceCategory *string              `json:"nutrition_source_category,omitempty"`
-	MatchedFoodID           *string              `json:"matched_food_id,omitempty"`
-	PackagedFoodID          *string              `json:"packaged_food_id,omitempty"`
-	PackageMatchStatus      *string              `json:"package_match_status,omitempty"`
-	PackageMatchConfidence  *float64             `json:"package_match_confidence,omitempty"`
-	PackageWeightSource     *string              `json:"package_weight_source,omitempty"`
-	PackageWeightApplied    *bool                `json:"package_weight_applied,omitempty"`
-	PackageWeightReason     *string              `json:"package_weight_reason,omitempty"`
-	PackagedCandidates      []map[string]any     `json:"packaged_candidates,omitempty"`
-	Nutrients               FoodItemNutrients    `json:"nutrients"`
-	Ingredients             *FoodItemIngredients `json:"ingredients,omitempty"`
-	ManualSource            *string              `json:"manual_source,omitempty"`
-	ManualSourceID          *string              `json:"manual_source_id,omitempty"`
-	ManualSourceTitle       *string              `json:"manual_source_title,omitempty"`
-	ManualPortionLabel      *string              `json:"manual_portion_label,omitempty"`
+	Name                    string                   `json:"name"`
+	Measurement             *foodmeasure.Measurement `json:"measurement,omitempty"`
+	Weight                  float64                  `json:"weight"`
+	Ratio                   float64                  `json:"ratio"`
+	Intake                  float64                  `json:"intake"`
+	ImagePath               *string                  `json:"image_path,omitempty"`
+	ImagePaths              []string                 `json:"image_paths,omitempty"`
+	GrossWeightGrams        float64                  `json:"gross_weight_grams,omitempty"`
+	EdiblePortionRatio      float64                  `json:"edible_portion_ratio,omitempty"`
+	EdiblePortionReason     *string                  `json:"edible_portion_reason,omitempty"`
+	EdiblePortionSource     *string                  `json:"edible_portion_source,omitempty"`
+	SuggestedRatio          *float64                 `json:"suggested_ratio,omitempty"`
+	SuggestedRatioReason    *string                  `json:"suggested_ratio_reason,omitempty"`
+	SuggestedRatioSource    *string                  `json:"suggested_ratio_source,omitempty"`
+	WaterMl                 float64                  `json:"water_ml,omitempty"`
+	NutritionSource         *string                  `json:"nutrition_source,omitempty"`
+	NutritionSourceCategory *string                  `json:"nutrition_source_category,omitempty"`
+	MatchedFoodID           *string                  `json:"matched_food_id,omitempty"`
+	PackagedFoodID          *string                  `json:"packaged_food_id,omitempty"`
+	PackageMatchStatus      *string                  `json:"package_match_status,omitempty"`
+	PackageMatchConfidence  *float64                 `json:"package_match_confidence,omitempty"`
+	PackageWeightSource     *string                  `json:"package_weight_source,omitempty"`
+	PackageWeightApplied    *bool                    `json:"package_weight_applied,omitempty"`
+	PackageWeightReason     *string                  `json:"package_weight_reason,omitempty"`
+	PackagedCandidates      []map[string]any         `json:"packaged_candidates,omitempty"`
+	Nutrients               FoodItemNutrients        `json:"nutrients"`
+	Ingredients             *FoodItemIngredients     `json:"ingredients,omitempty"`
+	ManualSource            *string                  `json:"manual_source,omitempty"`
+	ManualSourceID          *string                  `json:"manual_source_id,omitempty"`
+	ManualSourceTitle       *string                  `json:"manual_source_title,omitempty"`
+	ManualPortionLabel      *string                  `json:"manual_portion_label,omitempty"`
 }
 
 // FoodItemIngredients holds the ingredient label / nutrition facts extracted

@@ -1,17 +1,37 @@
 package service
 
 import (
+	"context"
 	"time"
 
 	"food_link/backend/internal/auth/domain"
+	"food_link/backend/internal/auth/repo"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
 type JWTService struct {
-	secret     []byte
-	accessTTL  time.Duration
-	refreshTTL time.Duration
+	accountAccess func(context.Context, string, int64, string, string) error
+	secret        []byte
+	accessTTL     time.Duration
+	refreshTTL    time.Duration
+}
+
+func (s *JWTService) ConfigureAccountAccess(check func(context.Context, string, int64, string, string) error) {
+	s.accountAccess = check
+}
+func (s *JWTService) CheckAccountAccess(ctx context.Context, claims *domain.Claims, path, method string) error {
+	if claims.Type == "refresh" {
+		return repo.ErrDeletionSession
+	}
+	if s.accountAccess == nil {
+		return nil
+	}
+	issued := claims.IssuedNano
+	if issued == 0 && claims.IssuedAt != nil {
+		issued = claims.IssuedAt.UnixNano()
+	}
+	return s.accountAccess(ctx, claims.UserID, issued, path, method)
 }
 
 func NewJWTService(secret string, accessTTLSeconds, refreshTTLSeconds int64) *JWTService {
@@ -47,10 +67,11 @@ func (s *JWTService) Parse(tokenString string) (*domain.Claims, error) {
 func (s *JWTService) issue(userID, openID, unionID, typ string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := domain.Claims{
-		UserID:  userID,
-		OpenID:  openID,
-		UnionID: unionID,
-		Type:    typ,
+		IssuedNano: now.UnixNano(),
+		UserID:     userID,
+		OpenID:     openID,
+		UnionID:    unionID,
+		Type:       typ,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),

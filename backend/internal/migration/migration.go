@@ -320,7 +320,10 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureMembershipGrantConfig(ctx, db); err != nil {
 		return err
 	}
-	return ensurePapayContractIndexes(ctx, db)
+	if err := ensurePapayContractIndexes(ctx, db); err != nil {
+		return err
+	}
+	return MigrateAccountDeletion(ctx, db, schema)
 }
 
 // MigrateMarketingQR applies only the additive tables needed by the offline

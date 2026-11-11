@@ -1,11 +1,12 @@
 import { withAuth } from '../../../utils/withAuth'
 import { View, Text, ScrollView, Image } from '@tarojs/components'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
 import {
   communityGetCheckinLeaderboard,
   communityGetFoodNutrientLeaderboard,
   communityGetHealthLeaderboard,
+  communityGetFoodContributionLeaderboard,
   getAccessToken,
   showUnifiedApiError,
   type CheckinLeaderboardItem,
@@ -17,7 +18,7 @@ import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 
 type LeaderboardSection = 'user' | 'food'
-type UserRankingType = 'checkin' | 'health'
+type UserRankingType = 'checkin' | 'health' | 'contribution'
 
 type UserRankingRow = {
   rank: number
@@ -96,8 +97,10 @@ function CheckinLeaderboardPage() {
   const router = useRouter()
   const section: LeaderboardSection = router.params.section === 'food' ? 'food' : 'user'
   const [userRankingType, setUserRankingType] = useState<UserRankingType>(
-    router.params.ranking === 'health' ? 'health' : 'checkin'
+    router.params.ranking === 'contribution' ? 'contribution' : router.params.ranking === 'health' ? 'health' : 'checkin'
   )
+  const [contributionPeriod, setContributionPeriod] = useState<'month' | 'all'>('month')
+  const loadSeq = useRef(0)
   const [nutrient, setNutrient] = useState<string>(router.params.nutrient || 'protein')
   const [userRows, setUserRows] = useState<UserRankingRow[]>([])
   const [foodRows, setFoodRows] = useState<FoodNutrientLeaderboardItem[]>([])
@@ -109,6 +112,8 @@ function CheckinLeaderboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    const request = ++loadSeq.current
+    const isCurrent = () => request === loadSeq.current
     if (!getAccessToken()) {
       setError('请先登录')
       setLoading(false)
@@ -119,30 +124,45 @@ function CheckinLeaderboardPage() {
     try {
       if (section === 'food') {
         const result = await communityGetFoodNutrientLeaderboard(nutrient)
+        if (!isCurrent()) return
         setFoodRows(result.list || [])
         setFoodUnit(result.unit)
+      } else if (userRankingType === 'contribution') {
+        const result = await communityGetFoodContributionLeaderboard(contributionPeriod)
+        if (!isCurrent()) return
+        setWeekStart(result.start_date || '')
+        setWeekEnd(result.end_date || '')
+        setUserRows((result.list || []).map(row => ({
+          rank: row.rank, userId: row.user_id, nickname: row.nickname, avatar: row.avatar,
+          value: row.contribution_count, isMe: row.is_me,
+          detail: [row.standard_count ? `标准${row.standard_count}` : '', row.packaged_count ? `包装${row.packaged_count}` : '', row.meal_count ? `餐食${row.meal_count}` : '', row.custom_count ? `自定义${row.custom_count}` : ''].filter(Boolean).join(' · '),
+        })))
       } else if (userRankingType === 'health') {
         const result = await communityGetHealthLeaderboard()
+        if (!isCurrent()) return
         setWeekStart(result.week_start)
         setWeekEnd(result.week_end)
         setHealthScoringRule(result.scoring_rule)
         setUserRows(normalizeHealthRows(result.list || []))
       } else {
         const result = await communityGetCheckinLeaderboard()
+        if (!isCurrent()) return
         setWeekStart(result.week_start)
         setWeekEnd(result.week_end)
         setUserRows(normalizeCheckinRows(result.list || []))
       }
     } catch (loadError: unknown) {
+      if (!isCurrent()) return
       setError('加载失败，请稍后重试')
       await showUnifiedApiError(loadError, '加载失败')
     } finally {
-      setLoading(false)
+      if (isCurrent()) setLoading(false)
     }
-  }, [nutrient, section, userRankingType])
+  }, [contributionPeriod, nutrient, section, userRankingType])
 
   useEffect(() => {
     void load()
+    return () => { loadSeq.current += 1 }
   }, [load])
 
   const topUsers = useMemo(() => userRows.slice(0, 3), [userRows])
@@ -150,6 +170,8 @@ function CheckinLeaderboardPage() {
   const me = useMemo(() => userRows.find(row => row.isMe), [userRows])
   const selectedNutrient = NUTRIENT_OPTIONS.find(item => item.key === nutrient) || NUTRIENT_OPTIONS[0]
   const isHealth = userRankingType === 'health'
+  const isContribution = userRankingType === 'contribution'
+  const userUnit = isContribution ? '项' : isHealth ? '分' : '次'
 
   const renderState = () => {
     if (loading) {
@@ -189,7 +211,7 @@ function CheckinLeaderboardPage() {
       )
     }
     if (userRows.length === 0) {
-      return <View className='leaderboard-state'>{isHealth ? '本周暂无满足条件的健康饮食分' : '本周暂无饮食记录'}</View>
+      return <View className='leaderboard-state'>{isContribution ? '暂无有效公开贡献，来补充第一条食物数据吧' : isHealth ? '本周暂无满足条件的健康饮食分' : '本周暂无饮食记录'}</View>
     }
     return (
       <>
@@ -201,7 +223,7 @@ function CheckinLeaderboardPage() {
               <Text className='podium-medal'>{row.rank}</Text>
               <View className='podium-avatar-wrap'><Avatar src={row.avatar} /></View>
               <Text className='podium-name' numberOfLines={1}>{row.nickname}</Text>
-              <Text className='podium-value'>{row.value}{isHealth ? '分' : '次'}</Text>
+              <Text className='podium-value'>{row.value}{userUnit}</Text>
             </View>
             ))}
         </View>
@@ -219,7 +241,7 @@ function CheckinLeaderboardPage() {
               </View>
               <View className='leaderboard-value-wrap'>
                 <Text className='leaderboard-value'>{row.value}</Text>
-                <Text className='leaderboard-unit'>{isHealth ? '分' : '次'}</Text>
+                <Text className='leaderboard-unit'>{userUnit}</Text>
               </View>
             </View>
           ))}
@@ -231,7 +253,7 @@ function CheckinLeaderboardPage() {
   return (
     <View className='leaderboard-page'>
       <View className='leaderboard-header'>
-        <Text className='leaderboard-title'>{section === 'food' ? '食物排行榜' : '用户排行榜'}</Text>
+        <Text className='leaderboard-title'>{section === 'food' ? '食物排行榜' : isContribution ? '食物贡献榜' : '用户排行榜'}</Text>
         {section === 'user' ? (
           <View className='leaderboard-segments'>
             <View
@@ -242,6 +264,10 @@ function CheckinLeaderboardPage() {
               className={`leaderboard-segment${userRankingType === 'health' ? ' active' : ''}`}
               onClick={() => setUserRankingType('health')}
             >健康饮食榜</View>
+            <View
+              className={`leaderboard-segment${isContribution ? ' active' : ''}`}
+              onClick={() => setUserRankingType('contribution')}
+            >食物贡献榜</View>
           </View>
         ) : (
           <ScrollView scrollX enhanced showScrollbar={false} className='nutrient-scroll'>
@@ -256,12 +282,20 @@ function CheckinLeaderboardPage() {
             </View>
           </ScrollView>
         )}
+        {isContribution && section === 'user' && (
+          <View className='contribution-periods'>
+            <View className={contributionPeriod === 'month' ? 'active' : ''} onClick={() => setContributionPeriod('month')}>本月</View>
+            <View className={contributionPeriod === 'all' ? 'active' : ''} onClick={() => setContributionPeriod('all')}>总榜</View>
+          </View>
+        )}
         <View className='leaderboard-period-row'>
           <Text className='iconfont icon-rili leaderboard-period-icon' />
           <Text>{section === 'food'
             ? `${selectedNutrient.label} · 标准食物库 · 每100g`
-            : `${isHealth ? '好友' : '全体用户'} · 本周 ${weekStart}${weekEnd ? ` – ${weekEnd}` : ''}`}</Text>
+            : isContribution ? (contributionPeriod === 'all' ? '累计有效贡献' : `本月 ${weekStart}${weekEnd ? ` – ${weekEnd}` : ''}`)
+              : `${isHealth ? '好友' : '全体用户'} · 本周 ${weekStart}${weekEnd ? ` – ${weekEnd}` : ''}`}</Text>
         </View>
+        {isContribution && section === 'user' && <Text className='contribution-ranking-rule'>仅统计有效公开新增，同一条目只计一次。</Text>}
         {section === 'user' && isHealth ? (
           <View className='health-score-explanation'>
             <View className='health-score-explanation-head'>
@@ -294,9 +328,15 @@ function CheckinLeaderboardPage() {
         <View className='leaderboard-me-bar'>
           <View className='leaderboard-me-avatar'><Avatar src={me.avatar} /></View>
           <Text className='leaderboard-me-word'>我</Text>
-          <Text className='leaderboard-me-summary'>第{me.rank}名 · {me.value}{isHealth ? '分' : '次'}</Text>
+          <Text className='leaderboard-me-summary'>第{me.rank}名 · {me.value}{userUnit}</Text>
         </View>
       ) : null}
+      {section === 'user' && isContribution && !loading && !error && !me && (
+        <View className='leaderboard-me-bar'>
+          <Text className='leaderboard-me-summary'>还未上榜 · 0项有效贡献</Text>
+          <Text className='contribution-create-link' onClick={() => void Taro.navigateTo({ url: extraPkgUrl('/pages/food-contribution/index') })}>去贡献 ›</Text>
+        </View>
+      )}
     </View>
   )
 }

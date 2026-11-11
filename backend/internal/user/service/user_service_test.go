@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"food_link/backend/internal/auth/repo"
+	migrationdo "food_link/backend/internal/migration/do"
 	"food_link/backend/internal/user/domain"
 	userrepo "food_link/backend/internal/user/repo"
 	"food_link/backend/pkg/config"
@@ -797,6 +798,7 @@ func TestUserService_UpdateLastSeenAnalyzeHistory(t *testing.T) {
 
 func TestUserService_DeleteAccount(t *testing.T) {
 	db := setupTestDB(t)
+	require.NoError(t, db.AutoMigrate(&migrationdo.AccountDeletionDO{}))
 	userRepo := repo.NewUserRepo(db)
 	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
 	ctx := context.Background()
@@ -809,7 +811,12 @@ func TestUserService_DeleteAccount(t *testing.T) {
 
 	found, err := userRepo.FindByID(ctx, user.ID)
 	assert.NoError(t, err)
-	assert.Nil(t, found)
+	assert.NotNil(t, found)
+	d, err := userRepo.DeletionStatus(ctx, user.ID)
+	require.NoError(t, err)
+	require.NotNil(t, d)
+	assert.Equal(t, "pending", d.State)
+	assert.Equal(t, 7*24*time.Hour, d.ExecuteAt.Sub(d.RequestedAt))
 }
 
 func TestUserService_DeleteAccount_NotFound(t *testing.T) {

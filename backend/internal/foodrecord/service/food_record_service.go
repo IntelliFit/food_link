@@ -188,6 +188,9 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		first := input.ImagePaths[0]
 		input.ImagePath = &first
 	}
+	if err := s.requireMeasuredLibraryItems(ctx, userID, input.Items); err != nil {
+		return nil, err
+	}
 	input.Items = normalizeFoodItems(input.Items)
 	if err := domain.ValidateFoodItemsForRecording(input.Items); err != nil {
 		logger.Warn(ctx, "拦截无效饮食记录", slog.String("user_id", userID), slog.Int("item_count", len(input.Items)), logger.Err(err))
@@ -217,6 +220,9 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		}
 	}
 
+	if hasMeasuredFoodItems(input.Items) {
+		input.TotalCalories, input.TotalProtein, input.TotalCarbs, input.TotalFat, input.TotalWeightGrams = measuredRecordTotals(input.Items)
+	}
 	recordTime, err := s.buildRecordTime(ctx, userID, input.Date, input.SourceTaskID)
 	if err != nil {
 		return nil, err
@@ -358,6 +364,9 @@ func normalizeFoodItems(items []domain.FoodItem) []domain.FoodItem {
 		if items[i].Ratio < 0 {
 			items[i].Ratio = 0
 		}
+		// Validation immediately after normalization reports any invalid measure.
+		// Ignore the result here so an invalid snapshot is never downgraded to grams.
+		_ = domain.ApplyFoodItemMeasurement(&items[i])
 		if items[i].Intake > items[i].Weight {
 			items[i].Intake = items[i].Weight
 		}
@@ -375,6 +384,9 @@ func normalizeFoodItems(items []domain.FoodItem) []domain.FoodItem {
 func reconcileAIGeneratedFoodItems(items []domain.FoodItem) ([]domain.FoodItem, bool) {
 	hasAIGenerated := false
 	for i := range items {
+		if items[i].Measurement != nil {
+			continue
+		}
 		source := foodRecordStringPtrValue(items[i].NutritionSource)
 		category := foodRecordStringPtrValue(items[i].NutritionSourceCategory)
 		// A user correction is authoritative even when the historical category still
@@ -757,6 +769,12 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	}
 	effectiveItems := existingItems(existing)
 	if input.Items != nil {
+		if err := s.requireMeasuredLibraryItems(ctx, userID, input.Items); err != nil {
+			return nil, err
+		}
+		if err := validateMeasurementUpdateCompatibility(existingItems(existing), input.Items); err != nil {
+			return nil, err
+		}
 		effectiveItems = normalizeFoodItems(input.Items)
 		effectiveItems, enforceAIGeneratedEnergy = reconcileAIGeneratedFoodItems(effectiveItems)
 		if err := domain.ValidateFoodItemsForRecording(effectiveItems); err != nil {
@@ -788,20 +806,25 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	if input.TotalWeightGrams != nil {
 		updates["total_weight_grams"] = *input.TotalWeightGrams
 	}
+	if input.Items != nil && hasMeasuredFoodItems(effectiveItems) {
+		calories, protein, carbs, fat, grams := measuredRecordTotals(effectiveItems)
+		updates["total_calories"], updates["total_protein"] = calories, protein
+		updates["total_carbs"], updates["total_fat"], updates["total_weight_grams"] = carbs, fat, grams
+	}
 	if nutritionUpdate && existing != nil {
 		updated := *existing
 		updated.Items = effectiveItems
 		if value, ok := updates["total_calories"].(float64); ok {
 			updated.TotalCalories = value
 		}
-		if input.TotalProtein != nil {
-			updated.TotalProtein = *input.TotalProtein
+		if value, ok := updates["total_protein"].(float64); ok {
+			updated.TotalProtein = value
 		}
-		if input.TotalCarbs != nil {
-			updated.TotalCarbs = *input.TotalCarbs
+		if value, ok := updates["total_carbs"].(float64); ok {
+			updated.TotalCarbs = value
 		}
-		if input.TotalFat != nil {
-			updated.TotalFat = *input.TotalFat
+		if value, ok := updates["total_fat"].(float64); ok {
+			updated.TotalFat = value
 		}
 		insight, ratio, _, absorption := generatedRecordAdvice(&updated)
 		updates["insight"], updates["pfc_ratio_comment"], updates["absorption_notes"], updates["context_advice"] = insight, ratio, absorption, nil
@@ -1096,6 +1119,9 @@ func hydrateManualRecordNutrients(record *domain.FoodRecord) {
 		return
 	}
 	for index := range record.Items {
+		if record.Items[index].Measurement != nil {
+			continue
+		}
 		if !foodItemNutrientsMissing(record.Items[index].Nutrients) {
 			continue
 		}
@@ -1113,7 +1139,7 @@ func hydrateManualRecordNutrients(record *domain.FoodRecord) {
 func fillMissingManualNutrientsFromRecordTotals(record *domain.FoodRecord) {
 	missingWeight := 0.0
 	for _, item := range record.Items {
-		if foodItemNutrientsMissing(item.Nutrients) {
+		if item.Measurement == nil && foodItemNutrientsMissing(item.Nutrients) {
 			missingWeight += manualItemIntakeGrams(item)
 		}
 	}
@@ -1143,6 +1169,9 @@ func fillMissingManualNutrientsFromRecordTotals(record *domain.FoodRecord) {
 		return
 	}
 	for index := range record.Items {
+		if record.Items[index].Measurement != nil {
+			continue
+		}
 		if !foodItemNutrientsMissing(record.Items[index].Nutrients) {
 			continue
 		}
@@ -1222,6 +1251,9 @@ func (s *FoodRecordService) hydrateRecordNutrientsFromTask(ctx context.Context, 
 	}
 	used := map[int]bool{}
 	for index := range record.Items {
+		if record.Items[index].Measurement != nil {
+			continue
+		}
 		sourceIndex := matchSourceNutritionItem(record.Items[index], index, sourceItems, used)
 		if sourceIndex < 0 {
 			continue

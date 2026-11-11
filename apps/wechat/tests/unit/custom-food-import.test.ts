@@ -1,5 +1,6 @@
 import {
   customDraftFromPackagedExtract,
+  packagedExtractMeasurement,
   describeCustomImport,
   isSnackCustomFood,
   pollPackagedExtractResult,
@@ -27,6 +28,11 @@ const chips: PackagedProductExtractResult = {
 }
 
 describe('customDraftFromPackagedExtract', () => {
+  it('does not invent a gram or volume basis for an explicitly unresolved nutrition label', () => {
+    expect(packagedExtractMeasurement({ ...chips, nutrition_basis_unit: 'unknown' })).toBeNull()
+    expect(packagedExtractMeasurement({ ...chips, nutrition_basis_unit: undefined, net_content_unit: 'ml', net_content_value: 250 })).toBeNull()
+  })
+
   it('fills the form per 100g in kcal and joins brand, product and flavor', () => {
     const draft = customDraftFromPackagedExtract(chips)
 
@@ -71,6 +77,18 @@ describe('customDraftFromPackagedExtract', () => {
     const draft = customDraftFromPackagedExtract({ product_name: '薯片' })
 
     expect(draft.weight).toBe('')
+  })
+
+  it('keeps a 250ml drink tied to its per100ml label', () => {
+    const draft = customDraftFromPackagedExtract({ product_name: '牛奶', nutrition_basis_unit: '100ml', net_content_value: 250, net_content_unit: 'ml', unit_nutrition_per_100g: { calories: 60, protein: 3 } })
+    expect(draft).toMatchObject({ weight: '250', nutritionBasis: '100', basisUnit: 'ml', portionUnit: 'ml' })
+    expect(draft.measurement).toMatchObject({ amount: 250, unit: 'ml', basis_unit: 'ml', nutrients_per_basis: { calories: 60, protein: 3 } })
+  })
+
+  it('retains a per-serving label even when it has no gram conversion', () => {
+    const draft = customDraftFromPackagedExtract({ product_name: '自制餐食', raw_nutrition_basis: { type: 'serving', value: 1, unit: 'serving' }, raw_nutrition_per_basis: { energy: { value: 80, unit: 'kcal' }, protein: { value: 5, unit: 'g' } } })
+    expect(draft).toMatchObject({ weight: '1', nutritionBasis: '1', basisUnit: 'serving', portionUnit: 'serving' })
+    expect(draft.nutrition).toMatchObject({ calories: '80', protein: '5' })
   })
 })
 

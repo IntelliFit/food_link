@@ -40,7 +40,7 @@
 
 | 缓存 Key | 存储内容 | 使用页面 | 关联后端接口 | 说明 |
 |---------|---------|---------|-------------|------|
-| `home_dashboard_local_cache` | 当日/历史 dashboard 快照（摄入、餐次、运动消耗、成就等） | `pages/index` | `GET /api/user/dashboard` (`getHomeDashboard`) | 饮食记录保存成功后写入，回首页可立即看到更新，无需等整页重拉。上限保存 14 天。 |
+| `home_dashboard_local_cache` | 当日/历史 dashboard 快照（摄入、餐次、运动消耗、成就等） | `pages/index` | `GET /api/home/dashboard` (`getHomeDashboard`) | 上限14天，按账号过滤，快照带 `schema_version:5`；忽略旧版可能误标账号的缓存。异步刷新按发起时的token、用户和会话代数校验，过期响应不写入；writer拒绝冲突owner。仍使用同一key，现有清缓存入口可移除。 |
 | `body_metrics_storage` | 体重记录、饮水记录、饮水目标 | `pages/index` | `GET /api/user/body-metrics/summary` (`getBodyMetricsSummary`) | 与服务端数据合并存储。用户录入体重/饮水时先写本地，下次请求时带上同步。 |
 | `food_link_dashboard_targets_v1` | 用户自定义摄入目标（卡路里、蛋白质、碳水、脂肪） | `pages/index` | `GET /api/user/dashboard-targets` / `PUT /api/user/dashboard-targets` (`getDashboardTargets` / `updateDashboardTargets`) | 服务端优先；若后端未部署独立接口（404），则 fallback 写入本地 storage，并回退到 `PUT /api/user/health-profile` 携带 `dashboard_targets`。 |
 | `home_poster_modal_visible` | 首页弹窗海报是否已展示（标记值 `'1'`） | `pages/index` | 无（纯本地标记） | 首次进入首页展示海报后写入，避免重复弹窗。 |
@@ -49,6 +49,8 @@
 | `home_check_in_snooze_v1:<userId>` | 用户选择「稍后再签」的日期 | `pages/index` | 无（纯本地标记） | 仅当日不再弹签到提醒，不改变签到或积分；清除缓存会重置。 |
 
 **清理影响**：清除后首页会重新从服务端拉取 dashboard、体重饮水数据、摄入目标，弹窗标记重置（可能再次弹窗）。
+
+首页Tab在退出或重新登录后可能保留在内存中；认证变化事件会同步清除上个会话的餐食、身体指标、海报与编辑浮层，失效请求序号和30分钟去重缓存。每次显示首页也校验会话，先处理账号变化，再判断历史日期或缓存命中。请求身份包含会话代数，A→B→A及同token重新登录均不会接收旧响应。普通业务403只提示无权访问，当前会话401才清登录；旧会话401和流式片段不影响新登录。
 
 ---
 

@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/expiry/domain"
 	"food_link/backend/internal/expiry/repo"
 	"food_link/backend/pkg/config"
@@ -88,7 +90,15 @@ func (w *NotificationWorker) ProcessJob(ctx context.Context, job *domain.ExpiryN
 		return err
 	}
 
-	wxResult, err := w.sendSubscribeMessage(ctx, job, item)
+	var wxResult map[string]any
+	err = w.repo.WithActiveAccountNotification(ctx, job.UserID, func() error {
+		var sendErr error
+		wxResult, sendErr = w.sendSubscribeMessage(ctx, job, item)
+		return sendErr
+	})
+	if errors.Is(err, authrepo.ErrAccountDeleting) || errors.Is(err, authrepo.ErrDeletionSession) {
+		return nil
+	}
 	if err == nil {
 		snapshot := copyMap(job.PayloadSnapshot)
 		snapshot["wx_result"] = wxResult

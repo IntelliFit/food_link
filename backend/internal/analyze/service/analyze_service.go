@@ -8049,7 +8049,12 @@ func packagedCandidatesNeedSelection(query string, item map[string]any, candidat
 
 func packagedExperimentWeightForItem(item map[string]any, food *foodrecorddomain.PackagedFood, candidates []foodrecorddomain.PackagedFood, matchStatus string, fallbackWeight float64, experimentEnabled bool, storageClient *storage.Client) (float64, map[string]any) {
 	meta := map[string]any{}
-	if !experimentEnabled || food == nil {
+	if food == nil {
+		return fallbackWeight, meta
+	}
+	if !experimentEnabled {
+		// 关闭重量实验仍返回数据库原始规格，供客户端确认单位；不应用规格重量或改写实验标记。
+		meta["packaged_candidates"] = resolvePackagedCandidateImageURLs(packagedCandidateDebugList(food, candidates, matchStatus), storageClient)
 		return fallbackWeight, meta
 	}
 	fallbackWeight = packagedFallbackWeightForItem(item, fallbackWeight)

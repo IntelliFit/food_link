@@ -134,6 +134,12 @@ export function clearRecentRequestTraces(): void {
   recentRequestTraces.splice(0, recentRequestTraces.length)
 }
 
+const accountStateListeners = new Set<() => void>()
+export function subscribeAccountStateChanges(listener: () => void): () => void {
+  accountStateListeners.add(listener)
+  return () => { accountStateListeners.delete(listener) }
+}
+
 export const apiClient = createFoodLinkApiClient({
   baseUrl: API_BASE_URL,
   shareBaseUrl: SHARE_BASE_URL,
@@ -153,6 +159,9 @@ export const apiClient = createFoodLinkApiClient({
         })
         const headers = readHeaders(response)
         const data = await parseJsonResponse(response)
+        if (!url.includes('/api/user/account/deletion') && [20021, 20023].includes((data as { code?: number } | null)?.code || 0)) {
+          for (const listener of accountStateListeners) listener()
+        }
         recordRequestTrace({ url, method, startedAt, statusCode: response.status, headers })
         if (response.ok && (data as { code?: number } | null)?.code === 0 && method !== 'GET' && url.includes('/api/food-record/')) {
           // A reminder refresh must never turn a successful record write into a failed API call.

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	authservice "food_link/backend/internal/auth/service"
+	"food_link/backend/internal/common/response"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
@@ -38,6 +39,11 @@ func RequireJWT(jwt *authservice.JWTService) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		if err := jwt.CheckAccountAccess(c.Request.Context(), claims, c.FullPath(), c.Request.Method); err != nil {
+			response.Error(c, err)
+			c.Abort()
+			return
+		}
 		c.Set(ContextUserIDKey, claims.UserID)
 		c.Set(ContextOpenIDKey, claims.OpenID)
 		c.Set(ContextUnionIDKey, claims.UnionID)
@@ -57,7 +63,7 @@ func OptionalJWT(jwt *authservice.JWTService) gin.HandlerFunc {
 			return
 		}
 		claims, err := jwt.Parse(token)
-		if err == nil {
+		if err == nil && jwt.CheckAccountAccess(c.Request.Context(), claims, c.FullPath(), c.Request.Method) == nil {
 			c.Set(ContextUserIDKey, claims.UserID)
 			c.Set(ContextOpenIDKey, claims.OpenID)
 			c.Set(ContextUnionIDKey, claims.UnionID)

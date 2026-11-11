@@ -3898,6 +3898,33 @@ func TestPackagedExperimentWeightForItemKeepsVisualWeightWhenLibrarySpecIsMuchLa
 	assert.Contains(t, fmt.Sprint(meta["package_weight_reason"]), "1100g")
 }
 
+func TestPackagedExperimentWeightForItemDisabledKeepsWeightAndExposesDeclaredVolume(t *testing.T) {
+	basis, unit := "100ml", "ml"
+	food := &foodrecorddomain.PackagedFood{
+		ID: "milk-250ml", ProductName: "纯牛奶", NutritionBasisUnit: &basis,
+		NetContentValue: 250, NetContentUnit: &unit, KcalPer100g: 60,
+	}
+	item := map[string]any{"name": "纯牛奶", "estimatedWeightGrams": 120.0, "user_weight_g": 77.0}
+	weight, meta := packagedExperimentWeightForItem(item, food, []foodrecorddomain.PackagedFood{*food}, "exact_alias", 113.45678, false, nil)
+	assert.Equal(t, 113.45678, weight, "实验关闭时不应用包装量、用户量，也不改变原有fallback精度")
+	assert.Equal(t, 120.0, item["estimatedWeightGrams"])
+	require.Len(t, meta, 1, "只补充事实候选信息，不能偷偷打开重量实验或修改其标记")
+	candidates, ok := meta["packaged_candidates"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, candidates, 1)
+	assert.Equal(t, "milk-250ml", candidates[0]["packaged_food_id"])
+	assert.Equal(t, "100ml", candidates[0]["nutrition_basis_unit"])
+	assert.Equal(t, "ml", candidates[0]["net_content_unit"])
+	assert.Equal(t, 250.0, candidates[0]["net_content_value"])
+	assert.Equal(t, 60.0, candidates[0]["kcal_per_100g"])
+
+	for _, enabled := range []bool{false, true} {
+		unchanged, noMatchMeta := packagedExperimentWeightForItem(item, nil, []foodrecorddomain.PackagedFood{*food}, "unmatched", 113.45678, enabled, nil)
+		assert.Equal(t, 113.45678, unchanged)
+		assert.Empty(t, noMatchMeta, "没有匹配食物时不附猜测的规格")
+	}
+}
+
 func TestAnalyzeService_ApplyDBFirstPackagedExperimentKeepsAIWeightForAmbiguousSpecs(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
 	setupAnalyzeFoodDB(t, db)

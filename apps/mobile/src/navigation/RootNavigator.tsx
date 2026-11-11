@@ -89,6 +89,7 @@ import {
   UserGroupScreen,
 } from '../screens/TertiaryMigrationScreens'
 import { useAuth } from '../providers/AuthProvider'
+import { AccountDeletionScreen } from '../screens/AccountDeletionScreen'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { takePendingAuthDestination } from '../utils/pendingAuthNavigation'
 import { colors } from '../theme'
@@ -117,7 +118,7 @@ function MainTabs() {
 
 export function RootNavigator() {
   const { isDark } = useColorScheme()
-  const { isBootstrapping, isAuthenticated } = useAuth()
+  const { isBootstrapping, isAuthenticated, accountDeletionStatus, accountStatusError } = useAuth()
   const navigationTheme = {
     ...DefaultTheme,
     colors: {
@@ -337,6 +338,10 @@ export function RootNavigator() {
     )
   }
 
+  if (isAuthenticated && (accountStatusError || (accountDeletionStatus && !['active', 'cancelled'].includes(accountDeletionStatus.state)))) {
+    return <AccountDeletionScreen />
+  }
+
   return (
     <NavigationContainer
       ref={navigationRef}
@@ -389,6 +394,7 @@ export function RootNavigator() {
           contentStyle: { backgroundColor: isDark ? '#0d1312' : colors.background },
         }}
       >
+        <Stack.Screen name="AccountDeletion" component={AccountDeletionScreen} options={{ title: '注销账号' }} />
         <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
         <Stack.Screen name='NotificationDiagnostics' component={NotificationDiagnosticsScreen} options={{ title: '通知自检与诊断' }} />
         {isAuthenticated ? (

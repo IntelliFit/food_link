@@ -22,6 +22,7 @@ type CommunityService interface {
 	PublicFeed(ctx context.Context, params service.FeedParams) ([]service.FeedItem, error)
 	FriendFeed(ctx context.Context, userID string, params service.FeedParams) ([]service.FeedItem, error)
 	CheckinLeaderboard(ctx context.Context, viewerUserID string) (*service.LeaderboardResult, error)
+	FoodContributionLeaderboard(ctx context.Context, viewerUserID, period string) (*service.ContributionLeaderboardResult, error)
 	HealthLeaderboard(ctx context.Context, viewerUserID string) (*service.HealthLeaderboardResult, error)
 	FoodNutrientLeaderboard(ctx context.Context, nutrient string, limit int) (*service.FoodNutrientLeaderboardResult, error)
 	LikeFeed(ctx context.Context, userID, recordID string) (string, error)
@@ -116,6 +117,19 @@ func (h *CommunityHandler) HealthLeaderboard(c *gin.Context) {
 		return
 	}
 	logger.Info(c.Request.Context(), "完成好友健康饮食排行榜", slog.String("user_id", userID), slog.Int("user_count", len(result.List)))
+	response.Success(c, result)
+}
+
+func (h *CommunityHandler) FoodContributionLeaderboard(c *gin.Context) {
+	userID, period := c.GetString(authmw.ContextUserIDKey), c.DefaultQuery("period", "month")
+	logger.Info(c.Request.Context(), "进入食物贡献榜", slog.String("user_id", userID), slog.String("period", period))
+	result, err := h.svc.FoodContributionLeaderboard(c.Request.Context(), userID, period)
+	if err != nil {
+		logger.Error(c.Request.Context(), "获取食物贡献榜失败", err, slog.String("user_id", userID), slog.String("period", period))
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "食物贡献榜返回完成", slog.String("period", result.Period), slog.Int("user_count", len(result.List)))
 	response.Success(c, result)
 }
 

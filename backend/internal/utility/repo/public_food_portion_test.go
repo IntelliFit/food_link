@@ -73,6 +73,8 @@ func TestManualFoodResultFromPublicWithoutAnyWeightSkipsPer100g(t *testing.T) {
 
 	result := (&ManualFoodRepo{}).manualFoodResultFromPublic(drink, false)
 
-	assert.InDelta(t, publicFoodFallbackWeightGrams, result.DefaultWeightGrams, 0.001)
+	assert.Zero(t, result.DefaultWeightGrams, "未提供克重时保留每份营养，不生成假克重")
+	require.NotNil(t, result.Measurement)
+	assert.EqualValues(t, "serving", result.Measurement.Unit)
 	assert.Nil(t, result.NutrientsPer100g, "没有营养明细时不能生成全零的每100g")
 }

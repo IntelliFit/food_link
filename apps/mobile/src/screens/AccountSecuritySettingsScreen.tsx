@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
   AccessibilityInfo,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -34,13 +32,11 @@ import type { UserInfo } from '@food-link/core'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../api'
 import type { RootStackParamList } from '../navigation/types'
-import { useAuth } from '../providers/AuthProvider'
 import { useAppDialog } from '../providers/DialogProvider'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { userFacingErrorMessage } from '../utils/errors'
 
 const DEFAULT_SMS_COOLDOWN_SECONDS = 30
-const DELETE_CONFIRMATION = '注销账号'
 
 type FormTouched = {
   phone?: boolean
@@ -53,7 +49,6 @@ type FormTouched = {
 export function AccountSecurityScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
-  const { logout } = useAuth()
   const { isDark } = useColorScheme()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
@@ -75,9 +70,6 @@ export function AccountSecurityScreen() {
   const [saving, setSaving] = useState(false)
   const [codeSending, setCodeSending] = useState(false)
   const [codeCooldownSeconds, setCodeCooldownSeconds] = useState(0)
-  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false)
-  const [deleteConfirmation, setDeleteConfirmation] = useState('')
-  const [deleting, setDeleting] = useState(false)
   const [reduceMotion, setReduceMotion] = useState(false)
   const initialSnapshotRef = useRef('')
   const allowLeaveRef = useRef(false)
@@ -187,7 +179,7 @@ export function AccountSecurityScreen() {
 
   useEffect(() => navigation.addListener('beforeRemove', (event) => {
     if (allowLeaveRef.current) return
-    if (saving || deleting) {
+    if (saving) {
       event.preventDefault()
       return
     }
@@ -204,7 +196,7 @@ export function AccountSecurityScreen() {
       allowLeaveRef.current = true
       navigation.dispatch(event.data.action)
     })
-  }), [deleting, dialog, dirty, navigation, saving])
+  }), [dialog, dirty, navigation, saving])
 
   const handlePhoneChange = useCallback((value: string) => {
     const nextPhone = normalizeMainlandPhone(value)
@@ -253,35 +245,7 @@ export function AccountSecurityScreen() {
     }
   }, [canSave, dialog, load, normalizedPhone, phoneChanged, trimmedCurrentPassword, trimmedPassword, trimmedVerificationCode])
 
-  const openDeleteDialog = useCallback(() => {
-    setDeleteConfirmation('')
-    setDeleteDialogVisible(true)
-  }, [])
-
-  const closeDeleteDialog = useCallback(() => {
-    if (deleting) return
-    setDeleteDialogVisible(false)
-    setDeleteConfirmation('')
-  }, [deleting])
-
-  const deleteAccount = useCallback(async () => {
-    if (deleting || deleteConfirmation.trim() !== DELETE_CONFIRMATION) return
-    setDeleting(true)
-    try {
-      await apiClient.deleteAccount()
-      await AsyncStorage.clear()
-      await logout()
-      allowLeaveRef.current = true
-      setDeleteDialogVisible(false)
-      AccessibilityInfo.announceForAccessibility('账号已注销')
-      await dialog.alert('账号已注销', '本机登录状态和缓存已清除。', 'success')
-      navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] })
-    } catch (error) {
-      await dialog.alert('注销失败', userFacingErrorMessage(error, '请稍后重试'), 'danger')
-    } finally {
-      setDeleting(false)
-    }
-  }, [deleteConfirmation, deleting, dialog, logout, navigation])
+  const openDeleteDialog = useCallback(() => { navigation.navigate('AccountDeletion') }, [navigation])
 
   if (!loaded && !loadError) {
     return (
@@ -453,7 +417,7 @@ export function AccountSecurityScreen() {
             <View style={styles.dangerIcon}><AlertTriangle size={20} color={palette.danger} strokeWidth={2.3} /></View>
             <View style={styles.dangerCopy}>
               <Text style={styles.dangerTitle}>注销账号</Text>
-              <Text style={styles.dangerDescription}>注销后将永久删除你的健康档案、记录和账户资料，且无法恢复。</Text>
+              <Text style={styles.dangerDescription}>可选择 7 天冷静期，截止前可撤销。</Text>
             </View>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="注销账号" style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]} onPress={openDeleteDialog}>
@@ -477,18 +441,7 @@ export function AccountSecurityScreen() {
         </Pressable>
       </View>
 
-      <DeleteAccountModal
-        visible={deleteDialogVisible}
-        value={deleteConfirmation}
-        deleting={deleting}
-        reduceMotion={reduceMotion}
-        insetsBottom={insets.bottom}
-        palette={palette}
-        styles={styles}
-        onChange={setDeleteConfirmation}
-        onClose={closeDeleteDialog}
-        onConfirm={() => void deleteAccount()}
-      />
+
     </View>
   )
 }
@@ -557,64 +510,6 @@ function StatusPill({ label, active, palette, styles }: {
       {active ? <CheckCircle2 size={13} color={palette.brandStrong} strokeWidth={2.4} /> : null}
       <Text style={[styles.statusPillText, active && styles.statusPillTextActive]}>{label}</Text>
     </View>
-  )
-}
-
-function DeleteAccountModal({ visible, value, deleting, reduceMotion, insetsBottom, palette, styles, onChange, onClose, onConfirm }: {
-  visible: boolean
-  value: string
-  deleting: boolean
-  reduceMotion: boolean
-  insetsBottom: number
-  palette: Palette
-  styles: ReturnType<typeof createStyles>
-  onChange: (value: string) => void
-  onClose: () => void
-  onConfirm: () => void
-}) {
-  const valid = value.trim() === DELETE_CONFIRMATION
-  return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <Pressable style={styles.modalDismiss} accessibilityRole="button" accessibilityLabel="关闭注销确认" onPress={onClose} />
-        <KeyboardAvoidingView style={styles.modalCenter} behavior={Platform.OS === 'ios' ? 'padding' : undefined} pointerEvents="box-none">
-          <View style={[styles.modalCard, { marginBottom: Math.max(insetsBottom, 16) }]} accessibilityViewIsModal>
-            <View style={styles.modalDangerIcon}><Trash2 size={22} color={palette.danger} strokeWidth={2.3} /></View>
-            <Text style={styles.modalTitle}>确认注销账号</Text>
-            <Text style={styles.modalDescription}>这是不可恢复的操作。请输入“注销账号”后继续。</Text>
-            <Text style={styles.modalLabel}>确认文案</Text>
-            <TextInput
-              accessibilityLabel="注销账号确认文案"
-              accessibilityHint="请输入注销账号四个字"
-              value={value}
-              onChangeText={(text) => onChange(text.slice(0, 8))}
-              editable={!deleting}
-              autoFocus
-              maxLength={8}
-              placeholder="注销账号"
-              placeholderTextColor={palette.textMuted}
-              style={[styles.modalInput, value.length > 0 && !valid && styles.inputError]}
-            />
-            {value.length > 0 && !valid ? <Text style={styles.inlineError} accessibilityLiveRegion="polite">请输入完整的“注销账号”</Text> : null}
-            <View style={styles.modalActions}>
-              <Pressable accessibilityRole="button" accessibilityLabel="取消注销" disabled={deleting} style={({ pressed }) => [styles.modalCancel, deleting && styles.secondaryButtonDisabled, pressed && styles.pressed]} onPress={onClose}>
-                <Text style={styles.modalCancelText}>取消</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="确认注销账号"
-                accessibilityState={{ disabled: !valid || deleting, busy: deleting }}
-                disabled={!valid || deleting}
-                style={({ pressed }) => [styles.modalConfirm, (!valid || deleting) && styles.modalConfirmDisabled, pressed && valid && !deleting && styles.pressed]}
-                onPress={onConfirm}
-              >
-                {deleting ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.modalConfirmText}>确认注销</Text>}
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </View>
-    </Modal>
   )
 }
 

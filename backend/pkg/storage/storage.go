@@ -12,12 +12,18 @@ import (
 	"time"
 
 	"food_link/backend/pkg/config"
+	"github.com/google/uuid"
 
 	"github.com/tencentyun/cos-go-sdk-v5"
 )
 
 type Client struct {
-	cfg config.StorageConfig
+	cfg                config.StorageConfig
+	accountUploadGuard func(context.Context, string, func() error) error
+}
+
+func (c *Client) ConfigureAccountUploadGuard(guard func(context.Context, string, func() error) error) {
+	c.accountUploadGuard = guard
 }
 
 const (
@@ -325,11 +331,29 @@ func (c *Client) UploadBytes(bucketAlias, key string, data []byte, contentType s
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	_, err = client.Object.Put(context.Background(), key, bytes.NewReader(data), &cos.ObjectPutOptions{
-		ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
-			ContentType: contentType,
-		},
-	})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	write := func() error {
+		_, putErr := client.Object.Put(ctx, key, bytes.NewReader(data), &cos.ObjectPutOptions{
+			ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
+				ContentType: contentType,
+			},
+		})
+		return putErr
+	}
+	owner := ""
+	parts := strings.Split(key, "/")
+	if len(parts) > 1 {
+		owner = parts[0]
+	}
+	if len(parts) > 2 && (owner == "analysis-video-frames" || owner == "user-feedback") {
+		owner = parts[1]
+	}
+	if _, parseErr := uuid.Parse(owner); parseErr == nil && c.accountUploadGuard != nil {
+		err = c.accountUploadGuard(ctx, owner, write)
+	} else {
+		err = write()
+	}
 	if err != nil {
 		return "", err
 	}

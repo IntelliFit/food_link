@@ -1,4 +1,5 @@
 export * from './types'
+export * from './account-deletion'
 export * from './meal'
 export * from './food-record'
 export * from './custom-food-import'

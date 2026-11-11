@@ -9,6 +9,7 @@ import (
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
+	"food_link/backend/internal/foodmeasure"
 	"food_link/backend/internal/utility/domain"
 	"food_link/backend/internal/utility/repo"
 	"food_link/backend/pkg/logger"
@@ -32,6 +33,7 @@ type ManualFoodService interface {
 	Search(ctx context.Context, userID string, keyword string, limit int) ([]domain.ManualFoodResult, error)
 	SearchPackaged(ctx context.Context, keyword string, limit int) ([]domain.ManualFoodResult, error)
 	ListCustomFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error)
+	ListOwnedFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error)
 	SaveCustomFood(ctx context.Context, userID string, input repo.CustomFoodInput) (domain.ManualFoodResult, error)
 }
 
@@ -198,7 +200,11 @@ func (h *UtilityHandler) ManualFoodSearch(c *gin.Context) {
 func (h *UtilityHandler) ManualFoodCustomList(c *gin.Context) {
 	limit := parsePositiveInt(c.Query("limit"), 60)
 	offset := parseNonNegativeInt(c.Query("offset"), 0)
-	items, hasMore, err := h.manualFoodSvc.ListCustomFoods(
+	listFoods := h.manualFoodSvc.ListCustomFoods
+	if c.Query("include_imports") == "1" {
+		listFoods = h.manualFoodSvc.ListOwnedFoods
+	}
+	items, hasMore, err := listFoods(
 		c.Request.Context(),
 		c.GetString(authmw.ContextUserIDKey),
 		limit,
@@ -215,27 +221,29 @@ func (h *UtilityHandler) ManualFoodCustomList(c *gin.Context) {
 func (h *UtilityHandler) ManualFoodCustomSave(c *gin.Context) {
 	logger.Info(c.Request.Context(), "接收自定义食物保存请求", slog.String("user_id", c.GetString(authmw.ContextUserIDKey)))
 	var body struct {
-		ID                 string         `json:"id"`
-		Title              string         `json:"title"`
-		Category           string         `json:"category"`
-		DefaultWeightGrams float64        `json:"default_weight_grams"`
-		TotalCalories      float64        `json:"total_calories"`
-		TotalProtein       float64        `json:"total_protein"`
-		TotalCarbs         float64        `json:"total_carbs"`
-		TotalFat           float64        `json:"total_fat"`
-		NutrientsPer100g   map[string]any `json:"nutrients_per_100g"`
-		ExtraNutrients     map[string]any `json:"extra_nutrients"`
-		ImagePath          *string        `json:"image_path"`
-		ImagePaths         []string       `json:"image_paths"`
-		PortionLabel       string         `json:"portion_label"`
-		RecommendReason    string         `json:"recommend_reason"`
-		ShareToPublic      bool           `json:"share_to_public"`
+		Measurement        *foodmeasure.Measurement `json:"measurement"`
+		ID                 string                   `json:"id"`
+		Title              string                   `json:"title"`
+		Category           string                   `json:"category"`
+		DefaultWeightGrams float64                  `json:"default_weight_grams"`
+		TotalCalories      float64                  `json:"total_calories"`
+		TotalProtein       float64                  `json:"total_protein"`
+		TotalCarbs         float64                  `json:"total_carbs"`
+		TotalFat           float64                  `json:"total_fat"`
+		NutrientsPer100g   map[string]any           `json:"nutrients_per_100g"`
+		ExtraNutrients     map[string]any           `json:"extra_nutrients"`
+		ImagePath          *string                  `json:"image_path"`
+		ImagePaths         []string                 `json:"image_paths"`
+		PortionLabel       string                   `json:"portion_label"`
+		RecommendReason    string                   `json:"recommend_reason"`
+		ShareToPublic      bool                     `json:"share_to_public"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
 	item, err := h.manualFoodSvc.SaveCustomFood(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), repo.CustomFoodInput{
+		Measurement:        body.Measurement,
 		ID:                 body.ID,
 		Title:              body.Title,
 		Category:           body.Category,

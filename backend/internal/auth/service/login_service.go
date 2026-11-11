@@ -158,6 +158,15 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 	if err != nil {
 		return nil, err
 	}
+	if user != nil && s.users.AccountDeletionEnabled() {
+		d, err := s.users.DeletionStatus(ctx, user.ID)
+		if err != nil {
+			return nil, err
+		}
+		if d != nil && d.State != "cancelled" {
+			return s.issueLoginOutput(user, openID, unionID)
+		}
+	}
 	if user != nil {
 		if err := s.ensureTrialEntitlement(ctx, user, openID, unionID); err != nil {
 			return nil, err
@@ -464,6 +473,15 @@ func (s *LoginService) ensureTrialEntitlement(ctx context.Context, user *repo.Us
 	if user == nil {
 		return nil
 	}
+	if s.users.AccountDeletionEnabled() {
+		d, err := s.users.DeletionStatus(ctx, user.ID)
+		if err != nil {
+			return err
+		}
+		if d != nil && d.State != "cancelled" {
+			return nil
+		}
+	}
 	openID = strings.TrimSpace(openID)
 	unionID = strings.TrimSpace(unionID)
 
@@ -526,6 +544,21 @@ func (s *LoginService) findOrCreateWechatUser(ctx context.Context, openID, union
 	if err != nil {
 		return nil, err
 	}
+	if user == nil && unionID != "" {
+		user, err = s.users.FindByUnionID(ctx, unionID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if user != nil && s.users.AccountDeletionEnabled() {
+		d, err := s.users.DeletionStatus(ctx, user.ID)
+		if err != nil {
+			return nil, err
+		}
+		if d != nil && d.State != "cancelled" {
+			return s.touchLogin(ctx, user, loginMethod)
+		}
+	}
 	if user == nil {
 		phone := s.resolvePhoneNumber(ctx, phoneCode)
 		user = newDefaultUser(openID, phone)
@@ -578,6 +611,15 @@ func (s *LoginService) findOrCreateAppWechatUser(ctx context.Context, appOpenID,
 		user, err = s.users.FindByUnionID(ctx, unionID)
 		if err != nil {
 			return nil, err
+		}
+	}
+	if user != nil && s.users.AccountDeletionEnabled() {
+		d, err := s.users.DeletionStatus(ctx, user.ID)
+		if err != nil {
+			return nil, err
+		}
+		if d != nil && d.State != "cancelled" {
+			return s.touchLogin(ctx, user, "wechat_app")
 		}
 	}
 	now := time.Now()

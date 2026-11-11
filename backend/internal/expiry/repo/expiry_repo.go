@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/expiry/domain"
 
 	"github.com/google/uuid"
@@ -17,6 +18,13 @@ type ExpiryRepo struct {
 
 func NewExpiryRepo(db *gorm.DB) *ExpiryRepo {
 	return &ExpiryRepo{db: db}
+}
+
+func (r *ExpiryRepo) WithActiveAccountNotification(ctx context.Context, id string, send func() error) error {
+	if !r.db.Migrator().HasTable("account_deletions") {
+		return send()
+	}
+	return authrepo.NewUserRepo(r.db).WithActiveAccountWrite(ctx, id, send)
 }
 
 func (r *ExpiryRepo) Create(ctx context.Context, item *domain.ExpiryItem) error {

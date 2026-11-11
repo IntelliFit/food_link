@@ -13,6 +13,8 @@ import {
   type SelectableMealType
 } from '../../../components/MealTypeSelector'
 import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
+import { foodMeasurementGrams, formatFoodMeasurementAmount, normalizeFoodMeasurement, type FoodMeasurement } from '../../../utils/food-measure'
+import { recordMeasurementWithNutrients } from '../../../utils/food-record-measurement'
 import { formatMacroNutrient, formatMicroNutrient, roundTo } from '../../../utils/number-format'
 import { applyEnergyEdit } from '../../../utils/nutrition-edit'
 import { confirmSingleItemRecalculation, recalculateSingleFoodItem } from '../../../utils/single-item-recalculation'
@@ -21,7 +23,10 @@ import './MealRecordEditModal.scss'
 
 type EditableNutrientField = 'calories' | 'protein' | 'carbs' | 'fat' | 'waterMl'
 
-interface EditableFoodItem {
+interface EditableFoodItem extends Pick<FoodRecord['items'][number],
+  'manual_source' | 'manual_source_id' | 'manual_source_title' | 'manual_portion_label' | 'image_path' | 'image_paths'
+> {
+  measurement?: FoodMeasurement
   name: string
   weight: number
   grossWeight: number
@@ -138,7 +143,7 @@ const hasVisibleMacroData = (nutrients?: Nutrients | null) => (
 
 const resolveRecordItemRatio = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
   const ratio = Number(item.ratio)
-  if (Number.isFinite(ratio) && ratio > 0) return Math.min(100, ratio)
+  if (item.ratio != null && Number.isFinite(ratio) && ratio >= 0) return Math.min(100, ratio)
   const intake = Number(item.intake)
   const weight = Number(item.weight)
   if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
@@ -236,9 +241,12 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       originalMealTypeRef.current = mt
       const items = (record.items || []).map(item => {
         const ratio = resolveRecordItemRatio(item)
+        const measurement = normalizeFoodMeasurement(item.measurement) || undefined
         return {
+          ...item,
+          measurement,
           name: item.name,
-          weight: item.weight,
+          weight: measurement?.amount ?? item.weight,
           grossWeight: Number((item as any).gross_weight_grams ?? (item as any).grossWeightGrams ?? item.weight) || item.weight,
           ediblePortionRatio: Number((item as any).edible_portion_ratio ?? (item as any).ediblePortionRatio ?? 100) || 100,
           ediblePortionReason: (item as any).edible_portion_reason ?? (item as any).ediblePortionReason,
@@ -257,7 +265,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           packageWeightReason: (item as any).package_weight_reason ?? (item as any).packageWeightReason,
           packagedCandidates: (item as any).packaged_candidates ?? (item as any).packagedCandidates,
           ratio,
-          intake: resolveRecordItemIntake(item),
+          intake: measurement ? measurement.amount * ratio / 100 : resolveRecordItemIntake(item),
           waterMl: item.waterMl ?? item.water_ml ?? 0,
           nutrients: resolveEditableItemNutrients(item, record, ratio),
           nutrientDetailsExpanded: false
@@ -278,7 +286,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     setEditItems(prev => {
       const next = [...prev]
       const item = { ...next[index] }
-      item.intake = Math.max(0, Math.min(item.weight, roundTo(newIntake, 1)))
+      item.intake = Math.max(0, Math.min(item.weight, item.measurement ? newIntake : roundTo(newIntake, 1)))
       if (item.weight > 0) {
         item.ratio = Math.round((item.intake / item.weight) * 100)
       }
@@ -292,7 +300,8 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       const next = [...prev]
       const item = { ...next[index] }
       item.ratio = Math.max(0, Math.min(100, newRatio))
-      item.intake = roundTo(item.weight * item.ratio / 100, 1)
+      const intake = item.weight * item.ratio / 100
+      item.intake = item.measurement ? intake : roundTo(intake, 1)
       next[index] = item
       return next
     })
@@ -306,7 +315,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     recalculationBusyRef.current = true
     try {
       const res = await Taro.showModal({
-        title: '改名并重算此项',
+        title: editItems[index]?.measurement ? '修改食物名称' : '改名并重算此项',
         content: currentName,
         editable: true,
         placeholderText: '请输入新的食物名称',
@@ -318,6 +327,10 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
         return
       }
       if (nextName === currentName.trim()) return
+      if (editItems[index]?.measurement) {
+        setEditItems(previous => previous.map((item, itemIndex) => itemIndex === index ? { ...item, name: nextName } : item))
+        return
+      }
       if (!await confirmSingleItemRecalculation(nextName) || !isCurrent()) return
       setRecalculatingIndex(index)
       const original = editItems[index]
@@ -482,10 +495,14 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       if (!item) return prev
       const next = [...prev]
       const updated = { ...next[index] }
-      const nextWeight = Math.max(10, roundTo((item.weight || 0) + delta, 1))
+      const countUnit = item.measurement?.unit === 'piece' || item.measurement?.unit === 'serving'
+      const change = countUnit ? Math.sign(delta) : delta
+      const nextWeight = Math.max(item.measurement ? 0.01 : 10, roundTo((item.weight || 0) + change, 2))
       const scale = item.weight > 0 ? nextWeight / item.weight : 1
       updated.weight = nextWeight
-      updated.intake = roundTo(nextWeight * (updated.ratio / 100), 1)
+      if (item.measurement) updated.measurement = { ...item.measurement, amount: nextWeight }
+      const intake = nextWeight * (updated.ratio / 100)
+      updated.intake = item.measurement ? intake : roundTo(intake, 1)
       if (updated.intake > nextWeight) {
         updated.intake = nextWeight
         updated.ratio = 100
@@ -605,11 +622,17 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       const totalProtein = editItems.reduce((sum, item) => sum + (item.nutrients.protein * (item.ratio / 100)), 0)
       const totalCarbs = editItems.reduce((sum, item) => sum + (item.nutrients.carbs * (item.ratio / 100)), 0)
       const totalFat = editItems.reduce((sum, item) => sum + (item.nutrients.fat * (item.ratio / 100)), 0)
-      const totalWeight = editItems.reduce((sum, item) => sum + item.intake, 0)
+      const payloadItems = editItems.map(item => buildFoodRecordItemPayloadFromResultItem({
+        ...item,
+        measurement: item.measurement
+          ? recordMeasurementWithNutrients({ ...item.measurement, amount: item.weight }, item.nutrients)
+          : undefined,
+      }, item.nutrients))
+      const totalWeight = payloadItems.reduce((sum, item) => sum + item.intake, 0)
 
       await updateFoodRecord(record.id, {
         meal_type: editMealType,
-        items: editItems.map(item => buildFoodRecordItemPayloadFromResultItem(item, item.nutrients)),
+        items: payloadItems,
         total_calories: roundTo(totalCalories, 1),
         total_protein: roundTo(totalProtein, 1),
         total_carbs: roundTo(totalCarbs, 1),
@@ -681,8 +704,8 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
                         </View>
                       )}
                     </View>
-                    <Text className='ingredient-basis-label'>当前整份营养（约 {Math.round(item.weight)}g）</Text>
-                    <Text className='ingredient-per100-label'>每100g参考：{Math.round((item.nutrients.calories || 0) * 100 / Math.max(item.weight, 1))} kcal · 蛋白 {formatMacroNutrient((item.nutrients.protein || 0) * 100 / Math.max(item.weight, 1))}g · 碳水 {formatMacroNutrient((item.nutrients.carbs || 0) * 100 / Math.max(item.weight, 1))}g · 脂肪 {formatMacroNutrient((item.nutrients.fat || 0) * 100 / Math.max(item.weight, 1))}g</Text>
+                    <Text className='ingredient-basis-label'>当前整份营养（{item.measurement ? formatFoodMeasurementAmount(item.weight, item.measurement.unit) : `约 ${Math.round(item.weight)}g`}）</Text>
+                    {(!item.measurement || foodMeasurementGrams({ ...item.measurement, amount: item.weight }) != null) && <Text className='ingredient-per100-label'>每100g参考：{Math.round((item.nutrients.calories || 0) * 100 / Math.max(item.measurement ? (foodMeasurementGrams({ ...item.measurement, amount: item.weight }) || 1) : item.weight, 1))} kcal · 蛋白 {formatMacroNutrient((item.nutrients.protein || 0) * 100 / Math.max(item.measurement ? (foodMeasurementGrams({ ...item.measurement, amount: item.weight }) || 1) : item.weight, 1))}g · 碳水 {formatMacroNutrient((item.nutrients.carbs || 0) * 100 / Math.max(item.measurement ? (foodMeasurementGrams({ ...item.measurement, amount: item.weight }) || 1) : item.weight, 1))}g · 脂肪 {formatMacroNutrient((item.nutrients.fat || 0) * 100 / Math.max(item.measurement ? (foodMeasurementGrams({ ...item.measurement, amount: item.weight }) || 1) : item.weight, 1))}g</Text>}
                   </View>
                 </View>
 
@@ -751,12 +774,12 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
                 {/* 估算重量 + 实际摄入 */}
                 <View className='ingredient-controls'>
                   <View className='weight-control'>
-                    <Text className='control-label'>估算重量</Text>
+                    <Text className='control-label'>{item.measurement ? '整份数量' : '估算重量'}</Text>
                     <View className='weight-adjuster'>
                       <View className='adjust-btn minus' onClick={() => adjustWeight(idx, -10)}>
                         <Text className='adjust-btn-text'>−</Text>
                       </View>
-                      <Text className='weight-display'>{formatWeightDisplay(item.weight)}</Text>
+                      <Text className='weight-display'>{item.measurement ? formatFoodMeasurementAmount(item.weight, item.measurement.unit) : formatWeightDisplay(item.weight)}</Text>
                       <View className='adjust-btn plus' onClick={() => adjustWeight(idx, 10)}>
                         <Text className='adjust-btn-text'>+</Text>
                       </View>
@@ -765,7 +788,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
 
                   <View className='ratio-control'>
                     <View className='ratio-label-wrap'>
-                      <Text className='control-label'>实际摄入</Text>
+                      <Text className='control-label'>{item.measurement ? `实际摄入 ${formatFoodMeasurementAmount(item.intake, item.measurement.unit)}` : '实际摄入'}</Text>
                     </View>
                     <View className='ratio-control-right'>
                       <View className='ratio-slider-shell'>

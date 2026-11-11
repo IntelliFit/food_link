@@ -1,9 +1,11 @@
 import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from './food-display-image'
 import type { Nutrients } from './api'
+import type { FoodMeasurement } from './food-measure'
 
 export type ManualFoodSourceType = 'public_library' | 'nutrition_library' | 'packaged_food'
 
 export type ManualFoodSourceItem = {
+  measurement?: FoodMeasurement | null
   name?: string
   manual_source?: string | null
   manual_source_id?: string | null

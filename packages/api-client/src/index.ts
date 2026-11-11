@@ -1,4 +1,5 @@
 import type {
+  AccountDeletionStatus,
   AnalysisTask,
   AnalysisEngine,
   AnalysisFeedbackRequest,
@@ -1627,11 +1628,23 @@ export class FoodLinkApiClient {
     })
   }
 
-  async deleteAccount(): Promise<{ message?: string }> {
-    return this.authenticatedRequest<{ message?: string }>('/api/user/account', {
+  async deleteAccount(coolingOffDays: 0 | 7 = 7): Promise<{ status: AccountDeletionStatus; access_token: string }> {
+    const result = await this.authenticatedRequest<{ status: AccountDeletionStatus; access_token: string; user_id: string }>('/api/user/account', {
       method: 'DELETE',
+      body: { confirmation: '注销账号', cooling_off_days: coolingOffDays },
       timeoutMs: 15000,
     })
+    await this.adapters.tokenStorage.setTokens({ accessToken: result.access_token, refreshToken: '', userId: result.user_id })
+    return result
+  }
+
+  async getAccountDeletionStatus(): Promise<AccountDeletionStatus> {
+    return this.authenticatedRequest<AccountDeletionStatus>('/api/user/account/deletion', { method: 'GET', timeoutMs: 10000 })
+  }
+
+  async cancelAccountDeletion(): Promise<void> {
+    await this.authenticatedRequest('/api/user/account/deletion/cancel', { method: 'POST', body: { confirmation: '撤销注销' } })
+    await this.clearTokens()
   }
 
   async getHealthProfile(): Promise<HealthProfile> {

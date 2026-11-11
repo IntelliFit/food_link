@@ -400,7 +400,7 @@ func (h *UserHandler) DeleteAccount(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	logUserAPI(c, "账号注销完成")
+	logUserAPI(c, "账号注销申请已受理")
 	response.Success(c, map[string]bool{"success": true})
 }
 

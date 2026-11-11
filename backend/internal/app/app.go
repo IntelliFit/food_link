@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -148,6 +149,8 @@ import (
 )
 
 type App struct {
+	accountDeletionCancel context.CancelFunc
+	accountDeletionDone   chan struct{}
 	analyticsCancel       context.CancelFunc
 	analyticsDone         chan struct{}
 	engine                *gin.Engine
@@ -240,6 +243,11 @@ func New(cfg *config.Config) (*App, error) {
 
 	jwtSvc := authservice.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTokenTTLSeconds, cfg.JWT.RefreshTokenTTLSeconds)
 	userRepo := authrepo.NewUserRepo(db)
+	jwtSvc.ConfigureAccountAccess(userRepo.CheckAccountAccess)
+	storageClient.ConfigureAccountUploadGuard(userRepo.WithActiveAccountWrite)
+	retentionDays, _ := strconv.Atoi(os.Getenv("FOODLINK_ACCOUNT_EVIDENCE_RETENTION_DAYS"))
+	accountDeletionSvc := userservice.NewAccountDeletionService(userRepo, storageClient, retentionDays)
+	accountDeletionHandler := userhandler.NewAccountDeletionHandler(accountDeletionSvc, jwtSvc)
 	contentSecurity, err := contentsecurityservice.New(cfg, userRepo)
 	if err != nil {
 		return nil, err
@@ -665,6 +673,10 @@ func New(cfg *config.Config) (*App, error) {
 	}
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, campusCatalogRepo, campusCatalogSvc, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, statsSvc, frNutritionSvc, frSvc, membershipSvc, taskQueue, storageClient)
 	if os.Getenv("FOOD_LINK_DISABLE_BACKGROUND_MAINTENANCE") != "1" {
+		deletionCtx, deletionCancel := context.WithCancel(context.Background())
+		app.accountDeletionCancel = deletionCancel
+		app.accountDeletionDone = make(chan struct{})
+		go func() { defer close(app.accountDeletionDone); accountDeletionSvc.Run(deletionCtx) }()
 		analyticsCtx, cancel := context.WithCancel(context.Background())
 		app.analyticsCancel = cancel
 		app.analyticsDone = make(chan struct{})
@@ -747,7 +759,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/user/record-days", authmw.RequireJWT(jwtSvc), userHandler.GetRecordDays)
 	engine.POST("/api/user/last-seen-analyze-history", authmw.RequireJWT(jwtSvc), userHandler.UpdateLastSeenAnalyzeHistory)
 	engine.POST("/api/user/acknowledge-health-disclaimer", authmw.RequireJWT(jwtSvc), userHandler.AcknowledgeHealthDisclaimer)
-	engine.DELETE("/api/user/account", authmw.RequireJWT(jwtSvc), userHandler.DeleteAccount)
+	engine.DELETE("/api/user/account", authmw.RequireJWT(jwtSvc), accountDeletionHandler.Request)
+	engine.GET("/api/user/account/deletion", authmw.RequireJWT(jwtSvc), accountDeletionHandler.Status)
+	engine.POST("/api/user/account/deletion/cancel", authmw.RequireJWT(jwtSvc), accountDeletionHandler.Cancel)
 	engine.GET("/api/user/:user_id/public-profile", authmw.RequireJWT(jwtSvc), userHandler.GetPublicProfile)
 	engine.POST("/api/feedback", authmw.RequireJWT(jwtSvc), feedbackHandler.Submit)
 	engine.POST("/api/feedback/upload-image", authmw.RequireJWT(jwtSvc), feedbackHandler.UploadImage)
@@ -858,6 +872,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/community/comments/mine", authmw.RequireJWT(jwtSvc), communityHandler.OwnComments)
 	engine.GET("/api/community/checkin-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.CheckinLeaderboard)
 	engine.GET("/api/community/health-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.HealthLeaderboard)
+	engine.GET("/api/community/food-contribution-leaderboard", authmw.RequireJWT(jwtSvc), communityHandler.FoodContributionLeaderboard)
 	engine.GET("/api/community/food-nutrient-leaderboard", authmw.OptionalJWT(jwtSvc), communityHandler.FoodNutrientLeaderboard)
 	engine.POST("/api/community/feed/:record_id/like", authmw.RequireJWT(jwtSvc), communityHandler.LikeFeed)
 	engine.DELETE("/api/community/feed/:record_id/like", authmw.RequireJWT(jwtSvc), communityHandler.UnlikeFeed)
@@ -1747,6 +1762,16 @@ func (a *App) Close(ctx context.Context) error {
 		}
 	}
 	a.stopWechatTransferPoller(ctx)
+	if a.accountDeletionCancel != nil {
+		a.accountDeletionCancel()
+	}
+	if a.accountDeletionDone != nil {
+		select {
+		case <-a.accountDeletionDone:
+		case <-ctx.Done():
+			logger.Warn(context.Background(), "账号注销巡检关闭超时")
+		}
+	}
 	if a.openPlatformCancel != nil {
 		a.openPlatformCancel()
 	}

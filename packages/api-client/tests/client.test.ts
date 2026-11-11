@@ -17,6 +17,9 @@ function createMockAdapters() {
   const adapters: ApiClientAdapters = {
     async request(url, options) {
       requests.push({ url, options })
+      if (url.endsWith('/api/user/account')) {
+        return response({ status: { state: 'pending', can_cancel: true }, access_token: 'deletion-token', user_id: 'user-1' })
+      }
       if (url.endsWith('/api/test-backend/impersonate-user')) {
         return response({
           access_token: 'access-token',

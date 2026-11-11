@@ -36,6 +36,33 @@ func NewUploadService(storage *storage.Client) *UploadService {
 	}
 }
 
+// Account namespace enables complete cleanup of uploads never saved as records.
+func (s *UploadService) UploadBase64ForUser(userID, image string) (string, error) {
+	if _, err := uuid.Parse(userID); err != nil {
+		return "", fmt.Errorf("用户身份无效")
+	}
+	if image == "" {
+		return "", fmt.Errorf("图片不能为空")
+	}
+	return s.storage.UploadBase64("food-images", userID+"/"+uuid.NewString()+".jpg", image, "image/jpeg")
+}
+func (s *UploadService) UploadFileForUser(userID string, data []byte, ext, contentType string) (string, error) {
+	if _, err := uuid.Parse(userID); err != nil {
+		return "", fmt.Errorf("用户身份无效")
+	}
+	if len(data) == 0 {
+		return "", fmt.Errorf("图片不能为空")
+	}
+	ext = strings.ToLower(strings.TrimSpace(ext))
+	if ext == "" {
+		ext = ".jpg"
+	}
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	return s.storage.UploadBytes("food-images", userID+"/"+uuid.NewString()+ext, data, contentType)
+}
+
 func (s *UploadService) UploadBase64(base64Image string) (string, error) {
 	if base64Image == "" {
 		return "", fmt.Errorf("base64Image 不能为空")

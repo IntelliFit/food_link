@@ -5,7 +5,7 @@ installConsoleLogCapture()
 
 import { createElement, type PropsWithChildren, useEffect } from 'react'
 import Taro, { useError, useLaunch } from '@tarojs/taro'
-import { flushRecentRequestTraces, getAccessToken } from './utils/api'
+import { flushRecentRequestTraces, getAccessToken, getAccountDeletionStatus } from './utils/api'
 import { extraPkgUrl } from './utils/subpackage-extra'
 import { writePendingFriendInviteCode } from './utils/pending-friend-invite'
 import { AppColorSchemeProvider } from './components/AppColorSchemeContext'
@@ -172,6 +172,24 @@ function App({ children }: PropsWithChildren<any>) {
       handleDeepLink(options)
     }
   })
+
+  useEffect(() => {
+	const checkDeletion = async () => {
+	  if (!getAccessToken()) return
+	  try {
+	    const status = await getAccountDeletionStatus()
+	    if (!['active', 'cancelled'].includes(status.state)) {
+	      const route = String(Taro.getCurrentPages().slice(-1)[0]?.route || '')
+	      const target = extraPkgUrl('/pages/account-deletion/index')
+	      if (`/${route}` !== target) await Taro.reLaunch({ url: target })
+	    }
+	  } catch { /* Network failures are retried on foreground and by protected requests. */ }
+	}
+	void checkDeletion()
+	Taro.onAppShow(checkDeletion)
+	Taro.eventCenter.on(PRODUCT_UPDATE_AUTH_EVENT, checkDeletion)
+	return () => { Taro.offAppShow(checkDeletion); Taro.eventCenter.off(PRODUCT_UPDATE_AUTH_EVENT, checkDeletion) }
+  }, [])
 
   useEffect(() => {
     const productUpdates = new ProductUpdatePrompt()

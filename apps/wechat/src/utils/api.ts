@@ -1,4 +1,7 @@
 import Taro from '@tarojs/taro'
+import type { AccountDeletionStatus } from '@food-link/core'
+import type { FoodMeasurement } from './food-measure'
+import { AUTH_SESSION_CHANGED_EVENT, advanceAuthSession, captureAuthSession, isAuthSessionCurrent, authSessionChangedError } from './auth-session'
 import { rememberMealLocation } from './meal-location'
 import { COMMUNITY_FEED_CHANGED_EVENT, HOME_INTAKE_DATA_CHANGED_EVENT } from './home-events'
 
@@ -223,6 +226,7 @@ export interface UnitNutritionPer100g extends Nutrients {}
 
 // 食物项接口
 export interface FoodItem {
+  measurement?: FoodMeasurement
   itemId?: number
   intakeRatio?: number
   intakeGrams?: number
@@ -505,6 +509,7 @@ export interface CompareAnalyzeResponse {
 
 /** 确认记录时提交的单条食物项（含调节后的 weight/ratio/intake） */
 export interface FoodRecordItemPayload {
+  measurement?: FoodMeasurement
   name: string
   weight: number
   ratio: number
@@ -587,6 +592,7 @@ export interface CriticalSamplePayload {
 
 /** 饮食记录 items 单条（含手动记录来源与展示图） */
 export interface FoodRecordItemRow {
+  measurement?: FoodMeasurement
   name: string
   weight: number
   gross_weight_grams?: number
@@ -3610,7 +3616,9 @@ export async function markAnalyzeHistorySeen(): Promise<{ success: boolean }> {
 
 /** 提交食物分析任务，立即返回 task_id */
 export async function submitAnalyzeTask(body: AnalyzeTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const session = captureAuthSession()
   const payload = await enrichAnalyzePayloadWithGeoContext({ ...body, precise_micronutrients: true })
+  if (!isAuthSessionCurrent(session)) throw authSessionChangedError()
   const res = await authenticatedRequest('/api/analyze/submit', {
     method: 'POST',
     data: payload,
@@ -3725,7 +3733,9 @@ export interface AnalyzeTextTaskSubmitParams {
 
 /** 提交文字分析任务（异步） */
 export async function submitTextAnalyzeTask(body: AnalyzeTextTaskSubmitParams): Promise<{ task_id: string; message: string }> {
+  const session = captureAuthSession()
   const payload = await enrichAnalyzePayloadWithGeoContext({ ...body, precise_micronutrients: true })
+  if (!isAuthSessionCurrent(session)) throw authSessionChangedError()
   const res = await authenticatedRequest('/api/analyze-text/submit', {
     method: 'POST',
     data: payload,
@@ -3836,7 +3846,9 @@ export async function continuePrecisionSession(
   sessionId: string,
   body: ContinuePrecisionSessionParams,
 ): Promise<{ task_id: string; message: string }> {
+  const session = captureAuthSession()
   const payload = await enrichAnalyzePayloadWithGeoContext(body)
+  if (!isAuthSessionCurrent(session)) throw authSessionChangedError()
   const res = await authenticatedRequest(`/api/precision-sessions/${sessionId}/continue`, {
     method: 'POST',
     data: payload,
@@ -5020,6 +5032,8 @@ export interface StreamGeneratePetChatCallbacks {
   onChunk: (text: string) => void
   onDone: (meta: PetChatStreamMeta) => void
   onError: (error: Error) => void
+  /** Session replacement stops the old turn without fetching its history. */
+  onCancel?: () => void
 }
 
 export function streamGeneratePetChat(
@@ -5033,6 +5047,7 @@ export function streamGeneratePetChat(
   entryContext?: PetChatEntryContext,
   location?: PetChatLocation,
 ): () => void {
+  const requestSession = captureAuthSession()
   const token = getAccessToken()
   if (!token) {
     redirectToLogin('未登录，请先登录')
@@ -5051,6 +5066,7 @@ export function streamGeneratePetChat(
       clearTimeout(timeoutID)
       timeoutID = null
     }
+    Taro.eventCenter.off(AUTH_SESSION_CHANGED_EVENT, onAuthChanged)
   }
 
   const reportError = (error: unknown) => {
@@ -5060,12 +5076,24 @@ export function streamGeneratePetChat(
     callbacks.onError(error instanceof Error ? error : new Error(String(error || '请求失败')))
   }
 
+  const ensureSession = () => {
+    if (isAuthSessionCurrent(requestSession)) return true
+    settled = true
+    clearRequestTimeout()
+    try { requestTask?.abort?.() } catch (_) {}
+    callbacks.onCancel?.()
+    return false
+  }
+  const onAuthChanged = () => { if (!settled) ensureSession() }
+  Taro.eventCenter.on(AUTH_SESSION_CHANGED_EVENT, onAuthChanged)
+
   const processSSEText = (text: string) => {
-    if (settled) return
+    if (settled || !ensureSession()) return
     buffer += text
     const events = buffer.split('\n\n')
     buffer = events.pop() || ''
     for (const event of events) {
+      if (settled || !ensureSession()) return
       const lines = event.split('\n')
       let dataLine = ''
       for (const line of lines) {
@@ -5124,14 +5152,16 @@ export function streamGeneratePetChat(
       enableChunked: true,
       timeout: 180000,
       success: (res) => {
-        if (settled) return
-        if (res.statusCode === 401 || res.statusCode === 403) {
+        if (settled || !ensureSession()) return
+        if (res.statusCode === 401) {
           redirectToLogin('登录已失效，请重新登录')
           reportError(new Error('登录已失效，请重新登录'))
           return
         }
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          reportError(new Error('小食探分析失败'))
+          try {
+            throwHttpErrorWithStatus(res.statusCode, res.data, '小食探分析失败', res.header as Record<string, any> | undefined)
+          } catch (error) { reportError(error) }
           return
         }
         callbacks.onStart?.()
@@ -5143,10 +5173,11 @@ export function streamGeneratePetChat(
         }
       },
       fail: (err) => {
+        if (settled || !ensureSession()) return
         reportError(new Error(String(err?.errMsg || err || '请求失败')))
       },
       complete: () => {
-        if (settled) return
+        if (settled || !ensureSession()) return
         const trailingText = decoder.decode()
         if (trailingText) processSSEText(trailingText)
         if (!settled && buffer.trim()) processSSEText('\n\n')
@@ -5158,7 +5189,7 @@ export function streamGeneratePetChat(
     ;(requestTask as unknown as Promise<unknown>)?.catch?.(() => undefined)
 
     requestTask.onChunkReceived?.((res: any) => {
-      if (settled) return
+      if (settled || !ensureSession()) return
       const chunk = res.data instanceof ArrayBuffer
         ? decoder.decode(res.data, { stream: true })
         : String(res.data || '')
@@ -5167,7 +5198,7 @@ export function streamGeneratePetChat(
 
     if (!settled) {
       timeoutID = setTimeout(() => {
-        if (settled) return
+        if (settled || !ensureSession()) return
         reportError(new Error('宠物回答超时，请稍后重试'))
         try {
           requestTask?.abort?.()
@@ -5358,6 +5389,7 @@ export function saveTokens(accessToken: string, refreshToken: string, user_id: s
     Taro.setStorageSync('access_token', accessToken)
     Taro.setStorageSync('refresh_token', refreshToken)
     Taro.setStorageSync('user_id', user_id)
+    advanceAuthSession()
     Taro.eventCenter.trigger('product_update_auth_changed')
   } catch (error) {
     console.error('保存 token 失败:', error)
@@ -5374,6 +5406,7 @@ export function clearTokens() {
     Taro.removeStorageSync('access_token')
     Taro.removeStorageSync('refresh_token')
     Taro.removeStorageSync('user_id')
+    advanceAuthSession()
     Taro.eventCenter.trigger('product_update_auth_changed')
     Taro.removeStorageSync('stats_custom_focus_pending_tasks_v1')
   } catch (error) {
@@ -5403,6 +5436,11 @@ export function clearAllStorage() {
     Taro.removeStorageSync('home_dashboard_local_cache')
     Taro.removeStorageSync('body_metrics_storage')
     Taro.removeStorageSync('stats_custom_focus_pending_tasks_v1')
+	// Remove private result/feed caches when a session is suspended or closed.
+	const privateKeys = ['analyzeResult', 'analyzeSourceTaskId', 'analyzeImagePaths', 'analyzeImagePath', 'analyzeTextInput', 'analyzeTextAdditionalContext', 'analyzePrecisionSessionId', 'analyzePendingCorrectionItems', 'analyzePendingCorrectionTaskId', 'analyzeShareData', 'community_feed_cache', 'community_friends_cache', 'community_requests_cache', 'community_notification_target_v1']
+	privateKeys.forEach(key => Taro.removeStorageSync(key))
+	const keys = Taro.getStorageInfoSync?.()?.keys || []
+	keys.filter(key => key.startsWith('comment_draft_') || key.startsWith('temp_comments_') || key.startsWith('record_manual_custom_foods_v1:')).forEach(key => Taro.removeStorageSync(key))
 
     // 清除业务数据（可选，根据需求决定是否清除）
     // Taro.removeStorageSync('analyzeImagePath')
@@ -5421,16 +5459,28 @@ export function clearAllStorage() {
 /** 登录页路径，token 失效时统一跳转 */
 const LOGIN_PAGE_URL = extraPkgUrl('/pages/login/index')
 
-export async function deleteAccount(confirmation: string): Promise<{ success: boolean }> {
+export async function deleteAccount(confirmation: string, coolingOffDays: 0 | 7 = 7): Promise<{ status: AccountDeletionStatus }> {
   const response = await authenticatedRequest('/api/user/account', {
     method: 'DELETE',
-    data: { confirmation },
+    data: { confirmation, cooling_off_days: coolingOffDays },
     timeout: 15000,
   })
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '注销失败')
   }
-  return response.data as { success: boolean }
+  const result = response.data as { status: AccountDeletionStatus; access_token: string; user_id: string }
+  clearAllStorage()
+  saveTokens(result.access_token, '', result.user_id)
+  return result
+}
+
+export async function getAccountDeletionStatus(): Promise<AccountDeletionStatus> {
+  return (await authenticatedRequest('/api/user/account/deletion', { method: 'GET' })).data
+}
+
+export async function cancelAccountDeletion(): Promise<void> {
+  await authenticatedRequest('/api/user/account/deletion/cancel', { method: 'POST', data: { confirmation: '撤销注销' } })
+  clearAllStorage()
 }
 
 /**
@@ -5452,7 +5502,7 @@ function redirectToLogin(message: string = '登录已失效，请重新登录') 
 /**
  * 带认证的请求
  * - 无 token 时清除本地并跳转登录页
- * - 响应 401/403 时视为 token 失效，清除登录态并跳转登录页
+ * - 仅当前会话的 401 清除登录态；403 是业务权限错误
  * @param url 请求 URL
  * @param options 请求选项
  * @returns Promise<any>
@@ -5461,6 +5511,7 @@ export async function authenticatedRequest(
   url: string,
   options: Omit<Taro.request.Option, 'url'> = {}
 ): Promise<any> {
+  const requestSession = captureAuthSession()
   const token = getAccessToken()
 
   if (!token) {
@@ -5494,15 +5545,25 @@ export async function authenticatedRequest(
       startedAt,
       error,
     })
+    if (!isAuthSessionCurrent(requestSession)) throw authSessionChangedError()
     throw error
   }
-  if (res.statusCode === 401 || res.statusCode === 403) {
+  // A late response belongs to its original login, including a late 401. It
+  // must neither return old private data nor clear a more recent login.
+  if (!isAuthSessionCurrent(requestSession)) throw authSessionChangedError()
+  if (res.statusCode === 403 && (res.data as { code?: number })?.code === 20021) {
+    const deletionPage = extraPkgUrl('/pages/account-deletion/index')
+    const pages = Taro.getCurrentPages()
+    if (`/${pages[pages.length - 1]?.route}` !== deletionPage) void Taro.reLaunch({ url: deletionPage })
+    throw new Error('账号正在注销，请查看注销状态')
+  }
+  if (res.statusCode === 401) {
     redirectToLogin('登录已失效，请重新登录')
     throw new Error('登录已失效，请重新登录')
   }
 
   // 特殊处理 openid 相关错误：视为登录状态异常，强制重新登录
-  if (res.statusCode >= 400 && res.statusCode < 500) {
+  if (res.statusCode >= 400 && res.statusCode < 500 && res.statusCode !== 403) {
     const detail = (res.data as any)?.detail as string | undefined
     if (detail && (detail.includes('openid') || detail.includes('Token 中缺少 openid'))) {
       redirectToLogin('登录状态异常，请重新登录')
@@ -6448,6 +6509,7 @@ export async function uploadHealthReportOcr(base64Image: string): Promise<{
 // ---------- 手动记录：食物搜索 ----------
 
 export interface ManualFoodSearchResult {
+  measurement?: FoodMeasurement
   id: string
   source: 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom'
   can_edit?: boolean
@@ -6603,6 +6665,7 @@ export async function fetchManualFoodCatalog(
 }
 
 export interface SaveManualCustomFoodRequest {
+  measurement?: FoodMeasurement
   id?: string
   title: string
   category?: 'custom' | 'snack'
@@ -6627,6 +6690,7 @@ export async function fetchManualCustomFoods(
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
+    include_imports: '1',
   })
   const response = await authenticatedRequest(`/api/manual-food/custom?${params.toString()}`, {
     method: 'GET',
@@ -6944,6 +7008,9 @@ export interface PackagedAutoIngestResult {
 }
 
 export interface PackagedProductExtractResult {
+  measurement?: FoodMeasurement
+  raw_nutrition_basis?: { type?: string; value?: number; unit?: string }
+  raw_nutrition_per_basis?: Record<string, { value?: number; unit?: string }>
   brand?: string
   product_name?: string
   flavor_text?: string
@@ -7169,6 +7236,26 @@ export interface CheckinLeaderboardItem {
   avatar: string
   checkin_count: number
   is_me: boolean
+}
+
+export interface FoodContributionLeaderboardItem {
+  rank: number
+  user_id: string
+  nickname: string
+  avatar: string
+  contribution_count: number
+  standard_count: number
+  packaged_count: number
+  meal_count: number
+  custom_count: number
+  is_me: boolean
+}
+
+export interface FoodContributionLeaderboardResult {
+  period: 'month' | 'all'
+  start_date?: string
+  end_date?: string
+  list: FoodContributionLeaderboardItem[]
 }
 
 export interface HealthLeaderboardItem {
@@ -7852,6 +7939,11 @@ export async function communityGetHealthLeaderboard(): Promise<{
     scoring_rule: HealthLeaderboardScoringRule
     list: HealthLeaderboardItem[]
   }
+}
+
+export async function communityGetFoodContributionLeaderboard(period: 'month' | 'all' = 'month'): Promise<FoodContributionLeaderboardResult> {
+  const response = await authenticatedRequest(`/api/community/food-contribution-leaderboard?period=${period}`, { method: 'GET', timeout: 15000 })
+  return unwrapResponse<FoodContributionLeaderboardResult>(response)
 }
 
 export async function communityGetFoodNutrientLeaderboard(

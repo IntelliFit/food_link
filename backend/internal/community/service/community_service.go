@@ -54,6 +54,7 @@ type FeedRepo interface {
 	IsFriend(ctx context.Context, userID, friendID string) (bool, error)
 	GetUserProfiles(ctx context.Context, userIDs []string) (map[string]*repo.UserProfile, error)
 	GetWeeklyCheckinCounts(ctx context.Context, weekStart, weekEnd time.Time) (map[string]int, error)
+	GetContributionCounts(ctx context.Context, start, end *time.Time) (map[string]repo.ContributionCounts, error)
 	GetFoodNutrientRanking(ctx context.Context, nutrient string, limit int) ([]repo.NutrientFoodRow, error)
 	CreateCirclePost(ctx context.Context, post *domain.UserCirclePost) error
 	GetCirclePostByID(ctx context.Context, postID string) (*domain.UserCirclePost, error)

@@ -1,6 +1,9 @@
 import type { FoodItem, FoodRecordItemPayload, Nutrients } from './api'
+import { foodMeasurementGrams, type FoodMeasurement } from './food-measure'
+import { recordMeasurementWithNutrients } from './food-record-measurement'
 
 type PackagedAnalysisMetaSource = {
+  measurement?: FoodMeasurement | null
   name?: string
   image_path?: string | null
   image_paths?: string[] | null
@@ -93,11 +96,13 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
   item: T,
   nutrients: Nutrients,
 ): FoodRecordItemPayload => {
-  const weight = normalizeFoodRecordNumber(item.weight)
+  const measurement = item.measurement != null ? recordMeasurementWithNutrients(item.measurement, nutrients) : undefined
+  const weight = measurement ? (foodMeasurementGrams(measurement) ?? 0) : normalizeFoodRecordNumber(item.weight)
   let ratio = normalizeFoodRecordNumber(item.ratio)
   let intake = normalizeFoodRecordNumber(item.intake)
   if (ratio > 100) ratio = 100
   if (ratio < 0) ratio = 0
+  if (measurement) intake = weight * ratio / 100
   if (intake > weight) intake = weight
   if (intake < 0) intake = 0
 
@@ -132,6 +137,7 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
 
   return {
     name: item.name || '未命名食物',
+    measurement,
     image_path: item.image_path || undefined,
     image_paths: item.image_paths || undefined,
     manual_portion_label: item.manual_portion_label,

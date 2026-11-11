@@ -56,6 +56,7 @@ import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedAc
 import { FeedImageGrid } from './components/FeedImageGrid'
 import { SupplementFeedCard } from './components/SupplementFeedCard'
 import { MealMeetupList } from './components/MealMeetupList'
+import { FoodContributionRankEntry } from '../../components/FoodContributionRankEntry'
 
 import { IconTrendingUp } from '../../components/iconfont'
 
@@ -2063,6 +2064,7 @@ function CommunityPage() {
               if (expandedCommentRecordId) closeCommentModal()
             }}
           >
+            <FoodContributionRankEntry />
             {/* 排行榜：左侧用户榜，右侧食物营养榜 */}
             <View className='ranking-banner ranking-banner--compact' onClick={(e) => e.stopPropagation()}>
               <View className='ranking-head'>

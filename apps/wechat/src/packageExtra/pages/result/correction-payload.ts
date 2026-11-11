@@ -1,6 +1,7 @@
 import type { AnalyzeTaskSubmitParams, FoodItem, Nutrients } from '../../../utils/api'
 
 export interface ResultCorrectionItem {
+  measurement?: FoodItem['measurement']
   id: number
   sourceItemId?: number
   sourceName?: string
@@ -68,6 +69,7 @@ export function buildCorrectionPreviousResultItems<T extends ResultCorrectionIte
   return items.map((item) => ({
     itemId: item.sourceItemId ?? item.id,
     name: item.name,
+    measurement: item.measurement,
     intakeRatio: item.ratio,
     intakeGrams: item.intake,
     manual_source: item.manual_source,
@@ -125,6 +127,8 @@ export function buildCorrectionItemsPayload<T extends ResultCorrectionItem>(
         : true,
       weightEdited: baseline
         ? hasCorrectionWeightChanged(item.weight, baseline.weight)
+          || item.measurement?.amount !== baseline.measurement?.amount
+          || item.measurement?.unit !== baseline.measurement?.unit
         : true,
       nutritionEdited: Boolean(item.nutritionEdited),
     }
@@ -146,5 +150,7 @@ export function hasCorrectionChanges<T extends ResultCorrectionItem>(
     return Boolean(item.nutritionEdited)
       || normalizeFoodNameForCorrection(item.name) !== normalizeFoodNameForCorrection(baseline.name)
       || hasCorrectionWeightChanged(item.weight, baseline.weight)
+      || item.measurement?.amount !== baseline.measurement?.amount
+      || item.measurement?.unit !== baseline.measurement?.unit
   })
 }

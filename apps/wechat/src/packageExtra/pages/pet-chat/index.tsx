@@ -604,6 +604,9 @@ function PetChatPage() {
     }
 
     const callbacks: StreamGeneratePetChatCallbacks = {
+      // The old turn must release its input lock after an account replacement;
+      // cancellation must not run onError's fetch-latest-history fallback.
+      onCancel: finish,
       onStart: () => {
         // first chunk will arrive soon
       },

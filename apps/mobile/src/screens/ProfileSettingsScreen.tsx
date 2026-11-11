@@ -13,7 +13,6 @@ import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatDateTime } from '../utils/date'
 import { readImageAsBase64DataUrl } from '../utils/image'
-import { useAuth } from '../providers/AuthProvider'
 import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { useAppDialog } from '../providers/DialogProvider'
 import { userFacingErrorMessage } from '../utils/errors'
@@ -107,7 +106,6 @@ const PROFILE_DARK_THEME: ProfileVisualTheme = {
 export function ProfileSettingsScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ProfileSettings'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const { logout } = useAuth()
   const { isDark, toggleScheme } = useColorScheme()
   const profileTheme = isDark ? PROFILE_DARK_THEME : PROFILE_LIGHT_THEME
   const dialog = useAppDialog()
@@ -137,8 +135,6 @@ export function ProfileSettingsScreen() {
   const [reportExtra, setReportExtra] = useState('')
   const [reporting, setReporting] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false)
-  const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const showError = useCallback((title: string, error: unknown) => {
     return dialog.alert(title, userFacingErrorMessage(error), 'danger')
   }, [dialog])
@@ -149,9 +145,8 @@ export function ProfileSettingsScreen() {
 
   useEffect(() => {
     if (route.params?.action !== 'delete-account' || !isOwner) return
-    setDeleteConfirmation('')
-    setDeleteConfirmVisible(true)
     navigation.setParams({ action: undefined })
+    navigation.navigate('AccountDeletion')
   }, [isOwner, navigation, route.params?.action])
 
   const load = useCallback(async () => {
@@ -377,24 +372,7 @@ export function ProfileSettingsScreen() {
     }
   }
 
-  const confirmDeleteAccount = async () => {
-    setDeleteConfirmation('')
-    setDeleteConfirmVisible(true)
-  }
-
-  const deleteAccount = async () => {
-    setSaving(true)
-    try {
-      await apiClient.deleteAccount()
-      setDeleteConfirmVisible(false)
-      await logout()
-      await dialog.alert('已注销', '账号已注销，请重新登录。', 'success')
-    } catch (error) {
-      await showError('注销失败', error)
-    } finally {
-      setSaving(false)
-    }
-  }
+  const confirmDeleteAccount = async () => { navigation.navigate('AccountDeletion') }
 
   const copyUserId = async () => {
     const value = String(profile?.id || targetUserId || '').trim()
@@ -859,38 +837,7 @@ export function ProfileSettingsScreen() {
         </Pressable>
         </KeyboardAvoidingView>
       </Modal>
-      <Modal visible={deleteConfirmVisible} transparent animationType="fade" onRequestClose={() => setDeleteConfirmVisible(false)}>
-        <Pressable style={[styles.deleteDialogMask, { backgroundColor: profileTheme.scrim }]} onPress={() => setDeleteConfirmVisible(false)}>
-          <Pressable style={[styles.deleteDialog, { backgroundColor: profileTheme.drawer }]} onPress={(event) => event.stopPropagation()}>
-            <Text style={[styles.deleteDialogTitle, { color: profileTheme.primaryText }]}>确认注销账号</Text>
-            <Text style={[styles.deleteDialogDescription, { color: profileTheme.secondaryText }]}>这是不可恢复的操作。请输入“注销账号”后继续。</Text>
-            <Text style={[styles.fieldLabel, { color: profileTheme.secondaryText }]}>确认文案</Text>
-            <TextInput
-              value={deleteConfirmation}
-              onChangeText={setDeleteConfirmation}
-              placeholder="注销账号"
-              placeholderTextColor={profileTheme.mutedText}
-              accessibilityLabel="输入注销账号确认文案"
-              maxLength={8}
-              style={[styles.input, { color: profileTheme.primaryText, backgroundColor: profileTheme.input, borderColor: profileTheme.border }]}
-            />
-            <View style={styles.deleteDialogActions}>
-              <Pressable accessibilityRole="button" accessibilityLabel="取消注销" style={[styles.deleteDialogCancel, { backgroundColor: profileTheme.cancelSurface }]} disabled={saving} onPress={() => setDeleteConfirmVisible(false)}>
-                <Text style={[styles.deleteDialogCancelText, { color: profileTheme.secondaryText }]}>取消</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="确认注销账号"
-                style={[styles.deleteDialogConfirm, deleteConfirmation.trim() !== '注销账号' && styles.deleteDialogConfirmDisabled]}
-                disabled={saving || deleteConfirmation.trim() !== '注销账号'}
-                onPress={() => void deleteAccount()}
-              >
-                <Text style={styles.deleteDialogConfirmText}>{saving ? '处理中…' : '确认注销'}</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+
     </ScrollView>
   )
 }

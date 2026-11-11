@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	commonerrors "food_link/backend/internal/common/errors"
+	"food_link/backend/internal/foodmeasure"
 	fooddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	publicdomain "food_link/backend/internal/publicfood/domain"
@@ -32,6 +33,7 @@ type ManualFoodRepo struct {
 const nutritionExactQualitySQL = "quality_tier IN ('authoritative','reviewed_estimate','legacy_curated')"
 
 type CustomFoodInput struct {
+	Measurement        *foodmeasure.Measurement
 	ID                 string
 	Title              string
 	Category           string
@@ -131,6 +133,28 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 	if len(extraNutrients) == 0 {
 		extraNutrients = nutrientsPer100g
 	}
+	var measurement *foodmeasure.Measurement
+	if input.Measurement != nil {
+		measurement = input.Measurement.Clone()
+		if err := measurement.Validate(); err != nil {
+			return domain.ManualFoodResult{}, &commonerrors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+		}
+		totals, err := measurement.Totals()
+		if err != nil {
+			return domain.ManualFoodResult{}, &commonerrors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+		}
+		input.TotalCalories, input.TotalProtein, input.TotalCarbs, input.TotalFat = totals["calories"], totals["protein"], totals["carbs"], totals["fat"]
+		extraNutrients = nutrientAny(totals)
+		defaultWeight = 0
+		nutrientsPer100g = map[string]any{}
+		if grams, known := measurement.Grams(); known {
+			defaultWeight = grams
+			if per100, scaleErr := measurement.Scale(100, foodmeasure.Gram); scaleErr == nil {
+				nutrientsPer100g = nutrientAny(per100)
+			}
+		}
+		input.PortionLabel = formatManualCompactNumber(measurement.Amount) + measurementUnitLabel(measurement.Unit)
+	}
 	imagePaths := compactStrings(input.ImagePaths)
 	if len(imagePaths) == 0 && input.ImagePath != nil && strings.TrimSpace(*input.ImagePath) != "" {
 		imagePaths = []string{strings.TrimSpace(*input.ImagePath)}
@@ -146,6 +170,7 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 	}
 	now := time.Now()
 	row := domain.UserCustomFood{
+		Measurement:        measurement,
 		ID:                 id,
 		UserID:             userID,
 		Title:              title,
@@ -188,7 +213,11 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 			if duplicate > 0 {
 				return &commonerrors.AppError{Code: 10002, Message: "已有同名自定义食物，请使用不同名称", HTTPStatus: 400}
 			}
+			if input.Measurement == nil && existing.Measurement != nil {
+				return &commonerrors.AppError{Code: 10002, Message: "该食物含单位换算资料，请使用新版编辑，原资料已保留", HTTPStatus: 409}
+			}
 			columns := []string{"title", "normalized_title", "default_weight_grams", "total_calories", "total_protein", "total_carbs", "total_fat", "nutrients_per_100g", "extra_nutrients", "image_path", "image_paths", "portion_label", "recommend_reason", "updated_at"}
+			columns = append(columns, "measurement")
 			if input.ShareToPublic {
 				columns = append(columns, "public_status")
 			} else {
@@ -210,9 +239,10 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 	if categoryProvided {
 		upsertColumns = append(upsertColumns, "category")
 	}
-	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+	conflict := clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "normalized_title"}},
 		DoUpdates: clause.AssignmentColumns(append(upsertColumns,
+			"measurement",
 			"default_weight_grams",
 			"total_calories",
 			"total_protein",
@@ -228,8 +258,16 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 			"status",
 			"updated_at",
 		)),
-	}).Create(&row).Error; err != nil {
-		return domain.ManualFoodResult{}, err
+	}
+	if input.Measurement == nil {
+		conflict.Where = clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "user_custom_foods.measurement IS NULL"}}}
+	}
+	created := r.db.WithContext(ctx).Clauses(conflict).Create(&row)
+	if created.Error != nil {
+		return domain.ManualFoodResult{}, created.Error
+	}
+	if created.RowsAffected == 0 {
+		return domain.ManualFoodResult{}, &commonerrors.AppError{Code: 10002, Message: "该食物含单位换算资料，请使用新版编辑，原资料已保留", HTTPStatus: 409}
 	}
 	var saved domain.UserCustomFood
 	if err := r.db.WithContext(ctx).
@@ -255,34 +293,11 @@ func (r *ManualFoodRepo) DeleteCustomFood(ctx context.Context, userID, id string
 }
 
 func (r *ManualFoodRepo) ListCustomFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error) {
-	if strings.TrimSpace(userID) == "" {
-		return []domain.ManualFoodResult{}, false, nil
-	}
-	limit = clampLimit(limit, 30, 120)
-	if offset < 0 {
-		offset = 0
-	}
-	var rows []domain.UserCustomFood
-	if err := r.db.WithContext(ctx).
-		Where("user_id = ? AND status <> ?", userID, "deleted").
-		Order("updated_at desc NULLS LAST, created_at desc NULLS LAST").
-		Limit(limit + 1).
-		Offset(offset).
-		Find(&rows).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return []domain.ManualFoodResult{}, false, nil
-		}
-		return nil, false, err
-	}
-	hasMore := len(rows) > limit
-	if hasMore {
-		rows = rows[:limit]
-	}
-	results := make([]domain.ManualFoodResult, 0, len(rows))
-	for _, row := range rows {
-		results = append(results, r.manualFoodResultFromCustomFood(row, userID))
-	}
-	return results, hasMore, nil
+	return r.listStoredCustomFoods(ctx, userID, limit, offset)
+}
+
+func (r *ManualFoodRepo) ListOwnedFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error) {
+	return r.listOwnedManualFoods(ctx, userID, limit, offset)
 }
 
 func (r *ManualFoodRepo) searchCustomFoods(ctx context.Context, userID string, query string, limit int) ([]domain.ManualFoodResult, error) {
@@ -1284,13 +1299,18 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 		if it == nil {
 			continue
 		}
-		intake := publicFoodItemWeightGrams(it)
-		if intake <= 0 {
-			continue
-		}
-		totalIntake += intake
 		nutrients := manualFoodNutrientsFromAny(it["nutrients"])
+		if it["measurement"] != nil {
+			nutrients = scaleManualFoodNutrients(nutrients, publicMeasuredItemRatio(it))
+		}
 		totalNutrients = sumManualFoodNutrients(totalNutrients, nutrients)
+		intake := publicFoodItemWeightGrams(it)
+		if intake > 0 {
+			totalIntake += intake
+		}
+	}
+	if len(item.Items) > 0 {
+		result.ExtraNutrients = &totalNutrients
 	}
 	if totalIntake > 0 && totalNutrients.Calories > 0 {
 		per100Scale := 100 / totalIntake
@@ -1300,6 +1320,7 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 	}
 
 	applyManualFoodServingProfile(&result)
+	attachPublicMeasurement(&result)
 	return result
 }
 
@@ -1385,7 +1406,11 @@ func manualFoodResultFromPackaged(item fooddomain.PackagedFood, score float64) d
 		NutritionHighlights: highlights,
 		MatchScore:          score,
 	}
+	result.Measurement = packagedMeasurement(item, &per100g)
 	applyManualFoodServingProfile(&result)
+	if result.Measurement != nil {
+		result.NutritionHighlights = []string{fmt.Sprintf("%.0f kcal/100%s", item.KcalPer100g, measurementUnitLabel(result.Measurement.BasisUnit))}
+	}
 	return result
 }
 
@@ -1494,6 +1519,7 @@ func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64)
 		MatchScore:          score,
 	}
 	applyManualFoodServingProfile(&result)
+	attachNutritionMeasurement(&result)
 	return result
 }
 
@@ -1549,12 +1575,13 @@ func manualFoodResultFromRecordItem(source, sourceID, sourceTitle, portionLabel 
 		VitaminB12Mcg  float64 `json:"vitaminB12Mcg"`
 	}
 	type recordItem struct {
-		Name       string          `json:"name"`
-		Weight     float64         `json:"weight"`
-		Intake     float64         `json:"intake"`
-		ImagePath  *string         `json:"image_path"`
-		ImagePaths []string        `json:"image_paths"`
-		Nutrients  nutrientPayload `json:"nutrients"`
+		Measurement *foodmeasure.Measurement `json:"measurement"`
+		Name        string                   `json:"name"`
+		Weight      float64                  `json:"weight"`
+		Intake      float64                  `json:"intake"`
+		ImagePath   *string                  `json:"image_path"`
+		ImagePaths  []string                 `json:"image_paths"`
+		Nutrients   nutrientPayload          `json:"nutrients"`
 	}
 	var item recordItem
 	_ = json.Unmarshal(raw, &item)
@@ -1568,6 +1595,7 @@ func manualFoodResultFromRecordItem(source, sourceID, sourceTitle, portionLabel 
 	}
 	result := domain.ManualFoodResult{
 		ID:                 strings.TrimSpace(sourceID),
+		Measurement:        item.Measurement,
 		Source:             strings.TrimSpace(source),
 		Title:              title,
 		Subtitle:           "最近常吃",
@@ -1778,6 +1806,9 @@ func (r *ManualFoodRepo) manualFoodResultFromCustomFood(item domain.UserCustomFo
 		SourceLabel:        "自定义",
 		RecommendReason:    item.RecommendReason,
 	}
+	if item.Measurement != nil {
+		result.Measurement = item.Measurement.Clone()
+	}
 	if result.DefaultWeightGrams <= 0 {
 		result.DefaultWeightGrams = 100
 	}
@@ -1807,6 +1838,9 @@ func manualFoodNutrientsFromMap(values map[string]any) domain.ManualFoodNutrient
 	}
 	var nutrients domain.ManualFoodNutrients
 	_ = json.Unmarshal(raw, &nutrients)
+	if _, hasSnake := values["sodium_mg"]; !hasSnake {
+		nutrients.SodiumMg = numberFromAny(values["sodiumMg"])
+	}
 	return nutrients
 }
 
@@ -2164,6 +2198,9 @@ func (r *ManualFoodRepo) enrichManualFoodResultsWithNutritionLibrary(ctx context
 }
 
 func shouldEnrichManualFoodWithNutritionLibrary(item domain.ManualFoodResult) bool {
+	if item.Measurement != nil {
+		return false
+	}
 	source := strings.TrimSpace(item.Source)
 	id := strings.TrimSpace(item.ID)
 	if source == "nutrition_library" {
@@ -2583,6 +2620,9 @@ func inferManualFoodCategory(text string, source string) string {
 
 func applyManualFoodServingProfile(item *domain.ManualFoodResult) {
 	if item == nil {
+		return
+	}
+	if applyMeasuredFoodResult(item) {
 		return
 	}
 	if item.Source == "public_library" {

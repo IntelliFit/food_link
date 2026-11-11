@@ -4,6 +4,7 @@ import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { FoodContributionRankEntry } from '../../../components/FoodContributionRankEntry'
 import './index.scss'
 
 const TYPES = [
@@ -54,6 +55,7 @@ export default function FoodContributionPage() {
         <Text className='contribution-hero__title'>贡献食物数据</Text>
         <Text className='contribution-hero__desc'>选择你要补充的数据类型。日常记录仍从首页底部入口完成。</Text>
       </View>
+      <FoodContributionRankEntry />
       <View className='contribution-types'>
         {TYPES.map((item) => (
           <View key={item.key} className='contribution-type' onClick={() => void openType(item.key)}>

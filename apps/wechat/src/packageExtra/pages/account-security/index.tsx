@@ -1,9 +1,10 @@
 import { Button, Input, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useState } from 'react'
-import { bindPhone, clearAllStorage, deleteAccount, getUserProfile, showUnifiedApiError } from '../../../utils/api'
+import { bindPhone, getUserProfile, showUnifiedApiError } from '../../../utils/api'
 import type { UserInfo } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
 
 function maskPhone(phone?: string | null): string {
@@ -17,9 +18,6 @@ function AccountSecurity() {
   const [profile, setProfile] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState(false)
-  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false)
-  const [deleteConfirmation, setDeleteConfirmation] = useState('')
-  const [deleting, setDeleting] = useState(false)
 
   const phone = profile?.telephone || ''
   const maskedPhone = maskPhone(phone)
@@ -72,29 +70,7 @@ function AccountSecurity() {
     }
   }
 
-  const closeDeleteDialog = () => {
-    if (deleting) return
-    setDeleteDialogVisible(false)
-    setDeleteConfirmation('')
-  }
-
-  const handleDeleteAccount = async () => {
-    if (deleting || deleteConfirmation.trim() !== '注销账号') return
-    try {
-      setDeleting(true)
-      await deleteAccount(deleteConfirmation.trim())
-      clearAllStorage()
-      Taro.showToast({ title: '账号已注销', icon: 'success' })
-      setTimeout(() => {
-        Taro.reLaunch({ url: '/pages/index/index' })
-      }, 900)
-    } catch (error) {
-      console.error('[account-security] delete account failed:', error)
-      await showUnifiedApiError(error, '注销失败，请稍后重试')
-    } finally {
-      setDeleting(false)
-    }
-  }
+  const handleDeleteAccount = () => { void Taro.navigateTo({ url: extraPkgUrl('/pages/account-deletion/index') }) }
   if (loading && !profile) {
     return (
       <View className='account-security-page account-security-page--center'>
@@ -152,28 +128,13 @@ function AccountSecurity() {
           </View>
           <View className='account-security-danger-copy'>
             <Text className='account-security-danger-title'>注销账号</Text>
-            <Text className='account-security-danger-description'>注销后将永久删除你的健康档案、记录和账户资料，且无法恢复。</Text>
+            <Text className='account-security-danger-description'>可选择 7 天冷静期，截止前可撤销。</Text>
           </View>
         </View>
-        <Button className='account-security-delete-btn' onClick={() => setDeleteDialogVisible(true)}>注销账号</Button>
+        <Button className='account-security-delete-btn' onClick={handleDeleteAccount}>注销账号</Button>
       </View>
 
-      {deleteDialogVisible && (
-        <View className='account-security-dialog-mask' onClick={closeDeleteDialog}>
-          <View className='account-security-dialog' onClick={(event) => event.stopPropagation()}>
-            <Text className='account-security-dialog-title'>确认注销账号</Text>
-            <Text className='account-security-dialog-description'>这是不可恢复的操作。请输入“注销账号”后继续。</Text>
-            <Text className='account-security-dialog-label'>确认文案</Text>
-            <Input className='account-security-dialog-input' value={deleteConfirmation} placeholder='注销账号' maxlength={8} onInput={(event) => setDeleteConfirmation(event.detail.value)} />
-            <View className='account-security-dialog-actions'>
-              <Button className='account-security-dialog-cancel' disabled={deleting} onClick={closeDeleteDialog}>取消</Button>
-              <Button className={`account-security-dialog-confirm ${deleteConfirmation.trim() === '注销账号' ? '' : 'account-security-dialog-confirm--disabled'}`} disabled={deleting || deleteConfirmation.trim() !== '注销账号'} onClick={handleDeleteAccount}>
-                {deleting ? <View className='account-security-btn-spinner account-security-btn-spinner--danger' /> : '确认注销'}
-              </Button>
-            </View>
-          </View>
-        </View>
-      )}
+
     </View>
   )
 }

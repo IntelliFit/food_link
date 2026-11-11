@@ -343,7 +343,15 @@ func (h *FoodRecordHandler) UploadAnalyzeImage(c *gin.Context) {
 		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "base64Image 不能为空", HTTPStatus: 400})
 		return
 	}
-	imageURL, err := h.uploadSvc.UploadBase64(body.Base64Image)
+	var imageURL string
+	var err error
+	if owned, ok := h.uploadSvc.(interface {
+		UploadBase64ForUser(string, string) (string, error)
+	}); ok {
+		imageURL, err = owned.UploadBase64ForUser(c.GetString(authmw.ContextUserIDKey), body.Base64Image)
+	} else {
+		imageURL, err = h.uploadSvc.UploadBase64(body.Base64Image)
+	}
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -388,7 +396,14 @@ func (h *FoodRecordHandler) UploadAnalyzeImageFile(c *gin.Context) {
 	}
 
 	ext := filepathExt(file.Filename)
-	imageURL, err := h.uploadSvc.UploadFile(fileBytes, ext, file.Header.Get("Content-Type"))
+	var imageURL string
+	if owned, ok := h.uploadSvc.(interface {
+		UploadFileForUser(string, []byte, string, string) (string, error)
+	}); ok {
+		imageURL, err = owned.UploadFileForUser(c.GetString(authmw.ContextUserIDKey), fileBytes, ext, file.Header.Get("Content-Type"))
+	} else {
+		imageURL, err = h.uploadSvc.UploadFile(fileBytes, ext, file.Header.Get("Content-Type"))
+	}
 	if err != nil {
 		response.Error(c, err)
 		return

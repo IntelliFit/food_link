@@ -57,7 +57,17 @@ export default function PrivacyPage() {
                 </View>
 
                 <View className='section'>
-                    <Text className='section-title'>四、如何联系我们</Text>
+                    <Text className='section-title'>四、账号注销与个人信息删除</Text>
+                    <Text className='paragraph'>
+                        您可通过账号安全或个人资料进入注销页，选择7天冷静期或立即注销。申请后账号暂停正常使用，冷静期内仅保留查看状态和明确撤销等必要能力。打开或登录不会自动撤销，截止后自动开始永久清理。
+                    </Text>
+                    <Text className='paragraph'>
+                        永久清理将处理账号资料、健康记录、照片和社交关联；依法需保留的最小交易与安全凭证单独存储并限制用途。共享资料、外部存储与备份依据适用规则处理，不承诺所有副本即时消失。
+                    </Text>
+                </View>
+
+                <View className='section'>
+                    <Text className='section-title'>五、如何联系我们</Text>
                     <Text className='paragraph'>
                         如果您对本隐私政策或个人信息保护有任何疑问、意见或建议，请通过本程序内的客服入口或相关反馈通道与我们联系。
                     </Text>

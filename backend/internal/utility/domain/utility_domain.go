@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"food_link/backend/internal/foodmeasure"
+	"time"
+)
 
 // ManualFood — table: manual_food_library
 type ManualFood struct {
@@ -16,27 +19,28 @@ type ManualFood struct {
 func (ManualFood) TableName() string { return "manual_food_library" }
 
 type UserCustomFood struct {
-	ID                 string         `gorm:"column:id" json:"id"`
-	UserID             string         `gorm:"column:user_id" json:"user_id"`
-	Title              string         `gorm:"column:title" json:"title"`
-	NormalizedTitle    string         `gorm:"column:normalized_title" json:"normalized_title"`
-	Category           string         `gorm:"column:category" json:"category"`
-	DefaultWeightGrams float64        `gorm:"column:default_weight_grams" json:"default_weight_grams"`
-	TotalCalories      float64        `gorm:"column:total_calories" json:"total_calories"`
-	TotalProtein       float64        `gorm:"column:total_protein" json:"total_protein"`
-	TotalCarbs         float64        `gorm:"column:total_carbs" json:"total_carbs"`
-	TotalFat           float64        `gorm:"column:total_fat" json:"total_fat"`
-	NutrientsPer100g   map[string]any `gorm:"column:nutrients_per_100g;serializer:json" json:"nutrients_per_100g"`
-	ExtraNutrients     map[string]any `gorm:"column:extra_nutrients;serializer:json" json:"extra_nutrients"`
-	ImagePath          *string        `gorm:"column:image_path" json:"image_path,omitempty"`
-	ImagePaths         []string       `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`
-	PortionLabel       string         `gorm:"column:portion_label" json:"portion_label"`
-	RecommendReason    string         `gorm:"column:recommend_reason" json:"recommend_reason"`
-	PublicStatus       string         `gorm:"column:public_status" json:"public_status"`
-	PublicFoodItemID   *string        `gorm:"column:public_food_item_id" json:"public_food_item_id,omitempty"`
-	Status             string         `gorm:"column:status" json:"status"`
-	CreatedAt          *time.Time     `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt          *time.Time     `gorm:"column:updated_at" json:"updated_at"`
+	Measurement        *foodmeasure.Measurement `gorm:"column:measurement;type:jsonb;serializer:json" json:"measurement,omitempty"`
+	ID                 string                   `gorm:"column:id" json:"id"`
+	UserID             string                   `gorm:"column:user_id" json:"user_id"`
+	Title              string                   `gorm:"column:title" json:"title"`
+	NormalizedTitle    string                   `gorm:"column:normalized_title" json:"normalized_title"`
+	Category           string                   `gorm:"column:category" json:"category"`
+	DefaultWeightGrams float64                  `gorm:"column:default_weight_grams" json:"default_weight_grams"`
+	TotalCalories      float64                  `gorm:"column:total_calories" json:"total_calories"`
+	TotalProtein       float64                  `gorm:"column:total_protein" json:"total_protein"`
+	TotalCarbs         float64                  `gorm:"column:total_carbs" json:"total_carbs"`
+	TotalFat           float64                  `gorm:"column:total_fat" json:"total_fat"`
+	NutrientsPer100g   map[string]any           `gorm:"column:nutrients_per_100g;serializer:json" json:"nutrients_per_100g"`
+	ExtraNutrients     map[string]any           `gorm:"column:extra_nutrients;serializer:json" json:"extra_nutrients"`
+	ImagePath          *string                  `gorm:"column:image_path" json:"image_path,omitempty"`
+	ImagePaths         []string                 `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`
+	PortionLabel       string                   `gorm:"column:portion_label" json:"portion_label"`
+	RecommendReason    string                   `gorm:"column:recommend_reason" json:"recommend_reason"`
+	PublicStatus       string                   `gorm:"column:public_status" json:"public_status"`
+	PublicFoodItemID   *string                  `gorm:"column:public_food_item_id" json:"public_food_item_id,omitempty"`
+	Status             string                   `gorm:"column:status" json:"status"`
+	CreatedAt          *time.Time               `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt          *time.Time               `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (UserCustomFood) TableName() string { return "user_custom_foods" }
@@ -76,6 +80,7 @@ type ManualFoodServingPreset struct {
 }
 
 type ManualFoodResult struct {
+	Measurement         *foodmeasure.Measurement  `json:"measurement,omitempty"`
 	ID                  string                    `json:"id"`
 	Source              string                    `json:"source"`
 	CanEdit             bool                      `json:"can_edit"`

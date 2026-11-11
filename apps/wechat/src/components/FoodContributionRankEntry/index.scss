@@ -1,0 +1,18 @@
+.food-contribution-rank-entry {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin: 16rpx 0 22rpx;
+  padding: 22rpx 24rpx;
+  border: 1rpx solid rgba(5, 150, 105, 0.16);
+  border-radius: 22rpx;
+  background: rgba(16, 185, 129, 0.08);
+  color: inherit;
+  box-sizing: border-box;
+
+  &__icon { color: #10a779; font-size: 38rpx; }
+  &__copy { flex: 1; min-width: 0; }
+  &__title { display: block; font-size: 29rpx; font-weight: 700; }
+  &__desc { display: block; margin-top: 6rpx; font-size: 23rpx; opacity: 0.66; }
+  &__link { flex: 0 0 auto; color: #059669; font-size: 24rpx; }
+}
