@@ -103,7 +103,7 @@ describe('food library page detail and custom editor integration', () => {
     const add = await screen.findByLabelText(`添加${title}到本餐`)
     for (let index = 0; index < clicks; index++) fireEvent.click(add)
     fireEvent.click(screen.getByText('选好了，核对本餐'))
-    fireEvent.click(screen.getByText(/^确认记录到今天/))
+    fireEvent.click(screen.getByText(/^确认记录到\d+月\d+日$/))
     await waitFor(() => expect(saveFoodRecord).toHaveBeenCalledTimes(1))
     expect(saveFoodRecord).toHaveBeenCalledWith(expect.objectContaining({
       total_calories: calories, total_weight_grams: grams,
@@ -178,7 +178,7 @@ describe('food library page detail and custom editor integration', () => {
     fireEvent.click(add)
     fireEvent.click(add)
     fireEvent.click(screen.getByText('选好了，核对本餐'))
-    fireEvent.click(screen.getByText(/^确认记录到今天/))
+    fireEvent.click(screen.getByText(/^确认记录到\d+月\d+日$/))
     await waitFor(() => expect(saveFoodRecord).toHaveBeenCalledTimes(1))
     expect(saveFoodRecord).toHaveBeenCalledWith(expect.objectContaining({ total_calories: 60, total_weight_grams: 12, items: [expect.objectContaining({ weight: 12, measurement: expect.objectContaining({ amount: 2, unit: 'serving' }) })] }))
   })
