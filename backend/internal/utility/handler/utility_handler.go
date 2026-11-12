@@ -149,6 +149,14 @@ func (h *UtilityHandler) ManualFoodBrowse(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	if items != nil {
+		copy := *items
+		copy.RecentItems = manualFoodResponseItems(c, items.RecentItems)
+		copy.CollectedPublicLibrary = manualFoodResponseItems(c, items.CollectedPublicLibrary)
+		copy.PublicLibrary = manualFoodResponseItems(c, items.PublicLibrary)
+		copy.NutritionLibrary = manualFoodResponseItems(c, items.NutritionLibrary)
+		items = &copy
+	}
 	response.Success(c, items)
 }
 
@@ -162,6 +170,11 @@ func (h *UtilityHandler) ManualFoodCatalog(c *gin.Context) {
 	if err != nil {
 		response.Error(c, err)
 		return
+	}
+	if result != nil {
+		copy := *result
+		copy.Items = manualFoodResponseItems(c, result.Items)
+		result = &copy
 	}
 	response.Success(c, result)
 }
@@ -193,7 +206,7 @@ func (h *UtilityHandler) ManualFoodSearch(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"results": items})
+	response.Success(c, gin.H{"results": manualFoodResponseItems(c, items)})
 }
 
 // GET /api/manual-food/custom
@@ -214,7 +227,7 @@ func (h *UtilityHandler) ManualFoodCustomList(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"items": items, "has_more": hasMore})
+	response.Success(c, gin.H{"items": manualFoodResponseItems(c, items), "has_more": hasMore})
 }
 
 // POST /api/manual-food/custom
@@ -266,7 +279,7 @@ func (h *UtilityHandler) ManualFoodCustomSave(c *gin.Context) {
 		return
 	}
 	logger.Info(c.Request.Context(), "自定义食物保存请求完成", slog.String("user_id", c.GetString(authmw.ContextUserIDKey)), slog.String("food_id", item.ID))
-	response.Success(c, gin.H{"item": item})
+	response.Success(c, gin.H{"item": manualFoodResponseItem(c, item)})
 }
 
 func (h *UtilityHandler) ManualFoodCustomDelete(c *gin.Context) {

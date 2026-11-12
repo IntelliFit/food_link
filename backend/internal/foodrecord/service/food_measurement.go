@@ -10,7 +10,15 @@ import (
 )
 
 func (s *FoodRecordService) requireMeasuredLibraryItems(ctx context.Context, userID string, items []domain.FoodItem) error {
-	for _, item := range items {
+	for i := range items {
+		restored, err := s.recordRepo.RestoreLegacyVolumeItem(ctx, userID, &items[i])
+		if err != nil {
+			return err
+		}
+		if restored {
+			continue
+		}
+		item := items[i]
 		required, err := s.recordRepo.SourceRequiresNativeMeasurement(ctx, userID, item)
 		if err != nil {
 			return err

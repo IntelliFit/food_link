@@ -65,6 +65,26 @@ func TestCustomFoodMeasurementPersistence(t *testing.T) {
 }
 
 func TestManualFoodMeasurementReadModels(t *testing.T) {
+	t.Run("historical basis aliases keep quantity and nutrition consistent", func(t *testing.T) {
+		for _, basis := range []string{"g", "per_100g", "100g", "ml", "per_100ml", "100ml"} {
+			unit, _ := foodmeasure.PackagedPer100Unit(basis)
+			contentUnit := string(unit)
+			result := manualFoodResultFromPackaged(fooddomain.PackagedFood{ProductName: "标签食品", NutritionBasisUnit: &basis, NetContentUnit: &contentUnit, NetContentValue: 250, KcalPer100g: 68.6}, 1)
+			require.NotNil(t, result.Measurement, basis)
+			assert.Equal(t, 250.0, result.Measurement.Amount, basis)
+			assert.InDelta(t, 171.5, result.TotalCalories, 1e-8, basis)
+			assert.Equal(t, unit, result.Measurement.BasisUnit)
+		}
+	})
+	t.Run("gram label with only package volume never assumes density", func(t *testing.T) {
+		basis, unit := "g", "ml"
+		result := manualFoodResultFromPackaged(fooddomain.PackagedFood{ProductName: "果汁", NutritionBasisUnit: &basis, NetContentUnit: &unit, NetContentValue: 1000, KcalPer100g: 48}, 1)
+		require.NotNil(t, result.Measurement)
+		assert.Equal(t, "100g", result.PortionLabel)
+		assert.Equal(t, 48.0, result.TotalCalories)
+		_, known := result.Measurement.Convert(100, foodmeasure.Milliliter, foodmeasure.Gram)
+		assert.False(t, known)
+	})
 	t.Run("packaged milk uses volume and no guessed mass", func(t *testing.T) {
 		basis, unit := "100ml", "ml"
 		item := fooddomain.PackagedFood{ProductName: "牛奶", NutritionBasisUnit: &basis, NetContentValue: 250, NetContentUnit: &unit, NetWeightG: 250, ServingWeightG: 250, KcalPer100g: 60, ProteinPer100g: 3}

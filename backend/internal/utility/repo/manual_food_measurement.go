@@ -93,14 +93,8 @@ func attachNutritionMeasurement(result *domain.ManualFoodResult) {
 }
 
 func packagedMeasurement(item fooddomain.PackagedFood, nutrients *domain.ManualFoodNutrients) *foodmeasure.Measurement {
-	basis := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(stringPtrValue(item.NutritionBasisUnit)), " ", ""))
-	var unit foodmeasure.Unit
-	switch basis {
-	case "100g":
-		unit = foodmeasure.Gram
-	case "100ml":
-		unit = foodmeasure.Milliliter
-	default:
+	unit, known := foodmeasure.PackagedPer100Unit(stringPtrValue(item.NutritionBasisUnit))
+	if !known {
 		return nil
 	}
 	amount := 100.0
