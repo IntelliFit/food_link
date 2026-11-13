@@ -1,5 +1,4 @@
-import { View, Text, Input } from '@tarojs/components'
-import { useState } from 'react'
+import { View, Text } from '@tarojs/components'
 import { PetAvatar } from '../../components/PetAvatar'
 import type { PetProfile, PetStatus } from '../../utils/api'
 import type { TodayRowView } from '../../utils/nutrition-state-view'
@@ -218,25 +217,14 @@ export function PetTaskRow({ task, addingWater, onAction, onAddWater }: {
   )
 }
 
-export function PetAskBar({ placeholder, onAsk }: { placeholder: string; onAsk: (question: string) => void }) {
-  const [question, setQuestion] = useState('')
-  const send = () => {
-    onAsk(question)
-    setQuestion('')
-  }
+/** 「问问」入口：点它进聊天页，接着最近一次对话聊（不在这里打字，免得占位提示被当成问题发出去） */
+export function PetAskBar({ label, onOpen }: { label: string; onOpen: () => void }) {
   return (
-    <View className='pet-ask'>
-      <Input
-        className='pet-ask__input'
-        value={question}
-        placeholder={placeholder}
-        placeholderClass='pet-ask__placeholder'
-        confirmType='send'
-        maxlength={200}
-        onInput={(event) => setQuestion(event.detail.value)}
-        onConfirm={send}
-      />
-      <View className='pet-ask__send' onClick={send}>
+    <View className='pet-ask' onClick={onOpen}>
+      <View className='pet-ask__input'>
+        <Text className='pet-ask__placeholder'>{label}</Text>
+      </View>
+      <View className='pet-ask__send'>
         <Text className='iconfont icon-send pet-ask__send-icon' />
       </View>
     </View>

@@ -45,17 +45,22 @@ describe('伙伴 page actions', () => {
     expect(pickMealTarget(null, '')).toEqual({ kind: 'petChat', starter: '下一餐吃什么？' })
   })
 
-  it('asks what the user typed, or the placeholder question, in a new conversation', () => {
-    expect(askTarget(' 奶茶能喝吗 ', '晚上吃什么好？')).toEqual({ kind: 'petAsk', question: '奶茶能喝吗' })
-    expect(askTarget('  ', '晚上吃什么好？')).toEqual({ kind: 'petAsk', question: '晚上吃什么好？' })
+  it('opens the chat to continue the latest conversation and never sends for the user', () => {
+    expect(askTarget()).toEqual({ kind: 'petContinue' })
+    const chat = read('src/packageExtra/pages/pet-chat/index.tsx')
+    expect(read('src/utils/pet-navigation.ts')).toContain("export const PET_CONTINUE_ENTRY = 'pet_tab_continue'")
+    // the latest conversation is restored (only a home meal entry starts fresh) and the input gets focus
+    expect(chat).toContain('if (homeMealContextRef.current) return')
+    expect(chat).toContain('options?.entry === PET_CONTINUE_ENTRY) setInputFocus(true)')
+    expect(chat).not.toContain('autoSendRef')
+    // the 伙伴 page has no text field whose placeholder could be sent
+    const cards = read('src/pages/pet/PetDailyCards.tsx')
+    expect(cards).not.toContain('<Input')
   })
 
-  it('makes the chat page start fresh and send the question by itself', () => {
+  it('sends the same text at most once within two seconds', () => {
     const chat = read('src/packageExtra/pages/pet-chat/index.tsx')
-    expect(read('src/utils/pet-navigation.ts')).toContain("export const PET_ASK_ENTRY = 'pet_tab_ask'")
-    expect(chat).toContain('options?.entry === PET_ASK_ENTRY')
-    expect(chat).toContain('if (homeMealContextRef.current || freshAskRef.current) return')
-    expect(chat).toMatch(/autoSendRef\.current = ''\s*handleSend\(\)/)
+    expect(chat).toContain('now - lastSentRef.current.at < 2000')
   })
 
   it('lets guests open the full analysis and gates personal actions', () => {

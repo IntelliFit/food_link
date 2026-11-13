@@ -17,7 +17,7 @@ export interface PetNextMealInput {
 export type PetActionTarget =
   | { kind: 'navigateTo'; url: string }
   | { kind: 'petChat'; starter: string }
-  | { kind: 'petAsk'; question: string }
+  | { kind: 'petContinue' }
   | { kind: 'petChatMeal'; entry: PetChatHomeMealEntry }
   | { kind: 'petSettings' }
 
@@ -39,9 +39,9 @@ export function pickMealTarget(meal: PetNextMealInput | null | undefined, date: 
   }
 }
 
-/** 输入框：用户写了就问写的，没写就问占位里的那句；开一段新对话直接发出去 */
-export function askTarget(question: string, fallback: string): PetActionTarget {
-  return { kind: 'petAsk', question: question.trim() || fallback }
+/** 「问问」入口：进聊天页接着最近一次对话，不替用户发话 */
+export function askTarget(): PetActionTarget {
+  return { kind: 'petContinue' }
 }
 
 export function petActionTarget(id: 'stats' | 'dress'): PetActionTarget {
