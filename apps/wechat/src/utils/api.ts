@@ -1436,6 +1436,8 @@ export interface DietRecommendationResult {
   meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'evening_snack'
   meal_date?: string
   meal_label?: string
+  /** An answer about the card already shown ("为什么推荐这些"); it carries no new meals. */
+  explains_previous?: boolean
   resolved_school?: {
     id: string
     name: string

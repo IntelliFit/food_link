@@ -99,6 +99,46 @@ describe('pet chat credit cost', () => {
     expect((streamGeneratePetChat as jest.Mock).mock.calls[0][8]).toEqual(expect.objectContaining({ latitude: 40, longitude: 116, coordinate_type: 'gcj02' }))
   })
 
+  // Trial 2026-11-13: the first meal answer only asked where the user was, although location was allowed.
+  it('reads an allowed location silently for a meal question, and not after 取消定位', async () => {
+    const locate = jest.fn().mockResolvedValue({ latitude: 40, longitude: 116, accuracy: 30 })
+    const t = Taro as unknown as { getLocation: jest.Mock; getSetting?: jest.Mock }
+    t.getLocation = locate
+    t.getSetting = jest.fn().mockResolvedValue({ authSetting: { 'scope.userLocation': true } })
+    try {
+      render(<PetChatPage />)
+      await act(async () => { await Promise.resolve(); await Promise.resolve() })
+      fireEvent.click(screen.getByText('今天吃什么'))
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('发送'))
+        for (let i = 0; i < 6; i++) await Promise.resolve()
+      })
+      expect(locate).toHaveBeenCalledWith({ type: 'gcj02' })
+      expect((streamGeneratePetChat as jest.Mock).mock.calls[0][8]).toEqual(expect.objectContaining({ latitude: 40, longitude: 116 }))
+
+      act(() => { (streamGeneratePetChat as jest.Mock).mock.calls[0][4].onCancel() })
+      fireEvent.click(screen.getByLabelText('定位与深度思考选项'))
+      fireEvent.click(screen.getByText('取消定位'))
+      locate.mockClear()
+      const textbox = screen.getByRole('textbox') as unknown as Record<string, { onInput: (event: unknown) => void }>
+      const propsKey = Object.keys(textbox).find(key => key.startsWith('__reactProps')) as string
+      act(() => { textbox[propsKey].onInput({ detail: { value: '晚饭吃什么' } }) })
+      await act(async () => {
+        jest.advanceTimersByTime(350)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('发送'))
+        for (let i = 0; i < 6; i++) await Promise.resolve()
+      })
+      expect(locate).not.toHaveBeenCalled()
+      expect((streamGeneratePetChat as jest.Mock).mock.calls[1][8]).toBeUndefined()
+    } finally {
+      delete t.getSetting
+    }
+  })
+
   it('fills a quick question, shows its estimate, then allows sending', async () => {
     render(<PetChatPage />)
 

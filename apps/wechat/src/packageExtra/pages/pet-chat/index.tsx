@@ -40,7 +40,7 @@ import { MealSuggestions } from './MealSuggestions'
 import { answerAsksQuestion, isCompoundMealFollowUp, isFreeMealAcknowledgement, releasesVenueLimit, requestsOtherVenue } from './meal-routing'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { chooseImageWithPrivacy, ensureWeappPrivacyAuthorized, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
-import { currentMealLocation, rememberMealLocation } from '../../../utils/meal-location'
+import { currentMealLocation, mealLocationAllowed, rememberMealLocation, silentMealLocation } from '../../../utils/meal-location'
 import './index.scss'
 
 type ChatRole = 'pet' | 'user'
@@ -150,11 +150,24 @@ function isMealFollowUpQuestion(question: string): boolean {
     || /(?:不吃|不要|不想吃|避开|换成|改成)(?:鸡|牛|猪|羊|鸭|鱼|虾|蟹|蛋|奶|豆|花生|海鲜|香菜|葱|蒜|面|米饭|辣|油|糖|盐|汤|粥|饼|包子)|^(?:我|本人)?(?:现在|目前|今天|这次)?在[^，。？！!?；;]{1,20}(?:大学|学院|学校|食堂|餐厅|社区|大厦|园|北京|上海|深圳)[?？。!！]*$/.test(question)
 }
 
+// Mirrors mealExplainIntent: "你为什么推荐这些" / "我在问你为什么，不要再给我推荐了" asks about the
+// card on screen. "我在问你" is how the question is framed, not a place like "我在北大".
+const STOP_RECOMMENDING = /(?:不要|别|不用|不需要)(?:再)?(?:给我)?(?:推荐|找|换)(?:了|啦|新的|别的)?/g
+const ASKING_FRAME = /我(?:在|是|就是|只是)?问(?:你)?|我问的是/g
+const NEW_SEARCH_CONSTRAINT = /(?:\d+(?:\.\d+)?)(?:元|块|千卡|大卡|卡路里|kcal|卡)|太贵|贵了|便宜|实惠|预算|减脂|减肥|增肌|高蛋白|低脂|清淡|少油|不要|不吃|想吃|换成|改成|训练|健身|外卖|附近|我在/
+
+export function asksAboutShownMeals(question: string): boolean {
+  const normalized = question.replace(/\s+/g, '')
+  if (!/为什么/.test(normalized) && !new RegExp(STOP_RECOMMENDING.source).test(normalized)) return false
+  return !NEW_SEARCH_CONSTRAINT.test(normalized.replace(STOP_RECOMMENDING, '').replace(ASKING_FRAME, ''))
+}
+
 export function classifyDietRecommendationIntent(question: string, hasActiveRecommendation: boolean): DietRecommendationIntent | null {
   const normalized = question.replace(/\s+/g, '')
   if (/自己做|自炊|家里做|食谱|菜谱/.test(normalized) && !/历史|吃过|记录/.test(normalized)) return null
   if (leavesMealConversation(normalized)) return null
   if (hasActiveRecommendation) {
+    if (asksAboutShownMeals(normalized)) return 'context'
     if (!isMealFollowUpQuestion(normalized)) return null
     if (/在哪|在哪里|哪里|哪个食堂|什么食堂|位置|几楼|楼层|窗口|档口|怎么去/.test(normalized)) return 'location'
     if (/还有|其他|再来|再换|换一批|更多|多推荐|再推荐|别的|另外/.test(normalized)) return 'more'
@@ -194,6 +207,8 @@ export function activeDietRecommendationContext(messages: ChatMessage[]): { late
     // thought of its wording (the server may ask the model about wording it does not know).
     if (message.recommendation) {
       mealTurn = true
+      // An explanation keeps the card it explains.
+      if (message.recommendation.explains_previous) continue
       latest = message.recommendation
       sourceIDs = Array.from(new Set([...sourceIDs, ...recommendationSourceIDs(message.recommendation)]))
       continue
@@ -363,6 +378,8 @@ function PetChatPage() {
   const [enableThinking, setEnableThinking] = useState(false)
   const [pendingImages, setPendingImages] = useState<PendingChatImage[]>([])
   const busyRef = useRef(false)
+  // Location may be read silently for a meal question: the user allowed it and has not turned it off here.
+  const silentLocationRef = useRef(false)
   const estimateRequestRef = useRef(0)
   const historyLoadedRef = useRef(false)
   const routeLoadedRef = useRef(false)
@@ -686,10 +703,24 @@ function PetChatPage() {
         finish()
       },
     }
-    const location = currentMealLocation(getAccessToken() || '')
+    let location = currentMealLocation(getAccessToken() || '')
     if (mealLocation && !location) setMealLocation(undefined)
+    // Without a fresh location a meal question could only be answered with "where are you?";
+    // read it silently when the user already allowed location. Questions about the card on
+    // screen need no new search, so they do not wait for a location.
+    const mealIntent = classifyDietRecommendationIntent(question, Boolean(latestDietRecommendation))
+    if (!location && silentLocationRef.current && (homeMealContext || mealIntent === 'initial' || mealIntent === 'refine' || mealIntent === 'more')) {
+      location = await silentMealLocation(getAccessToken() || '')
+      if (location) setMealLocation(location)
+    }
     streamGeneratePetChat(question, range, sessionID, !sessionID, callbacks, enableThinking, imageUrls, homeMealContext || undefined, location)
-  }, [appendMessage, applyHistory, enableThinking, homeMealContext, mealLocation, petName, sessionID, summary, updateMessage])
+  }, [appendMessage, applyHistory, enableThinking, homeMealContext, latestDietRecommendation, mealLocation, petName, sessionID, summary, updateMessage])
+
+  useEffect(() => {
+    let alive = true
+    void mealLocationAllowed().then((allowed) => { if (alive) silentLocationRef.current = allowed })
+    return () => { alive = false }
+  }, [])
 
   const locateForMeal = useCallback(async () => {
     if (busyRef.current || locatingMeal) return
@@ -702,6 +733,7 @@ function PetChatPage() {
       const location = rememberMealLocation(owner, { latitude: fix.latitude, longitude: fix.longitude, accuracy_m: fix.accuracy, captured_at: Date.now(), coordinate_type: 'gcj02' })
       if (!location) throw new Error('定位精度不足，请重新定位或直接输入学校和校区')
       setMealLocation(location)
+      silentLocationRef.current = true
       setInput((current) => current.trim() || '帮我结合近期饮食和当前目标，选一下附近这餐吃什么')
     } catch (error) {
       rememberMealLocation(owner)
@@ -891,7 +923,7 @@ function PetChatPage() {
                 ) : (
                   <Text className='pet-chat-message-text'>{message.text}</Text>
                 )}
-                {message.role === 'pet' && message.recommendation ? (
+                {message.role === 'pet' && message.recommendation?.recommendations?.length ? (
                   <MealSuggestions result={message.recommendation} onOpen={openRecommendationDetail} onSaveSchool={result => void saveCampusPreference(result)} savedSchoolIDs={savedSchoolIDs} />
                 ) : null}
                 {message.role === 'pet' && message.provisional ? (
@@ -916,7 +948,7 @@ function PetChatPage() {
           <View className='pet-chat-location-button' onClick={() => void locateForMeal()}>
             {locatingMeal ? <View className='pet-chat-location-spinner' /> : <Text>{mealLocation ? '更新位置' : '使用当前位置'}</Text>}
           </View>
-          {mealLocation ? <Text className='pet-chat-location-clear' onClick={() => { rememberMealLocation(getAccessToken() || ''); setMealLocation(undefined) }}>取消定位</Text> : null}
+          {mealLocation ? <Text className='pet-chat-location-clear' onClick={() => { rememberMealLocation(getAccessToken() || ''); setMealLocation(undefined); silentLocationRef.current = false }}>取消定位</Text> : null}
         </View>
         <View className='pet-chat-thinking-switch-row'>
           <View className='pet-chat-thinking-switch-copy'>
