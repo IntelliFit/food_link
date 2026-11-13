@@ -185,21 +185,22 @@ func TestMealHarnessStopsRepeatedContextCallsAndRetrievesEvidence(t *testing.T) 
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		call++
+		// The server has already read the context and run this turn's search. Rereading either
+		// is answered from the cache, and after two repeats the model must give its final answer.
 		switch call {
-		case 1, 2:
+		case 1:
 			writeCampusDietAgentTestToolCall(t, w, fmt.Sprintf("context-%d", call), "get_meal_context", `{}`)
-		case 3:
-			choice := body["tool_choice"].(map[string]any)
-			assert.Equal(t, "search_campus_foods", choice["function"].(map[string]any)["name"])
+		case 2:
 			writeCampusDietAgentTestToolCall(t, w, "search", "search_campus_foods", `{}`)
 		default:
+			assert.Equal(t, "none", body["tool_choice"], "repeated reads end in the final answer")
 			writeCampusDietAgentTestFinal(t, w, map[string]any{"answer": "根据你这餐的需求可以选这个。", "selections": []map[string]any{{"source_id": candidates[0].SourceID}}})
 		}
 	}))
 	defer server.Close()
 	result := newCampusDietAgentTestService(repo, server.URL).runCampusDietAgent(context.Background(), newCampusDietAgentTestState("initial", nil))
 	require.True(t, result.AgentUsed)
-	assert.Equal(t, 4, call)
+	assert.Equal(t, 3, call)
 	require.Len(t, repo.campusSearchFilters, 1)
 }
 

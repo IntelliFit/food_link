@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"food_link/backend/internal/health/domain"
@@ -163,8 +164,9 @@ func TestMealPolicyComposeMealBudgetAndSameVenueAndFollowup(t *testing.T) {
 	assert.Equal(t, 14.0, followup.Candidates[id].Price)
 	locationResult, err := buildCampusDietAgentResult(followup, campusDietAgentFinal{}, true, "")
 	require.NoError(t, err)
-	assert.Contains(t, locationResult.Answer, "米饭：")
-	assert.Contains(t, locationResult.Answer, "蒸鸡肉：")
+	// Dishes bought at one place share one line with the place said once.
+	assert.Contains(t, locationResult.Answer, "蒸鸡肉、米饭：清华大学 · 紫荆园 · 4F · 健康轻食")
+	assert.Equal(t, 1, strings.Count(locationResult.Answer, "紫荆园"))
 	budget = 13
 	_, err = registerMealPlan(state, []DietRecommendationCandidate{meat, rice})
 	require.Error(t, err)

@@ -55,14 +55,14 @@ export function openPetChat(input?: unknown): void {
   else openWithoutStacking(url)
 }
 
-/** 伙伴页「问问」：开一段新对话，聊天页一打开就把这句发出去（旧对话留在「最近」里） */
-export const PET_ASK_ENTRY = 'pet_tab_ask'
+/**
+ * 伙伴页「问问」：进聊天页接着最近一次对话聊（页面会恢复上一段），光标直接放进输入框。
+ * 不替用户发任何话；要开新话题，聊天页右上角有「新对话」。
+ */
+export const PET_CONTINUE_ENTRY = 'pet_tab_continue'
 
-export function askPetNow(question: string): void {
-  const text = question.trim()
-  if (!text) return
-  const query = `entry=${PET_ASK_ENTRY}&starter=${encodeURIComponent(text)}`
-  Taro.navigateTo({ url: `${extraPkgUrl('/pages/pet-chat/index')}?${query}` })
+export function continuePetChat(): void {
+  Taro.navigateTo({ url: `${extraPkgUrl('/pages/pet-chat/index')}?entry=${PET_CONTINUE_ENTRY}` })
 }
 
 /**

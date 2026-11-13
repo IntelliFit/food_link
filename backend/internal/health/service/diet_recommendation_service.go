@@ -101,6 +101,8 @@ type DietRecommendationResult struct {
 	MealType  string `json:"meal_type,omitempty"`
 	MealDate  string `json:"meal_date,omitempty"`
 	MealLabel string `json:"meal_label,omitempty"`
+	// ExplainsPrevious marks an answer about the card already shown; it is not a new card.
+	ExplainsPrevious bool `json:"explains_previous,omitempty"`
 }
 
 type CampusDietRecommendationConstraints struct {

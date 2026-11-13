@@ -8,7 +8,7 @@ import { addBodyWaterLog, getNutritionState, showUnifiedApiError } from '../../u
 import { experiments } from '../../utils/experiments'
 import { requestHomeRecordMenu } from '../../utils/home-record-menu'
 import { normalizeNutritionState, planLineText, todayRowView, type TodayRowView } from '../../utils/nutrition-state-view'
-import { askPetNow, openPetChat, openPetSettings, takePetFocusSheetRequest } from '../../utils/pet-navigation'
+import { continuePetChat, openPetChat, openPetSettings, takePetFocusSheetRequest } from '../../utils/pet-navigation'
 import { DEFAULT_PET_NAME, petDisplayName } from '../../utils/pet-name'
 import { HOME_BOTANICAL_BG_URL } from '../../utils/static-asset-cdn-url'
 import { checkIsLoggedIn, redirectToLogin, withAuth } from '../../utils/withAuth'
@@ -30,8 +30,6 @@ import {
 import { PetAskBar, PetBrief, PetDailySkeleton, PetMealCard, PetTaskRow } from './PetDailyCards'
 import './index.scss'
 
-const ASK_FALLBACK = '晚上吃什么好？'
-
 function openTarget(target: PetActionTarget) {
   switch (target.kind) {
     case 'navigateTo':
@@ -40,8 +38,8 @@ function openTarget(target: PetActionTarget) {
     case 'petChat':
       openPetChat(target.starter)
       return
-    case 'petAsk':
-      askPetNow(target.question)
+    case 'petContinue':
+      continuePetChat()
       return
     case 'petChatMeal':
       openPetChat(target.entry)
@@ -127,8 +125,8 @@ function PetTabPage() {
     if (allow('pick_meal')) openTarget(pickMealTarget(daily?.next_meal, daily?.date || ''))
   }, [allow, daily?.date, daily?.next_meal])
 
-  const handleAsk = useCallback((question: string) => {
-    if (allow('ask')) openTarget(askTarget(question, ASK_FALLBACK))
+  const handleAsk = useCallback(() => {
+    if (allow('ask')) openTarget(askTarget())
   }, [allow])
 
   const handleOpenStats = useCallback(() => {
@@ -262,7 +260,7 @@ function PetTabPage() {
             {daily.task && !mealReward ? (
               <PetTaskRow task={daily.task} addingWater={addingWater} onAction={handleTaskAction} onAddWater={handleAddWater} />
             ) : null}
-            <PetAskBar placeholder={`问问${petName}：${ASK_FALLBACK}`} onAsk={handleAsk} />
+            <PetAskBar label={`问问${petName}，接着上次聊…`} onOpen={handleAsk} />
           </>
         ) : loadFailed && !loading ? (
           <View className='pet-card pet-retry'>
@@ -291,7 +289,7 @@ function PetTabPage() {
 function GuestView({ onLogin, onOpenStats, onAsk }: {
   onLogin: () => void
   onOpenStats: () => void
-  onAsk: (question: string) => void
+  onAsk: () => void
 }) {
   return (
     <>
@@ -313,7 +311,7 @@ function GuestView({ onLogin, onOpenStats, onAsk }: {
         buttonText='登录开始'
         onPick={onLogin}
       />
-      <PetAskBar placeholder={`问问${DEFAULT_PET_NAME}：${ASK_FALLBACK}`} onAsk={onAsk} />
+      <PetAskBar label={`问问${DEFAULT_PET_NAME}…`} onOpen={onAsk} />
     </>
   )
 }

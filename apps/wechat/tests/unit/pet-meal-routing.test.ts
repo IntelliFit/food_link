@@ -93,6 +93,19 @@ describe('the meal conversation looks through a free acknowledgement', () => {
     expect(context.lastAnswer).toBe('搭配好了')
   })
 
+  it('keeps the card active after the server explains it (trial 2026-11-13: "你为什么推荐这些")', () => {
+    const explained = { id: 'why', role: 'pet' as const, kind: 'diet_recommendation' as const, text: '你只睡了两小时，第一份最稳。', recommendation: { recommendations: [], explains_previous: true } as never }
+    const messages = [question('推荐点吃的'), card('搭配好了'), question('你为什么推荐这些？'), explained]
+    const context = activeDietRecommendationContext(messages)
+    expect(context.latest).toBe(recommendation)
+    expect(context.lastAnswer).toBe('你只睡了两小时，第一份最稳。')
+    for (const q of ['你为什么推荐这些？', '我在问你为什么推荐这些，不要再给我推荐了', '别推荐了，说说理由']) {
+      expect([q, classifyDietRecommendationIntent(q, true)]).toEqual([q, 'context'])
+    }
+    // A new wish is a new search even when it starts with 为什么.
+    expect(classifyDietRecommendationIntent('为什么没有便宜点的？要20元以内', true)).toBe('refine')
+  })
+
   it('does not treat a bare agreement after a question as an acknowledgement', () => {
     const messages = [question('推荐点吃的'), card('搭配好了，需要换成清淡一点的吗？'), question('好的')]
     const context = activeDietRecommendationContext(messages)
