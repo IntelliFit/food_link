@@ -221,6 +221,10 @@ export default defineConfig<'vite'>(async (merge) => {
                 if (/[\\/]src[\\/]packageExtra[\\/]pages[\\/]food-library[\\/]food-map-share(?:-cover)?\.ts$/.test(id)) {
                   return 'common'
                 }
+                // The pet chat's wording rules mirror the server's; keep them out of the packageExtra budget.
+                if (/[\\/]src[\\/]packageExtra[\\/]pages[\\/]pet-chat[\\/]meal-routing\.ts$/.test(id)) {
+                  return 'common'
+                }
                 if (/node_modules[\\/]weapp-qrcode-canvas-2d[\\/]/.test(id)) {
                   return 'profile-qrcode-vendor'
                 }

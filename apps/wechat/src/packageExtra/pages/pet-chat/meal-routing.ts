@@ -124,3 +124,15 @@ export function isCompoundMealFollowUp(question: string): boolean {
   const q = question.replace(/\s+/g, '')
   return hasLimit(PRICE_LIMIT, q, 1000) || hasLimit(CALORIE_LIMIT, q, 3000) || FOLLOW_UP_ADJUST.test(q) || FOLLOW_UP_SHORT_ASK.test(q) || statesTrainingTiming(q)
 }
+
+// Mirrors mealExplainIntent: "你为什么推荐这些" / "我在问你为什么，不要再给我推荐了" asks about the
+// card on screen. "我在问你" is how the question is framed, not a place like "我在北大".
+const STOP_RECOMMENDING = /(?:不要|别|不用|不需要)(?:再)?(?:给我)?(?:推荐|找|换)(?:了|啦|新的|别的)?/g
+const ASKING_FRAME = /我(?:在|是|就是|只是)?问(?:你)?|我问的是/g
+const NEW_SEARCH_CONSTRAINT = /(?:\d+(?:\.\d+)?)(?:元|块|千卡|大卡|卡路里|kcal|卡)|太贵|贵了|便宜|实惠|预算|减脂|减肥|增肌|高蛋白|低脂|清淡|少油|不要|不吃|想吃|换成|改成|训练|健身|外卖|附近|我在/
+
+export function asksAboutShownMeals(question: string): boolean {
+  const normalized = question.replace(/\s+/g, '')
+  if (!/为什么/.test(normalized) && !new RegExp(STOP_RECOMMENDING.source).test(normalized)) return false
+  return !NEW_SEARCH_CONSTRAINT.test(normalized.replace(STOP_RECOMMENDING, '').replace(ASKING_FRAME, ''))
+}

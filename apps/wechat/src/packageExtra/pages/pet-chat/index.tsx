@@ -37,7 +37,7 @@ import { petChatFailureText, savedAnswerFor } from './chat-failure'
 import { AdaptiveImageGrid } from '../../../components/AdaptiveImageGrid'
 import { PetMarkdown } from './pet-markdown'
 import { MealSuggestions } from './MealSuggestions'
-import { answerAsksQuestion, isCompoundMealFollowUp, isFreeMealAcknowledgement, releasesVenueLimit, requestsOtherVenue } from './meal-routing'
+import { answerAsksQuestion, asksAboutShownMeals, isCompoundMealFollowUp, isFreeMealAcknowledgement, releasesVenueLimit, requestsOtherVenue } from './meal-routing'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { chooseImageWithPrivacy, ensureWeappPrivacyAuthorized, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { currentMealLocation, mealLocationAllowed, rememberMealLocation, silentMealLocation } from '../../../utils/meal-location'
@@ -148,18 +148,6 @@ function isMealFollowUpQuestion(question: string): boolean {
     || /^(?:这些|这几个|这几道|这份|它|各自|分别)?(?:在哪(?:里|个食堂)?|哪里|位置(?:在哪)?|几楼|楼层|窗口|档口|怎么去|多少钱|价格(?:是多少)?|热量(?:是多少)?|多少卡|蛋白(?:质)?(?:多少)?|碳水(?:多少)?|脂肪(?:多少)?|营养(?:怎么样)?|份量|分量|来源|核对来源|为什么(?:这么推荐|推荐这些|适合我)?)(?:呢|吗|啊)?[?？。!！]*$/.test(question)
     || /^(?:我|那|今天|现在|这次)?(?:刚(?:刚)?(?:训练|健身|跑步)(?:结束|完|了)|减脂|减肥|增肌|高蛋白|低脂|清淡|少油|便宜|实惠)(?:一点|一些|点|的|呢|吧|啊)?[?？。!！]*$|^(?:那|我|我的|这餐|今天)?预算[^，。？！!?；;]{1,18}[?？。!！]*$|^[^，。？！!?；;]{0,8}\d+(?:\.\d+)?(?:元|块|千卡|大卡|卡路里|kcal|卡)(?:以内|以下|左右|最好)?[?？。!！]*$/.test(question)
     || /(?:不吃|不要|不想吃|避开|换成|改成)(?:鸡|牛|猪|羊|鸭|鱼|虾|蟹|蛋|奶|豆|花生|海鲜|香菜|葱|蒜|面|米饭|辣|油|糖|盐|汤|粥|饼|包子)|^(?:我|本人)?(?:现在|目前|今天|这次)?在[^，。？！!?；;]{1,20}(?:大学|学院|学校|食堂|餐厅|社区|大厦|园|北京|上海|深圳)[?？。!！]*$/.test(question)
-}
-
-// Mirrors mealExplainIntent: "你为什么推荐这些" / "我在问你为什么，不要再给我推荐了" asks about the
-// card on screen. "我在问你" is how the question is framed, not a place like "我在北大".
-const STOP_RECOMMENDING = /(?:不要|别|不用|不需要)(?:再)?(?:给我)?(?:推荐|找|换)(?:了|啦|新的|别的)?/g
-const ASKING_FRAME = /我(?:在|是|就是|只是)?问(?:你)?|我问的是/g
-const NEW_SEARCH_CONSTRAINT = /(?:\d+(?:\.\d+)?)(?:元|块|千卡|大卡|卡路里|kcal|卡)|太贵|贵了|便宜|实惠|预算|减脂|减肥|增肌|高蛋白|低脂|清淡|少油|不要|不吃|想吃|换成|改成|训练|健身|外卖|附近|我在/
-
-export function asksAboutShownMeals(question: string): boolean {
-  const normalized = question.replace(/\s+/g, '')
-  if (!/为什么/.test(normalized) && !new RegExp(STOP_RECOMMENDING.source).test(normalized)) return false
-  return !NEW_SEARCH_CONSTRAINT.test(normalized.replace(STOP_RECOMMENDING, '').replace(ASKING_FRAME, ''))
 }
 
 export function classifyDietRecommendationIntent(question: string, hasActiveRecommendation: boolean): DietRecommendationIntent | null {
