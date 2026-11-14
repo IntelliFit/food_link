@@ -2,9 +2,27 @@ import { act, fireEvent, render } from '@testing-library/react'
 import Taro from '@tarojs/taro'
 import { ResultPage } from '../../src/packageExtra/pages/result'
 import { clearAnalyzeResultSessionCache, readAnalyzeTaskRecordState, writeAnalyzeTaskRecordState } from '../../src/utils/analyze-result-session'
-import { getAnalyzeTask, getFoodRecordById, getHealthProfile, saveFoodRecord, showUnifiedApiError } from '../../src/utils/api'
+import { getAnalyzeTask, getFoodRecordById, getHealthProfile, saveFoodRecord, showUnifiedApiError, submitAnalyzeTask } from '../../src/utils/api'
 
 const mockMealImpactShow = jest.fn((_id: string, _summary: unknown, onClose: () => void) => onClose())
+
+jest.mock('@tarojs/components', () => {
+  const React = require('react')
+  const container = ({ children, ...props }: any) => React.createElement('div', props, children)
+  return {
+    View: container, ScrollView: container, Swiper: container, SwiperItem: container,
+    Text: ({ children, ...props }: any) => React.createElement('span', props, children),
+    Image: (props: any) => React.createElement('img', props),
+    Slider: (props: any) => React.createElement('input', { ...props, type: 'range' }),
+    Input: ({ onInput, type, ...props }: any) => React.createElement('input', {
+      ...props, 'data-keyboard-type': type,
+      onChange: (event: any) => onInput?.({ detail: { value: event.target.value } }),
+    }),
+    Textarea: ({ onInput, ...props }: any) => React.createElement('textarea', {
+      ...props, onChange: (event: any) => onInput?.({ detail: { value: event.target.value } }),
+    }),
+  }
+})
 
 jest.mock('../../src/utils/withAuth', () => ({ withAuth: (Component: unknown) => Component }))
 jest.mock('../../src/utils/api', () => ({
@@ -128,6 +146,57 @@ describe('ResultPage task ownership', () => {
   afterEach(() => {
     jest.clearAllTimers()
     jest.useRealTimers()
+  })
+
+  it.each([undefined, 'g', 'ml', 'piece', 'serving'] as const)('keeps decimal input while typing and submits its numeric amount (%s)', async (unit) => {
+    const measurement = unit ? {
+      amount: 45, unit, basis_amount: 100, basis_unit: 'g', unit_conversions: { [unit]: 1 },
+      nutrients_per_basis: { calories: 240, protein: 40, carbs: 3, fat: 7 },
+    } : undefined
+    const result = { ...resultB, items: [{ ...resultB.items[0], measurement }] }
+    ;(getAnalyzeTask as jest.Mock).mockResolvedValue({ ...taskB(), result })
+    ;(submitAnalyzeTask as jest.Mock).mockResolvedValue({ task_id: 'corrected-task' })
+    setSnapshot('task-B', result, imageB)
+    const view = await renderResult()
+    fireEvent.click(view.container.querySelector('.result-bar__say-send')!)
+    const input = view.container.querySelector('.correction-input.weight-input') as HTMLInputElement
+    expect(input).toHaveAttribute('data-keyboard-type', 'digit')
+    for (const value of ['', '0', '0.', '0.5', '52', '52.', '52.5']) {
+      fireEvent.change(input, { target: { value } })
+      expect(input.value).toBe(value)
+    }
+    fireEvent.click(view.container.querySelector('.correction-drawer-overlay .drawer-submit-btn')!)
+    const modal = (Taro.showModal as jest.Mock).mock.calls.slice(-1)[0]?.[0]
+    expect(modal.title).toBe('重新智能分析')
+    await act(async () => { await modal.success({ confirm: true }) })
+    const submitted = (submitAnalyzeTask as jest.Mock).mock.calls[0][0].correctionItems[0]
+    expect(submitted.weightEdited).toBe(true)
+    if (unit) {
+      expect(submitted.measurement).toMatchObject({ amount: 52.5, unit })
+    } else {
+      expect(submitted.weight).toBe(52.5)
+    }
+  })
+
+  it('resets the unfinished amount when the correction drawer is reopened', async () => {
+    const view = await renderResult()
+    const open = () => fireEvent.click(view.container.querySelector('.result-bar__say-send')!)
+    open()
+    const input = view.container.querySelector('.correction-input.weight-input') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '52.' } })
+    expect(input.value).toBe('52.')
+    fireEvent.click(view.container.querySelector('.correction-drawer-overlay .drawer-close')!)
+    open()
+    expect(input.value).toBe('45')
+  })
+
+  it.each(['', '.', '0'])('blocks an unfinished or zero correction amount (%s)', async (value) => {
+    const view = await renderResult()
+    fireEvent.click(view.container.querySelector('.result-bar__say-send')!)
+    fireEvent.change(view.container.querySelector('.correction-input.weight-input')!, { target: { value } })
+    fireEvent.click(view.container.querySelector('.correction-drawer-overlay .drawer-submit-btn')!)
+    expect(Taro.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: '请填写大于0的有效份量' }))
+    expect(submitAnalyzeTask).not.toHaveBeenCalled()
   })
 
   it('records meal B after A was saved without sharing, and sends B to the poster', async () => {

@@ -99,6 +99,7 @@ import { loadAnalysisRetryDate } from '../../../utils/analysis-retry-date'
 import { readAnalyzeTaskRecordState, writeAnalyzeTaskRecordState, loadAnalyzeResultSnapshot, updateAnalyzeResultSnapshot } from '../../../utils/analyze-result-session'
 import './index.scss'
 
+type CorrectionItemDraft = NutritionItem & { amountInput?: string }
 
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
 const PACKAGED_FOOD_EDIT_DRAFT_KEY = 'packagedFoodEditDraft'
@@ -671,7 +672,7 @@ export function ResultPage() {
   // 二次纠错抽屉状态
   const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
   const [quickRatioSheetVisible, setQuickRatioSheetVisible] = useState(false)
-  const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
+  const [correctionItems, setCorrectionItems] = useState<CorrectionItemDraft[]>([])
   const currentItemsRef = useRef(nutritionItems)
   currentItemsRef.current = nutritionItems
   const [additionalContext, setAdditionalContext] = useState('')
@@ -2556,9 +2557,16 @@ export function ResultPage() {
 
   // 修改纠错项的重量
   const handleCorrectionWeightChange = (id: number, val: string) => {
-    const parsed = Number(val)
-    const num = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
-    setCorrectionItems(prev => prev.map(item => item.id === id ? (item.measurement ? resizeResultMeasurement(item, num) : { ...item, weight: num }) : item))
+    if (!/^\d*\.?\d*$/.test(val)) return
+    const amount = Number(val)
+    setCorrectionItems(prev => prev.map(item => {
+      if (item.id !== id) return item
+      const updated = Number.isFinite(amount) && amount > 0
+        ? (item.measurement ? resizeResultMeasurement(item, amount) : { ...item, weight: amount })
+        : item
+      // 保留清空、末尾小数点等输入中间态，避免数值回填吞掉小数点。
+      return { ...updated, amountInput: val }
+    }))
   }
 
   // 删除纠错项
@@ -2607,6 +2615,12 @@ export function ResultPage() {
     // 检查是否有空名称
     if (!isTextTask && correctionItems.some(item => !item.name.trim())) {
       Taro.showToast({ title: '请填写所有食物名称', icon: 'none' })
+      return
+    }
+
+    if (correctionItems.some(item => item.amountInput !== undefined
+      && (!item.amountInput.trim() || !Number.isFinite(Number(item.amountInput)) || Number(item.amountInput) <= 0))) {
+      Taro.showToast({ title: '请填写大于0的有效份量', icon: 'none' })
       return
     }
 
@@ -3792,7 +3806,7 @@ export function ResultPage() {
                       <Input
                         className='correction-input weight-input'
                         type='digit'
-                        value={String(item.measurement?.amount ?? item.weight)}
+                        value={item.amountInput ?? String(item.measurement?.amount ?? item.weight)}
                         onInput={(e: any) => handleCorrectionWeightChange(item.id, e.detail.value)}
                       />
                       <Text className='weight-unit'>{foodMeasureUnitLabel(item.measurement?.unit || 'g')}</Text>
