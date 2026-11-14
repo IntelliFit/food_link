@@ -5759,7 +5759,7 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		strings.Contains(lower, "net/http: timeout") ||
 		strings.Contains(lower, "i/o timeout") ||
 		strings.Contains(lower, "tls handshake timeout") {
-		return "AI 识别服务响应超时，请稍后重试；如果连续失败，可以换一张更清晰的照片再试"
+		return "AI 识别服务响应超时，请过几分钟再试"
 	}
 	if lower == "eof" ||
 		strings.HasSuffix(lower, ": eof") ||
@@ -5769,7 +5769,7 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		strings.Contains(lower, "server closed idle connection") ||
 		strings.Contains(lower, "use of closed network connection") ||
 		strings.Contains(lower, "socket hang up") {
-		return "AI 识别服务连接中断，请稍后重试；如果连续失败，可以换一张更清晰的照片再试"
+		return "AI 识别服务连接中断，请过几分钟再试"
 	}
 	if strings.Contains(lower, "resource exhausted") ||
 		strings.Contains(lower, "ofoxai api error 429") ||
