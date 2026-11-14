@@ -67,6 +67,7 @@ const (
 	visionHedgeDelay                = 10 * time.Second
 	visionHedgeOverallTimeout       = 35 * time.Second
 	visionFallbackTimeout           = 12 * time.Second
+	ordinaryQwenFallbackTimeout     = 30 * time.Second
 	maxLLMJSONParseRetries          = 3
 	maxLLMTransientRetries          = 2
 	realtimeVisionJSONRetries       = 1
@@ -2941,20 +2942,19 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			)
 		}
 	}
-	if err != nil && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) && isOrdinaryFoodImageMode(executionMode) {
-		logger.Warn(ctx, "普通模式 Gemini 识别失败，按质量策略不回退千问",
-			logger.NamedErr("gemini_error", err),
-			slog.String("execution_mode", executionMode),
-			slog.Int("image_count", len(imageURLs)),
-		)
-		apm.AddEvent(ctx, "普通模式已禁止千问回退",
-			attribute.String("analysis.execution_mode", executionMode),
-			attribute.String("analysis.fallback_policy", "gemini_only"),
-		)
-	}
-	if err != nil && !s.balancedVisionApplies(ctx, model) && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) && !isOrdinaryFoodImageMode(executionMode) && s.dashscopeClient != nil {
+	ordinaryGeminiFailed := err != nil && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) && isOrdinaryFoodImageMode(executionMode)
+	otherGeminiFailed := err != nil && !s.balancedVisionApplies(ctx, model) && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) && !isOrdinaryFoodImageMode(executionMode)
+	if (ordinaryGeminiFailed || otherGeminiFailed) && s.dashscopeClient != nil {
 		primaryErr := err
-		fallbackCtx, fallbackCancel := context.WithTimeout(geminiRouteCtx, visionFallbackTimeout)
+		// 2026-11-14: every Gemini relay (OpenLux, A6, Wanjie) hung at once on
+		// several late-night photos. The user prefers a Qwen result over an error,
+		// so ordinary photos now fall back too. The Gemini route context is spent by
+		// then, so the ordinary fallback gets its own budget from the task context.
+		fallbackParent, fallbackTimeout := geminiRouteCtx, visionFallbackTimeout
+		if ordinaryGeminiFailed {
+			fallbackParent, fallbackTimeout = ctx, ordinaryQwenFallbackTimeout
+		}
+		fallbackCtx, fallbackCancel := context.WithTimeout(fallbackParent, fallbackTimeout)
 		fallbackCall := newAnalyzeWithImagesWithoutThinkingModelCall(s.dashscopeClient, prompt, imageURLs, qwen38FlashModel)
 		fallbackParsed, fallbackErr := analyzeWithJSONParseRetryPolicy(fallbackCtx, "food_image_fallback", "qwen", qwen38FlashModel, postprocessRetryPolicy, fallbackCall)
 		fallbackCancel()

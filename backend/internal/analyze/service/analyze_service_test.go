@@ -964,13 +964,12 @@ func TestAnalyzeService_AnalyzeImageFallsBackAcrossGeminiUpstreamsBeforeQwen(t *
 	assert.Equal(t, true, meta["fallback_used"])
 }
 
-func TestAnalyzeService_AnalyzeImageStandardDoesNotFallBackToQwenAfterBothGeminiUpstreamsFail(t *testing.T) {
+// 2026-11-14 policy change: ordinary photos fall back to Qwen once every Gemini
+// upstream has failed, instead of showing the user an error.
+func TestAnalyzeService_AnalyzeImageStandardFallsBackToQwenAfterBothGeminiUpstreamsFail(t *testing.T) {
 	primaryClient := &multiImageLLMClient{err: errors.New("context deadline exceeded")}
 	openLuxClient := &multiImageLLMClient{err: errors.New("net/http: TLS handshake timeout")}
-	qwenClient := &multiImageLLMClient{result: map[string]any{
-		"description": "unexpected qwen fallback",
-		"items":       []any{map[string]any{"name": "鸡蛋", "estimatedWeightGrams": 60.0}},
-	}}
+	qwenClient := &multiImageLLMClient{result: channelFood("鸡蛋")}
 	svc := NewAnalyzeService(nil, primaryClient, nil)
 	svc.ConfigureOpenLuxGeminiLLMClients(openLuxClient, nil)
 	svc.ConfigureDashScopeLLMClient(qwenClient)
@@ -983,11 +982,10 @@ func TestAnalyzeService_AnalyzeImageStandardDoesNotFallBackToQwenAfterBothGemini
 		ExecutionMode: &executionMode,
 	})
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "Gemini")
+	require.NoError(t, err)
 	require.Len(t, primaryClient.imageSetCalls, 1)
 	require.Len(t, openLuxClient.imageSetCalls, 1)
-	assert.Empty(t, qwenClient.imageSetCalls)
+	require.Len(t, qwenClient.imageSetCalls, 1)
 }
 
 func TestAnalyzeService_RunPrecisionJSONUsesSelectedQwenClient(t *testing.T) {
@@ -1791,6 +1789,45 @@ func TestAnalyzeService_AnalyzeImageStandardDoesNotFallbackToDoubaoWhenGeminiFai
 	require.Error(t, err)
 	assert.Equal(t, 0, doubaoClient.calls)
 	assert.Equal(t, 1, gemini3Client.calls, "限流错误应立即返回，避免重复等待同一上游")
+}
+
+func TestAnalyzeService_AnalyzeImageOrdinaryFallsBackToQwenWhenAllGeminiTimeout(t *testing.T) {
+	geminiClient := &multiImageLLMClient{err: errors.New(`Post "https://api.openlux.ai/v1beta/models/gemini-3.6-flash:generateContent": context deadline exceeded`)}
+	qwenClient := &multiImageLLMClient{result: channelFood("米饭")}
+	svc := NewAnalyzeService(nil, geminiClient, nil)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+	svc.ConfigureWebSearcher(nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/img.jpg",
+		ModelName: "ofox-gemini",
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, geminiClient.imageSetCalls, "应先尝试 Gemini")
+	require.Len(t, qwenClient.imageSetCalls, 1, "Gemini 全部超时后应回退千问一次")
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "米饭", items[0]["name"])
+}
+
+func TestAnalyzeService_AnalyzeImageOrdinaryReturnsGeminiErrorWhenQwenAlsoFails(t *testing.T) {
+	geminiClient := &multiImageLLMClient{err: errors.New("context deadline exceeded")}
+	qwenClient := &multiImageLLMClient{err: errors.New("dashscope api error 503")}
+	svc := NewAnalyzeService(nil, geminiClient, nil)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+	svc.ConfigureWebSearcher(nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+
+	_, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/img.jpg",
+		ModelName: "ofox-gemini",
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "context deadline exceeded", "千问也失败时保留 Gemini 的原始错误，便于归类为超时文案")
+	assert.NotContains(t, err.Error(), "dashscope")
 }
 
 func TestAnalyzeService_AnalyzeImageStandardWebSearchRefinesWithSearchEvidence(t *testing.T) {
