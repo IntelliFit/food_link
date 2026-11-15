@@ -10,21 +10,25 @@ describe('community leaderboard redesign', () => {
     join(process.cwd(), 'src/packageExtra/pages/checkin-leaderboard/index.tsx'),
     'utf8',
   )
+  const previewSource = readFileSync(
+    join(process.cwd(), 'src/pages/community/components/CommunityRanking.tsx'),
+    'utf8',
+  )
 
-  it('splits the circle card into compact user and food ranking columns', () => {
-    expect(communitySource).toContain("className='ranking-columns'")
-    expect(communitySource).toContain('用户榜')
-    expect(communitySource).toContain('食物榜')
-    expect(communitySource).toContain('ranking=health')
-    expect(communitySource).toContain('nutrient=fiber')
-    expect(communitySource).toContain('nutrient=calcium')
+  it('uses one three-column preview and removes the separate contribution banner', () => {
+    expect(communitySource).toContain('<CommunityRanking')
+    expect(communitySource).not.toContain('FoodContributionRankEntry')
+    expect(previewSource).toContain('贡献榜')
+    expect(previewSource).toContain('记录榜')
+    expect(previewSource).toContain('食物榜')
+    expect(communitySource).toContain("communityGetFoodContributionLeaderboard('month')")
   })
 
   it('makes the user scope explicit for each weekly ranking', () => {
-    expect(communitySource).toContain('全体记录')
-    expect(communitySource).toContain('好友健康')
+    expect(previewSource).toContain("period: '本周'")
     expect(leaderboardSource).toContain("isHealth ? '好友' : '全体用户'")
     expect(leaderboardSource).toContain('饮食记录榜')
+    expect(leaderboardSource).toContain("setUserRankingType('health')")
   })
 
   it('explains the calibrated weekly healthy-eating score', () => {
@@ -43,5 +47,7 @@ describe('community leaderboard redesign', () => {
     expect(leaderboardSource).toContain('维生素B12')
     expect(leaderboardSource).toContain('标准食物库')
     expect(leaderboardSource).toContain('每100g')
+    expect(leaderboardSource).toContain("key: 'fiber'")
+    expect(leaderboardSource).toContain("key: 'calcium'")
   })
 })
