@@ -442,7 +442,9 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	return rows, err
 }
 
-const mapSpotLimit = 5000
+// mapSpotLimit caps spots, not dishes. Live data reached 8777 spots on 2026-11-12, so
+// 5000 hid about 3800 small shops; keep this well above the live count.
+const mapSpotLimit = 12000
 
 // ViewerHasBlocks reports whether any block involves this viewer, which is the only
 // thing that makes their map differ from everyone else's.
