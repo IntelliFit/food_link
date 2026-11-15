@@ -4953,45 +4953,7 @@ func (r *Runner) processPackagedProductExtract(ctx context.Context, task *domain
 }
 
 func packagedFoodQualifiesForReward(food *foodrecorddomain.PackagedFood) bool {
-	if food == nil || !food.IsActive {
-		return false
-	}
-	if strings.TrimSpace(food.ProductName) == "" {
-		return false
-	}
-	if len(food.SourceImageURLs) == 0 {
-		return false
-	}
-	if food.NetContentValue <= 0 || strings.TrimSpace(stringValue(food.NetContentUnit)) == "" {
-		return false
-	}
-	if strings.EqualFold(stringValue(food.NetContentUnit), "g") && food.NetWeightG <= 0 {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(stringValue(food.ConversionStatus)), "converted") {
-		return false
-	}
-	verifiedZeroNutrition := foodrecordservice.PackagedFoodHasVerifiedZeroNutritionEvidence(food)
-	if (food.KcalPer100g <= 0 && !verifiedZeroNutrition) || food.KcalPer100g > 900 {
-		return false
-	}
-	macroSum := food.ProteinPer100g + food.CarbsPer100g + food.FatPer100g
-	if (macroSum <= 0 && !verifiedZeroNutrition) || macroSum > 120 {
-		return false
-	}
-	for _, value := range []float64{food.ProteinPer100g, food.CarbsPer100g, food.FatPer100g} {
-		if value < 0 || value > 100 {
-			return false
-		}
-	}
-	return true
-}
-
-func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
+	return foodrecordservice.PackagedFoodQualifiesForReward(food)
 }
 
 func (r *Runner) trySilentPackagedIngest(ctx context.Context, task *domain.AnalysisTask, result map[string]any) {

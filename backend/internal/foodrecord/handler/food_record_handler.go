@@ -63,6 +63,7 @@ type FoodNutritionService interface {
 	Search(ctx context.Context, query string, limit int) ([]map[string]any, error)
 	GetUnresolvedTop(ctx context.Context, limit int) ([]domain.FoodUnresolvedLog, error)
 	CreatePackagedFood(ctx context.Context, input service.PackagedFoodInput) (*domain.PackagedFood, error)
+	SupplementPackagedExtractTask(ctx context.Context, userID, taskID string, input service.PackagedFoodInput) (*domain.PackagedFood, *service.PackagedSupplementOutcome, error)
 	GetPackagedFood(ctx context.Context, id string) (*domain.PackagedFood, error)
 	SubmitPackagedFoodCorrection(ctx context.Context, userID string, input service.SubmitPackagedFoodCorrectionInput) (*domain.PackagedFoodCorrectionSubmission, error)
 	RecognizePackagedNutritionLabel(ctx context.Context, imageURL string) (*service.PackagedNutritionLabelResult, error)
@@ -607,6 +608,7 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		FolateMcgPer100g      float64        `json:"folate_mcg_per_100g"`
 		VitaminB12McgPer100g  float64        `json:"vitamin_b12_mcg_per_100g"`
 		SourceURL             string         `json:"source_url"`
+		SourceTaskID          string         `json:"source_task_id"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -616,7 +618,7 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "请至少上传一张包装图片", HTTPStatus: 400})
 		return
 	}
-	item, err := h.nutritionSvc.CreatePackagedFood(c.Request.Context(), service.PackagedFoodInput{
+	input := service.PackagedFoodInput{
 		Brand:                 body.Brand,
 		ProductName:           body.ProductName,
 		DisplayName:           body.DisplayName,
@@ -670,7 +672,12 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		FolateMcgPer100g:      body.FolateMcgPer100g,
 		VitaminB12McgPer100g:  body.VitaminB12McgPer100g,
 		SourceURL:             body.SourceURL,
-	})
+	}
+	if sourceTaskID := strings.TrimSpace(body.SourceTaskID); sourceTaskID != "" {
+		h.supplementPackagedFood(c, sourceTaskID, input)
+		return
+	}
+	item, err := h.nutritionSvc.CreatePackagedFood(c.Request.Context(), input)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -683,6 +690,29 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		slog.Float64("net_weight_g", item.NetWeightG),
 	)
 	response.Success(c, gin.H{"item": item})
+}
+
+// supplementPackagedFood 处理任务详情页「补充信息」：带原识别任务 ID，补齐后能过门槛就直接入库。
+func (h *FoodRecordHandler) supplementPackagedFood(c *gin.Context, sourceTaskID string, input service.PackagedFoodInput) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	item, outcome, err := h.nutritionSvc.SupplementPackagedExtractTask(c.Request.Context(), userID, sourceTaskID, input)
+	if err != nil {
+		logFoodRecordAPIError(c, "packaged_food_supplement", err)
+		response.Error(c, err)
+		return
+	}
+	attrs := []slog.Attr{
+		slog.String("source_task_id", sourceTaskID),
+		slog.String("packaged_food_id", item.ID),
+		slog.String("supplement_status", outcome.Status),
+		slog.String("supplement_reason", outcome.Reason),
+		slog.String("upsert_action", outcome.UpsertAction),
+	}
+	if outcome.TaskUpdateErr != nil {
+		attrs = append(attrs, slog.String("task_update_error", outcome.TaskUpdateErr.Error()))
+	}
+	logFoodRecordAPI(c, "packaged_food_supplement_ok", attrs...)
+	response.Success(c, gin.H{"item": item, "supplement": outcome})
 }
 
 // GET /api/packaged-food/:food_id

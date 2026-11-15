@@ -6858,6 +6858,8 @@ export async function searchFoodNutritionCandidates(query: string, limit: number
 
 /** 搜索用户项（不包含手机号） */
 export interface CreatePackagedFoodRequest {
+  /** 来自包装食品任务详情「补充信息」时带上原识别任务，后端会重新判断能否直接入库 */
+  source_task_id?: string
   brand?: string
   product_name: string
   spec_text?: string
@@ -7078,6 +7080,38 @@ export async function createPackagedFood(payload: CreatePackagedFoodRequest): Pr
     throwHttpErrorWithStatus(res.statusCode, res.data, '保存零食数据失败')
   }
   return unwrapResponse<{ item: PackagedFoodItem }>(res).item
+}
+
+export interface PackagedSupplementResult {
+  /** ingested：补齐后直接入库；pending_review：进入人工审核 */
+  status?: 'ingested' | 'pending_review' | string
+  reason?: string
+  packaged_food_id?: string
+  upsert_action?: string
+  filled_fields?: string[]
+  edited_fields?: string[]
+  reward_result?: PackagedUploadRewardResult
+  submitted_at?: string
+}
+
+export interface SupplementPackagedFoodResponse {
+  item: PackagedFoodItem
+  supplement?: PackagedSupplementResult
+}
+
+/** 任务详情页「补充信息」提交：带 source_task_id，返回是否已直接入库 */
+export async function supplementPackagedFood(
+  payload: CreatePackagedFoodRequest & { source_task_id: string },
+): Promise<SupplementPackagedFoodResponse> {
+  const res = await authenticatedRequest('/api/packaged-food', {
+    method: 'POST',
+    data: payload,
+    timeout: 15000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '保存补充信息失败')
+  }
+  return unwrapResponse<SupplementPackagedFoodResponse>(res)
 }
 
 export async function getPackagedFoodItem(foodId: string): Promise<PackagedFoodItem> {

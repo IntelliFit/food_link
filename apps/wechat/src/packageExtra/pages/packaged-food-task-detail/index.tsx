@@ -7,6 +7,7 @@ import {
   type AnalysisTask,
   type PackagedAutoIngestResult,
   type PackagedProductExtractResult,
+  type PackagedSupplementResult,
   type PackagedUploadRewardResult,
 } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
@@ -29,6 +30,29 @@ function extractRewardResult(task?: AnalysisTask | null): PackagedUploadRewardRe
   const result = (task?.result || {}) as Record<string, any>
   const reward = (result.reward_result || {}) as PackagedUploadRewardResult
   return Object.keys(reward).length > 0 ? reward : null
+}
+
+function extractSupplementResult(task?: AnalysisTask | null): PackagedSupplementResult | null {
+  const result = (task?.result || {}) as Record<string, any>
+  const supplement = (result.supplement_result || {}) as PackagedSupplementResult
+  return supplement.status ? supplement : null
+}
+
+function isSupplementPendingReview(supplement?: PackagedSupplementResult | null) {
+  return supplement?.status === 'pending_review'
+}
+
+function describeSupplementPending(supplement?: PackagedSupplementResult | null) {
+  switch (supplement?.reason) {
+    case 'edited_recognized_fields':
+      return '你补充的信息已收到。因为改动了识别出的名称或营养数值，需要人工核对后入库。'
+    case 'net_weight_out_of_range':
+      return '你补充的信息已收到。净含量超出常见范围，需要人工核对后入库。'
+    case 'conflict':
+      return '你补充的信息已收到。每份重量和净含量对不上，需要人工核对后入库。'
+    default:
+      return '你补充的信息已收到，人工核对后入库。'
+  }
 }
 
 function isTaskStillRunning(status?: string) {
@@ -255,17 +279,18 @@ function describeBlockedReason(auto?: PackagedAutoIngestResult | null) {
   }
 }
 
-function detailResultTitle(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null) {
+function detailResultTitle(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null, supplement?: PackagedSupplementResult | null) {
   if (!task) return '正在读取任务'
   if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') return '这次没有分析成功'
   if (isTaskStillRunning(task.status)) return '已收到，后台分析中'
   if (reward?.awarded) return '新商品已入库'
   if (reward?.already_exists || packaged?.auto_ingest_result?.upsert_action === 'updated') return '商品库已有同商品'
   if (packaged?.auto_ingest_result?.status === 'ingested') return '商品已入库'
+  if (isSupplementPendingReview(supplement)) return '已补充，等待审核'
   return '暂未入库'
 }
 
-function detailResultDesc(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null) {
+function detailResultDesc(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null, supplement?: PackagedSupplementResult | null) {
   if (!task) return '请稍等片刻，正在读取任务状态。'
   if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') {
     return taskFailureMessage(task)
@@ -283,16 +308,18 @@ function detailResultDesc(task?: AnalysisTask | null, packaged?: PackagedProduct
   if (auto?.status === 'ingested') {
     return '商品已成功入库；本次未发放奖励积分，请以奖励记录为准。'
   }
+  if (isSupplementPendingReview(supplement)) return describeSupplementPending(supplement)
   return describeBlockedReason(auto)
 }
 
-function statusText(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null) {
+function statusText(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null, supplement?: PackagedSupplementResult | null) {
   if (!task) return ''
   if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') return '分析失败'
   if (isTaskStillRunning(task.status)) return '后台分析中'
   if (reward?.awarded) return `已入库，奖励积分 +${Number(reward.reward_credits) || 1}`
   if (reward?.already_exists || packaged?.auto_ingest_result?.upsert_action === 'updated') return '数据库已有，本次不奖励'
   if (packaged?.auto_ingest_result?.status === 'ingested') return '已入库，本次不奖励'
+  if (isSupplementPendingReview(supplement)) return '已补充，待审核'
   return '未入库，可补充'
 }
 
@@ -322,6 +349,7 @@ function PackagedFoodTaskDetailPage() {
 
   const packaged = useMemo(() => extractPackagedResult(task), [task])
   const reward = useMemo(() => extractRewardResult(task), [task])
+  const supplement = useMemo(() => extractSupplementResult(task), [task])
   const auto = packaged?.auto_ingest_result || null
   const imageUrls = useMemo(() => imageUrlsForTask(task, packaged), [task, packaged])
   const derivedNutrition = useMemo(() => derivePackagedNutrition(packaged), [packaged])
@@ -404,7 +432,7 @@ function PackagedFoodTaskDetailPage() {
           <Text className='detail-hero-kicker'>包装食品上传任务</Text>
           <Text className='detail-hero-title'>{packaged?.product_name || `包装食品照片 ${imageUrls.length || 1} 张`}</Text>
           {task
-            ? <Text className='detail-hero-status'>{statusText(task, packaged, reward)}</Text>
+            ? <Text className='detail-hero-status'>{statusText(task, packaged, reward, supplement)}</Text>
             : <View className='detail-hero-loading-spinner' />}
           <Text className='detail-hero-time'>{formatTaskTime(task?.created_at)}</Text>
           <View className='detail-actions'>
@@ -448,8 +476,8 @@ function PackagedFoodTaskDetailPage() {
         {packaged ? (
           <>
             <View className={`detail-card result ${reward?.awarded || auto?.status === 'ingested' ? 'success' : 'warning'}`}>
-              <Text className='detail-card-title'>{detailResultTitle(task, packaged, reward)}</Text>
-              <Text className='detail-card-desc'>{detailResultDesc(task, packaged, reward)}</Text>
+              <Text className='detail-card-title'>{detailResultTitle(task, packaged, reward, supplement)}</Text>
+              <Text className='detail-card-desc'>{detailResultDesc(task, packaged, reward, supplement)}</Text>
             </View>
 
             <View className='detail-card'>
@@ -465,7 +493,7 @@ function PackagedFoodTaskDetailPage() {
                 </View>
                 <View className='field-item'>
                   <Text className='field-label'>规格</Text>
-                  <Text className='field-value'>{packaged.spec_text || `${formatNumber(packaged.net_weight_g, 'g')}`}</Text>
+                  <Text className='field-value'>{packaged.spec_text || (Number(packaged.net_weight_g) > 0 ? formatNumber(packaged.net_weight_g, 'g') : '未识别')}</Text>
                 </View>
                 <View className='field-item'>
                   <Text className='field-label'>条码</Text>

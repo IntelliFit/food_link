@@ -5,6 +5,7 @@ import { withAuth } from '../../../utils/withAuth'
 import {
   compressImagePathForUpload,
   createPackagedFood,
+  supplementPackagedFood,
   getAnalyzeTask,
   listAnalyzeTasks,
   sanitizeUserFacingErrorMessage,
@@ -1135,7 +1136,12 @@ function PackagedFoodEditPage() {
     setSaving(true)
     Taro.showLoading({ title: '保存中...', mask: true })
     try {
-      const item = await createPackagedFood(payload)
+      const sourceTaskId = String(draft.sourceTaskId || '').trim()
+      const supplementResponse = sourceTaskId
+        ? await supplementPackagedFood({ ...payload, source_task_id: sourceTaskId })
+        : null
+      const item = supplementResponse ? supplementResponse.item : await createPackagedFood(payload)
+      const ingestedBySupplement = supplementResponse?.supplement?.status === 'ingested'
       Taro.setStorageSync(PACKAGED_FOOD_EDIT_SAVED_KEY, {
         itemId: draft.itemId,
         packagedFoodId: item.id,
@@ -1152,7 +1158,7 @@ function PackagedFoodEditPage() {
       })
       Taro.removeStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY)
       Taro.hideLoading()
-      Taro.showToast({ title: '已提交待审核', icon: 'success' })
+      Taro.showToast({ title: ingestedBySupplement ? '已入库' : '已提交待审核', icon: 'success' })
       setTimeout(() => Taro.navigateBack(), 450)
     } catch (error) {
       Taro.hideLoading()

@@ -111,6 +111,8 @@ type mockNutritionService struct {
 	submitPackagedInputs     []service.SubmitPackagedProductExtractInput
 	getPackagedFoodID        string
 	submitCorrectionInput    *service.SubmitPackagedFoodCorrectionInput
+	supplementTaskID         string
+	supplementInput          *service.PackagedFoodInput
 }
 
 func (m *mockNutritionService) Search(ctx context.Context, query string, limit int) ([]map[string]any, error) {
@@ -124,6 +126,15 @@ func (m *mockNutritionService) CreatePackagedFood(ctx context.Context, input ser
 		return m.item, m.err
 	}
 	return &domain.PackagedFood{ID: "p1", ProductName: input.ProductName, NetWeightG: input.NetWeightG, IsActive: true}, nil
+}
+func (m *mockNutritionService) SupplementPackagedExtractTask(ctx context.Context, userID, taskID string, input service.PackagedFoodInput) (*domain.PackagedFood, *service.PackagedSupplementOutcome, error) {
+	m.supplementTaskID = taskID
+	m.supplementInput = &input
+	if m.err != nil {
+		return nil, nil, m.err
+	}
+	return &domain.PackagedFood{ID: "p2", ProductName: input.ProductName, NetWeightG: input.NetWeightG, IsActive: true},
+		&service.PackagedSupplementOutcome{Status: service.PackagedSupplementStatusIngested, PackagedFoodID: "p2", UpsertAction: "created"}, nil
 }
 func (m *mockNutritionService) GetPackagedFood(ctx context.Context, id string) (*domain.PackagedFood, error) {
 	m.getPackagedFoodID = id
@@ -717,6 +728,39 @@ func TestCreatePackagedFood(t *testing.T) {
 	item := data["item"].(map[string]any)
 	assert.Equal(t, "蛋白棒", item["product_name"])
 	assert.Equal(t, float64(60), item["net_weight_g"])
+}
+
+func TestCreatePackagedFoodWithSourceTaskRoutesToSupplement(t *testing.T) {
+	mockSvc := &mockNutritionService{}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"product_name":      "无糖黄金锅巴",
+		"source_image_urls": []string{"https://cdn.example.com/guoba.jpg"},
+		"source_task_id":    " task-1 ",
+		"net_weight_g":      48,
+		"kcal_per_100g":     581.3,
+		"protein_per_100g":  7,
+		"carbs_per_100g":    71.5,
+		"fat_per_100g":      20.1,
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/packaged-food", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "task-1", mockSvc.supplementTaskID)
+	if assert.NotNil(t, mockSvc.supplementInput) {
+		assert.Equal(t, float64(48), mockSvc.supplementInput.NetWeightG)
+	}
+	var resp map[string]any
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	supplement := data["supplement"].(map[string]any)
+	assert.Equal(t, "ingested", supplement["status"])
+	assert.Equal(t, "p2", data["item"].(map[string]any)["id"])
 }
 
 func TestCreatePackagedFoodRejectsMissingImage(t *testing.T) {
