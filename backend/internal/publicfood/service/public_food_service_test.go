@@ -6,6 +6,7 @@ import (
 	"time"
 
 	analyzedomain "food_link/backend/internal/analyze/domain"
+	catalogdomain "food_link/backend/internal/campuscatalog/domain"
 	analyzerepo "food_link/backend/internal/analyze/repo"
 	analyzeservice "food_link/backend/internal/analyze/service"
 	authrepo "food_link/backend/internal/auth/repo"
@@ -125,6 +126,8 @@ func setupPublicFoodServiceTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
 	db := testdb.New(t)
+	// GetItem joins the canteen catalog tables, so every service test needs them.
+	require.NoError(t, db.AutoMigrate(&catalogdomain.CollectionBatch{}, &catalogdomain.CatalogItem{}))
 	require.NoError(t, db.AutoMigrate(
 		&domain.PublicFoodItem{},
 		&analyzedomain.AnalysisTask{},

@@ -15,18 +15,13 @@ import (
 
 	"food_link/backend/pkg/testdb"
 
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 func TestGetItemReadsLinkedCatalogTaskForLegacyProjection(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:"+uuid.NewString()+"?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	require.NoError(t, db.AutoMigrate(&domain.PublicFoodItem{}, &analyzedomain.AnalysisTask{}, &catalogdomain.CollectionBatch{}, &catalogdomain.CatalogItem{}))
-	require.NoError(t, db.Exec("CREATE TABLE schools (name TEXT, status TEXT, logo_url TEXT)").Error)
+	// Postgres like the rest of the package: the SQLite driver needs cgo, which
+	// CGO_ENABLED=0 builds (and this Windows machine) do not have.
+	db := setupPublicFoodRepoTestDB(t)
 	batchID, itemID := uuid.NewString(), uuid.NewString()
 	require.NoError(t, db.Create(&catalogdomain.CollectionBatch{ID: batchID, VenueType: "community"}).Error)
 	taskID := uuid.NewString()
