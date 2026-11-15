@@ -12,6 +12,9 @@ jest.mock('@tarojs/components', () => {
     View: ({ children, ...props }: any) => React.createElement('div', props, children),
     Text: ({ children, ...props }: any) => React.createElement('span', props, children),
     Image: ({ mode: _mode, ...props }: any) => React.createElement('img', props),
+    Swiper: ({ children, current, onChange, indicatorDots: _dots, indicatorActiveColor: _color, ...props }: any) => React.createElement('div', { ...props, 'data-current': current },
+      children, React.createElement('button', { onClick: () => onChange({ detail: { current: 1 } }) }, '模拟滑到第二张')),
+    SwiperItem: ({ children }: any) => React.createElement('div', {}, children),
     ScrollView: ({ children, scrollY: _scrollY, ...props }: any) => React.createElement('div', props, children),
     PageContainer: ({ show, onBeforeLeave, children }: any) => show ? React.createElement('div', {},
       React.createElement('button', { onClick: onBeforeLeave }, '模拟系统返回'), children) : null,
@@ -40,6 +43,20 @@ beforeEach(() => {
   jest.clearAllMocks()
   ;(Taro as any).canIUse = jest.fn(() => false)
   ;(Taro as any).previewImage = jest.fn()
+})
+
+it('shows explicitly missing nutrients as unknown and preserves a verified zero', () => {
+  const partial = { ...food, missing_nutrients: ['riboflavinMg', 'protein'], total_protein: 0,
+    nutrients_per_100g: { ...food.nutrients_per_100g!, riboflavinMg: 4512.5 } }
+  const rows = manualFoodDetailNutrition(partial)
+  expect(rows.macroRows.find((row) => row.key === 'protein')?.value).toBe('—')
+  expect(rows.microRows.find((row) => row.key === 'riboflavinMg')?.value).toBe('—')
+  expect(manualFoodDetailNutrition({ ...food, total_protein: 0 }).macroRows.find((row) => row.key === 'protein')?.value).toBe('0')
+  render(<ManualFoodDetailSheet item={partial} onClose={jest.fn()} onAdd={jest.fn()} />)
+  expect(screen.getByText('— 表示原始资料未提供')).toBeInTheDocument()
+  fireEvent.click(screen.getByText('展开'))
+  expect(screen.queryByText(/4512/)).not.toBeInTheDocument()
+  expect(screen.getByText('维生素 B2')).toBeInTheDocument()
 })
 
 it.each(['custom', 'packaged_food', 'nutrition_library', 'public_library'] as const)('opens %s details without requesting a different library', (source) => {
@@ -81,8 +98,32 @@ it('hides editing for another user contribution and previews all valid images', 
   expect(screen.queryByText('编辑')).not.toBeInTheDocument()
   fireEvent.click(screen.getByLabelText(`查看${food.title}详情`))
   const images = screen.getAllByRole('img')
-  fireEvent.click(images[images.length - 1])
+  fireEvent.click(images[1])
   expect(Taro.previewImage).toHaveBeenCalledWith({ current: food.image_paths![0], urls: food.image_paths })
+})
+
+it('shows every uploaded image and previews the selected page after swiping', () => {
+  render(<FoodLibraryHarness />)
+  fireEvent.click(screen.getByLabelText(`查看${food.title}详情`))
+  expect(screen.getAllByRole('img').map((image) => image.getAttribute('src'))).toEqual([
+    food.image_paths![0], ...food.image_paths!,
+  ])
+  expect(screen.getByText('1/2')).toBeInTheDocument()
+  fireEvent.click(screen.getByText('模拟滑到第二张'))
+  fireEvent.click(screen.getByText('2/2'))
+  expect(Taro.previewImage).toHaveBeenLastCalledWith({ current: food.image_paths![1], urls: food.image_paths })
+  fireEvent.click(screen.getByText('关闭'))
+  fireEvent.click(screen.getByLabelText(`查看${food.title}详情`))
+  expect(screen.getByText('1/2')).toBeInTheDocument()
+})
+
+it('keeps single-image and no-image foods usable without empty gallery controls', () => {
+  const { rerender } = render(<ManualFoodDetailSheet item={{ ...food, image_paths: [food.image_paths![0]] }} onClose={jest.fn()} onAdd={jest.fn()} />)
+  expect(screen.getAllByRole('img')).toHaveLength(1)
+  expect(screen.queryByText('模拟滑到第二张')).not.toBeInTheDocument()
+  rerender(<ManualFoodDetailSheet item={{ ...food, image_paths: [] }} onClose={jest.fn()} onAdd={jest.fn()} />)
+  expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  expect(screen.getByText('加入本餐')).toBeInTheDocument()
 })
 
 it('closes the native page container when the system back action fires', () => {

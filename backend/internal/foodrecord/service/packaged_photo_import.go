@@ -231,5 +231,8 @@ func canForceIngestPackagedProduct(result *PackagedProductExtractResult) bool {
 	if strings.TrimSpace(result.ConversionStatus) != "converted" {
 		return false
 	}
+	if !validPackagedLabelUnits(result) || len(missingPackagedCoreLabelFields(result)) > 0 || len(detectPackagedExtractConflicts(result)) > 0 || hasImplausiblePackagedNutrition(result.UnitNutritionPer100g, result.NutritionBasisUnit) {
+		return false
+	}
 	return hasValidPackagedNutrition(result.UnitNutritionPer100g) || PackagedExtractHasVerifiedZeroNutritionEvidence(result)
 }

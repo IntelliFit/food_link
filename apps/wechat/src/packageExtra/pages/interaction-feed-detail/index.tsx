@@ -1,4 +1,4 @@
-import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Input, Swiper, SwiperItem } from '@tarojs/components'
 import * as React from 'react'
 import Taro from '@tarojs/taro'
 import { foodRecordAmountText } from '../../../utils/food-record-measurement'
@@ -263,6 +263,7 @@ export function InteractionFeedDetailPage() {
   const [microsExpanded, setMicrosExpanded] = useState(false)
   const [manualFoodsExpanded, setManualFoodsExpanded] = useState(false)
   const [manualFoodDetail, setManualFoodDetail] = useState<ReturnType<typeof extractManualFoodDisplayItems>[number] | null>(null)
+  const [manualFoodImageIndex, setManualFoodImageIndex] = useState(0)
   const [deletingCommentIds, setDeletingCommentIds] = useState<Set<string>>(() => new Set())
   const [isGuest, setIsGuest] = useState(() => !getAccessToken())
   const likePendingRef = useRef(false)
@@ -562,6 +563,7 @@ export function InteractionFeedDetailPage() {
       Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
       return
     }
+    setManualFoodImageIndex(0)
     setManualFoodDetail(row)
   }, [isGuest])
 
@@ -676,6 +678,8 @@ export function InteractionFeedDetailPage() {
   }, [feedTextExpanded, toggleFeedTextExpanded])
 
   const manualFoodRatio = manualFoodDetail ? resolveRecordItemRatio(manualFoodDetail) : 100
+  const manualFoodImages = collectFoodDisplayImageUrls(manualFoodDetail)
+  const currentManualFoodImageIndex = Math.min(manualFoodImageIndex, Math.max(0, manualFoodImages.length - 1))
   const manualFoodNutrients = manualFoodDetail?.nutrients
   const manualFoodNutrientRows = [
     { key: 'calories' as const, label: '热量', unit: 'kcal' },
@@ -1048,7 +1052,16 @@ export function InteractionFeedDetailPage() {
               </View>
             </View>
             <ScrollView scrollY className='manual-food-detail-scroll'>
-              {manualFoodDetail.imageUrl && <Image className='manual-food-detail-image' src={manualFoodDetail.imageUrl} mode='aspectFit' />}
+              {manualFoodImages.length > 0 && (
+                <View className='manual-food-detail-gallery'>
+                  {manualFoodImages.length > 1 ? (
+                    <Swiper className='manual-food-detail-swiper' current={currentManualFoodImageIndex} indicatorDots indicatorActiveColor='#059669' onChange={(event) => setManualFoodImageIndex(event.detail.current)}>
+                      {manualFoodImages.map((url) => <SwiperItem key={url}><Image className='manual-food-detail-image' src={url} mode='aspectFit' onClick={() => Taro.previewImage({ current: url, urls: manualFoodImages })} /></SwiperItem>)}
+                    </Swiper>
+                  ) : <Image className='manual-food-detail-image' src={manualFoodImages[0]} mode='aspectFit' onClick={() => Taro.previewImage({ current: manualFoodImages[0], urls: manualFoodImages })} />}
+                  {manualFoodImages.length > 1 && <Text className='manual-food-detail-image-count' onClick={() => Taro.previewImage({ current: manualFoodImages[currentManualFoodImageIndex], urls: manualFoodImages })}>{currentManualFoodImageIndex + 1}/{manualFoodImages.length}</Text>}
+                </View>
+              )}
               <Text className='manual-food-detail-title'>{manualFoodDetail.displayName}</Text>
               <Text className='manual-food-detail-meta'>{[manualFoodDetail.sourceLabel, '本次记录'].filter(Boolean).join(' · ')}</Text>
               {manualFoodDetail.manual_portion_label && <Text className='manual-food-detail-meta'>{manualFoodDetail.manual_portion_label}</Text>}

@@ -1194,7 +1194,7 @@ func TestFoodNutritionRepo_UpsertPackagedFoodCreatesDifferentFlavorsWithSameName
 		NetWeightG:         30,
 		KcalPer100g:        650,
 		CarbsPer100g:       61.5,
-		FatPer100g:         41,
+		FatPer100g:         35,
 		NutritionBasisUnit: "100g",
 	})
 	require.NoError(t, err)
@@ -1235,7 +1235,7 @@ func TestFoodNutritionRepo_UpsertPackagedFoodUpdatesSameBarcode(t *testing.T) {
 		NetWeightG:         30,
 		KcalPer100g:        650,
 		CarbsPer100g:       61.5,
-		FatPer100g:         41,
+		FatPer100g:         35,
 		NutritionBasisUnit: "100g",
 	})
 	require.NoError(t, err)
@@ -1250,7 +1250,7 @@ func TestFoodNutritionRepo_UpsertPackagedFoodUpdatesSameBarcode(t *testing.T) {
 		NetWeightG:         30,
 		KcalPer100g:        648,
 		CarbsPer100g:       61.5,
-		FatPer100g:         41,
+		FatPer100g:         35,
 		NutritionBasisUnit: "100g",
 	})
 	require.NoError(t, err)
@@ -1273,7 +1273,7 @@ func TestFoodNutritionRepo_UpsertPackagedFoodCreatesWhenSameProductKeyHasDiffere
 		NetWeightG:         30,
 		KcalPer100g:        650,
 		CarbsPer100g:       61.5,
-		FatPer100g:         41,
+		FatPer100g:         35,
 		NutritionBasisUnit: "100g",
 	})
 	require.NoError(t, err)

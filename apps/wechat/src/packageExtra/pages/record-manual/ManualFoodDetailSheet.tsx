@@ -1,4 +1,4 @@
-import { Image, PageContainer, ScrollView, Text, View } from '@tarojs/components'
+import { Image, PageContainer, ScrollView, Swiper, SwiperItem, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { useEffect, useMemo, useState } from 'react'
 import type { ManualFoodSearchResult } from '../../../utils/api'
@@ -19,13 +19,15 @@ interface ManualFoodDetailSheetProps {
 export function ManualFoodDetailSheet({ item, dark, portionText, onClose, onAdd }: ManualFoodDetailSheetProps) {
   const [perHundred, setPerHundred] = useState(false)
   const [showMore, setShowMore] = useState(false)
+  const [imageIndex, setImageIndex] = useState(0)
   const nativeContainer = useMemo(() => typeof Taro.canIUse === 'function' && Taro.canIUse('page-container'), [])
-  useEffect(() => { setPerHundred(false); setShowMore(false) }, [item?.id, item?.source])
+  useEffect(() => { setPerHundred(false); setShowMore(false); setImageIndex(0) }, [item?.id, item?.source])
 
   const content = item ? (() => {
     const images = collectFoodDisplayImageUrls(item)
+    const currentImageIndex = Math.min(imageIndex, Math.max(0, images.length - 1))
     const basis = manualFoodNutritionBasis(item)
-    const { macroRows, microRows } = manualFoodDetailNutrition(item, perHundred)
+    const { macroRows, microRows, hasMissingNutrients } = manualFoodDetailNutrition(item, perHundred)
     return (
       <View className={`manual-food-detail${dark ? ' manual-food-detail--dark' : ''}`} onClick={(event) => event.stopPropagation()}>
         <View className='manual-food-detail__header'>
@@ -35,8 +37,12 @@ export function ManualFoodDetailSheet({ item, dark, portionText, onClose, onAdd 
         <ScrollView scrollY className='manual-food-detail__scroll'>
           {images.length > 0 && (
             <View className='manual-food-detail__images'>
-              <Image className='manual-food-detail__image' src={images[0]} mode='aspectFit' onClick={() => Taro.previewImage({ current: images[0], urls: images })} />
-              {images.length > 1 && <Text className='manual-food-detail__image-count' onClick={() => Taro.previewImage({ current: images[0], urls: images })}>查看全部 {images.length} 张</Text>}
+              {images.length > 1 ? (
+                <Swiper className='manual-food-detail__swiper' current={currentImageIndex} indicatorDots indicatorActiveColor='#059669' onChange={(event) => setImageIndex(event.detail.current)}>
+                  {images.map((url) => <SwiperItem key={url}><Image className='manual-food-detail__image' src={url} mode='aspectFit' onClick={() => Taro.previewImage({ current: url, urls: images })} /></SwiperItem>)}
+                </Swiper>
+              ) : <Image className='manual-food-detail__image' src={images[0]} mode='aspectFit' onClick={() => Taro.previewImage({ current: images[0], urls: images })} />}
+              {images.length > 1 && <Text className='manual-food-detail__image-count' onClick={() => Taro.previewImage({ current: images[currentImageIndex], urls: images })}>{currentImageIndex + 1}/{images.length}</Text>}
             </View>
           )}
           <Text className='manual-food-detail__title'>{item.title}</Text>
@@ -49,6 +55,7 @@ export function ManualFoodDetailSheet({ item, dark, portionText, onClose, onAdd 
           <View className='manual-food-detail__macros'>
             {macroRows.map((row) => <View key={row.key}><Text>{row.label}</Text><Text className='manual-food-detail__value'>{row.value}<Text className='manual-food-detail__unit'> {row.unit}</Text></Text></View>)}
           </View>
+          {hasMissingNutrients && <Text className='manual-food-detail__description'>— 表示原始资料未提供</Text>}
           {microRows.length > 0 && (
             <>
               <View className='manual-food-detail__more' onClick={() => setShowMore((current) => !current)}><Text>更多营养</Text><Text>{showMore ? '收起' : '展开'}</Text></View>

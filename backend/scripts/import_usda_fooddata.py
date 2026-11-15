@@ -26,6 +26,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import httpx
 from dotenv import load_dotenv
+from nutrition_import_validation import validate_per100g_values
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -39,7 +40,7 @@ API_BASE_URL = "https://api.nal.usda.gov/fdc/v1"
 DEFAULT_PAGE_SIZE = 200
 DEFAULT_BATCH_SIZE = 200
 DEFAULT_TIMEOUT_SECONDS = 30.0
-USDA_NUTRIENT_MAPPING_VERSION = "v2_1114_1177"
+USDA_NUTRIENT_MAPPING_VERSION = "v3_1114_1177_1258"
 DEFAULT_RATE_SLEEP_SECONDS = 0.15
 
 DEFAULT_DATASET_URLS = {
@@ -202,7 +203,7 @@ def _looks_like_sugar(name: str) -> bool:
 
 
 def _looks_like_saturated_fat(name: str) -> bool:
-    return "fatty acids, total saturated" in name or "saturated" in name
+    return name in {"fatty acids, total saturated", "saturated fat", "saturated fatty acids"}
 
 
 def _looks_like_cholesterol(name: str) -> bool:
@@ -225,6 +226,7 @@ def _pick_macros(food: Dict[str, Any]) -> Dict[str, float]:
     fiber_value: Optional[float] = None
     sugar_value: Optional[float] = None
     saturated_fat_value: Optional[float] = None
+    saturated_fat_from_id = False
     cholesterol_value: Optional[float] = None
     sodium_value: Optional[float] = None
     potassium_value: Optional[float] = None
@@ -266,7 +268,24 @@ def _pick_macros(food: Dict[str, Any]) -> Dict[str, float]:
         if value is None:
             continue
 
+        raw_unit = str(nutrient.get("unitName") or (nutrient.get("nutrient") or {}).get("unitName") or "").lower().replace("μ", "u").replace("µ", "u").replace("mcg", "ug").strip()
+        if value < 0 or not math.isfinite(value):
+            raise ValueError(f"Invalid nutrient value for {nutrient_id}")
+        gram_ids = PROTEIN_IDS | CARBS_IDS | FAT_IDS | FIBER_IDS | SUGAR_IDS | SATURATED_FAT_IDS
+        mg_ids = CHOLESTEROL_IDS | SODIUM_IDS | POTASSIUM_IDS | CALCIUM_IDS | IRON_IDS | MAGNESIUM_IDS | ZINC_IDS | VITAMIN_C_IDS | VITAMIN_E_IDS | THIAMIN_IDS | RIBOFLAVIN_IDS | NIACIN_IDS | VITAMIN_B6_IDS
+        ug_ids = VITAMIN_A_IDS | VITAMIN_D_IDS | VITAMIN_K_IDS | FOLATE_IDS | VITAMIN_B12_IDS
+        if raw_unit and (nutrient_id in gram_ids | mg_ids | ug_ids):
+            mass = {"g": 1.0, "mg": .001, "ug": .000001}
+            if raw_unit not in mass:
+                raise ValueError(f"Unresolved nutrient unit {raw_unit} for {nutrient_id}")
+            target = "g" if nutrient_id in gram_ids else "mg" if nutrient_id in mg_ids else "ug"
+            value *= mass[raw_unit] / mass[target]
+
         if nutrient_id in ENERGY_IDS or _looks_like_energy_kcal(name):
+            if raw_unit in {"kj", "kilojoules"}:
+                value /= 4.184
+            elif raw_unit and raw_unit not in {"kcal", "kilocalories"}:
+                raise ValueError(f"Unresolved energy unit {raw_unit}")
             priority = 0
             if nutrient_id == 2048 or "specific factor" in name:
                 priority = 3
@@ -297,7 +316,19 @@ def _pick_macros(food: Dict[str, Any]) -> Dict[str, float]:
             sugar_value = value
             continue
 
-        if saturated_fat_value is None and (nutrient_id in SATURATED_FAT_IDS or _looks_like_saturated_fat(name)):
+        if nutrient_id in SATURATED_FAT_IDS:
+            saturated_fat_value = value
+            saturated_fat_from_id = True
+            continue
+
+        # Known MUFA/PUFA IDs must never enter a name fallback. An explicit
+        # saturated-fat ID also supersedes an earlier name-only value.
+        if nutrient_id is None and not saturated_fat_from_id and saturated_fat_value is None and _looks_like_saturated_fat(name):
+            if raw_unit:
+                mass = {"g": 1.0, "mg": .001, "ug": .000001}
+                if raw_unit not in mass:
+                    raise ValueError(f"Unresolved saturated-fat unit {raw_unit}")
+                value *= mass[raw_unit]
             saturated_fat_value = value
             continue
 
@@ -448,6 +479,7 @@ class ImportFoodRow:
     brand_owner: Optional[str] = None
 
     def to_insert_row(self) -> Dict[str, Any]:
+        validate_per100g_values(vars(self))
         return {
             "canonical_name": self.canonical_name,
             "normalized_name": self.normalized_name,
@@ -727,6 +759,8 @@ def _get_existing_names(canonical_names: Sequence[str], batch_size: int) -> set[
 
 
 def _insert_rows(rows: Sequence[ImportFoodRow], batch_size: int, update_existing: bool) -> Tuple[int, int]:
+    for row in rows:
+        validate_per100g_values(vars(row))
     supabase = _get_supabase_client()
     normalized_names = [row.normalized_name for row in rows]
     existing_names = _get_existing_names(normalized_names, batch_size=batch_size)
@@ -743,7 +777,7 @@ def _insert_rows(rows: Sequence[ImportFoodRow], batch_size: int, update_existing
 
     if update_existing:
         for row in to_update:
-            supabase.table("food_nutrition_library").update({
+            response = supabase.table("food_nutrition_library").update({
                 "canonical_name": row.canonical_name,
                 "kcal_per_100g": row.kcal_per_100g,
                 "protein_per_100g": row.protein_per_100g,
@@ -773,8 +807,8 @@ def _insert_rows(rows: Sequence[ImportFoodRow], batch_size: int, update_existing
                 "source": row.source,
                 "quality_evidence": _usda_quality_evidence(row.usda_fdc_id, row.usda_data_type),
                 "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            }).eq("normalized_name", row.normalized_name).execute()
-            updated += 1
+            }).eq("normalized_name", row.normalized_name).eq("is_active", True).eq("source", row.source).is_("quality_evidence->data_cleanup", "null").execute()
+            updated += len(response.data or [])
 
     return inserted, updated
 
@@ -786,6 +820,8 @@ def _write_json_snapshot(rows: Sequence[ImportFoodRow], output_path: Path) -> No
 
 
 def _write_sql(rows: Sequence[ImportFoodRow], output_path: Path) -> None:
+    for row in rows:
+        validate_per100g_values(vars(row))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     values_sql: List[str] = []
     for row in rows:
@@ -888,7 +924,10 @@ def _write_sql(rows: Sequence[ImportFoodRow], output_path: Path) -> None:
         "  vitamin_b12_mcg_per_100g = excluded.vitamin_b12_mcg_per_100g,\n"
         "  source = excluded.source,\n"
         "  quality_evidence = excluded.quality_evidence,\n"
-        "  updated_at = now();\n"
+        "  updated_at = now()\n"
+        "WHERE food_nutrition_library.is_active = TRUE\n"
+        "  AND food_nutrition_library.source = excluded.source\n"
+        "  AND NOT (COALESCE(food_nutrition_library.quality_evidence, '{}'::jsonb) ? 'data_cleanup');\n"
     )
     output_path.write_text(body, encoding="utf-8")
 

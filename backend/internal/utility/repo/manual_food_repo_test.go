@@ -24,6 +24,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&fooddomain.FoodNutrition{},
 		&fooddomain.FoodNutritionAlias{},
 		&fooddomain.PackagedFood{},
+		&fooddomain.PackagedFoodAlias{},
 		&publicdomain.PublicFoodItem{},
 		&publicdomain.PublicFoodCollection{},
 		&domain.UserCustomFood{},

@@ -345,33 +345,33 @@ func (s *PackagedFoodService) Create(ctx context.Context, input CreatePackagedFo
 	})
 
 	item := &domain.PackagedFood{
-		Brand:            input.Brand,
-		ProductName:      input.ProductName,
-		NormalizedName:   normalized.NormalizedName,
-		ProductKey:       normalized.ProductKey,
-		DisplayName:      normalized.DisplayName,
-		SearchText:       normalized.SearchText,
-		ProductFamilyKey: normalized.ProductFamilyKey,
-		SpecText:         input.SpecText,
-		Barcode:          input.Barcode,
-		FlavorText:       input.FlavorText,
-		PackageCategory:  input.PackageCategory,
-		IngredientsText:  input.IngredientsText,
-		SourceImageURLs:  normalizeStringSlice(input.SourceImageURLs),
-		OCRRawText:       input.OCRRawText,
+		Brand:              input.Brand,
+		ProductName:        input.ProductName,
+		NormalizedName:     normalized.NormalizedName,
+		ProductKey:         normalized.ProductKey,
+		DisplayName:        normalized.DisplayName,
+		SearchText:         normalized.SearchText,
+		ProductFamilyKey:   normalized.ProductFamilyKey,
+		SpecText:           input.SpecText,
+		Barcode:            input.Barcode,
+		FlavorText:         input.FlavorText,
+		PackageCategory:    input.PackageCategory,
+		IngredientsText:    input.IngredientsText,
+		SourceImageURLs:    normalizeStringSlice(input.SourceImageURLs),
+		OCRRawText:         input.OCRRawText,
 		NutritionBasisUnit: input.NutritionBasisUnit,
-		EnergyUnitRaw:    input.EnergyUnitRaw,
-		ConversionStatus: input.ConversionStatus,
-		IngestMethod:     input.IngestMethod,
-		ReviewStatus:     normalized.ReviewStatus,
-		SourceURL:        strings.TrimSpace(input.SourceURL),
-		Source:           strings.TrimSpace(input.Source),
-		NetWeightG:       normalized.NetWeightG,
-		NetContentValue:  normalized.NetContentValue,
-		NetContentUnit:   ptrString(normalized.NetContentUnit),
-		UnitCount:        normalized.UnitCount,
-		UnitContentValue: normalized.UnitContentValue,
-		UnitContentUnit:  ptrString(normalized.UnitContentUnit),
+		EnergyUnitRaw:      input.EnergyUnitRaw,
+		ConversionStatus:   input.ConversionStatus,
+		IngestMethod:       input.IngestMethod,
+		ReviewStatus:       normalized.ReviewStatus,
+		SourceURL:          strings.TrimSpace(input.SourceURL),
+		Source:             strings.TrimSpace(input.Source),
+		NetWeightG:         normalized.NetWeightG,
+		NetContentValue:    normalized.NetContentValue,
+		NetContentUnit:     ptrString(normalized.NetContentUnit),
+		UnitCount:          normalized.UnitCount,
+		UnitContentValue:   normalized.UnitContentValue,
+		UnitContentUnit:    ptrString(normalized.UnitContentUnit),
 	}
 	if input.ExtractConfidence != nil {
 		item.ExtractConfidence = *input.ExtractConfidence
@@ -468,6 +468,9 @@ func (s *PackagedFoodService) Create(ctx context.Context, input CreatePackagedFo
 		item.FieldConfidence = input.FieldConfidence
 	}
 
+	if err := validateActivePackagedImport(item); err != nil {
+		return nil, &commonerrors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+	}
 	created, err := s.repo.Create(ctx, item)
 	if err != nil {
 		return nil, err
@@ -504,6 +507,9 @@ func (s *PackagedFoodService) Update(ctx context.Context, id string, input Updat
 	if len(patch) == 0 {
 		s.normalizeImages(current)
 		return current, nil
+	}
+	if err := validatePackagedImportPatch(current, map[string]any(patch)); err != nil {
+		return nil, &commonerrors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
 	}
 	updated, err := s.repo.Update(ctx, id, patch)
 	if err != nil {

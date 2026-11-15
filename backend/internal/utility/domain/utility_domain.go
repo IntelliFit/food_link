@@ -80,6 +80,7 @@ type ManualFoodServingPreset struct {
 }
 
 type ManualFoodResult struct {
+	MissingNutrients    []string                  `json:"missing_nutrients,omitempty"`
 	Measurement         *foodmeasure.Measurement  `json:"measurement,omitempty"`
 	ID                  string                    `json:"id"`
 	Source              string                    `json:"source"`

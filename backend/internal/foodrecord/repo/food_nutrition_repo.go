@@ -744,6 +744,11 @@ func (r *FoodNutritionRepo) UpsertPackagedFood(ctx context.Context, input Packag
 }
 
 func (r *FoodNutritionRepo) UpsertPackagedFoodWithAction(ctx context.Context, input PackagedFoodInput) (*domain.PackagedFood, string, error) {
+	if strings.TrimSpace(input.ReviewStatus) != "pending" {
+		if err := ValidatePackagedFoodInput(input); err != nil {
+			return nil, "", err
+		}
+	}
 	productName := strings.TrimSpace(input.ProductName)
 	normalizedFields := normalizePackagedProductFields(PackagedProductNormalizeInput{
 		Brand:            input.Brand,
@@ -859,8 +864,22 @@ func (r *FoodNutritionRepo) UpsertPackagedFoodWithAction(ctx context.Context, in
 		err = query.First(&existing).Error
 	}
 	if err == nil {
-		if err := r.db.WithContext(ctx).Model(&domain.PackagedFood{}).Where("id = ?", existing.ID).Updates(values).Error; err != nil {
+		if err := rejectProtectedPackagedImport(existing); err != nil {
 			return nil, "", err
+		}
+		if err := rejectConflictingPackagedIdentity(existing, normalizedFields, input.FlavorText); err != nil {
+			return nil, "", err
+		}
+		update := r.db.WithContext(ctx).Model(&domain.PackagedFood{}).
+			Where("id = ? AND NOT jsonb_exists(COALESCE(raw_label_payload::jsonb, '{}'::jsonb), 'data_cleanup')", existing.ID).
+			Where("product_key = ? AND brand = ? AND net_content_value = ? AND net_weight_g = ? AND COALESCE(net_content_unit, '') = ? AND COALESCE(flavor_text, '') = ?",
+				existing.ProductKey, existing.Brand, existing.NetContentValue, existing.NetWeightG, derefString(existing.NetContentUnit), derefString(existing.FlavorText)).
+			Updates(values)
+		if update.Error != nil {
+			return nil, "", update.Error
+		}
+		if update.RowsAffected != 1 {
+			return nil, "", fmt.Errorf("食物资料已变更，请重新核对后再提交")
 		}
 		_ = r.createPackagedFoodAlias(ctx, existing.ID, productName, normalizedFields.NormalizedName)
 		var updated domain.PackagedFood
@@ -2581,10 +2600,10 @@ func normalizePackagedProductFields(input PackagedProductNormalizeInput) Package
 	spec := strings.TrimSpace(input.SpecText)
 	parsed := parsePackagedSpec(spec + " " + input.OCRRawText)
 	netWeight := nonNegative(input.NetWeightG)
-	netValue := nonNegative(input.NetContentValue)
+	netValue := convertContentValue(nonNegative(input.NetContentValue), input.NetContentUnit)
 	netUnit := normalizeContentUnit(input.NetContentUnit)
 	unitCount := nonNegative(input.UnitCount)
-	unitValue := nonNegative(input.UnitContentValue)
+	unitValue := convertContentValue(nonNegative(input.UnitContentValue), input.UnitContentUnit)
 	unitUnit := normalizeContentUnit(input.UnitContentUnit)
 	if parsed.UnitCount > 0 && unitCount <= 0 {
 		unitCount = parsed.UnitCount
@@ -2665,10 +2684,14 @@ var (
 	packagedSpecUnitCountPattern  = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(g|克|kg|千克|ml|毫升|l|升)\s*(\d+(?:\.\d+)?)\s*(条|袋|支|包|瓶|罐|盒|枚|片|个)`)
 	packagedSpecNetPattern        = regexp.MustCompile(`(?i)(?:净含量|净重|规格|net\s*(?:weight|content))\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(g|克|kg|千克|ml|毫升|l|升)`)
 	packagedSpecCountPattern      = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(条|袋|支|包|瓶|罐|盒|枚|片|个)\s*装?`)
+	packagedSpecMonthsPattern     = regexp.MustCompile(`\d+(?:\.\d+)?\s*个\s*月`)
 )
 
 func parsePackagedSpec(text string) packagedSpecParts {
 	text = strings.TrimSpace(text)
+	// OCR includes shelf-life text. “12个月” is a duration, never 12 pieces;
+	// remove it before both the compound-weight and standalone-count parsers.
+	text = packagedSpecMonthsPattern.ReplaceAllString(text, " ")
 	out := packagedSpecParts{}
 	if text == "" {
 		return out
@@ -2770,6 +2793,7 @@ func packagedCountLabel(specText string, unitCount float64) string {
 	if unitCount <= 1 {
 		return ""
 	}
+	specText = packagedSpecMonthsPattern.ReplaceAllString(specText, " ")
 	if match := packagedSpecCountPattern.FindStringSubmatch(specText); len(match) == 3 {
 		if math.Abs(parsePositiveFloat(match[1])-unitCount) < 0.01 {
 			return formatCleanNumber(unitCount) + match[2] + "装"

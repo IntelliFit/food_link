@@ -21,6 +21,7 @@ import {
   type Nutrients,
 } from '../../../utils/api'
 import {
+  collectFoodDisplayImageUrls,
   pickFoodDisplayImageUrl,
 } from '../../../utils/food-display-image'
 import { withAuth } from '../../../utils/withAuth'
@@ -127,6 +128,7 @@ interface ServingPreset {
 }
 
 interface SelectedItem {
+  missingNutrients?: string[]
   measurement?: FoodMeasurement
   id: string
   source: ManualFoodSource
@@ -145,6 +147,7 @@ interface SelectedItem {
   naturalDisplayUnitLabel: string
   servingPresets: ServingPreset[]
   imagePath?: string | null
+  imagePaths?: string[]
   recommendReason?: string
   usageCount: number
   collected: boolean
@@ -564,15 +567,17 @@ function selectedFoodPayload(item: SelectedItem) {
   const converted = Number.isFinite(entered) && entered > 0 ? weightFromDisplayInput(item, entered) : item.weight
   const amount = Number.isFinite(converted) && converted > 0 ? converted : item.weight
   const grams = item.measurement ? foodMeasurementGrams(item.measurement, amount) ?? 0 : amount
+  const images = collectFoodDisplayImageUrls({ image_path: item.imagePath, image_paths: item.imagePaths })
   return {
     name: item.title, weight: grams, ratio: 100, intake: grams,
     measurement: item.measurement ? { ...item.measurement, amount } : undefined,
     nutrients: nutrientsForPayload(buildNutrientsFromWeight(item, amount)),
     manual_source: item.source, manual_source_id: item.id,
     manual_source_title: item.title,
+    missing_nutrients: item.missingNutrients?.length ? item.missingNutrients : undefined,
     manual_portion_label: item.measurement ? formatFoodMeasurementAmount(amount, item.measurement.unit) : item.portionLabel,
-    image_path: item.imagePath || undefined,
-    image_paths: item.imagePath ? [item.imagePath] : undefined,
+    image_path: images[0] || undefined,
+    image_paths: images.length ? images : undefined,
   }
 }
 
@@ -1202,6 +1207,8 @@ function RecordManualPage() {
           defaultWeight: profile.defaultWeight, portionLabel: profile.portionLabel,
           nutrientsPer100g: savedCustomResult.nutrients_per_100g || undefined,
           imagePath: pickFoodDisplayImageUrl(savedCustomResult) || null,
+          imagePaths: collectFoodDisplayImageUrls(savedCustomResult),
+          missingNutrients: savedCustomResult.missing_nutrients,
           baseNutrients: { ...item.baseNutrients, calories: savedCustomResult.total_calories, protein: savedCustomResult.total_protein, carbs: savedCustomResult.total_carbs, fat: savedCustomResult.total_fat },
           displayUnit: profile.displayUnit, displayUnitLabel: profile.displayUnitLabel,
           naturalDisplayUnit: profile.displayUnit, naturalDisplayUnitLabel: profile.displayUnitLabel,
@@ -1348,6 +1355,8 @@ function RecordManualPage() {
             naturalDisplayUnitLabel: servingProfile.displayUnitLabel,
             servingPresets: servingProfile.servingPresets,
             imagePath: pickFoodDisplayImageUrl(item) || null,
+            imagePaths: collectFoodDisplayImageUrls(item),
+            missingNutrients: item.missing_nutrients,
             recommendReason: item.nutrition_highlights?.join(' · ') || item.recommend_reason,
             usageCount: Number(item.usage_count || 0),
             collected: Boolean(item.collected),
@@ -1384,19 +1393,19 @@ function RecordManualPage() {
 
   const handleWeightInput = (key: string, value: string) => {
     const cleaned = value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
-    setSelectedItems((prev) =>
-      prev.map((item) => (
-        getItemKey(item) === key
-          ? { ...item, weightInput: cleaned }
-          : item
-      ))
-    )
+    setSelectedItems((prev) => prev.map((item) => {
+      if (getItemKey(item) !== key) return item
+      const parsed = Number(cleaned)
+      const amount = parsed > 0 ? weightFromDisplayInput(item, parsed) : NaN
+      if (!Number.isFinite(amount) || amount <= 0) return { ...item, weightInput: cleaned }
+      return { ...item, weightInput: cleaned, weight: amount, nutrients: buildNutrientsFromWeight(item, amount) }
+    }))
   }
 
-  const commitWeightInput = (key: string) => {
+  const commitWeightInput = (key: string, value?: string) => {
     const target = selectedMap.get(key)
     if (!target) return
-    const parsed = parseFloat(target.weightInput)
+    const parsed = parseFloat(value ?? target.weightInput)
     if (Number.isFinite(parsed) && parsed > 0) {
       updateItemWeight(key, weightFromDisplayInput(target, parsed))
       return
@@ -1639,8 +1648,7 @@ function RecordManualPage() {
                 value={item.weightInput}
                 onInput={(e) => handleWeightInput(key, e.detail.value)}
                 onBlur={(e) => {
-                  handleWeightInput(key, e.detail.value)
-                  commitWeightInput(key)
+                  commitWeightInput(key, e.detail.value)
                 }}
               />
               <Text className='weight-unit'>{manualFoodWeightInputUnit(item)}</Text>

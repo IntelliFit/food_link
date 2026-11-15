@@ -581,6 +581,13 @@ func packagedReadyExtract() *PackagedProductExtractResult {
 		SpecText:           "105克(7条X15克)",
 		NutritionBasisUnit: "100g",
 		ConversionStatus:   "converted",
+		RawNutritionBasis:  PackagedLabelNutritionBasis{Type: "100g", Value: 100, Unit: "g"},
+		RawNutritionPerBasis: PackagedLabelRawNutrition{
+			Energy:  PackagedLabelNutritionValue{Value: 40.15, Unit: "kcal"},
+			Protein: PackagedLabelNutritionValue{Value: 0, Unit: "g"},
+			Carbs:   PackagedLabelNutritionValue{Value: 6.6, Unit: "g"},
+			Fat:     PackagedLabelNutritionValue{Value: 1.5, Unit: "g"},
+		},
 		UnitNutritionPer100g: map[string]any{
 			"calories": 40.15,
 			"carbs":    6.6,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -11,7 +12,8 @@ from typing import Iterable
 
 import psycopg2
 from dotenv import load_dotenv
-from psycopg2.extras import execute_values
+from psycopg2.extras import Json, execute_values
+from nutrition_import_validation import validate_per100g_values
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -33,7 +35,7 @@ def db_config() -> dict[str, str]:
         "port": os.getenv("POSTGRESQL_PORT", "5432"),
         "dbname": os.getenv("POSTGRESQL_DATABASE", "food-link"),
         "user": os.getenv("POSTGRESQL_USER", "app_user"),
-        "password": os.getenv("POSTGRESQL_PASSWORD", "ffa2053eddc5b7564be7c20437086f67"),
+        "password": os.environ["POSTGRESQL_PASSWORD"],
         "sslmode": os.getenv("POSTGRESQL_SSLMODE", "disable"),
     }
 
@@ -50,14 +52,39 @@ def parse_number(raw: str) -> float:
     text = (raw or "").strip()
     if text in {"", "—", "–", "-", "Tr", "tr", "un"}:
         return 0.0
-    match = re.search(r"-?\d+(?:\.\d+)?", text.replace(",", ""))
+    # A numeric substring is not a quantity: 66% must never become 66 grams.
+    match = re.fullmatch(r"([+-]?\d+(?:\.\d+)?)\s*(g|mg|μg|µg|ug|kJ|kcal)?", text, re.IGNORECASE)
     if not match:
-        return 0.0
-    return float(match.group(0))
+        raise ValueError(f"无法识别数值或单位：{text}")
+    value = float(match.group(1))
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"营养数值必须有限且非负：{text}")
+    return value
+
+
+def parse_quantity(raw: str, unit: str, *, required: bool = False) -> float:
+    text = (raw or "").strip()
+    if text in {"", "—", "–", "-", "Tr", "tr", "un"}:
+        if required:
+            raise ValueError(f"缺少必需营养值（{unit}）")
+        return 0.0  # Missingness is retained in quality_evidence, not inferred as a measured zero.
+    value = parse_number(text)
+    found = re.search(r"[a-zμµ]+$", text, re.IGNORECASE)
+    actual = found.group().lower().replace("μ", "u").replace("µ", "u") if found else ""
+    if not actual and value != 0:
+        raise ValueError(f"缺少营养素单位：{text}，不能默认当作{unit}")
+    if actual and actual != unit.lower():
+        mass = {"g": 1.0, "mg": .001, "ug": .000001}
+        if actual not in mass or unit not in mass:
+            raise ValueError(f"单位不匹配：{text}，目标为{unit}")
+        value *= mass[actual] / mass[unit]
+    return value
 
 
 def kj_to_kcal(raw: str) -> float:
-    value = parse_number(raw)
+    if (raw or "").strip().lower().endswith("kcal"):
+        return parse_quantity(raw, "kcal", required=True)
+    value = parse_quantity(raw, "kj", required=True)
     if value <= 0:
         return 0.0
     return round(value / 4.184, 4)
@@ -96,6 +123,7 @@ class FoodRow:
     source: str
     alias_name: str
     normalized_alias: str
+    quality_evidence: dict
 
     def db_tuple(self) -> tuple:
         return (
@@ -128,6 +156,8 @@ class FoodRow:
             self.vitamin_b12_mcg_per_100g,
             self.is_active,
             self.source,
+            "unreviewed",
+            Json(self.quality_evidence),
         )
 
 
@@ -140,31 +170,37 @@ def build_row(raw: dict[str, str], source: str) -> FoodRow | None:
     alias_name = (raw.get("别名或俗名") or "").strip()
     normalized_alias = normalize_food_name(alias_name)
 
-    return FoodRow(
+    if raw.get("计量基准", "").strip() != "每100克可食部":
+        raise ValueError("标准库导入必须明确为每100克可食部；毫升、个、份不可直接当克")
+    # Percentages require a separately reviewed denominator and conversion; never guess here.
+    if any("%" in raw.get(key, "") or "％" in raw.get(key, "") for key in ("蛋白质", "碳水化合物", "脂肪", "饱和脂肪酸")):
+        raise ValueError("营养含量含百分比，必须核实分母并转换为明确质量单位后再导入")
+
+    row = FoodRow(
         canonical_name=canonical_name,
         normalized_name=normalized_name,
         kcal_per_100g=kj_to_kcal(raw.get("能量", "")),
-        protein_per_100g=parse_number(raw.get("蛋白质", "")),
-        carbs_per_100g=parse_number(raw.get("碳水化合物", "")),
-        fat_per_100g=parse_number(raw.get("脂肪", "")),
-        fiber_per_100g=parse_number(raw.get("总膳食纤维", "")),
+        protein_per_100g=parse_quantity(raw.get("蛋白质", ""), "g", required=True),
+        carbs_per_100g=parse_quantity(raw.get("碳水化合物", ""), "g", required=True),
+        fat_per_100g=parse_quantity(raw.get("脂肪", ""), "g", required=True),
+        fiber_per_100g=parse_quantity(raw.get("总膳食纤维", ""), "g"),
         sugar_per_100g=0.0,
-        saturated_fat_per_100g=parse_number(raw.get("饱和脂肪酸", "")),
-        cholesterol_mg_per_100g=parse_number(raw.get("胆固醇", "")),
-        sodium_mg_per_100g=parse_number(raw.get("钠", "")),
-        potassium_mg_per_100g=parse_number(raw.get("钾", "")),
-        calcium_mg_per_100g=parse_number(raw.get("钙", "")),
-        iron_mg_per_100g=parse_number(raw.get("铁", "")),
-        magnesium_mg_per_100g=parse_number(raw.get("镁", "")),
-        zinc_mg_per_100g=parse_number(raw.get("锌", "")),
-        vitamin_a_rae_mcg_per_100g=parse_number(raw.get("维生素A", "")),
-        vitamin_c_mg_per_100g=parse_number(raw.get("维生素C", "")),
+        saturated_fat_per_100g=parse_quantity(raw.get("饱和脂肪酸", ""), "g"),
+        cholesterol_mg_per_100g=parse_quantity(raw.get("胆固醇", ""), "mg"),
+        sodium_mg_per_100g=parse_quantity(raw.get("钠", ""), "mg"),
+        potassium_mg_per_100g=parse_quantity(raw.get("钾", ""), "mg"),
+        calcium_mg_per_100g=parse_quantity(raw.get("钙", ""), "mg"),
+        iron_mg_per_100g=parse_quantity(raw.get("铁", ""), "mg"),
+        magnesium_mg_per_100g=parse_quantity(raw.get("镁", ""), "mg"),
+        zinc_mg_per_100g=parse_quantity(raw.get("锌", ""), "mg"),
+        vitamin_a_rae_mcg_per_100g=parse_quantity(raw.get("维生素A", ""), "ug"),
+        vitamin_c_mg_per_100g=parse_quantity(raw.get("维生素C", ""), "mg"),
         vitamin_d_mcg_per_100g=0.0,
-        vitamin_e_mg_per_100g=parse_number(raw.get("α-TE", "")),
+        vitamin_e_mg_per_100g=parse_quantity(raw.get("α-TE", ""), "mg"),
         vitamin_k_mcg_per_100g=0.0,
-        thiamin_mg_per_100g=parse_number(raw.get("硫胺素", "")),
-        riboflavin_mg_per_100g=parse_number(raw.get("核黄素", "")),
-        niacin_mg_per_100g=parse_number(raw.get("烟酸", "")),
+        thiamin_mg_per_100g=parse_quantity(raw.get("硫胺素", ""), "mg"),
+        riboflavin_mg_per_100g=parse_quantity(raw.get("核黄素", ""), "mg"),
+        niacin_mg_per_100g=parse_quantity(raw.get("烟酸", ""), "mg"),
         vitamin_b6_mg_per_100g=0.0,
         folate_mcg_per_100g=0.0,
         vitamin_b12_mcg_per_100g=0.0,
@@ -172,18 +208,32 @@ def build_row(raw: dict[str, str], source: str) -> FoodRow | None:
         source=source,
         alias_name=alias_name,
         normalized_alias=normalized_alias,
+        quality_evidence={"source_record_id": raw.get("食物ID"), "basis": "100g_edible", "raw_values": dict(raw), "missing_or_not_detected": [key for key, value in raw.items() if value.strip() in {"", "—", "Tr", "un"}], "import_validation": "units_and_nutrient_bounds_v1"},
     )
+    validate_row(row)
+    return row
+
+
+def validate_row(row: FoodRow) -> None:
+    validate_per100g_values(vars(row))
 
 
 def read_rows(csv_path: Path, source: str) -> list[FoodRow]:
     rows_by_normalized: dict[str, FoodRow] = {}
+    rejected = []
     with csv_path.open("r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
         for raw in reader:
-            row = build_row(raw, source)
+            try:
+                row = build_row(raw, source)
+            except ValueError as error:
+                rejected.append(f"{reader.line_num}:{raw.get('食物名称', '')}:{error}")
+                continue
             if row is None:
                 continue
             rows_by_normalized[row.normalized_name] = row
+    if rejected:
+        raise ValueError(f"导入已阻止：{len(rejected)}条未通过校验。示例：" + "; ".join(rejected[:5]))
     return list(rows_by_normalized.values())
 
 
@@ -225,6 +275,8 @@ def preview(conn, rows: list[FoodRow]) -> dict[str, int]:
 
 
 def import_rows(conn, rows: list[FoodRow], batch_size: int) -> tuple[int, int]:
+    for row in rows:
+        validate_row(row)
     inserted = 0
     updated = 0
     sql = """
@@ -257,7 +309,9 @@ def import_rows(conn, rows: list[FoodRow], batch_size: int) -> tuple[int, int]:
             folate_mcg_per_100g,
             vitamin_b12_mcg_per_100g,
             is_active,
-            source
+            source,
+            quality_tier,
+            quality_evidence
         ) VALUES %s
         ON CONFLICT (normalized_name) DO UPDATE SET
             canonical_name = EXCLUDED.canonical_name,
@@ -288,7 +342,11 @@ def import_rows(conn, rows: list[FoodRow], batch_size: int) -> tuple[int, int]:
             vitamin_b12_mcg_per_100g = EXCLUDED.vitamin_b12_mcg_per_100g,
             is_active = EXCLUDED.is_active,
             source = EXCLUDED.source,
+            quality_evidence = COALESCE(food_nutrition_library.quality_evidence, '{}'::jsonb) || EXCLUDED.quality_evidence,
             updated_at = now()
+        WHERE food_nutrition_library.is_active = TRUE
+          AND food_nutrition_library.source = EXCLUDED.source
+          AND NOT (COALESCE(food_nutrition_library.quality_evidence, '{}'::jsonb) ? 'data_cleanup')
         RETURNING (xmax = 0) AS inserted
     """
 
@@ -296,7 +354,7 @@ def import_rows(conn, rows: list[FoodRow], batch_size: int) -> tuple[int, int]:
         INSERT INTO public.food_nutrition_aliases (food_id, alias_name, normalized_alias)
         SELECT id, %s, %s
         FROM public.food_nutrition_library
-        WHERE normalized_name = %s
+            WHERE normalized_name = %s AND is_active = TRUE
         ON CONFLICT (normalized_alias) DO NOTHING
     """
 

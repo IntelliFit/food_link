@@ -92,6 +92,36 @@ describe('food library page detail and custom editor integration', () => {
     expect(screen.getByLabelText('查看家里卤牛肉详情')).toBeInTheDocument()
   })
 
+  it.each(['packaged_food', 'nutrition_library', 'custom'])('keeps all %s source photos in the newly saved meal snapshot', async (source) => {
+    const photos = ['https://cdn.example.com/front.jpg', 'https://cdn.example.com/panel.jpg', 'https://cdn.example.com/weight.jpg']
+    ;(getAccessToken as jest.Mock).mockReturnValue('test-token')
+    ;(fetchManualFoodCatalog as jest.Mock).mockResolvedValue({
+      items: [{ ...oats, source, image_path: photos[0], image_paths: [...photos, photos[0], ''] }],
+      categories: [{ key: 'common', label: '常见' }], has_more: false,
+    })
+    render(<RecordManualPage />)
+    fireEvent.click(await screen.findByLabelText('添加原味燕麦到本餐'))
+    fireEvent.click(screen.getByText('选好了，核对本餐'))
+    fireEvent.click(screen.getByText(/^确认记录到\d+月\d+日$/))
+    await waitFor(() => expect(saveFoodRecord).toHaveBeenCalledTimes(1))
+    expect(saveFoodRecord).toHaveBeenCalledWith(expect.objectContaining({
+      items: [expect.objectContaining({ image_path: photos[0], image_paths: photos, nutrients: expect.objectContaining({ calories: 350 }) })],
+    }))
+  })
+
+  it('returns all photos when adding food to an existing meal through the picker', async () => {
+    const photos = ['https://cdn.example.com/front.jpg', 'https://cdn.example.com/panel.jpg']
+    const emit = jest.fn()
+    ;(Taro.getCurrentInstance as jest.Mock).mockReturnValue({ router: { params: { picker: '1' } }, page: { getOpenerEventChannel: () => ({ emit }) } })
+    ;(fetchManualFoodCatalog as jest.Mock).mockResolvedValue({ items: [{ ...oats, image_paths: photos }], categories: [], has_more: false })
+    render(<RecordManualPage />)
+    fireEvent.click(await screen.findByLabelText('添加原味燕麦到本餐'))
+    fireEvent.click(screen.getByText('选好了，核对添加'))
+    fireEvent.click(screen.getByText('确认添加到本餐'))
+    await waitFor(() => expect(emit).toHaveBeenCalledWith(expect.any(String), [expect.objectContaining({ image_path: photos[0], image_paths: photos })]))
+    expect(saveFoodRecord).not.toHaveBeenCalled()
+  })
+
   it.each([
     { title: '体积牛奶', measurement: { amount: 250, unit: 'ml', basis_amount: 100, basis_unit: 'ml', nutrients_per_basis: { calories: 60 } }, clicks: 1, amount: 250, calories: 150, grams: 0 },
     { title: '按个食物', measurement: { amount: 1, unit: 'piece', basis_amount: 1, basis_unit: 'piece', nutrients_per_basis: { calories: 80 } }, clicks: 2, amount: 2, calories: 160, grams: 0 },
@@ -131,6 +161,27 @@ describe('food library page detail and custom editor integration', () => {
       total_calories: 150, default_weight_grams: 0, nutrients_per_100g: undefined,
       measurement: expect.objectContaining({ amount: 250, unit: 'ml', basis_amount: 100, basis_unit: 'ml', nutrients_per_basis: expect.objectContaining({ calories: 60 }) }),
     }))
+  })
+
+  it.each([
+    { name: '脱脂奶', amount: 200, per100: 33, entered: '400', calories: 132 },
+    { name: '极致奶', amount: 250, per100: 68.6, entered: '100', calories: 68.6 },
+  ])('recalculates $name while typing and saves the same native quantity before blur', async ({ name, amount, per100, entered, calories }) => {
+    ;(getAccessToken as jest.Mock).mockReturnValue('test-token')
+    ;(fetchManualFoodCatalog as jest.Mock).mockResolvedValue({ items: [{ ...oats, id: name, title: name, source: 'packaged_food', default_weight_grams: 0, total_calories: amount * per100 / 100, measurement: { amount, unit: 'ml', basis_amount: 100, basis_unit: 'ml', nutrients_per_basis: { calories: per100, protein: 3.3, calciumMg: 100 } } }], categories: [{ key: 'common', label: '常见' }], has_more: false })
+    const { container } = render(<RecordManualPage />)
+    fireEvent.click(await screen.findByLabelText(`添加${name}到本餐`))
+    fireEvent.click(screen.getByText('选好了，核对本餐'))
+    const selected = container.querySelector('.drawer-selected-list .selected-item') as HTMLElement
+    const input = selected.querySelector('.weight-input')!
+    expect(input).toHaveValue(String(amount))
+    fireEvent.change(input, { target: { value: entered } })
+    expect(within(selected).getByText(`${Math.round(calories)} kcal`)).toBeInTheDocument()
+    expect(within(selected).getByText(`当前：${entered}ml`)).toBeInTheDocument()
+    // No blur: the visible total and submitted total must already agree.
+    fireEvent.click(screen.getByText(/^确认记录到\d+月\d+日$/))
+    await waitFor(() => expect(saveFoodRecord).toHaveBeenCalledTimes(1))
+    expect(saveFoodRecord).toHaveBeenCalledWith(expect.objectContaining({ total_calories: calories, total_weight_grams: 0, items: [expect.objectContaining({ weight: 0, measurement: expect.objectContaining({ amount: Number(entered), unit: 'ml' }), nutrients: expect.objectContaining({ calories, calciumMg: Number(entered) }) })] }))
   })
 
   it('emits the native measurement from picker mode', async () => {

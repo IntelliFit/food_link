@@ -96,6 +96,9 @@ func (r *ManualFoodRepo) Browse(ctx context.Context, userID string, limit int) (
 }
 
 func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, input CustomFoodInput) (domain.ManualFoodResult, error) {
+	if err := validateCustomFoodImport(input); err != nil {
+		return domain.ManualFoodResult{}, &commonerrors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+	}
 	userID = strings.TrimSpace(userID)
 	title := strings.TrimSpace(input.Title)
 	if userID == "" {
@@ -522,6 +525,7 @@ func (r *ManualFoodRepo) listCatalogItems(ctx context.Context, userID string, ca
 func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, category string, limit int, offset int) ([]domain.ManualFoodResult, error) {
 	type row struct {
 		Name       string          `gorm:"column:name"`
+		Unit       string          `gorm:"column:quantity_unit"`
 		Uses       int             `gorm:"column:uses"`
 		AvgWeight  float64         `gorm:"column:avg_weight"`
 		AvgCal     float64         `gorm:"column:avg_cal"`
@@ -541,6 +545,8 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 		WITH record_items AS (
 			SELECT
 				trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) AS name,
+				%s AS quantity_unit,
+				%s AS item_quantity,
 				item
 			FROM user_food_records
 			CROSS JOIN LATERAL jsonb_array_elements(items) item
@@ -550,8 +556,9 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 		)
 		SELECT
 			name,
+			quantity_unit,
 			COUNT(*)::int AS uses,
-			COALESCE(AVG(NULLIF(COALESCE(item->>'intake', item->>'weight'), '')::numeric), 100)::float8 AS avg_weight,
+			COALESCE(AVG(item_quantity), 100)::float8 AS avg_weight,
 			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'calories', item->>'calories'), '')::numeric), 0)::float8 AS avg_cal,
 			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'protein', item->>'protein'), '')::numeric), 0)::float8 AS avg_protein,
 			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'carbs', item->>'carbs'), '')::numeric), 0)::float8 AS avg_carbs,
@@ -560,20 +567,20 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 		FROM record_items
 		WHERE name <> ''
 			%s
-		GROUP BY name
+		GROUP BY name, quantity_unit
 		HAVING COUNT(*) >= 3
 		ORDER BY COUNT(*) DESC, name ASC
 		LIMIT ? OFFSET ?
-	`, whereCategory), args...).Scan(&rows).Error
+	`, frequentRecordUnitSQL, frequentRecordQuantitySQL, whereCategory), args...).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
-		if isPhysicallyImplausibleFrequentFood(row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat) {
+		if row.Unit == "g" && isPhysicallyImplausibleFrequentFood(row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat) {
 			continue
 		}
-		item := manualFoodResultFromFrequentRecord(row.Name, row.Uses, row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat, row.ItemJSON)
+		item := measuredFrequentRecordResult(row.Name, row.Unit, row.Uses, row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat, row.ItemJSON)
 		if item.Title != "" {
 			results = append(results, item)
 		}
@@ -585,6 +592,7 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, userID string, 
 	terms := expandedSearchTerms(query)
 	type row struct {
 		Name       string          `gorm:"column:name"`
+		Unit       string          `gorm:"column:quantity_unit"`
 		Uses       int             `gorm:"column:uses"`
 		AvgWeight  float64         `gorm:"column:avg_weight"`
 		AvgCal     float64         `gorm:"column:avg_cal"`
@@ -610,6 +618,8 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, userID string, 
 		WITH record_items AS (
 			SELECT
 				trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) AS name,
+				%s AS quantity_unit,
+				%s AS item_quantity,
 				item
 			FROM user_food_records
 			CROSS JOIN LATERAL jsonb_array_elements(items) item
@@ -620,8 +630,9 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, userID string, 
 		)
 		SELECT
 			name,
+			quantity_unit,
 			COUNT(*)::int AS uses,
-			COALESCE(AVG(NULLIF(COALESCE(item->>'intake', item->>'weight'), '')::numeric), 100)::float8 AS avg_weight,
+			COALESCE(AVG(item_quantity), 100)::float8 AS avg_weight,
 			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'calories', item->>'calories'), '')::numeric), 0)::float8 AS avg_cal,
 			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'protein', item->>'protein'), '')::numeric), 0)::float8 AS avg_protein,
 			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'carbs', item->>'carbs'), '')::numeric), 0)::float8 AS avg_carbs,
@@ -629,23 +640,23 @@ func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, userID string, 
 			(MAX(item::text))::jsonb AS item_json
 		FROM record_items
 		WHERE %s
-		GROUP BY name
+		GROUP BY name, quantity_unit
 		HAVING COUNT(*) >= 2
 		ORDER BY
 			CASE WHEN name = ? THEN 0 WHEN name LIKE ? THEN 1 ELSE 2 END,
 			COUNT(*) DESC,
 			name ASC
 		LIMIT ?
-	`, recordFilter, strings.Join(conditions, " OR ")), args...).Scan(&rows).Error
+	`, frequentRecordUnitSQL, frequentRecordQuantitySQL, recordFilter, strings.Join(conditions, " OR ")), args...).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
-		if isPhysicallyImplausibleFrequentFood(row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat) {
+		if row.Unit == "g" && isPhysicallyImplausibleFrequentFood(row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat) {
 			continue
 		}
-		item := manualFoodResultFromFrequentRecord(row.Name, row.Uses, row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat, row.ItemJSON)
+		item := measuredFrequentRecordResult(row.Name, row.Unit, row.Uses, row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat, row.ItemJSON)
 		item.MatchScore = computeMatchScore(query, row.Name) + 0.45
 		results = append(results, item)
 	}
@@ -1114,8 +1125,9 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 			OR LOWER(COALESCE(spec_text, '')) LIKE ?
 			OR LOWER(COALESCE(barcode, '')) LIKE ?
 			OR LOWER(COALESCE(package_category, '')) LIKE ?
+			OR EXISTS (SELECT 1 FROM packaged_food_aliases a WHERE a.food_id = f.id AND LOWER(a.alias_name) LIKE ?)
 		`)
-		args = append(args, like, like, like, like, like, like, like, like, like)
+		args = append(args, like, like, like, like, like, like, like, like, like, like)
 	}
 	args = append(args,
 		normalizedQuery,
@@ -1126,7 +1138,7 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 	var rows []fooddomain.PackagedFood
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
 		SELECT *
-		FROM packaged_food_library
+		FROM packaged_food_library f
 		WHERE is_active = TRUE
 			AND kcal_per_100g > 0
 			AND COALESCE(NULLIF(review_status, ''), 'active') = 'active'
@@ -1407,6 +1419,7 @@ func manualFoodResultFromPackaged(item fooddomain.PackagedFood, score float64) d
 		MatchScore:          score,
 	}
 	result.Measurement = packagedMeasurement(item, &per100g)
+	result.MissingNutrients = manualMissingNutrients(item.RawLabelPayload)
 	applyManualFoodServingProfile(&result)
 	if result.Measurement != nil {
 		result.NutritionHighlights = []string{fmt.Sprintf("%.0f kcal/100%s", item.KcalPer100g, measurementUnitLabel(result.Measurement.BasisUnit))}
@@ -1520,6 +1533,7 @@ func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64)
 	}
 	applyManualFoodServingProfile(&result)
 	attachNutritionMeasurement(&result)
+	result.MissingNutrients = manualMissingNutrients(map[string]any(item.QualityEvidence))
 	return result
 }
 
@@ -3064,14 +3078,11 @@ func normalizeManualText(raw string) string {
 }
 
 func packagedPrimaryImage(urls []string) (*string, []string) {
-	for _, raw := range urls {
-		url := strings.TrimSpace(raw)
-		if url == "" {
-			continue
-		}
-		return &url, []string{url}
+	images := compactStrings(urls)
+	if len(images) == 0 {
+		return nil, nil
 	}
-	return nil, nil
+	return &images[0], images
 }
 
 func stringPtrValue(value *string) string {

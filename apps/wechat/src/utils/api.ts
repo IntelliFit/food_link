@@ -226,6 +226,7 @@ export interface UnitNutritionPer100g extends Nutrients {}
 
 // 食物项接口
 export interface FoodItem {
+  missing_nutrients?: string[]
   measurement?: FoodMeasurement
   itemId?: number
   intakeRatio?: number
@@ -509,6 +510,7 @@ export interface CompareAnalyzeResponse {
 
 /** 确认记录时提交的单条食物项（含调节后的 weight/ratio/intake） */
 export interface FoodRecordItemPayload {
+  missing_nutrients?: string[]
   measurement?: FoodMeasurement
   name: string
   weight: number
@@ -592,6 +594,7 @@ export interface CriticalSamplePayload {
 
 /** 饮食记录 items 单条（含手动记录来源与展示图） */
 export interface FoodRecordItemRow {
+  missing_nutrients?: string[]
   measurement?: FoodMeasurement
   name: string
   weight: number
@@ -6512,6 +6515,7 @@ export async function uploadHealthReportOcr(base64Image: string): Promise<{
 // ---------- 手动记录：食物搜索 ----------
 
 export interface ManualFoodSearchResult {
+  missing_nutrients?: string[]
   measurement?: FoodMeasurement
   id: string
   source: 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom'
@@ -6619,7 +6623,7 @@ export async function searchManualFood(
   options?: { source?: 'packaged_food' }
 ): Promise<ManualFoodSearchResult[]> {
   const token = getAccessToken()
-  const params = new URLSearchParams({ q: q.trim(), limit: String(limit) })
+  const params = new URLSearchParams({ q: q.trim(), limit: String(limit), measurement_version: '1' })
   if (options?.source) {
     params.set('source', options.source)
   }
@@ -6648,6 +6652,7 @@ export async function fetchManualFoodCatalog(
     category,
     page: String(page),
     page_size: String(pageSize),
+    measurement_version: '1',
   })
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/manual-food/catalog?${params.toString()}`,
@@ -6694,6 +6699,7 @@ export async function fetchManualCustomFoods(
     limit: String(limit),
     offset: String(offset),
     include_imports: '1',
+    measurement_version: '1',
   })
   const response = await authenticatedRequest(`/api/manual-food/custom?${params.toString()}`, {
     method: 'GET',
@@ -6705,7 +6711,7 @@ export async function fetchManualCustomFoods(
 export async function saveManualCustomFood(
   data: SaveManualCustomFoodRequest
 ): Promise<ManualFoodSearchResult> {
-  const response = await authenticatedRequest('/api/manual-food/custom', {
+  const response = await authenticatedRequest('/api/manual-food/custom?measurement_version=1', {
     method: 'POST',
     data,
     timeout: 15000
@@ -6732,7 +6738,7 @@ export interface ManualFoodBrowseResult {
 export async function browseManualFood(): Promise<ManualFoodBrowseResult> {
   const token = getAccessToken()
   const response = await Taro.request({
-    url: `${API_BASE_URL}/api/manual-food/browse`,
+    url: `${API_BASE_URL}/api/manual-food/browse?measurement_version=1`,
     method: 'GET',
     header: withNgrokBypassHeaders({
       ...(token ? { Authorization: `Bearer ${token}` } : {})

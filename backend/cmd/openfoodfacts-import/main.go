@@ -495,7 +495,18 @@ func productFromCSV(record []string, columns map[string]int) offProduct {
 	completeness, _ := strconv.ParseFloat(value("completeness"), 64)
 	lastModified, _ := strconv.ParseInt(value("last_modified_t"), 10, 64)
 	uniqueScans, _ := strconv.Atoi(value("unique_scans_n"))
-	quantityUnit := inferQuantityUnit(value("quantity"))
+	quantityUnit := strings.TrimSpace(value("product_quantity_unit"))
+	if quantityUnit == "" {
+		// OFF's CSV product_quantity is already normalized to grams or ml.
+		// The human quantity (e.g. "1.53 l") supplies the dimension only;
+		// pairing its original 'l' with 1530 would multiply a second time.
+		switch inferQuantityUnit(value("quantity")) {
+		case "l", "cl", "dl", "ml":
+			quantityUnit = "ml"
+		case "kg", "mg", "g":
+			quantityUnit = "g"
+		}
+	}
 	return offProduct{
 		Code: value("code"), ProductName: value("product_name"), Brands: value("brands"), Quantity: value("quantity"),
 		ServingSize: value("serving_size"), Categories: value("categories"), CategoriesTags: splitTags(value("categories_tags")),

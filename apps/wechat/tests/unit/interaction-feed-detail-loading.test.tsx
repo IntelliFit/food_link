@@ -220,6 +220,19 @@ describe('InteractionFeedDetailPage loading', () => {
       return view
     }
 
+    it('shows all saved packaging photos and previews the chosen one without loading current library data', async () => {
+      const photos = ['https://cdn.example.com/front.jpg', 'https://cdn.example.com/panel.jpg', 'https://cdn.example.com/weight.jpg']
+      const view = await renderManualFood({ image_path: photos[0], image_paths: photos })
+      const sheet = view.container.querySelector('.manual-food-detail-sheet')!
+      const images = sheet.querySelectorAll('.manual-food-detail-image')
+      expect(Array.from(images).map((image) => image.getAttribute('src'))).toEqual(photos)
+      expect(sheet).toHaveTextContent('1/3')
+      expect(sheet).toHaveTextContent('93 kcal')
+      fireEvent.click(images[1])
+      expect(Taro.previewImage).toHaveBeenCalledWith({ current: photos[1], urls: photos })
+      expect(Taro.navigateTo).not.toHaveBeenCalled()
+    })
+
     it.each([
       { manual_source: 'packaged_food' },
       { manual_source: 'nutrition_library' },

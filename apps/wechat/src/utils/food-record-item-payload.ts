@@ -3,6 +3,7 @@ import { foodMeasurementGrams, type FoodMeasurement } from './food-measure'
 import { recordMeasurementWithNutrients } from './food-record-measurement'
 
 type PackagedAnalysisMetaSource = {
+  missing_nutrients?: string[]
   measurement?: FoodMeasurement | null
   name?: string
   image_path?: string | null
@@ -140,6 +141,7 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
     measurement,
     image_path: item.image_path || undefined,
     image_paths: item.image_paths || undefined,
+    missing_nutrients: item.missing_nutrients?.length ? item.missing_nutrients : undefined,
     manual_portion_label: item.manual_portion_label,
     weight,
     ratio,

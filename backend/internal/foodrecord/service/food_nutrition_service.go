@@ -339,7 +339,7 @@ func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context,
 	if source == "" {
 		source = "user_submitted"
 	}
-	return s.nutritionRepo.UpsertPackagedFoodWithAction(ctx, repo.PackagedFoodInput{
+	repoInput := repo.PackagedFoodInput{
 		Brand:                 input.Brand,
 		ProductName:           productName,
 		DisplayName:           input.DisplayName,
@@ -394,7 +394,13 @@ func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context,
 		VitaminB12McgPer100g:  input.VitaminB12McgPer100g,
 		SourceURL:             input.SourceURL,
 		Source:                source,
-	})
+	}
+	if strings.TrimSpace(input.ReviewStatus) != "pending" {
+		if err := repo.ValidatePackagedFoodInput(repoInput); err != nil {
+			return nil, "", &commonerrors.AppError{Code: 10002, Message: err.Error(), HTTPStatus: 400}
+		}
+	}
+	return s.nutritionRepo.UpsertPackagedFoodWithAction(ctx, repoInput)
 }
 
 func normalizePackagedServingWeight(input *PackagedFoodInput) {
@@ -583,7 +589,7 @@ func buildPackagedProductExtractPrompt(recognizedNameHint string, imageCount int
 如果包装较大、弯曲、反光或一张图拍不全，请综合 1-5 张图片互相补全品牌、品名、净含量/规格和营养成分表；若不同图片信息冲突，只记录冲突，不要编造。
 请只提取图片中真实可见的信息，不要编造，不要根据常识补品牌和口味。
 不要在模型里做自由数学换算。你只负责提取标签上的原始数值、单位、口径（每100g/每100ml/每份）和份量信息。
-如果同一大包装是组合装/多口味，且营养成分表有两列或以上，请不要丢弃任一列：在 raw_label_payload 中按“口味/子商品名 + 每份重量”分别记录每列每份营养，例如“浓郁黑巧克力单支营养（42g）”。raw_nutrition_per_basis 仍只在标签只有一套营养表时填写。
+如果同一大包装是组合装/多口味，且营养成分表有两列或以上，请不要丢弃任一列：在 raw_label_payload 中按“口味/子商品名 + 标签明确写出的每份重量”分别记录每列每份营养。口味、重量和营养数值必须来自对应图片，无法读清时保留缺失，不根据常见规格或其他商品补全。raw_nutrition_per_basis 仍只在标签只有一套营养表时填写。
 food_type 只能是 snack、beverage、dairy、staple、protein、meal、other 之一，按这件商品实际是什么来判断：开袋即食的休闲食品（薯片、饼干、糖果、巧克力、坚果、果干、辣条、肉脯、海苔、果冻、蛋白棒等）填 snack；饮料填 beverage；牛奶酸奶填 dairy；米面主食填 staple；需要烹饪的肉蛋豆制品填 protein；即食正餐填 meal；判断不了填 other。
 营养成分表、净含量/规格、品名是核心信息；配料表和条码是可选增强信息，缺失时不要放入 needs_more_images，也不要降低整体置信度。
 只有缺少营养成分表、净含量/规格、品名等核心信息，导致无法确定商品营养或规格时，才在 needs_more_images 里返回对应原因（如 ["nutrition_label"]、["net_weight"]、["front_package"]）。
@@ -962,7 +968,7 @@ func parseRawNutritionBasis(value any) PackagedLabelNutritionBasis {
 	raw := mapFromAny(value)
 	return PackagedLabelNutritionBasis{
 		Type:  strings.ToLower(stringFromAny(raw["type"])),
-		Value: numberFromAny(raw["value"]),
+		Value: strictRawLabelNumber(raw["value"]),
 		Unit:  strings.ToLower(stringFromAny(raw["unit"])),
 	}
 }
@@ -1001,7 +1007,7 @@ func parseRawNutritionValues(value any) PackagedLabelRawNutrition {
 func parseNutritionValue(value any) PackagedLabelNutritionValue {
 	raw := mapFromAny(value)
 	return PackagedLabelNutritionValue{
-		Value: numberFromAny(raw["value"]),
+		Value: strictRawLabelNumber(raw["value"]),
 		Unit:  strings.ToLower(stringFromAny(raw["unit"])),
 	}
 }
@@ -1016,6 +1022,28 @@ func convertPackagedNutrition(result *PackagedProductExtractResult) {
 	basis := normalizeBasisUnit(result.RawNutritionBasis.Type, result.RawNutritionBasis.Unit, result.NutritionBasisUnit)
 	result.NutritionBasisUnit = basis
 	result.EnergyUnitRaw = normalizeEnergyUnit(result.RawNutritionPerBasis.Energy.Unit, result.EnergyUnitRaw)
+	if len(result.RawLabelPayload) == 0 {
+		result.RawLabelPayload = map[string]any{
+			"raw_nutrition_basis":     result.RawNutritionBasis,
+			"raw_nutrition_per_basis": result.RawNutritionPerBasis,
+		}
+	}
+	if result.RawNutritionBasis.Value < 0 || math.IsNaN(result.RawNutritionBasis.Value) || math.IsInf(result.RawNutritionBasis.Value, 0) {
+		result.ConversionStatus = "invalid_nutrition_basis"
+		result.UnitNutritionPer100g = map[string]any{}
+		return
+	}
+	if err := validateLabelEnergy(result.RawNutritionPerBasis.Energy, result.EnergyUnitRaw); err != nil {
+		result.ConversionStatus = "unsupported_energy_unit"
+		result.UnitNutritionPer100g = map[string]any{}
+		return
+	}
+	if _, err := convertedLabelMassValues(result.RawNutritionPerBasis); err != nil {
+		result.ConversionStatus = "unsupported_nutrient_unit"
+		result.UnitNutritionPer100g = map[string]any{}
+		result.MissingFields = append(result.MissingFields, "unit_nutrition_per_100g")
+		return
+	}
 	conversionStatus := "insufficient"
 	switch basis {
 	case "100g", "100ml":
@@ -1039,7 +1067,12 @@ func convertPackagedNutrition(result *PackagedProductExtractResult) {
 	if conversionStatus == "converted" && !hasValidPackagedNutrition(result.UnitNutritionPer100g) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
 		conversionStatus = "insufficient"
 	}
+	if conversionStatus == "converted" && hasImplausiblePackagedNutrition(result.UnitNutritionPer100g, result.NutritionBasisUnit) {
+		conversionStatus = "invalid_nutrition"
+	}
 	result.ConversionStatus = conversionStatus
+	result.RawLabelPayload["nutrition_basis_unit"] = result.NutritionBasisUnit
+	result.RawLabelPayload["energy_unit_raw"] = result.EnergyUnitRaw
 	if len(result.RawLabelPayload) == 0 {
 		result.RawLabelPayload = map[string]any{
 			"raw_nutrition_basis":     result.RawNutritionBasis,
@@ -1320,30 +1353,13 @@ func fillConvertedNutrition(out map[string]any, raw PackagedLabelRawNutrition, s
 		return
 	}
 	out["calories"] = convertEnergyToKcal(raw.Energy.Value, firstNonEmpty(energyUnitRaw, raw.Energy.Unit)) * scale
-	out["protein"] = raw.Protein.Value * scale
-	out["carbs"] = raw.Carbs.Value * scale
-	out["fat"] = raw.Fat.Value * scale
-	out["fiber"] = raw.Fiber.Value * scale
-	out["sugar"] = raw.Sugar.Value * scale
-	out["saturatedFat"] = raw.SaturatedFat.Value * scale
-	out["cholesterolMg"] = raw.CholesterolMg.Value * scale
-	out["sodiumMg"] = raw.SodiumMg.Value * scale
-	out["potassiumMg"] = raw.PotassiumMg.Value * scale
-	out["calciumMg"] = raw.CalciumMg.Value * scale
-	out["ironMg"] = raw.IronMg.Value * scale
-	out["magnesiumMg"] = raw.MagnesiumMg.Value * scale
-	out["zincMg"] = raw.ZincMg.Value * scale
-	out["vitaminARaeMcg"] = raw.VitaminARaeMcg.Value * scale
-	out["vitaminCMg"] = raw.VitaminCMg.Value * scale
-	out["vitaminDMcg"] = raw.VitaminDMcg.Value * scale
-	out["vitaminEMg"] = raw.VitaminEMg.Value * scale
-	out["vitaminKMcg"] = raw.VitaminKMcg.Value * scale
-	out["thiaminMg"] = raw.ThiaminMg.Value * scale
-	out["riboflavinMg"] = raw.RiboflavinMg.Value * scale
-	out["niacinMg"] = raw.NiacinMg.Value * scale
-	out["vitaminB6Mg"] = raw.VitaminB6Mg.Value * scale
-	out["folateMcg"] = raw.FolateMcg.Value * scale
-	out["vitaminB12Mcg"] = raw.VitaminB12Mcg.Value * scale
+	values, err := convertedLabelMassValues(raw)
+	if err != nil {
+		return
+	}
+	for key, value := range values {
+		out[key] = value * scale
+	}
 }
 
 func convertEnergyToKcal(value float64, unit string) float64 {
@@ -1488,12 +1504,29 @@ func evaluatePackagedAutoIngest(result *PackagedProductExtractResult) *PackagedA
 		auto.Reason = "conversion_not_closed"
 		return auto
 	}
-	if hasImplausiblePackagedNutrition(result.UnitNutritionPer100g) {
+	if !validPackagedLabelUnits(result) {
+		auto.Reason = "unsupported_label_units"
+		return auto
+	}
+	if hasImplausiblePackagedNutrition(result.UnitNutritionPer100g, result.NutritionBasisUnit) {
 		auto.Reason = "nutrition_out_of_range"
 		return auto
 	}
 	if !hasValidPackagedNutrition(result.UnitNutritionPer100g) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
 		auto.Reason = "missing_nutrition"
+		return auto
+	}
+	if missing := missingPackagedCoreLabelFields(result); len(missing) > 0 {
+		auto.MissingFields = append(auto.MissingFields, missing...)
+		auto.Reason = "incomplete_nutrition_label"
+		return auto
+	}
+	if len(auto.ConflictReasons) > 0 {
+		auto.Reason = "conflicting_label"
+		return auto
+	}
+	if reasons, _ := determinePackagedConfirmation(result); len(reasons) > 0 {
+		auto.Reason = "needs_confirmation"
 		return auto
 	}
 	auto.Status = "ready"
@@ -1550,11 +1583,14 @@ func determinePackagedConfirmation(result *PackagedProductExtractResult) ([]stri
 	if strings.TrimSpace(result.ConversionStatus) != "converted" {
 		add("conversion_not_closed", "unit_nutrition_per_100g", "nutrition_basis_unit")
 	}
-	if hasImplausiblePackagedNutrition(result.UnitNutritionPer100g) {
+	if hasImplausiblePackagedNutrition(result.UnitNutritionPer100g, result.NutritionBasisUnit) {
 		add("nutrition_out_of_range", "unit_nutrition_per_100g")
 	}
 	if !hasValidPackagedNutrition(result.UnitNutritionPer100g) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
 		add("missing_nutrition", "unit_nutrition_per_100g")
+	}
+	if len(missingPackagedCoreLabelFields(result)) > 0 {
+		add("incomplete_nutrition_label", "unit_nutrition_per_100g")
 	}
 
 	for _, missingField := range result.MissingFields {
@@ -1773,22 +1809,19 @@ func stringPointerValue(value *string) string {
 	return *value
 }
 
-func hasImplausiblePackagedNutrition(unit map[string]any) bool {
+func hasImplausiblePackagedNutrition(unit map[string]any, basis ...string) bool {
 	if len(unit) == 0 {
 		return false
 	}
-	if calories := numberFromAny(unit["calories"]); calories > 900 {
-		return true
+	basisUnit := "100g"
+	if len(basis) > 0 {
+		basisUnit = basis[0]
 	}
-	macroSum := 0.0
-	for _, key := range []string{"protein", "carbs", "fat"} {
-		value := numberFromAny(unit[key])
-		if value > 100 {
-			return true
-		}
-		macroSum += value
+	values := map[string]float64{}
+	for _, key := range packagedNutritionOutputFieldKeys {
+		values[key] = numberFromAny(unit[key])
 	}
-	return macroSum > 120
+	return domain.ValidateLibraryNutrition(basisUnit, values) != nil
 }
 
 func confidenceBelow(confidence map[string]any, key string, threshold float64) bool {

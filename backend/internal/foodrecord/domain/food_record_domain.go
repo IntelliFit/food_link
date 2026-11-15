@@ -45,6 +45,7 @@ type FoodRecord struct {
 func (FoodRecord) TableName() string { return "user_food_records" }
 
 type FoodItem struct {
+	MissingNutrients        []string                 `json:"missing_nutrients,omitempty"`
 	Name                    string                   `json:"name"`
 	Measurement             *foodmeasure.Measurement `json:"measurement,omitempty"`
 	Weight                  float64                  `json:"weight"`

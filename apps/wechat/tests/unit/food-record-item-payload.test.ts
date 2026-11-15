@@ -19,6 +19,14 @@ const baseNutrients = (overrides: Partial<Nutrients> = {}): Nutrients => ({
 })
 
 describe('food record item payload helpers', () => {
+  it('retains explicit missing nutrient evidence in a new snapshot', () => {
+    const payload = buildFoodRecordItemPayloadFromResultItem({
+      name: '加多宝', weight: 100, ratio: 100, intake: 100,
+      missing_nutrients: ['riboflavinMg', 'calciumMg'],
+    }, baseNutrients({ riboflavinMg: 0 }))
+    expect(payload.missing_nutrients).toEqual(['riboflavinMg', 'calciumMg'])
+    expect(payload.nutrients.riboflavinMg).toBe(0)
+  })
   it('preserves packaged metadata when saving from result page items', () => {
     const payload = buildFoodRecordItemPayloadFromResultItem(
       {
