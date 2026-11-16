@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -11,36 +13,103 @@ import (
 
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
+	"food_link/backend/pkg/logger"
 )
 
-const mapSpotCacheTTL = time.Minute
+const (
+	mapSpotCacheTTL = time.Minute
+	// mapSpotRefreshTimeout bounds a background refresh, which has no request to cancel it.
+	mapSpotRefreshTimeout = 30 * time.Second
+	// MapSpotMaxNearbyRadiusKm caps the nearby query; wider views load the full map.
+	MapSpotMaxNearbyRadiusKm = 200.0
+)
 
 // mapSpotCache keeps the shared map for a short while: every opening of the map page
-// would otherwise rerun an aggregate over the whole library. Filling holds the lock,
-// so concurrent misses share one query.
+// would otherwise rerun an aggregate over the whole library (several seconds at 9k
+// spots). Only the first fill blocks, and concurrent first misses share one query.
+// After expiry callers get the previous spots at once while one background refresh
+// runs, so no map opening waits for the aggregate again.
 type mapSpotCache struct {
-	mu        sync.Mutex
-	spots     []domain.PublicFoodMapSpot
-	expiresAt time.Time
-	now       func() time.Time
+	mu         sync.Mutex
+	spots      []domain.PublicFoodMapSpot
+	expiresAt  time.Time
+	refreshing bool
+	now        func() time.Time
+	// async runs background refreshes; tests replace it to run them inline.
+	async func(func())
 }
 
-func (c *mapSpotCache) get(load func() ([]domain.PublicFoodMapSpot, error)) ([]domain.PublicFoodMapSpot, error) {
+func (c *mapSpotCache) get(load func(context.Context) ([]domain.PublicFoodMapSpot, error), ctx context.Context) ([]domain.PublicFoodMapSpot, error) {
 	now := time.Now
 	if c.now != nil {
 		now = c.now
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.spots != nil && now().Before(c.expiresAt) {
-		return c.spots, nil
+	if c.spots == nil {
+		defer c.mu.Unlock()
+		spots, err := load(ctx)
+		if err != nil {
+			return nil, err
+		}
+		c.spots, c.expiresAt = spots, now().Add(mapSpotCacheTTL)
+		return spots, nil
 	}
-	spots, err := load()
-	if err != nil {
-		return nil, err
+	spots := c.spots
+	startRefresh := !now().Before(c.expiresAt) && !c.refreshing
+	if startRefresh {
+		c.refreshing = true
 	}
-	c.spots, c.expiresAt = spots, now().Add(mapSpotCacheTTL)
+	// Start the refresh only after unlocking: it takes the lock to store its result.
+	c.mu.Unlock()
+	if startRefresh {
+		c.runAsync(func() { c.refresh(load, now) })
+	}
 	return spots, nil
+}
+
+func (c *mapSpotCache) runAsync(task func()) {
+	if c.async != nil {
+		c.async(task)
+		return
+	}
+	go task()
+}
+
+// refresh keeps the stale spots when the query fails, so a database hiccup does not
+// blank the map; the next expired read tries again.
+func (c *mapSpotCache) refresh(load func(context.Context) ([]domain.PublicFoodMapSpot, error), now func() time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), mapSpotRefreshTimeout)
+	defer cancel()
+	spots, err := load(ctx)
+	if err != nil {
+		logger.Warn(ctx, "公共美食地图后台刷新失败，继续使用旧数据", slog.String("error", err.Error()))
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refreshing = false
+	if err == nil {
+		c.spots, c.expiresAt = spots, now().Add(mapSpotCacheTTL)
+	}
+}
+
+// FilterMapSpotsNear keeps spots within radiusKm of the point, in the shared order.
+// It never modifies spots, which may be the cached slice.
+func FilterMapSpotsNear(spots []domain.PublicFoodMapSpot, latitude, longitude, radiusKm float64) []domain.PublicFoodMapSpot {
+	nearby := make([]domain.PublicFoodMapSpot, 0)
+	for _, spot := range spots {
+		if mapDistanceKm(latitude, longitude, spot.Latitude, spot.Longitude) <= radiusKm {
+			nearby = append(nearby, spot)
+		}
+	}
+	return nearby
+}
+
+func mapDistanceKm(lat1, lng1, lat2, lng2 float64) float64 {
+	const earthRadiusKm = 6371.0
+	toRad := func(deg float64) float64 { return deg * math.Pi / 180 }
+	dLat, dLng := toRad(lat2-lat1), toRad(lng2-lng1)
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) + math.Cos(toRad(lat1))*math.Cos(toRad(lat2))*math.Sin(dLng/2)*math.Sin(dLng/2)
+	return 2 * earthRadiusKm * math.Asin(math.Min(1, math.Sqrt(a)))
 }
 
 // ListMapSpots returns spots that callers must treat as read-only: they may be shared.
@@ -54,9 +123,9 @@ func (s *PublicFoodService) ListMapSpots(ctx context.Context, userID string) ([]
 			return s.loadMapSpots(ctx, userID)
 		}
 	}
-	return s.mapSpots.get(func() ([]domain.PublicFoodMapSpot, error) {
-		return s.loadMapSpots(ctx, "")
-	})
+	return s.mapSpots.get(func(loadCtx context.Context) ([]domain.PublicFoodMapSpot, error) {
+		return s.loadMapSpots(loadCtx, "")
+	}, ctx)
 }
 
 func (s *PublicFoodService) loadMapSpots(ctx context.Context, userID string) ([]domain.PublicFoodMapSpot, error) {

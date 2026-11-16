@@ -1,7 +1,9 @@
 package service
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -40,14 +42,15 @@ func TestMapSpotFromCandidatePrefersSQLSpotKey(t *testing.T) {
 
 func TestMapSpotCacheReusesSpotsUntilExpiry(t *testing.T) {
 	current := time.Date(2026, 11, 2, 8, 0, 0, 0, time.UTC)
-	cache := mapSpotCache{now: func() time.Time { return current }}
+	var pending []func()
+	cache := mapSpotCache{now: func() time.Time { return current }, async: func(task func()) { pending = append(pending, task) }}
 	loads := 0
-	load := func() ([]domain.PublicFoodMapSpot, error) {
+	load := func(context.Context) ([]domain.PublicFoodMapSpot, error) {
 		loads++
-		return []domain.PublicFoodMapSpot{{Key: "food:1"}}, nil
+		return []domain.PublicFoodMapSpot{{Key: fmt.Sprintf("food:%d", loads)}}, nil
 	}
 	for range 3 {
-		if _, err := cache.get(load); err != nil {
+		if _, err := cache.get(load, context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -55,22 +58,69 @@ func TestMapSpotCacheReusesSpotsUntilExpiry(t *testing.T) {
 		t.Fatalf("loads = %d, want 1 while fresh", loads)
 	}
 	current = current.Add(mapSpotCacheTTL)
-	if _, err := cache.get(load); err != nil {
-		t.Fatal(err)
+	for range 3 {
+		spots, err := cache.get(load, context.Background())
+		if err != nil || spots[0].Key != "food:1" {
+			t.Fatalf("expired read should return the stale spots at once: %v %v", spots, err)
+		}
 	}
-	if loads != 2 {
-		t.Fatalf("loads = %d, want 2 after expiry", loads)
+	if len(pending) != 1 {
+		t.Fatalf("refreshes started = %d, want 1", len(pending))
+	}
+	pending[0]()
+	spots, _ := cache.get(load, context.Background())
+	if loads != 2 || spots[0].Key != "food:2" {
+		t.Fatalf("loads=%d spots=%v, want refreshed spots", loads, spots)
 	}
 }
 
 func TestMapSpotCacheDoesNotKeepFailures(t *testing.T) {
 	cache := mapSpotCache{}
-	if _, err := cache.get(func() ([]domain.PublicFoodMapSpot, error) { return nil, errors.New("db down") }); err == nil {
+	if _, err := cache.get(func(context.Context) ([]domain.PublicFoodMapSpot, error) { return nil, errors.New("db down") }, context.Background()); err == nil {
 		t.Fatal("want error")
 	}
-	spots, err := cache.get(func() ([]domain.PublicFoodMapSpot, error) { return []domain.PublicFoodMapSpot{{Key: "a"}}, nil })
+	spots, err := cache.get(func(context.Context) ([]domain.PublicFoodMapSpot, error) { return []domain.PublicFoodMapSpot{{Key: "a"}}, nil }, context.Background())
 	if err != nil || len(spots) != 1 {
 		t.Fatalf("spots=%v err=%v", spots, err)
+	}
+}
+
+func TestMapSpotCacheKeepsStaleSpotsWhenRefreshFails(t *testing.T) {
+	current := time.Date(2026, 11, 2, 8, 0, 0, 0, time.UTC)
+	cache := mapSpotCache{now: func() time.Time { return current }, async: func(task func()) { task() }}
+	ok := func(context.Context) ([]domain.PublicFoodMapSpot, error) { return []domain.PublicFoodMapSpot{{Key: "a"}}, nil }
+	if _, err := cache.get(ok, context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	current = current.Add(mapSpotCacheTTL)
+	failing := func(context.Context) ([]domain.PublicFoodMapSpot, error) { return nil, errors.New("db down") }
+	if _, err := cache.get(failing, context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	spots, err := cache.get(ok, context.Background())
+	if err != nil || len(spots) != 1 || spots[0].Key != "a" {
+		t.Fatalf("spots=%v err=%v, want stale spots kept", spots, err)
+	}
+	if cache.refreshing {
+		t.Fatal("refresh flag should clear after a failed refresh")
+	}
+}
+
+func TestFilterMapSpotsNearKeepsOrderAndRadius(t *testing.T) {
+	spots := []domain.PublicFoodMapSpot{
+		{Key: "beijing", Latitude: 39.9042, Longitude: 116.4074},
+		{Key: "shanghai", Latitude: 31.2304, Longitude: 121.4737},
+		{Key: "tianjin", Latitude: 39.0842, Longitude: 117.2009},
+	}
+	near := FilterMapSpotsNear(spots, 39.9, 116.4, 150)
+	if len(near) != 2 || near[0].Key != "beijing" || near[1].Key != "tianjin" {
+		t.Fatalf("near = %v", near)
+	}
+	if len(spots) != 3 {
+		t.Fatal("input must not change")
+	}
+	if got := FilterMapSpotsNear(spots, 0, 0, 10); len(got) != 0 {
+		t.Fatalf("got %v, want none", got)
 	}
 }
 

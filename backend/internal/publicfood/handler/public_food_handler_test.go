@@ -362,3 +362,47 @@ func TestPublicFoodHandlerUpdateMapsFields(t *testing.T) {
 	require.Equal(t, 18.0, *svc.updateInput.Price)
 	require.Equal(t, "fixed", *svc.updateInput.PriceType)
 }
+
+func TestPublicFoodHandlerMapSpotsNearbyFilter(t *testing.T) {
+	svc := &mockPublicFoodService{mapSpots: []domain.PublicFoodMapSpot{
+		{Key: "food:39.90420:116.40740", Latitude: 39.9042, Longitude: 116.4074, LocationName: "北京"},
+		{Key: "food:31.23040:121.47370", Latitude: 31.2304, Longitude: 121.4737, LocationName: "上海"},
+	}}
+	router := setupPublicFoodHandlerRouter(svc)
+	cases := []struct {
+		query string
+		want  []string
+	}{
+		{"", []string{"北京", "上海"}},
+		{"?lat=39.9&lng=116.4&radius_km=30", []string{"北京"}},
+		{"?lat=39.9&lng=116.4&radius_km=99999", []string{"北京"}},
+		{"?lat=31.2&lng=121.4", []string{"上海"}},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/api/public-food-library/map-spots"+tc.query, nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		require.Equal(t, http.StatusOK, resp.Code, tc.query)
+		var payload struct {
+			Data struct {
+				Spots []domain.PublicFoodMapSpot `json:"spots"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+		names := make([]string, 0, len(payload.Data.Spots))
+		for _, spot := range payload.Data.Spots {
+			names = append(names, spot.LocationName)
+		}
+		require.Equal(t, tc.want, names, tc.query)
+	}
+}
+
+func TestPublicFoodHandlerMapSpotsRejectsBadNearbyParams(t *testing.T) {
+	router := setupPublicFoodHandlerRouter(&mockPublicFoodService{})
+	for _, query := range []string{"?lat=abc&lng=116", "?lat=39.9", "?lat=91&lng=116", "?lat=39.9&lng=116.4&radius_km=-1"} {
+		req := httptest.NewRequest(http.MethodGet, "/api/public-food-library/map-spots"+query, nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		require.Equal(t, http.StatusBadRequest, resp.Code, query)
+	}
+}

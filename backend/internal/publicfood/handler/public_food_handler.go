@@ -6,12 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	authmw "food_link/backend/internal/auth"
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
@@ -239,14 +241,51 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 func (h *PublicFoodHandler) ListMapSpots(c *gin.Context) {
 	ctx := c.Request.Context()
 	userID := c.GetString(authmw.ContextUserIDKey)
-	logger.Info(ctx, "收到公共美食地图查询请求", slog.String("user_id", userID))
+	near, err := parseMapSpotNear(c)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(ctx, "收到公共美食地图查询请求", slog.String("user_id", userID), slog.Bool("nearby", near != nil))
 	spots, err := h.svc.ListMapSpots(ctx, userID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	if near != nil {
+		spots = service.FilterMapSpotsNear(spots, near.latitude, near.longitude, near.radiusKm)
+	}
 	logger.Info(ctx, "公共美食地图查询完成", slog.String("user_id", userID), slog.Int("spot_count", len(spots)))
 	writeMapSpots(c, spots)
+}
+
+type mapSpotNear struct {
+	latitude, longitude, radiusKm float64
+}
+
+// parseMapSpotNear reads the optional lat/lng/radius_km filter the map uses to draw
+// nearby spots before the full map arrives. No lat/lng means the full map, which is
+// what clients before the nearby-first release always ask for.
+func parseMapSpotNear(c *gin.Context) (*mapSpotNear, error) {
+	latText, lngText := strings.TrimSpace(c.Query("lat")), strings.TrimSpace(c.Query("lng"))
+	if latText == "" && lngText == "" {
+		return nil, nil
+	}
+	invalid := &commonerrors.AppError{Code: commonerrors.ErrBadRequest.Code, Message: "附近范围参数不正确", HTTPStatus: http.StatusBadRequest}
+	lat, latErr := strconv.ParseFloat(latText, 64)
+	lng, lngErr := strconv.ParseFloat(lngText, 64)
+	if latErr != nil || lngErr != nil || lat < -90 || lat > 90 || lng < -180 || lng > 180 {
+		return nil, invalid
+	}
+	radius := service.MapSpotMaxNearbyRadiusKm
+	if radiusText := strings.TrimSpace(c.Query("radius_km")); radiusText != "" {
+		parsed, err := strconv.ParseFloat(radiusText, 64)
+		if err != nil || parsed <= 0 {
+			return nil, invalid
+		}
+		radius = math.Min(parsed, service.MapSpotMaxNearbyRadiusKm)
+	}
+	return &mapSpotNear{latitude: lat, longitude: lng, radiusKm: radius}, nil
 }
 
 // writeMapSpots compresses here because nginx has gzip off for the API sites.
