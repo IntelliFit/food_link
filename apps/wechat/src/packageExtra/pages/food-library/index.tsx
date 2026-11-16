@@ -5,7 +5,7 @@ import { Ellipsis, Plus } from '@taroify/icons'
 import '@taroify/icons/style'
 import { withAuth } from '../../../utils/withAuth'
 import { AUTH_SESSION_CHANGED_EVENT, captureAuthSession, isAuthSessionCurrent, type AuthSession } from '../../../utils/auth-session'
-import { rememberMealLocation } from '../../../utils/meal-location'
+import { currentMealLocation, rememberMealLocation } from '../../../utils/meal-location'
 import {
   getAccessToken,
   getPublicFoodMapSpots,
@@ -68,6 +68,8 @@ const FOOD_MAP_MARKER_ICON = '/assets/icons/food-map-marker.png'
 const FOOD_MAP_CLUSTER_ICON = '/assets/icons/food-map-cluster.png'
 const FOOD_MAP_ID = 'food-library-map'
 const FOOD_MAP_NEARBY_SCALE = 15
+// 先拉这一圈画出来，全量在后台补齐；城市级范围，几十 KB。
+const FOOD_MAP_NEARBY_RADIUS_KM = 30
 const FOOD_MAP_SPOT_SCALE = 17
 const FOOD_MAP_ZOOM_AFTER_MARKERS_MS = 400
 // Wait for the tapping to settle before fetching a dish and drawing its share card.
@@ -548,7 +550,11 @@ function FoodLibraryPage() {
     }
   }, [])
 
-  /** 加载服务端全量聚合的地点（含餐食/食堂/校区/学校继承坐标），并尝试定位到用户附近。 */
+  /**
+   * 加载服务端聚合的地点（含餐食/食堂/校区/学校继承坐标），并尝试定位到用户附近。
+   * 全量近 1 MB，弱网要好几秒：有位置（本次会话已定位、分享的地点或刚拿到的定位）时
+   * 先取附近一圈画出来，全量回来再整体替换。附近请求失败不打扰用户，以全量为准。
+   */
   const loadMapList = useCallback(async (force = false) => {
     if (!getAccessToken()) return
     const locationOwner = getAccessToken() || ''
@@ -557,11 +563,41 @@ function FoodLibraryPage() {
     setMapLoading(true)
     setMapError(false)
     setMapLocating(true)
+    let fullLoaded = false
+    let nearbyShown = false
+    let nearbyRequested = false
+    const showNearby = (latitude: number, longitude: number) => {
+      if (nearbyRequested || fullLoaded) return
+      nearbyRequested = true
+      getPublicFoodMapSpots({ latitude, longitude, radiusKm: FOOD_MAP_NEARBY_RADIUS_KM })
+        .then((nearby) => {
+          if (fullLoaded || locationOwner !== getAccessToken()) return
+          nearbyShown = true
+          setMapSpotPayloads(nearby.spots || [])
+          setMapLoading(false)
+        })
+        .catch(() => undefined)
+    }
+    const knownPoint = sharedSpot || currentMealLocation(locationOwner)
+    if (knownPoint) showNearby(knownPoint.latitude, knownPoint.longitude)
     // 定位可能卡在授权框或等 GPS，点位不等它：先画地图，定位回来再移动过去。
     const locationTask = Taro.getLocation({ type: 'gcj02' }).catch(() => null)
+    void locationTask.then((result) => {
+      if (result) showNearby(result.latitude, result.longitude)
+    })
     try {
-      const foodResult = await getPublicFoodMapSpots()
-      setMapSpotPayloads(foodResult.spots || [])
+      let foodResult: { spots: PublicFoodMapSpotPayload[] }
+      try {
+        foodResult = await getPublicFoodMapSpots()
+      } catch (e) {
+        if (!nearbyShown) throw e
+        // 附近的已经画出来了：保留它们，下次进入页面再补全量。
+        mapLoadedRef.current = false
+        Taro.showToast({ title: '只加载了附近的地点', icon: 'none' })
+        foodResult = { spots: [] }
+      }
+      fullLoaded = true
+      if (foodResult.spots.length > 0 || !nearbyShown) setMapSpotPayloads(foodResult.spots || [])
       setMapLoading(false)
       if (sharedSpot) {
         // The native map drops a zoom sent in the same update as the full marker set.

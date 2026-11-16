@@ -8800,11 +8800,29 @@ export async function getPublicFoodLibraryList(
   return result
 }
 
-/** 获取服务端全量聚合的美食地图地点，避免热门截断并包含校园层级继承坐标。 */
-export async function getPublicFoodMapSpots(): Promise<{ spots: PublicFoodMapSpotPayload[] }> {
-  const response = await authenticatedRequest('/api/public-food-library/map-spots', {
+export interface PublicFoodMapNearQuery {
+  latitude: number
+  longitude: number
+  radiusKm: number
+}
+
+/** 不带 near 取全量；带 near 只取附近（旧后端会忽略参数，仍返回全量）。 */
+export function publicFoodMapSpotsPath(near?: PublicFoodMapNearQuery): string {
+  const path = '/api/public-food-library/map-spots'
+  if (!near) return path
+  const query = [
+    `lat=${near.latitude.toFixed(5)}`,
+    `lng=${near.longitude.toFixed(5)}`,
+    `radius_km=${Math.round(near.radiusKm)}`,
+  ].join('&')
+  return `${path}?${query}`
+}
+
+/** 获取服务端聚合的美食地图地点，避免热门截断并包含校园层级继承坐标。 */
+export async function getPublicFoodMapSpots(near?: PublicFoodMapNearQuery): Promise<{ spots: PublicFoodMapSpotPayload[] }> {
+  const response = await authenticatedRequest(publicFoodMapSpotsPath(near), {
     method: 'GET',
-    timeout: 30000,
+    timeout: near ? 15000 : 30000,
   })
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取美食地图失败')

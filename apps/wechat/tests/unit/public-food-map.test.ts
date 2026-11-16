@@ -12,7 +12,7 @@ import {
   mapSpotDishesLabel,
   mapSpotOpensDishList,
 } from '../../src/packageExtra/pages/food-library/food-map'
-import type { PublicFoodLibraryItem, PublicFoodMapSpotPayload } from '../../src/utils/api'
+import { publicFoodMapSpotsPath, type PublicFoodLibraryItem, type PublicFoodMapSpotPayload } from '../../src/utils/api'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -62,6 +62,19 @@ describe('public food map helpers', () => {
     expect(sharePageSource).toContain('商家位置（点亮地图必填）')
     expect(sharePageSource).toContain('请先选择商家位置')
     expect(sharePageSource).toContain('点亮这家美食')
+  })
+
+  it('asks for the full map without a point and for a nearby ring with one', () => {
+    expect(publicFoodMapSpotsPath()).toBe('/api/public-food-library/map-spots')
+    expect(publicFoodMapSpotsPath({ latitude: 39.904211, longitude: 116.407412, radiusKm: 30 }))
+      .toBe('/api/public-food-library/map-spots?lat=39.90421&lng=116.40741&radius_km=30')
+  })
+
+  it('draws nearby spots first and lets the full map replace them', () => {
+    expect(pageSource).toContain('radiusKm: FOOD_MAP_NEARBY_RADIUS_KM')
+    expect(pageSource).toContain('currentMealLocation(locationOwner)')
+    // A late nearby response must never overwrite the full map.
+    expect(pageSource).toMatch(/if \(fullLoaded \|\| locationOwner !== getAccessToken\(\)\) return/)
   })
 
   it('uses server-aggregated locations and preserves their food counts', () => {
