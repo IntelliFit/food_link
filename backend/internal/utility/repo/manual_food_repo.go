@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1108,14 +1109,7 @@ func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string,
 	return results, nil
 }
 
-func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string, limit int) ([]domain.ManualFoodResult, error) {
-	terms := expandedSearchTerms(query)
-	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
-	conditions := make([]string, 0, len(terms))
-	args := []any{}
-	for _, term := range terms {
-		like := "%" + strings.ToLower(term) + "%"
-		conditions = append(conditions, `
+const packagedTermSQL = `(
 			LOWER(COALESCE(product_name, '')) LIKE ?
 			OR LOWER(COALESCE(display_name, '')) LIKE ?
 			OR LOWER(COALESCE(search_text, '')) LIKE ?
@@ -1126,15 +1120,67 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 			OR LOWER(COALESCE(barcode, '')) LIKE ?
 			OR LOWER(COALESCE(package_category, '')) LIKE ?
 			OR EXISTS (SELECT 1 FROM packaged_food_aliases a WHERE a.food_id = f.id AND LOWER(a.alias_name) LIKE ?)
-		`)
-		args = append(args, like, like, like, like, like, like, like, like, like, like)
+		)`
+
+func packagedTermArgs(term string) []any {
+	like := "%" + strings.ToLower(term) + "%"
+	return []any{like, like, like, like, like, like, like, like, like, like}
+}
+
+func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string, limit int) ([]domain.ManualFoodResult, error) {
+	terms := expandedSearchTerms(query)
+	conditions := make([]string, 0, len(terms))
+	args := []any{}
+	for _, term := range terms {
+		conditions = append(conditions, packagedTermSQL)
+		args = append(args, packagedTermArgs(term)...)
 	}
-	args = append(args,
-		normalizedQuery,
-		normalizedQuery+"%",
-		"%"+normalizedQuery+"%",
-		limit,
-	)
+	rows, err := r.queryPackagedLibrary(ctx, strings.Join(conditions, " OR "), args, query, nil, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		// Compact queries such as "旺旺仙贝52g" match nothing as one string.
+		// Only then retry with every name part required and the size used for
+		// ordering, so queries that already find products are unchanged.
+		if required, specs := compactPackagedQueryParts(query); len(required) > 0 {
+			conditions = conditions[:0]
+			args = args[:0]
+			for _, term := range required {
+				conditions = append(conditions, packagedTermSQL)
+				args = append(args, packagedTermArgs(term)...)
+			}
+			rows, err = r.queryPackagedLibrary(ctx, strings.Join(conditions, " AND "), args, query, specs, limit)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		score := computeMatchScore(query, packagedDisplayName(row), row.SearchText, row.ProductName, row.Brand, stringPtrValue(row.FlavorText), stringPtrValue(row.SpecText), stringPtrValue(row.Barcode)) + 0.18
+		results = append(results, r.manualFoodResultFromPackaged(row, score))
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) queryPackagedLibrary(ctx context.Context, where string, args []any, query string, specs []string, limit int) ([]fooddomain.PackagedFood, error) {
+	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
+	// A literal 0 in ORDER BY would mean "column 0", so the size rank is only
+	// emitted when there is a size to rank by.
+	specRank := ""
+	specArgs := []any{}
+	if len(specs) > 0 {
+		parts := make([]string, 0, len(specs))
+		for _, spec := range specs {
+			like := "%" + strings.ToLower(spec) + "%"
+			parts = append(parts, `LOWER(COALESCE(spec_text, '') || ' ' || COALESCE(product_name, '') || ' ' || COALESCE(display_name, '')) LIKE ?`)
+			specArgs = append(specArgs, like)
+		}
+		specRank = "CASE WHEN " + strings.Join(parts, " OR ") + " THEN 0 ELSE 1 END,"
+	}
+	all := append(append([]any{}, args...), specArgs...)
+	all = append(all, normalizedQuery, normalizedQuery+"%", "%"+normalizedQuery+"%", limit)
 	var rows []fooddomain.PackagedFood
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
 		SELECT *
@@ -1144,6 +1190,7 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 			AND COALESCE(NULLIF(review_status, ''), 'active') = 'active'
 			AND (%s)
 		ORDER BY
+			%s
 			CASE
 				WHEN LOWER(COALESCE(NULLIF(display_name, ''), product_name, '')) = ? THEN 0
 				WHEN LOWER(COALESCE(NULLIF(display_name, ''), product_name, '')) LIKE ? THEN 1
@@ -1153,16 +1200,69 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 			updated_at DESC NULLS LAST,
 			product_name ASC
 		LIMIT ?
-	`, strings.Join(conditions, " OR ")), args...).Scan(&rows).Error
-	if err != nil {
-		return nil, err
+	`, where, specRank), all...).Scan(&rows).Error
+	return rows, err
+}
+
+var packagedSpecPattern = regexp.MustCompile(`(?i)\d+(?:\.\d+)?\s*(?:kg|ml|g|l|千克|克|毫升|升|包|袋|瓶|罐|盒|支|片|根|个)`)
+
+// compactPackagedQueryParts splits a compact package query into the name parts
+// that must all match (Chinese runs and latin words) and the size tokens used
+// only for ordering. It returns no required parts when splitting would not
+// change the query, so the caller keeps the original behaviour.
+func compactPackagedQueryParts(query string) ([]string, []string) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil, nil
 	}
-	results := make([]domain.ManualFoodResult, 0, len(rows))
-	for _, row := range rows {
-		score := computeMatchScore(query, packagedDisplayName(row), row.SearchText, row.ProductName, row.Brand, stringPtrValue(row.FlavorText), stringPtrValue(row.SpecText), stringPtrValue(row.Barcode)) + 0.18
-		results = append(results, r.manualFoodResultFromPackaged(row, score))
+	specs := []string{}
+	for _, match := range packagedSpecPattern.FindAllString(q, -1) {
+		specs = append(specs, strings.ReplaceAll(match, " ", ""))
 	}
-	return results, nil
+	rest := packagedSpecPattern.ReplaceAllString(q, " ")
+	parts := []string{}
+	var current []rune
+	kind := 0 // 1 = han, 2 = latin/digit
+	flush := func() {
+		if len(current) > 0 {
+			parts = append(parts, string(current))
+			current = current[:0]
+		}
+	}
+	for _, ch := range rest {
+		switch {
+		case unicode.Is(unicode.Han, ch):
+			if kind != 1 {
+				flush()
+			}
+			kind = 1
+			current = append(current, ch)
+		case unicode.IsLetter(ch) || unicode.IsDigit(ch):
+			if kind != 2 {
+				flush()
+			}
+			kind = 2
+			current = append(current, unicode.ToLower(ch))
+		default:
+			flush()
+			kind = 0
+		}
+	}
+	flush()
+	required := []string{}
+	for _, part := range parts {
+		// Single latin letters or digits are noise; single Chinese characters
+		// still carry meaning (e.g. "梨").
+		if len([]rune(part)) < 2 && !unicode.Is(unicode.Han, []rune(part)[0]) {
+			continue
+		}
+		required = append(required, part)
+	}
+	required = uniqueStrings(required)
+	if len(required) == 0 || (len(required) == 1 && len(specs) == 0 && strings.EqualFold(required[0], q)) {
+		return nil, nil
+	}
+	return required, uniqueStrings(specs)
 }
 
 func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query string, limit int) ([]domain.ManualFoodResult, error) {
@@ -1531,10 +1631,27 @@ func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64)
 		NutritionHighlights: highlights,
 		MatchScore:          score,
 	}
+	if isEstimatedNutritionRow(item) {
+		result.SourceLabel = "估算"
+		result.Subtitle = "估算值，仅供参考"
+	}
 	applyManualFoodServingProfile(&result)
 	attachNutritionMeasurement(&result)
 	result.MissingNutrients = manualMissingNutrients(map[string]any(item.QualityEvidence))
 	return result
+}
+
+// isEstimatedNutritionRow marks rows whose values are estimates rather than a
+// measured composition table: reviewed AI estimates, AI-generated sources and
+// unreviewed averages of past photo recognitions.
+func isEstimatedNutritionRow(item fooddomain.FoodNutrition) bool {
+	if strings.EqualFold(strings.TrimSpace(item.QualityTier), fooddomain.NutritionQualityReviewedEstimate) {
+		return true
+	}
+	if fooddomain.IsAIGeneratedNutritionSource(item.Source) {
+		return true
+	}
+	return strings.Contains(item.Source, "历史识别记录营养均值") && item.QualityReviewedAt == nil
 }
 
 func (r *ManualFoodRepo) manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64) domain.ManualFoodResult {
