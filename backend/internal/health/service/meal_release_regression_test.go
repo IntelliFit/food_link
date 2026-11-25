@@ -140,6 +140,9 @@ func TestMealReleaseFullCatalogSearchesOtherWindows(t *testing.T) {
 	}
 	require.Empty(t, repo.filters[0].AfterID)
 	require.Equal(t, "menu-099", repo.filters[1].AfterID)
+	// The catalog is counted once per scan: later pages carry the first page's total.
+	require.Zero(t, repo.filters[0].KnownTotal)
+	require.EqualValues(t, 180, repo.filters[1].KnownTotal)
 	require.Equal(t, false, result["supplementary_window_search"])
 	require.Equal(t, int64(180), result["total_matches"])
 	require.Len(t, state.CatalogCoverage, 1)

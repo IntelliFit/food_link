@@ -241,13 +241,17 @@ type DietRecommendationScope struct {
 }
 
 // CatalogScanMaxPage is the largest page of a catalog scan; ordinary searches stop at 100.
-// Every page is a round trip with its own count, and a dense area holds thousands of dishes.
-const CatalogScanMaxPage = 500
+// A dense area holds thousands of dishes (5288 within 5 km of 清华 on 2026-11-25) and every
+// page is a round trip, so pages are large and only the first one counts the catalog.
+const CatalogScanMaxPage = 2000
 
 type CampusDietSearchFilter struct {
 	// Internal keyset scan: exhaust a bounded place scope without an offset cap.
-	ScanCatalog           bool
-	AfterID               string
+	ScanCatalog bool
+	AfterID     string
+	// KnownTotal is the total the first page of a catalog scan returned. Later pages pass
+	// it back so the catalog is counted once per scan, not once per page.
+	KnownTotal            int64
 	IncludeMenuEvidence   bool
 	MealType              string
 	DiversitySeed         string
