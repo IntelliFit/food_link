@@ -89,6 +89,12 @@ external:
   deepseek_api_key: ""
   # OpenAI-compatible endpoint prefix. This service appends /chat/completions.
   deepseek_base_url: "https://api.deepseek.com"
+  # 宠物对话专用的 DeepSeek 官方账号（deepseek-flash + 服务端安全审核）。填了就切到 DeepSeek，
+  # 留空则宠物对话继续用 Qwen；DeepSeek 请求失败时自动回退 Qwen。
+  deepseek_official_api_key: ""
+  deepseek_official_base_url: "https://api.deepseek.com"
+  # 宠物对话模型：留空或 deepseek = 有官方密钥就用 DeepSeek；qwen = 强制回到 Qwen（回滚开关）。
+  pet_chat_llm_provider: ""
   # 像素分身图像编辑；密钥优先通过 PIXEL_AVATAR_API_KEY 环境变量注入。
   pixel_avatar_api_key: ""
   pixel_avatar_base_url: "https://maas-openapi.wanjiedata.com/api/v1"
