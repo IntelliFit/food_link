@@ -1,6 +1,9 @@
 package service
 
-import "math"
+import (
+	"math"
+	"regexp"
+)
 
 // How far a venue is decides whether a recommendation is usable. 2026-11-24 20:50 near 清华
 // the home card offered 中国农业大学 canteens 3–5 km away: distance cost 2 points per km, and
@@ -59,4 +62,53 @@ func mealOwnSchoolBonus(state *campusDietAgentRunState, c DietRecommendationCand
 		return 10
 	}
 	return 5
+}
+
+const (
+	// mealNearbyKM is close enough to count as "just here" when judging a detour.
+	mealNearbyKM = 1.5
+	// mealDetourKM is too far to offer while about-as-good options are nearby.
+	mealDetourKM = 2.5
+)
+
+// "远一点也行", "打车去": the user accepts a longer trip.
+var mealAcceptsFarVenues = regexp.MustCompile(`远(?:一)?点(?:也|都)?(?:行|可以|没关系|无所谓)|不怕远|远的也|可以远|打车|开车|骑车|骑行`)
+
+// mealDropDetours removes options more than mealDetourKM away when at least two different
+// options within mealNearbyKM are about as good (within mealModelPickTolerance health
+// points). Real-model replay 2026-11-26: the chat picked porridge 4.8, 4.0 and 3.0 km away
+// although two shops within 1.5 km sold much the same. Delivery, a place the user named and
+// a user who accepts a longer trip are left alone. The second result names what was removed.
+func mealDropDetours(state *campusDietAgentRunState, pool []groundedMeal) ([]groundedMeal, map[string]bool) {
+	if state == nil || state.Constraints.Scene == "takeout" || state.Constraints.CanteenName != "" || len(state.ExplicitSchools) > 0 || mealAcceptsFarVenues.MatchString(state.Question) {
+		return pool, nil
+	}
+	detours := map[string]bool{}
+	for _, far := range pool {
+		km := far.candidate.DistanceKM
+		if far.candidate.Source == "food_record" || km == nil || *km <= mealDetourKM || !far.evaluation.Feasible {
+			continue
+		}
+		near := map[string]bool{}
+		for _, m := range pool {
+			d := m.candidate.DistanceKM
+			if m.candidate.Source != "food_record" && m.evaluation.Feasible && d != nil && *d <= mealNearbyKM &&
+				m.evaluation.Scores.HealthFit >= far.evaluation.Scores.HealthFit-mealModelPickTolerance {
+				near[mealFingerprint(m.candidate)] = true
+			}
+		}
+		if len(near) >= 2 {
+			detours[far.candidate.SourceID] = true
+		}
+	}
+	if len(detours) == 0 {
+		return pool, nil
+	}
+	kept := make([]groundedMeal, 0, len(pool))
+	for _, m := range pool {
+		if !detours[m.candidate.SourceID] {
+			kept = append(kept, m)
+		}
+	}
+	return kept, detours
 }

@@ -70,3 +70,35 @@ func TestOwnSchoolIsPreferredWhenScoresAreClose(t *testing.T) {
 	state.School.ID = ""
 	assert.Zero(t, mealOwnSchoolBonus(state, own), "no profile school, no preference")
 }
+
+// Real-model replay 2026-11-26 of the 11-24 20:50 case: the chat still picked porridge 4.8,
+// 4.0 and 3.0 km away although two shops within 1.5 km sold much the same.
+func TestFarOptionsAreADetourWhenNearOnesAreAboutAsGood(t *testing.T) {
+	state := newCampusDietAgentTestState("initial", nil)
+	far := reachMeal("far", 4.8, 76, 0)
+	near1, near2 := reachMeal("near1", 0.9, 70, 0), reachMeal("near2", 1.5, 74, 0)
+	kept, detours := mealDropDetours(state, []groundedMeal{far, near1, near2})
+	assert.True(t, detours["far"])
+	require.Len(t, kept, 2)
+
+	// One near option is not a choice yet; a far one that is clearly better stays.
+	_, detours = mealDropDetours(state, []groundedMeal{far, near1})
+	assert.Empty(t, detours)
+	_, detours = mealDropDetours(state, []groundedMeal{reachMeal("far", 4.8, 90, 0), near1, near2})
+	assert.Empty(t, detours, "more than 10 points better is worth the trip")
+	// 2 km is not a detour, and delivery or a place the user named is their own choice.
+	_, detours = mealDropDetours(state, []groundedMeal{reachMeal("mid", 2.0, 76, 0), near1, near2})
+	assert.Empty(t, detours)
+	takeout := newCampusDietAgentTestState("initial", nil)
+	takeout.Constraints.Scene = "takeout"
+	_, detours = mealDropDetours(takeout, []groundedMeal{far, near1, near2})
+	assert.Empty(t, detours)
+	named := newCampusDietAgentTestState("initial", nil)
+	named.Constraints.CanteenName = "和园一食堂"
+	_, detours = mealDropDetours(named, []groundedMeal{far, near1, near2})
+	assert.Empty(t, detours)
+	asked := newCampusDietAgentTestState("initial", nil)
+	asked.Question = "远一点也行，推荐点好的"
+	_, detours = mealDropDetours(asked, []groundedMeal{far, near1, near2})
+	assert.Empty(t, detours)
+}

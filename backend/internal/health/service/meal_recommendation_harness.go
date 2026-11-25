@@ -364,8 +364,9 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 			score = 35 // Missing macros must never score as a zero-calorie meal.
 		}
 		if candidate.DistanceKM != nil {
-			score -= math.Min(15, *candidate.DistanceKM*2)
+			score -= mealDistancePenalty(*candidate.DistanceKM)
 		}
+		score += mealOwnSchoolBonus(state, candidate)
 		for _, f := range state.PersonalContext.FoodFrequency {
 			if f.RecentCount > 0 && strings.Contains(text, normalizeDietDecisionToken(f.Name)) {
 				score -= math.Min(18, float64(f.RecentCount)*6)
