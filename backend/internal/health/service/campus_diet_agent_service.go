@@ -161,6 +161,9 @@ type campusDietAgentRunState struct {
 	Progress               func(CampusDietAgentProgress)
 	// Provisional receives the rule-picked options as soon as the first search is back.
 	Provisional func(*CampusDietAgentResult)
+	// ClosedVenues is what the opening hours ruled out in this turn's searches.
+	ClosedVenues mealClosedVenues
+	closedSeen   map[string]bool
 }
 
 type campusDietAgentToolCall struct {
@@ -903,7 +906,9 @@ func (s *StatsService) runCampusDietAgent(ctx context.Context, state *campusDiet
 			// model prose promise a budget/combination the validator rejected.
 			// When nothing feasible was found, the model's own grounded explanation
 			// (filtered for numbers and false claims about the data) replaces the fixed one.
-			if state.SearchAttempted && len(mealFeasibleChoices(state, state.LastSearch)) == 0 {
+			// Closed canteens are a fact the server knows; the model's guess about a
+			// missing location or school does not replace it.
+			if state.SearchAttempted && len(mealFeasibleChoices(state, state.LastSearch)) == 0 && mealClosedNowAnswer(state) == "" {
 				if words := mealModelEmptyAnswer(state, final.Answer); words != "" {
 					result.Answer = words
 				}
@@ -1349,6 +1354,7 @@ func (s *StatsService) executeCampusDietSearchTool(ctx context.Context, state *c
 		logger.Info(ctx, "餐食完整组合已生成", logger.UserID(state.UserID), slog.String("dining_venue", state.Constraints.CanteenName), slog.Int("menu_rows", len(candidates)), slog.Int("meal_combinations", len(combinations)))
 		candidates = append(candidates, combinations...)
 	}
+	mealNoteClosedVenues(state, candidates)
 	candidates = mealHarnessRank(state, candidates)
 	// A price/protein-sorted first page can be entirely side dishes. An empty
 	// eligible page is not an empty catalog: sample other windows once before
@@ -1429,6 +1435,12 @@ func (s *StatsService) executeCampusDietSearchTool(ctx context.Context, state *c
 	}
 	if coverage := mealTakeoutCoverageFacts(state); coverage != nil {
 		output["takeout_coverage"] = coverage
+	}
+	if state.ClosedVenues.Dishes > 0 {
+		output["closed_canteens"] = map[string]any{
+			"dishes": state.ClosedVenues.Dishes, "schools": state.ClosedVenues.Schools,
+			"instruction": "这些菜所在的食堂在用户要吃的时间不供餐，已排除（hours_unknown=true表示营业时间未收录，按一般食堂的供餐时间推断）。有其他可选项就正常推荐，并用一句话说明更近的食堂为什么没选；没有可选项时如实说食堂这个点不供餐，不要说缺少位置或学校。",
+		}
 	}
 	return output, nil
 }
@@ -1584,7 +1596,7 @@ func campusDietAgentToolCandidates(candidates []DietRecommendationCandidate, det
 		if len(states) > 0 && states[0] != nil {
 			evaluation := evaluateDietDecisionCandidate(decision, candidate)
 			item["health_fit"] = evaluation.Scores.HealthFit
-			item["near_best"] = evaluation.Feasible && evaluation.Scores.HealthFit >= nearBestFloor
+			item["near_best"] = evaluation.Feasible && evaluation.Scores.HealthFit-mealReachDiscount(candidate.DistanceKM) >= nearBestFloor
 			item["nutrient_effects"] = mealToolNutrientEffects(evaluation.Scores.NutrientEffects)
 			issues, penalty := mealEvidenceIssues(candidate, states[0].MealContext.MealType)
 			item["evidence_issues"], item["evidence_penalty"] = issues, penalty
@@ -2151,6 +2163,16 @@ func buildCampusDietAgentResult(state *campusDietAgentRunState, final campusDiet
 		AgentConstraints:      &state.Constraints,
 		DecisionEngineVersion: resolvedDietEngineVersion(decisionContext),
 		DecisionBasis:         state.MealContext.DecisionBasis,
+	}
+	// Canteens the user would expect but that are not serving then are named with the options.
+	if campusDietAgentIsSearchIntent(state.Intent) && len(options) > 0 {
+		offered := make([]DietRecommendationCandidate, 0, len(options))
+		for _, option := range options {
+			if c, ok := state.Candidates[option.SourceID]; ok {
+				offered = append(offered, c)
+			}
+		}
+		recommendation.VenueNotice = mealClosedNotice(state, state.ClosedVenues, offered)
 	}
 	if resolvedDietEngineVersion(decisionContext) == dietDecisionEngineVersion {
 		method := "rules"

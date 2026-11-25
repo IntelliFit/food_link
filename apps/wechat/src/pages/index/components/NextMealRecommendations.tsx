@@ -328,6 +328,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
         </View>
       </View>
       {!!locationNotice && <View className='meal-picks__notice'><Text>{locationNotice}</Text>{locationSettings && <Text className='meal-picks__text-action' onClick={() => void openLocationSettings()}>去设置</Text>}</View>}
+      {!!result?.venue_notice && !!option && !busy && <View className='meal-picks__notice'><Text>{result.venue_notice}</Text></View>}
       {busy && !option ? (
         <PetThinking pet={pet} hidePet={!!petHidden} steps={(waitStages.length ? waitStages : ['searching' as MealWaitStage]).map(stage => mealWaitText(stage, petDisplayName(pet?.name)))} />
       ) : option ? (

@@ -356,11 +356,9 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 			meal.score -= penalty
 		}
 		if c.DistanceKM != nil {
-			meal.score -= math.Min(15, *c.DistanceKM*2)
+			meal.score -= mealDistancePenalty(*c.DistanceKM)
 		}
-		if state.Location == nil && c.SchoolID != "" && c.SchoolID == state.School.ID {
-			meal.score += 10
-		}
+		meal.score += mealOwnSchoolBonus(state, c)
 		text := normalizedDietDecisionCandidateText(c)
 		for _, f := range state.PersonalContext.FoodFrequency {
 			if strings.Contains(text, normalizeDietDecisionToken(f.Name)) {
@@ -501,6 +499,21 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 			if meal.candidate.Source != "food_record" {
 				add(meal, "nearby", "")
 			}
+		}
+	}
+	// Canteens left out because they are not serving then are named, not dropped silently.
+	if !verify && selectedID == "" {
+		retrieved, offered := make([]DietRecommendationCandidate, 0, len(pool)), make([]DietRecommendationCandidate, 0, len(result.Recommendations))
+		for _, meal := range pool {
+			retrieved = append(retrieved, meal.candidate)
+		}
+		for _, option := range result.Recommendations {
+			if c, ok := bySourceID[option.SourceID]; ok {
+				offered = append(offered, c)
+			}
+		}
+		if result.VenueNotice = mealClosedNotice(state, mealClosedVenueSummary(state, retrieved), offered); result.VenueNotice != "" {
+			result.DataNotes = append(result.DataNotes, result.VenueNotice)
 		}
 	}
 	result.Summary = "结合个人目标、今日摄入和近期餐食记录，下面是互为替代的选择，不是一起吃。"

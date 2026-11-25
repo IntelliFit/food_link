@@ -159,13 +159,15 @@ func mealSelectionRound(eligible, chosen []groundedMeal) []groundedMeal {
 	if len(pool) == 0 {
 		pool = history
 	}
+	// Options are compared on the reach-adjusted fit, so a dish far away must be clearly
+	// better, not marginally better, to keep nearer dishes out of the round.
 	for _, m := range pool {
-		maxHealth = math.Max(maxHealth, m.evaluation.Scores.HealthFit)
+		maxHealth = math.Max(maxHealth, mealReachFit(m))
 	}
 	band := []groundedMeal{}
 	hasFresh := false
 	for _, m := range pool {
-		if m.evaluation.Scores.HealthFit >= maxHealth-mealHealthShortlistTolerance {
+		if mealReachFit(m) >= maxHealth-mealHealthShortlistTolerance {
 			band = append(band, m)
 			hasFresh = hasFresh || !m.recentRepeat
 		}

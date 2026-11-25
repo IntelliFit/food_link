@@ -311,6 +311,26 @@ describe('pet chat credit cost', () => {
     expect(Taro.navigateTo).toHaveBeenCalledWith({ url: '/packageExtra/pages/food-library-detail/index?id=food-1&scene=campus' })
   })
 
+  // 2026-11-24 20:50 near 清华: farther canteens were offered and nothing said why the nearest were missing.
+  it('shows why the canteens the user would expect are missing', async () => {
+    render(<PetChatPage />)
+    fireEvent.click(screen.getByText('今天吃什么'))
+    fireEvent.click(screen.getByLabelText('发送'))
+    const callbacks = (streamGeneratePetChat as jest.Mock).mock.calls[0][4]
+    await act(async () => {
+      callbacks.onDietResult({ recommendation: {
+        scene: 'eat_out', title: '这餐可以这样选', summary: '这家离你最近。', generated_by: 'qwen3.8-flash', ai_used: true,
+        calorie_remaining: 600, macro_gaps: { calories: 600, protein: 40, carbs: 80, fat: 20 },
+        venue_notice: '清华大学的食堂没收录营业时间，按一般食堂 20:00 停晚餐算，这次先不推荐。',
+        recommendations: [{ title: '皮蛋瘦肉粥', source: 'public_food_library', source_id: 'shop-1', calories: 248, protein: 12, carbs: 40, fat: 5, items: [] }],
+      } })
+      callbacks.onChunk('这家离你最近。')
+      callbacks.onDone({ session_id: 'notice-session' })
+    })
+    expect(screen.getByText('清华大学的食堂没收录营业时间，按一般食堂 20:00 停晚餐算，这次先不推荐。')).toBeInTheDocument()
+    expect(screen.getByText('皮蛋瘦肉粥')).toBeInTheDocument()
+  })
+
   it('opens the selected original food from a composed meal and handles cancellation', async () => {
     const choose = jest.fn().mockResolvedValue({ tapIndex: 1 })
     ;(Taro as unknown as { showActionSheet: jest.Mock }).showActionSheet = choose
