@@ -354,3 +354,140 @@ func TestPetChatStreamFallsBackToQwenWhenDeepSeekIsDown(t *testing.T) {
 	assert.EqualValues(t, 1, atomic.LoadInt32(&qwen.calls))
 	assert.Equal(t, statsInsightPreferredModel, qwen.lastBody()["model"])
 }
+
+func TestOtherFeaturesStayOffDeepSeekWithTheOfficialKey(t *testing.T) {
+	deepSeek := newPetChatModelServer(t, func(w http.ResponseWriter, body map[string]any) {
+		writePetChatCompletion(w, "不该调用到这里", "stop")
+	})
+	qwen := newPetChatModelServer(t, func(w http.ResponseWriter, body map[string]any) {
+		writePetChatCompletion(w, "这周记录了一餐午饭，蛋白质偏少。明天午饭可以加一份鸡蛋或豆腐，晚饭多一份绿叶菜，慢慢把三餐记完整。", "stop")
+	})
+	svc := newPetChatDeepSeekTestService(petChatRepoWithMeal(), deepSeek.URL, qwen.URL)
+
+	result, err := svc.GenerateInsight(context.Background(), "user-1", "week", 2000, 5)
+	require.NoError(t, err)
+	assert.NotEmpty(t, result["analysis_summary"])
+	assert.Zero(t, atomic.LoadInt32(&deepSeek.calls), "stats insights keep their model")
+	assert.Positive(t, atomic.LoadInt32(&qwen.calls))
+}
+
+func TestRefusalDetectionIsOnlyForTheDeepSeekPetChatModel(t *testing.T) {
+	ctx := context.Background()
+	svc := NewStatsService(&mockStatsRepo{}, nil, &config.Config{})
+	svc.client = &http.Client{}
+	risky := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) { writeDeepSeekContentRisk(w) })
+	filtered := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) { writePetChatCompletion(w, "", "content_filter") })
+
+	for _, model := range []string{statsInsightPreferredModel, statsInsightDeepSeekModel} {
+		for name, server := range map[string]*petChatModelServer{"400": risky, "content_filter": filtered} {
+			_, err := svc.requestNutritionInsightOnce(ctx, server.URL, "k", model, "p", "", 100)
+			require.Error(t, err, model+" "+name)
+			assert.False(t, isPetChatSafetyRefusal(err), model+" "+name+": other features keep their old errors")
+			assert.NotContains(t, server.lastBody(), "safety_check", model)
+			assert.NotContains(t, server.lastBody(), "thinking", model)
+
+			llm := textLLMRuntimeConfig{BaseURL: server.URL, APIKey: "k", Model: model, Provider: "qwen"}
+			_, err = svc.requestCampusDietAgentCompletion(ctx, llm, []map[string]any{{"role": "user", "content": "json"}}, nil, "none")
+			if err != nil {
+				assert.False(t, isPetChatSafetyRefusal(err), model+" "+name+": agent request")
+			}
+		}
+	}
+}
+
+func TestNonStreamPetChatRefusalIsFreeAndLabelled(t *testing.T) {
+	deepSeek := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) { writeDeepSeekContentRisk(w) })
+	qwen := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) { writePetChatCompletion(w, "不该出现", "stop") })
+	svc := newPetChatDeepSeekTestService(petChatRepoWithMeal(), deepSeek.URL, qwen.URL)
+	guard := &mockStatsCreditGuard{}
+	svc.ConfigureCreditGuard(guard)
+
+	result, err := svc.GeneratePetChat(context.Background(), "user-1", PetChatInput{Range: "week", Question: "最近睡眠不好怎么办"})
+	require.NoError(t, err)
+	assert.Equal(t, petChatSafetyRefusalText, result.Answer)
+	assert.Equal(t, "safety_refused", result.BillingStatus)
+	assert.Zero(t, result.CreditsCharged)
+	assert.Zero(t, guard.consumeCalls)
+	assert.Zero(t, atomic.LoadInt32(&qwen.calls))
+}
+
+func TestNonStreamPetChatFallsBackToQwenWhenDeepSeekIsDown(t *testing.T) {
+	deepSeek := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) {
+		http.Error(w, `{"error":{"message":"Insufficient Balance"}}`, http.StatusPaymentRequired)
+	})
+	qwen := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) {
+		writePetChatCompletion(w, "我们今晚早点睡，晚饭别吃太晚，睡前少喝浓茶。", "stop")
+	})
+	svc := newPetChatDeepSeekTestService(petChatRepoWithMeal(), deepSeek.URL, qwen.URL)
+
+	result, err := svc.GeneratePetChat(context.Background(), "user-1", PetChatInput{Range: "week", Question: "最近睡眠不好怎么办"})
+	require.NoError(t, err)
+	assert.Equal(t, "我们今晚早点睡，晚饭别吃太晚，睡前少喝浓茶。", result.Answer)
+	assert.EqualValues(t, 1, atomic.LoadInt32(&deepSeek.calls))
+	assert.EqualValues(t, 1, atomic.LoadInt32(&qwen.calls))
+}
+
+func TestPetChatLabelReadingFallsBackToQwen(t *testing.T) {
+	// DeepSeek answers the label read with something that is not the required JSON.
+	deepSeek := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) {
+		writePetChatCompletion(w, "图片有点糊，看不清", "stop")
+	})
+	qwen := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) {
+		writePetChatCompletion(w, `{"images":[{"image_index":1,"serving_basis":"每100克","items":[`+
+			`{"name":"蛋白质","value":8.5,"unit":"克","raw_text":"蛋白质 8.5克"},`+
+			`{"name":"钠","value":420,"unit":"毫克","raw_text":"钠 420毫克"}]}]}`, "stop")
+	})
+	svc := newPetChatDeepSeekTestService(petChatRepoWithMeal(), deepSeek.URL, qwen.URL)
+	images := petChatImageContext{URLs: []string{"https://img.test/label.jpg"}, CurrentCount: 1}
+
+	answer, err := svc.streamPetChatAnswer(context.Background(), svc.preferredPetChatLLM(true), &statsComputation{}, "这个营养成分表里蛋白质和钠多少", nil, false, images)
+	require.NoError(t, err)
+	require.True(t, answer.LabelOnly)
+	assert.Equal(t, "qwen", answer.LLM.Provider)
+	var text strings.Builder
+	for chunk := range answer.Chunks {
+		text.WriteString(chunk)
+	}
+	assert.Contains(t, text.String(), "钠 420毫克")
+	assert.Contains(t, text.String(), "蛋白质 8.5克")
+	assert.EqualValues(t, 1, atomic.LoadInt32(&deepSeek.calls))
+}
+
+func TestEmptyDeepSeekAnswerFailsTheTurnWithoutCharging(t *testing.T) {
+	// Thinking used the whole budget: reasoning streamed, no answer text.
+	deepSeek := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) {
+		writePetChatSSE(w,
+			`{"choices":[{"delta":{"reasoning_content":"先想想晚饭"},"finish_reason":null}]}`,
+			`{"choices":[{"delta":{"content":""},"finish_reason":"length"}]}`,
+		)
+	})
+	repo := petChatRepoWithMeal()
+	svc := newPetChatDeepSeekTestService(repo, deepSeek.URL, "")
+	guard := &mockStatsCreditGuard{}
+	svc.ConfigureCreditGuard(guard)
+
+	types, text, errText, _ := collectPetChatStream(t, svc, "最近睡眠不好怎么办")
+	assert.Equal(t, []string{"start", "error"}, types)
+	assert.Empty(t, text)
+	assert.NotEmpty(t, errText)
+	assert.Zero(t, guard.consumeCalls)
+	assert.Empty(t, lastAssistantMessage(repo), "an empty answer is not saved")
+}
+
+func TestAcknowledgementFallsBackToQwenWhenDeepSeekFails(t *testing.T) {
+	deepSeek := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) {
+		http.Error(w, `{"error":{"message":"Authentication Fails"}}`, http.StatusUnauthorized)
+	})
+	qwen := newPetChatModelServer(t, func(w http.ResponseWriter, _ map[string]any) {
+		writePetChatCompletion(w, "好嘞，那就番茄牛腩饭，去桃李园买就行～", "stop")
+	})
+	svc := newPetChatDeepSeekTestService(withCardOnScreen(), deepSeek.URL, qwen.URL)
+	svc.mealRouterOff = false // the acknowledgement asks a model only when model calls are on
+
+	text, meta := acknowledgementReply(t, svc, "就这个吧")
+	assert.Equal(t, "好嘞，那就番茄牛腩饭，去桃李园买就行～", text, "worded by Qwen, not the fixed reply")
+	require.NotNil(t, meta)
+	assert.Equal(t, petChatFreeAcknowledgement, meta.BillingStatus)
+	assert.Positive(t, atomic.LoadInt32(&deepSeek.calls))
+	assert.Positive(t, atomic.LoadInt32(&qwen.calls))
+}
