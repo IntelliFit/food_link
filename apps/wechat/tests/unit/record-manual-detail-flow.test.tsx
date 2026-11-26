@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import Taro from '@tarojs/taro'
 import RecordManualPage from '../../src/packageExtra/pages/record-manual'
 import { fetchManualFoodCatalog, fetchManualCustomFoods, getAccessToken, saveManualCustomFood, saveFoodRecord } from '../../src/utils/api'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../src/utils/home-dashboard-local-cache'
 
 jest.mock('@tarojs/components', () => {
   const React = require('react')
@@ -27,7 +28,8 @@ jest.mock('../../src/utils/api', () => ({
 }))
 jest.mock('../../src/utils/withAuth', () => ({ withAuth: (component: unknown) => component }))
 jest.mock('../../src/components/AppColorSchemeContext', () => ({ useAppColorScheme: () => ({ scheme: 'light' }) }))
-jest.mock('../../src/components/MealImpactCard', () => ({ useMealImpactSheet: () => ({ sheet: null, show: jest.fn() }) }))
+const mockShowMealImpact = jest.fn()
+jest.mock('../../src/components/MealImpactCard', () => ({ useMealImpactSheet: () => ({ sheet: null, show: mockShowMealImpact }) }))
 jest.mock('../../src/utils/theme-navigation-bar', () => ({ applyThemeNavigationBar: jest.fn() }))
 jest.mock('../../src/utils/home-dashboard-local-cache', () => ({ refreshHomeDashboardLocalSnapshotFromCloud: jest.fn() }))
 jest.mock('../../src/utils/infer-default-meal-type', () => ({
@@ -107,6 +109,26 @@ describe('food library page detail and custom editor integration', () => {
     expect(saveFoodRecord).toHaveBeenCalledWith(expect.objectContaining({
       items: [expect.objectContaining({ image_path: photos[0], image_paths: photos, nutrients: expect.objectContaining({ calories: 350 }) })],
     }))
+  })
+
+  it('confirms the save without waiting for the home dashboard refresh', async () => {
+    let finishRefresh: (value: boolean) => void = () => undefined
+    ;(refreshHomeDashboardLocalSnapshotFromCloud as jest.Mock).mockReturnValue(
+      new Promise<boolean>((resolve) => { finishRefresh = resolve })
+    )
+    ;(getAccessToken as jest.Mock).mockReturnValue('test-token')
+    render(<RecordManualPage />)
+    fireEvent.click(await screen.findByLabelText('添加原味燕麦到本餐'))
+    fireEvent.click(screen.getByText('选好了，核对本餐'))
+    fireEvent.click(screen.getByText(/^确认记录到\d+月\d+日$/))
+
+    await waitFor(() => expect(mockShowMealImpact).toHaveBeenCalledWith('recorded-food', expect.anything(), expect.any(Function)))
+    expect(Taro.showToast).toHaveBeenCalledWith(expect.objectContaining({ icon: 'success' }))
+    const forceRefresh = expect.objectContaining({ force: true })
+    expect(Taro.eventCenter.trigger).not.toHaveBeenCalledWith(expect.anything(), forceRefresh)
+
+    await act(async () => { finishRefresh(true) })
+    expect(Taro.eventCenter.trigger).toHaveBeenCalledWith(expect.anything(), forceRefresh)
   })
 
   it('returns all photos when adding food to an existing meal through the picker', async () => {

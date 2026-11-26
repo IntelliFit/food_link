@@ -13,8 +13,7 @@ import {
   inferDefaultMealTypeFromLocalTime,
 } from '../../../utils/infer-default-meal-type'
 import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
-import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import { syncHomeAfterFoodRecordSave } from '../../../utils/home-refresh-after-save'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { returnHomeAfterFoodRecord } from '../../../utils/food-record-flow'
 import { mealSummaryFromSavePayload, useMealImpactSheet } from '../../../components/MealImpactCard'
@@ -457,21 +456,7 @@ function ResultTextPage() {
       }
       const saveResult = await saveFoodRecord(payload)
       const targetDate = recordDate
-      try {
-        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate })
-      } catch {
-        /* ignore */
-      }
-      try {
-        await refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
-      } catch {
-        /* ignore */
-      }
-      try {
-        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
-      } catch {
-        /* ignore */
-      }
+      void syncHomeAfterFoodRecordSave(targetDate)
 
       if (saveOnly) {
         Taro.showToast({ title: `已记录到${getRecordDateLabel(recordDate)}`, icon: 'success' })

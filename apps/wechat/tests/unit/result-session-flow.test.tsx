@@ -3,6 +3,7 @@ import Taro from '@tarojs/taro'
 import { ResultPage } from '../../src/packageExtra/pages/result'
 import { clearAnalyzeResultSessionCache, readAnalyzeTaskRecordState, writeAnalyzeTaskRecordState } from '../../src/utils/analyze-result-session'
 import { getAnalyzeTask, getFoodRecordById, getHealthProfile, saveFoodRecord, showUnifiedApiError, submitAnalyzeTask } from '../../src/utils/api'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../src/utils/home-dashboard-local-cache'
 
 const mockMealImpactShow = jest.fn((_id: string, _summary: unknown, onClose: () => void) => onClose())
 
@@ -213,6 +214,16 @@ describe('ResultPage task ownership', () => {
     const shared = JSON.parse(view.getByTestId('shared-record').textContent || '{}')
     expect(shared).toEqual(expect.objectContaining({ id: 'record-B', source_task_id: 'task-B', image_paths: [imageB], total_calories: 108 }))
     expect(getFoodRecordById).not.toHaveBeenCalledWith('record-A')
+    expect(showUnifiedApiError).not.toHaveBeenCalled()
+  })
+
+  it('opens the record feedback without waiting for the home dashboard refresh', async () => {
+    ;(refreshHomeDashboardLocalSnapshotFromCloud as jest.Mock).mockReturnValueOnce(new Promise(() => undefined))
+    writeAnalyzeTaskRecordState('task-A', true, 'record-A')
+    const view = await renderResult()
+    await clickPrimary(view)
+    expect(saveFoodRecord).toHaveBeenCalledTimes(1)
+    expect(mockMealImpactShow).toHaveBeenCalledWith('record-B', expect.anything(), expect.any(Function))
     expect(showUnifiedApiError).not.toHaveBeenCalled()
   })
 

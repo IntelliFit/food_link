@@ -46,11 +46,8 @@ import MealDishPrompt from '../../../components/MealDishPrompt'
 import { getRecommendedMealTypeWithFallback, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
 import { withAuth } from '../../../utils/withAuth'
-import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import {
-  applyOptimisticFoodRecordToHomeDashboardSnapshot,
-  refreshHomeDashboardLocalSnapshotFromCloud
-} from '../../../utils/home-dashboard-local-cache'
+import { applyOptimisticFoodRecordToHomeDashboardSnapshot } from '../../../utils/home-dashboard-local-cache'
+import { syncHomeAfterFoodRecordSave } from '../../../utils/home-refresh-after-save'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { applyEnergyEdit } from '../../../utils/nutrition-edit'
@@ -2210,21 +2207,7 @@ export function ResultPage() {
         if (!saveResult.already_saved) {
           applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
         }
-        try {
-          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey })
-        } catch {
-          /* ignore */
-        }
-        try {
-          await refreshHomeDashboardLocalSnapshotFromCloud(targetDateKey)
-        } catch {
-          /* ignore */
-        }
-        try {
-          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey, force: true })
-        } catch {
-          /* ignore */
-        }
+        void syncHomeAfterFoodRecordSave(targetDateKey)
         if (sourceTaskId) writeAnalyzeTaskRecordState(recordContext.taskId, true, saveResult.id)
         locallySavedRef.current = true
         if (!canPresentResult()) return

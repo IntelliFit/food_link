@@ -25,8 +25,7 @@ import {
   pickFoodDisplayImageUrl,
 } from '../../../utils/food-display-image'
 import { withAuth } from '../../../utils/withAuth'
-import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import { syncHomeAfterFoodRecordSave } from '../../../utils/home-refresh-after-save'
 import {
   getRecommendedMealTypeWithFallback,
   inferDefaultMealTypeFromLocalTime,
@@ -1524,21 +1523,7 @@ function RecordManualPage() {
       } catch {
         /* ignore */
       }
-      try {
-        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate })
-      } catch {
-        /* ignore */
-      }
-      try {
-        await refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
-      } catch {
-        /* ignore */
-      }
-      try {
-        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
-      } catch {
-        /* ignore */
-      }
+      void syncHomeAfterFoodRecordSave(targetDate)
 
       Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : `已记录到${getRecordDateLabel(targetDate)}`, icon: saveResult.already_saved ? 'none' : 'success' })
       const mealSummary = {
