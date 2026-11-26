@@ -118,15 +118,16 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 			continue
 		}
 		var unit map[string]any
-		var label, reason string
+		var label, reason, foodID string
+		source := "library"
 		if reference && smartIsWater(component.name) {
-			unit, label = map[string]any{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}, "水"
+			unit, label, source = map[string]any{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}, "水", "water"
 		} else if tableUnit, tableLabel, ok := smartReferenceIngredientState(component.name, component.state); ok {
 			// Common ingredients use the standard table for their state; the
 			// library aliases raw vegetables to stir-fried rows.
-			unit, label = tableUnit, tableLabel
+			unit, label, source = tableUnit, tableLabel, "reference_table"
 		} else {
-			unit, label, reason = r.resolveComponent(ctx, component)
+			unit, label, foodID, reason = r.resolveComponent(ctx, component)
 		}
 		if unit != nil && smartComponentIsOil(component.name) {
 			oilKcal += numberFromAny(unit["calories"]) * grams / 100
@@ -142,6 +143,12 @@ func (r *smartRun) resolveDish(ctx context.Context, item map[string]any) (map[st
 		matchedGrams += grams
 		entry["status"] = "matched"
 		entry["matched_food_name"] = label
+		// The library row id makes each component traceable from the task
+		// result, the same way a whole-item match stores matched_food_id.
+		entry["component_source"] = source
+		if foodID != "" {
+			entry["matched_food_id"] = foodID
+		}
 		breakdown = append(breakdown, entry)
 	}
 	if weight-seasoningGrams <= 0 || matchedGrams/(weight-seasoningGrams) < smartDishMinCoverage {
@@ -189,24 +196,27 @@ func smartDishSumDisagrees(sumKcal, oilKcal, modelKcal float64) bool {
 	return sumKcal > modelKcal*smartDishMaxKcalRatio && sumKcal-oilKcal > modelKcal*smartDishMaxKcalRatio
 }
 
-func (r *smartRun) resolveComponent(ctx context.Context, component smartComponent) (map[string]any, string, string) {
+// resolveComponent returns the per-100 g unit, the display label, the library
+// row id (empty when the value does not come from a library row) and, when
+// nothing matched, the rejection reason.
+func (r *smartRun) resolveComponent(ctx context.Context, component smartComponent) (map[string]any, string, string, string) {
 	if smartIsWater(component.name) {
-		return map[string]any{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}, "水", ""
+		return map[string]any{"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}, "水", "", ""
 	}
 	if smartIsCookingFat(component.name) {
 		for _, query := range append([]string{component.name}, smartCookingFatFallbacks...) {
 			result, err := r.resolveFood(ctx, query)
 			if err == nil && result != nil && result.Food != nil && result.Food.KcalPer100g >= 600 {
-				return nutritionUnit(result.Food), result.Food.CanonicalName, ""
+				return nutritionUnit(result.Food), result.Food.CanonicalName, result.Food.ID, ""
 			}
 		}
-		return nil, "", "cooking_fat_not_found"
+		return nil, "", "", "cooking_fat_not_found"
 	}
 	match, reason := r.matchSingleFood(ctx, smartComponentItem(component), component.name)
 	if match == nil {
-		return nil, "", reason
+		return nil, "", "", reason
 	}
-	return nutritionUnit(match.food), match.food.CanonicalName, ""
+	return nutritionUnit(match.food), match.food.CanonicalName, match.food.ID, ""
 }
 
 func smartComponentItem(component smartComponent) map[string]any {
