@@ -389,6 +389,10 @@ func (s *StatsService) hybridMealRecommendation(ctx context.Context, state *camp
 	}
 	// With about-as-good meals close by, the ones far away are not offered.
 	eligible, _ = mealDropDetours(state, eligible)
+	// A dish shown on the last few days rests while enough others remain.
+	if !verify && selectedID == "" {
+		eligible = mealDropRecentlyShown(state, eligible)
+	}
 	sort.SliceStable(eligible, func(i, j int) bool {
 		if resolvedDietEngineVersion(decision) == dietDecisionEngineVersion {
 			return dietDecisionBetter(eligible[i].evaluation, eligible[j].evaluation, eligible[i].score, eligible[j].score)

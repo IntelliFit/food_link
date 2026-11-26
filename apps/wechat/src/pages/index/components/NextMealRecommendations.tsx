@@ -57,6 +57,8 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
   const [error, setError] = useState('')
   const [locationNotice, setLocationNotice] = useState('')
   const [locationSettings, setLocationSettings] = useState(false)
+  // Location was never asked for: the notice carries a one-tap way to turn it on.
+  const [locationPrompt, setLocationPrompt] = useState(false)
   const [navigating, setNavigating] = useState('')
   const navigationPending = useRef(false)
   const loading = useRef<{ scope: string; seq: number }>()
@@ -92,7 +94,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
     setError('')
     try {
       let location = currentMealLocation(token)
-      if (requestLocation) { setLocationNotice(''); setLocationSettings(false) }
+      if (requestLocation) { setLocationNotice(''); setLocationSettings(false); setLocationPrompt(false) }
       if (requestLocation || !location) {
         try {
           const settings = await Taro.getSetting()
@@ -116,13 +118,15 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
               setLocationNotice(`定位精度不足；${location ? '暂用最近一次有效位置' : '当前仅显示非附近餐食参考'}`)
             }
           } else {
-            setLocationNotice('还未取得当前位置；点击位置图标查找附近餐食')
+            setLocationNotice('还没定位，暂时不含附近的店。')
+            setLocationPrompt(true)
           }
         } catch (locationError) {
           if (seq !== sequence.current || token !== getAccessToken()) return
           const failure = mealLocationFailure(locationError)
           setLocationNotice(`${failure.message}；${location ? '暂用最近一次有效位置' : '当前仅显示非附近餐食参考'}`)
           setLocationSettings(!!failure.settings)
+          setLocationPrompt(false)
         } finally {
           if (seq === sequence.current) setLocating(false)
         }
@@ -327,7 +331,7 @@ export default function NextMealRecommendations({ mealType, mealName, refreshKey
           {locating ? <View className='meal-picks__spinner' /> : <Text className='iconfont icon-dizhi' />}
         </View>
       </View>
-      {!!locationNotice && <View className='meal-picks__notice'><Text>{locationNotice}</Text>{locationSettings && <Text className='meal-picks__text-action' onClick={() => void openLocationSettings()}>去设置</Text>}</View>}
+      {!!locationNotice && <View className='meal-picks__notice'><Text>{locationNotice}</Text>{locationSettings && <Text className='meal-picks__text-action' onClick={() => void openLocationSettings()}>去设置</Text>}{locationPrompt && !locationSettings && <Text className='meal-picks__text-action' aria-role='button' onClick={() => !busy && void load(true)}>用当前位置</Text>}</View>}
       {!!result?.venue_notice && !!option && !busy && <View className='meal-picks__notice'><Text>{result.venue_notice}</Text></View>}
       {busy && !option ? (
         <PetThinking pet={pet} hidePet={!!petHidden} steps={(waitStages.length ? waitStages : ['searching' as MealWaitStage]).map(stage => mealWaitText(stage, petDisplayName(pet?.name)))} />
