@@ -511,7 +511,7 @@ func TestReestimateCorrectionWritesMillilitreAmountNotGrams(t *testing.T) {
 	runner := &Runner{analyze: analyze}
 	input := analyzeservice.AnalyzeInput{ImageURLs: []string{"https://img.example/meal.jpg"}, PreviousResult: map[string]any{"items": previous}, CorrectionItems: correction}
 
-	items, _, err := runner.reestimateCorrectionItems(context.Background(), input, "")
+	items, _, _, err := runner.reestimateCorrectionItems(context.Background(), input, "")
 	require.NoError(t, err)
 	require.Contains(t, analyze.prompt, "当前 250毫升", "模型要看到真实数量和单位，而不是 0g")
 	require.Contains(t, analyze.prompt, "当前 180g")
@@ -537,7 +537,7 @@ func TestReestimateCorrectionDisputedNutritionOfMillilitreFoodRewritesItsLabel(t
 	runner := &Runner{analyze: analyze}
 	input := analyzeservice.AnalyzeInput{ImageURLs: []string{"https://img.example/meal.jpg"}, PreviousResult: map[string]any{"items": previous}, CorrectionItems: correction}
 
-	items, disputes, err := runner.reestimateCorrectionItems(context.Background(), input, "")
+	items, disputes, _, err := runner.reestimateCorrectionItems(context.Background(), input, "")
 	require.NoError(t, err)
 	require.Len(t, disputes, 1)
 	require.Equal(t, 88.5, mapFromAny(items[1]["nutrients"])["calories"], "8.5*4+12.5*4+0.5*9")

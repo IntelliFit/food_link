@@ -120,6 +120,8 @@ type analyzeRunner interface {
 	RunPrecisionJSONWithImages(context.Context, string, string, []string, string) (map[string]any, error)
 	RunPrecisionJSONWithImagesNoFallback(context.Context, string, string, []string, string) (map[string]any, error)
 	RunPrecisionJSONWithImagesTemperatureNoFallback(context.Context, string, string, []string, string, float64) (map[string]any, error)
+	// 回答不是“带菜名和重量的食物清单”的看图调用，由调用方给出回答是否可用的判断。
+	RunPrecisionJSONWithImagesValidated(context.Context, string, string, []string, string, float64, func(map[string]any) error) (map[string]any, error)
 	ApplyDBFirstToItems(context.Context, []map[string]any, string) []map[string]any
 	ApplyDBFirstToItemsWithPreciseMicronutrients(context.Context, []map[string]any, string) ([]map[string]any, error)
 	ApplyPrecisionNutrition(context.Context, []map[string]any, analyzeservice.AnalyzeInput) ([]map[string]any, error)
@@ -1502,7 +1504,7 @@ func (r *Runner) resolveCorrectionTask(ctx context.Context, task *domain.Analysi
 	}
 	input.CorrectionItems = resolved
 	modelName := selectPrecisionModel(r.analyze, sessionID)
-	reestimated, nutritionDisputes, err := r.reestimateCorrectionItems(ctx, input, modelName)
+	reestimated, nutritionDisputes, photoUnresolved, err := r.reestimateCorrectionItems(ctx, input, modelName)
 	if err != nil {
 		return nil, err
 	}
@@ -1520,6 +1522,11 @@ func (r *Runner) resolveCorrectionTask(ctx context.Context, task *domain.Analysi
 
 	result, err := r.resolveScopedCorrection(ctx, task.UserID, input, contextOverrides)
 	if err != nil {
+		// 什么都没改成，是因为要对照照片重估的菜这次没估出来：照实告诉用户，
+		// 而不是让他去“填写需要修改的食物名称或重量”。其他修改生效时不受影响。
+		if errors.Is(err, errCorrectionChangedNothing) && len(photoUnresolved) > 0 {
+			return nil, fmt.Errorf("没能对照照片重新估算「%s」的分量，请稍后重试，或直接在纠错清单里填写重量", strings.Join(photoUnresolved, "、"))
+		}
 		return nil, err
 	}
 	return &correctionOutcome{result: result, input: input, items: reestimated, disputes: nutritionDisputes}, nil

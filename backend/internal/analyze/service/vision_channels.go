@@ -464,7 +464,7 @@ func visionChannelStatus(err error) string {
 	if IsLLMJSONParseError(err) {
 		return "invalid_json"
 	}
-	if errors.Is(err, ErrEmptyFoodAnalysisResult) {
+	if errors.Is(err, ErrEmptyFoodAnalysisResult) || errors.Is(err, ErrUnusableVisionAnswer) {
 		return "invalid_result"
 	}
 	if strings.Contains(err.Error(), "429") {

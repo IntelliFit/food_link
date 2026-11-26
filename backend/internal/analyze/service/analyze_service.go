@@ -41,6 +41,12 @@ const PrecisionGeminiFlashRoute = "openlux:gemini-3.6-flash"
 // otherwise the client renders a misleading 0 kcal card.
 var ErrEmptyFoodAnalysisResult = stderrors.New("食物识别未返回有效食物，请重试")
 
+// ErrUnusableVisionAnswer marks a channel answer that is valid JSON but not
+// what this particular request asked for. Callers whose answers are not food
+// lists (correction re-estimates, correction plans) return it from their own
+// validator so the router tries the next channel.
+var ErrUnusableVisionAnswer = stderrors.New("模型回答不符合本次请求的格式")
+
 const (
 	defaultExecutionMode            = "standard"
 	standardWebSearchMode           = "standard_web_search"
@@ -846,22 +852,33 @@ func (s *AnalyzeService) RunPrecisionJSONWithImages(ctx context.Context, sourceT
 // reasoning depth for the planning stage. Estimate and fallback calls keep
 // their existing medium/fast policies.
 func (s *AnalyzeService) RunPrecisionPlanJSONWithImages(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
-	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, 0, true, true)
+	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, 0, true, true, nil)
 }
 
 func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error) {
-	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, true, false)
+	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, true, false, nil)
 }
 
 func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperatureNoFallback(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error) {
-	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, false, false)
+	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, false, false, nil)
+}
+
+// RunPrecisionJSONWithImagesValidated is for calls on the precision channels
+// whose answer is not a list of named foods with weights. validate decides
+// whether a channel's answer is usable; a rejected answer moves on to the next
+// channel exactly like an empty food list does for recognition.
+func (s *AnalyzeService) RunPrecisionJSONWithImagesValidated(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64, validate func(map[string]any) error) (map[string]any, error) {
+	if validate == nil {
+		return nil, fmt.Errorf("RunPrecisionJSONWithImagesValidated 需要回答校验函数")
+	}
+	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, false, false, validate)
 }
 
 func (s *AnalyzeService) RunPrecisionJSONWithImagesNoFallback(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
 	return s.RunPrecisionJSONWithImagesTemperatureNoFallback(ctx, sourceType, prompt, imageURLs, modelName, 0)
 }
 
-func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64, allowFallback, useQwenDefaultReasoning bool) (map[string]any, error) {
+func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64, allowFallback, useQwenDefaultReasoning bool, validate func(map[string]any) error) (map[string]any, error) {
 	sourceType = strings.TrimSpace(sourceType)
 	timeout := 60 * time.Second
 	if sourceType == "image" {
@@ -940,25 +957,36 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	if (allowFallback || s.balancedVisionApplies(ctx, model)) && provider == "gemini" && len(imageURLs) > 0 {
 		geminiRouteCtx, geminiRouteCancel = s.geminiVisionRouteContext(callCtx, model, geminiUpstream, client)
 		defer geminiRouteCancel()
-		outcome, hedgeErr := s.runHedgedGeminiVision(
-			geminiRouteCtx,
-			"precision_gemini_hedge",
-			geminiUpstream,
-			model,
-			prompt,
-			imageURLs,
-			temperature,
-			client,
-			func(result map[string]any) error {
-				if s.balancedVisionApplies(ctx, model) {
-					return validateBalancedPrecisionPayload(result)
-				}
-				if len(result) == 0 {
-					return fmt.Errorf("精准模式未返回有效 JSON 内容")
-				}
-				return nil
-			},
-		)
+		var outcome geminiVisionHedgeOutcome
+		var hedgeErr error
+		if validate != nil && s.balancedVisionApplies(ctx, model) {
+			// 调用方自带回答校验（回答不是食物清单）：均衡路由只用它判断渠道回答是否可用，
+			// 不再叠加“带菜名和重量的食物清单”检查，否则正常回答会被判无效并让渠道熔断。
+			outcome, hedgeErr = s.runBalancedGeminiChannels(geminiRouteCtx, "precision_gemini_hedge", geminiUpstream, model, prompt, imageURLs, temperature, validate, nil)
+		} else {
+			outcome, hedgeErr = s.runHedgedGeminiVision(
+				geminiRouteCtx,
+				"precision_gemini_hedge",
+				geminiUpstream,
+				model,
+				prompt,
+				imageURLs,
+				temperature,
+				client,
+				func(result map[string]any) error {
+					if validate != nil {
+						return validate(result)
+					}
+					if s.balancedVisionApplies(ctx, model) {
+						return validateBalancedPrecisionPayload(result)
+					}
+					if len(result) == 0 {
+						return fmt.Errorf("精准模式未返回有效 JSON 内容")
+					}
+					return nil
+				},
+			)
+		}
 		parsed, err = outcome.parsed, hedgeErr
 		if err == nil {
 			client = outcome.client
@@ -979,6 +1007,9 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 			defer attemptCancel()
 			return primaryCall(attemptCtx)
 		})
+		if err == nil && validate != nil {
+			err = validate(parsed)
+		}
 	}
 	if allowFallback && !s.balancedVisionApplies(ctx, model) && err != nil && provider == "gemini" && len(imageURLs) > 0 && shouldFallbackGeminiVision(err) {
 		if s.dashscopeClient == nil {

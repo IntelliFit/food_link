@@ -27,8 +27,10 @@ type correctionReestimateTarget struct {
 // the correction plan flagged: a portion the user says is wrong without giving
 // a number, or nutrition the user disputes. Text-only meals keep the plan's
 // common-sense weight; disputed nutrition is then estimated from name and note.
-// It returns the cleaned items and the nutrition disputes for the review queue.
-func (r *Runner) reestimateCorrectionItems(ctx context.Context, input analyzeservice.AnalyzeInput, modelName string) ([]map[string]any, []map[string]any, error) {
+// It returns the cleaned items, the nutrition disputes for the review queue, and
+// the dishes whose portion could not be re-estimated because the photo call
+// failed and the plan gave no new amount (they stay exactly as they were).
+func (r *Runner) reestimateCorrectionItems(ctx context.Context, input analyzeservice.AnalyzeInput, modelName string) ([]map[string]any, []map[string]any, []string, error) {
 	items := make([]map[string]any, len(input.CorrectionItems))
 	for index, item := range input.CorrectionItems {
 		items[index] = copyAnyMap(item)
@@ -43,6 +45,7 @@ func (r *Runner) reestimateCorrectionItems(ctx context.Context, input analyzeser
 		}
 	}
 	var parsed map[string]any
+	var photoUnresolved []string
 	if needsCall {
 		sourceType := "image"
 		if len(imageURLs) == 0 {
@@ -51,12 +54,17 @@ func (r *Runner) reestimateCorrectionItems(ctx context.Context, input analyzeser
 		prompt := buildCorrectionReestimatePrompt(items, targets, len(imageURLs) > 0)
 		callCtx, cancel := context.WithTimeout(ctx, correctionReestimateTimeout)
 		var err error
-		parsed, err = r.analyze.RunPrecisionJSONWithImagesTemperatureNoFallback(callCtx, sourceType, prompt, imageURLs, modelName, 0.1)
+		// 重估回答只有序号和新数值，没有菜名；用它自己的规则判断渠道回答是否可用。
+		parsed, err = r.analyze.RunPrecisionJSONWithImagesValidated(callCtx, sourceType, prompt, imageURLs, modelName, 0.1,
+			correctionReestimateValidator(items, targets, len(imageURLs) > 0))
 		cancel()
 		if err != nil {
 			metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_reestimate", "failed")
 			logger.Warn(ctx, "纠错看图重估失败，重量沿用纠错计划的估计", slog.Int("target_count", len(targets)), logger.Err(err))
 			parsed = nil
+			// 只要求看图重估分量、计划里又没有给出新分量的菜，退回后保持原样。
+			// 这次纠错如果因此什么都没改成，由调用方说明是看图没成功。
+			photoUnresolved = correctionWeightTargetsLeftUnchanged(items, previous, targets, len(imageURLs) > 0)
 		}
 	}
 	disputes, missing := applyCorrectionReestimate(items, previous, targets, parsed, len(imageURLs) > 0)
@@ -70,12 +78,12 @@ func (r *Runner) reestimateCorrectionItems(ctx context.Context, input analyzeser
 	}
 	if len(missing) > 0 {
 		metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_reestimate", "rejected")
-		return nil, nil, fmt.Errorf("没能重新估算「%s」的营养，请稍后重试，或直接在纠错清单里填写营养数值", strings.Join(missing, "、"))
+		return nil, nil, nil, fmt.Errorf("没能重新估算「%s」的营养，请稍后重试，或直接在纠错清单里填写营养数值", strings.Join(missing, "、"))
 	}
 	if needsCall {
 		metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_reestimate", "passed")
 	}
-	return items, disputes, nil
+	return items, disputes, photoUnresolved, nil
 }
 
 func correctionImageURLs(input analyzeservice.AnalyzeInput) []string {
@@ -149,23 +157,89 @@ func buildCorrectionReestimatePrompt(items []map[string]any, targets []correctio
 		basis, strings.Join(meal, "\n"), strings.Join(tasks, "\n"), weightRule)
 }
 
-// applyCorrectionReestimate writes valid estimates onto items in place and
-// returns the nutrition disputes plus the names whose nutrition could not be
-// estimated. A missing weight keeps the plan's common-sense estimate.
-func applyCorrectionReestimate(items, previous []map[string]any, targets []correctionReestimateTarget, parsed map[string]any, hasImage bool) ([]map[string]any, []string) {
+// correctionReestimateRows indexes the model's rows by the dish they answer.
+func correctionReestimateRows(parsed map[string]any) map[int]map[string]any {
 	rows := map[int]map[string]any{}
 	for _, row := range extractItems(parsed["items"]) {
 		if index, ok := floatFromAny(row["index"]); ok && index == math.Trunc(index) {
 			rows[int(index)] = row
 		}
 	}
+	return rows
+}
+
+func correctionReestimatedWeight(row map[string]any) (float64, bool) {
+	weight, ok := floatFromAny(row["weight_grams"])
+	return weight, ok && weight > 0 && weight <= 100000
+}
+
+// correctionReestimateValidator tells the channel router whether an answer to
+// the re-estimate prompt is usable: every flagged dish must come back with what
+// was asked for. The answer carries indexes and numbers, never dish names, so
+// the recognition rule ("named foods with weights") must not be applied to it.
+func correctionReestimateValidator(items []map[string]any, targets []correctionReestimateTarget, hasImage bool) func(map[string]any) error {
+	return func(parsed map[string]any) error {
+		rows := correctionReestimateRows(parsed)
+		for _, target := range targets {
+			if target.index < 0 || target.index >= len(items) {
+				return fmt.Errorf("%w：重估目标超出清单", analyzeservice.ErrUnusableVisionAnswer)
+			}
+			row := rows[target.index]
+			item := items[target.index]
+			if target.weight && hasImage {
+				weight, ok := correctionReestimatedWeight(row)
+				if !ok {
+					return fmt.Errorf("%w：第 %d 项缺少有效的重估分量", analyzeservice.ErrUnusableVisionAnswer, target.index)
+				}
+				// 与写入结果时一致：营养按重估后的分量检查，而不是按计划里的旧分量。
+				item = copyAnyMap(item)
+				analyzeservice.SetCorrectionItemAmount(item, round2(weight))
+			}
+			if target.nutrition {
+				if _, ok := correctionEstimatedNutrients(row, item); !ok {
+					return fmt.Errorf("%w：第 %d 项缺少有效的重估营养", analyzeservice.ErrUnusableVisionAnswer, target.index)
+				}
+			}
+		}
+		return nil
+	}
+}
+
+// correctionWeightTargetsLeftUnchanged lists the dishes that only asked for a
+// portion re-estimate from the photo and whose plan gave no new amount, so a
+// failed photo call leaves them exactly as they were.
+func correctionWeightTargetsLeftUnchanged(items, previous []map[string]any, targets []correctionReestimateTarget, hasImage bool) []string {
+	var names []string
+	for _, target := range targets {
+		if !hasImage || !target.weight || target.nutrition {
+			continue
+		}
+		item := items[target.index]
+		original := correctionOriginalItem(item, previous)
+		if original == nil || normalizeScopedName(firstNonEmptyString(original, "name")) != normalizeScopedName(firstNonEmptyString(item, "name")) {
+			continue
+		}
+		amount, _ := analyzeservice.CorrectionItemAmount(item)
+		oldAmount, _ := analyzeservice.CorrectionItemAmount(original)
+		if math.Abs(amount-oldAmount) < 0.01 {
+			names = append(names, firstNonEmptyString(item, "name"))
+		}
+	}
+	return names
+}
+
+// applyCorrectionReestimate writes valid estimates onto items in place and
+// returns the nutrition disputes plus the names whose nutrition could not be
+// estimated. A missing weight keeps the plan's common-sense estimate.
+func applyCorrectionReestimate(items, previous []map[string]any, targets []correctionReestimateTarget, parsed map[string]any, hasImage bool) ([]map[string]any, []string) {
+	rows := correctionReestimateRows(parsed)
 	var disputes []map[string]any
 	var missing []string
 	for _, target := range targets {
 		item := items[target.index]
 		row := rows[target.index]
 		if target.weight && hasImage {
-			if weight, ok := floatFromAny(row["weight_grams"]); ok && weight > 0 && weight <= 100000 {
+			if weight, ok := correctionReestimatedWeight(row); ok {
 				// 与提示词里给出的当前数量同单位：克，或该条目声明的毫升、个、份。
 				analyzeservice.SetCorrectionItemAmount(item, round2(weight))
 				item["weightEdited"] = true

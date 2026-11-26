@@ -43,9 +43,20 @@ func correctionImageURLs(input AnalyzeInput) []string {
 	return urls
 }
 
+// validateCorrectionPlanAnswer accepts anything shaped like a correction plan.
+// A plan has no food list, so the recognition rule ("named foods with weights")
+// would reject every plan; whether the plan fits the meal is checked afterwards
+// by applyCorrectionInstructionPlan.
+func validateCorrectionPlanAnswer(parsed map[string]any) error {
+	if _, ok := parsed["needs_clarification"].(bool); !ok {
+		return ErrUnusableVisionAnswer
+	}
+	return nil
+}
+
 // runCorrectionPhotoPlan is the vision call; tests replace it.
 var runCorrectionPhotoPlan = func(s *AnalyzeService, ctx context.Context, prompt string, imageURLs []string, model string) (map[string]any, error) {
-	return s.RunPrecisionJSONWithImagesTemperatureNoFallback(ctx, "image", prompt, imageURLs, model, 0.1)
+	return s.RunPrecisionJSONWithImagesValidated(ctx, "image", prompt, imageURLs, model, 0.1, validateCorrectionPlanAnswer)
 }
 
 // resolveCorrectionInstructionsWithPhoto reads the note again together with

@@ -68,6 +68,16 @@ func (f *fakeWorkerAnalyzeRunner) RunPrecisionJSONWithImagesNoFallback(ctx conte
 	return f.result, f.err
 }
 
+func (f *fakeWorkerAnalyzeRunner) RunPrecisionJSONWithImagesValidated(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64, validate func(map[string]any) error) (map[string]any, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if err := validate(f.result); err != nil {
+		return nil, err
+	}
+	return f.result, nil
+}
+
 func (f *fakeWorkerAnalyzeRunner) RunPrecisionJSONWithImagesTemperatureNoFallback(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error) {
 	return f.result, f.err
 }

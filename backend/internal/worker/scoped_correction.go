@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -14,6 +15,9 @@ import (
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 )
+
+// errCorrectionChangedNothing 表示合并后的清单与原餐完全相同。
+var errCorrectionChangedNothing = errors.New("未应用任何更正，请在纠错清单中填写需要修改的食物名称或重量")
 
 // 结构化纠错按原食物标识合并，未修改项不进入营养重新估算。
 func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, input analyzeservice.AnalyzeInput, overrides map[int]correctionContextOverride) (map[string]any, error) {
@@ -125,7 +129,7 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 	if !scopedCorrectionChanged(previous, items) {
 		metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_effect", "rejected")
 		logger.Warn(ctx, "纠错结果没有实际变化，拒绝标记成功", slog.Int("item_count", len(items)))
-		return nil, fmt.Errorf("未应用任何更正，请在纠错清单中填写需要修改的食物名称或重量")
+		return nil, errCorrectionChangedNothing
 	}
 	metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_effect", "passed")
 	result["items"] = items
