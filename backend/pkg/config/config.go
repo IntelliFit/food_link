@@ -171,6 +171,15 @@ type ExternalConfig struct {
 	NutritionEmbeddingBaseURL     string              `mapstructure:"nutrition_embedding_base_url"`
 	NutritionEmbeddingModel       string              `mapstructure:"nutrition_embedding_model"`
 	NutritionEmbeddingDimensions  int                 `mapstructure:"nutrition_embedding_dimensions"`
+
+	// DeepSeekOfficial* is an account on DeepSeek's own platform (api.deepseek.com), separate
+	// from DeepSeekAPIKey, which other features reach through a gateway. Only the pet chat
+	// uses it: deepseek-flash with server-side safety checks needs the official API.
+	DeepSeekOfficialAPIKey  string `mapstructure:"deepseek_official_api_key"`
+	DeepSeekOfficialBaseURL string `mapstructure:"deepseek_official_base_url"`
+	// PetChatLLMProvider picks the pet chat model: "" or "deepseek" uses DeepSeek when the
+	// official key is set, "qwen" keeps the chat on Qwen.
+	PetChatLLMProvider string `mapstructure:"pet_chat_llm_provider"`
 }
 
 // VisionRoutingConfig controls channel scheduling. Only OrdinaryImageModel
@@ -721,6 +730,15 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	if fileCfg.External.DeepSeekBaseURL != "" {
 		v.Set("external.deepseek_base_url", fileCfg.External.DeepSeekBaseURL)
 	}
+	if fileCfg.External.DeepSeekOfficialAPIKey != "" {
+		v.Set("external.deepseek_official_api_key", fileCfg.External.DeepSeekOfficialAPIKey)
+	}
+	if fileCfg.External.DeepSeekOfficialBaseURL != "" {
+		v.Set("external.deepseek_official_base_url", fileCfg.External.DeepSeekOfficialBaseURL)
+	}
+	if fileCfg.External.PetChatLLMProvider != "" {
+		v.Set("external.pet_chat_llm_provider", fileCfg.External.PetChatLLMProvider)
+	}
 	if fileV.IsSet("external.nutrition_embedding_enabled") {
 		v.Set("external.nutrition_embedding_enabled", fileCfg.External.NutritionEmbeddingEnabled)
 	}
@@ -1254,6 +1272,9 @@ var cloudConfigKeyAliases = map[string]string{
 	"LLM_PROVIDER":                             "external.llm_provider",
 	"DEEPSEEK_API_KEY":                         "external.deepseek_api_key",
 	"DEEPSEEK_BASE_URL":                        "external.deepseek_base_url",
+	"DEEPSEEK_OFFICIAL_API_KEY":                "external.deepseek_official_api_key",
+	"DEEPSEEK_OFFICIAL_BASE_URL":               "external.deepseek_official_base_url",
+	"PET_CHAT_LLM_PROVIDER":                    "external.pet_chat_llm_provider",
 	"PIXEL_AVATAR_API_KEY":                     "external.pixel_avatar_api_key",
 	"PIXEL_AVATAR_BASE_URL":                    "external.pixel_avatar_base_url",
 	"PIXEL_AVATAR_MODEL":                       "external.pixel_avatar_model",
@@ -1411,6 +1432,9 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.LLMProvider = strings.TrimSpace(cfg.LLMProvider)
 	cfg.DeepSeekAPIKey = strings.TrimSpace(cfg.DeepSeekAPIKey)
 	cfg.DeepSeekBaseURL = strings.TrimSpace(cfg.DeepSeekBaseURL)
+	cfg.DeepSeekOfficialAPIKey = strings.TrimSpace(cfg.DeepSeekOfficialAPIKey)
+	cfg.DeepSeekOfficialBaseURL = strings.TrimRight(strings.TrimSpace(cfg.DeepSeekOfficialBaseURL), "/")
+	cfg.PetChatLLMProvider = strings.ToLower(strings.TrimSpace(cfg.PetChatLLMProvider))
 	cfg.PixelAvatarAPIKey = strings.TrimSpace(cfg.PixelAvatarAPIKey)
 	cfg.PixelAvatarBaseURL = strings.TrimRight(strings.TrimSpace(cfg.PixelAvatarBaseURL), "/")
 	cfg.PixelAvatarModel = strings.TrimSpace(cfg.PixelAvatarModel)
@@ -1784,6 +1808,9 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.llm_provider", "LLM_PROVIDER")
 	_ = v.BindEnv("external.deepseek_api_key", "DEEPSEEK_API_KEY")
 	_ = v.BindEnv("external.deepseek_base_url", "DEEPSEEK_BASE_URL")
+	_ = v.BindEnv("external.deepseek_official_api_key", "DEEPSEEK_OFFICIAL_API_KEY")
+	_ = v.BindEnv("external.deepseek_official_base_url", "DEEPSEEK_OFFICIAL_BASE_URL")
+	_ = v.BindEnv("external.pet_chat_llm_provider", "PET_CHAT_LLM_PROVIDER")
 	_ = v.BindEnv("external.pixel_avatar_api_key", "PIXEL_AVATAR_API_KEY")
 	_ = v.BindEnv("external.pixel_avatar_base_url", "PIXEL_AVATAR_BASE_URL")
 	_ = v.BindEnv("external.pixel_avatar_model", "PIXEL_AVATAR_MODEL")

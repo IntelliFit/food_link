@@ -182,10 +182,24 @@ func addPetChatTokenUsage(left, right billing.TokenUsage) billing.TokenUsage {
 		CachedInputTokens: left.CachedInputTokens + right.CachedInputTokens, CacheMissInputTokens: left.CacheMissInputTokens + right.CacheMissInputTokens}
 }
 
-func (s *StatsService) streamPetChatAnswer(ctx context.Context, llm textLLMRuntimeConfig, comp *statsComputation, question string, history []domain.PetChatMessage, enableThinking bool, images petChatImageContext) (<-chan string, billing.TokenUsage, bool, error) {
+// petChatAnswerStream is one streamed pet chat answer. LLM is the model that actually
+// answered, which is Qwen when DeepSeek failed and the turn fell back.
+type petChatAnswerStream struct {
+	Chunks    <-chan string
+	Usage     billing.TokenUsage
+	LabelOnly bool
+	Outcome   *petChatStreamOutcome
+	LLM       textLLMRuntimeConfig
+}
+
+func (s *StatsService) streamPetChatAnswer(ctx context.Context, llm textLLMRuntimeConfig, comp *statsComputation, question string, history []domain.PetChatMessage, enableThinking bool, images petChatImageContext) (petChatAnswerStream, error) {
 	evidence, err := s.readPetChatLabel(ctx, llm, question, images)
+	if fallback, ok := s.petChatRetryLLM(ctx, llm, err); ok {
+		llm = fallback
+		evidence, err = s.readPetChatLabel(ctx, llm, question, images)
+	}
 	if err != nil {
-		return nil, billing.TokenUsage{}, false, err
+		return petChatAnswerStream{LLM: llm}, err
 	}
 	var usage billing.TokenUsage
 	if evidence != nil {
@@ -195,10 +209,14 @@ func (s *StatsService) streamPetChatAnswer(ctx context.Context, llm textLLMRunti
 		chunks := make(chan string, 1)
 		chunks <- answer
 		close(chunks)
-		return chunks, usage, true, nil
+		return petChatAnswerStream{Chunks: chunks, Usage: usage, LabelOnly: true, LLM: llm}, nil
 	}
 	s.preparePetDietEvidence(ctx, comp, question, history, len(images.URLs) > 0)
 	prompt := buildPetChatImagePrompt(comp, question, history, images) + evidence.promptBlock()
-	chunks, err := s.streamNutritionInsight(ctx, llm.BaseURL, llm.APIKey, llm.Model, prompt, petChatMaxTokens, enableThinking, images.URLs...)
-	return chunks, usage, false, err
+	chunks, outcome, err := s.streamNutritionInsightWithOutcome(ctx, llm.BaseURL, llm.APIKey, llm.Model, prompt, petChatMaxTokens, enableThinking, images.URLs)
+	if fallback, ok := s.petChatRetryLLM(ctx, llm, err); ok {
+		llm = fallback
+		chunks, outcome, err = s.streamNutritionInsightWithOutcome(ctx, llm.BaseURL, llm.APIKey, llm.Model, prompt, petChatMaxTokens, enableThinking, images.URLs)
+	}
+	return petChatAnswerStream{Chunks: chunks, Usage: usage, Outcome: outcome, LLM: llm}, err
 }

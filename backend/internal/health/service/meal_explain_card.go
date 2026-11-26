@@ -73,7 +73,7 @@ func (s *StatsService) mealExplainWords(ctx context.Context, state *campusDietAg
 	if s == nil || s.cfg == nil {
 		return ""
 	}
-	llm := s.preferredTextLLM()
+	llm := s.preferredPetChatLLM(false)
 	if strings.TrimSpace(llm.APIKey) == "" {
 		return ""
 	}
@@ -100,7 +100,7 @@ func (s *StatsService) mealExplainWords(ctx context.Context, state *campusDietAg
 	})
 	callCtx, cancel := context.WithTimeout(ctx, mealExplainTimeout)
 	defer cancel()
-	completion, err := s.requestCampusDietAgentCompletion(callCtx, llm, []map[string]any{{"role": "system", "content": mealExplainPrompt}, {"role": "user", "content": string(payload)}}, nil, "none", false)
+	completion, err := s.requestPetChatCompletion(callCtx, &llm, []map[string]any{{"role": "system", "content": mealExplainPrompt}, {"role": "user", "content": string(payload)}}, nil, "none", false)
 	if err != nil {
 		logger.Warn(ctx, "推荐理由解释生成失败，改用卡片记录的理由", logger.UserID(state.UserID), logger.Err(err))
 		return ""

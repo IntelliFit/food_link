@@ -211,7 +211,13 @@ func (s *StatsService) preferredTextLLM() textLLMRuntimeConfig {
 	return textLLMRuntimeConfig{BaseURL: defaultDashScopeBaseURL, Model: statsInsightPreferredModel, Provider: "qwen"}
 }
 
+// preferredPetChatLLM is the model for every pet chat call: free chat, image questions and
+// the meal agent with its router, acknowledgement and explain card. deepseek-flash reads
+// images too, so with the official DeepSeek key both paths use it.
 func (s *StatsService) preferredPetChatLLM(hasImages bool) textLLMRuntimeConfig {
+	if llm, ok := s.petChatDeepSeekLLM(); ok {
+		return llm
+	}
 	if !hasImages {
 		return s.preferredTextLLM()
 	}
@@ -338,6 +344,8 @@ type statsInsightGeneration struct {
 	Usage   billing.TokenUsage
 	Pricing *billing.PricingResult
 	Model   string
+	// SafetyRefused: Content is the refusal that replaced a blocked pet chat answer.
+	SafetyRefused bool
 }
 
 type PetChatInput struct {
@@ -986,6 +994,9 @@ func (s *StatsService) GeneratePetChat(ctx context.Context, userID string, input
 	if petChatHomeIncluded(input) {
 		creditsCharged, billingStatus = 0, "included_home_meal"
 	}
+	if generation.SafetyRefused {
+		billingStatus = "safety_refused"
+	}
 	userMessageID, assistantMessageID := s.persistPetChatExchange(ctx, userID, session.ID, estimate.Range, estimate.Question, generation.Content, creditsCharged, actualPricing, &estimate.Pricing, billingStatus, input.ImageURLs)
 	return &PetChatResult{
 		Question:           estimate.Question,
@@ -1060,6 +1071,10 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 		var streamErr error
 		var labelUsage billing.TokenUsage
 		var labelOnly bool
+		// safetyRefused: DeepSeek's safety check blocked the question or the answer. When
+		// text had already streamed, the client is told via an error and reloads the saved
+		// exchange, which holds the refusal instead of the partial answer.
+		var safetyRefused, refusedAfterText bool
 		apiKey := llm.APIKey
 		model := llm.Model
 		if apiKey == "" {
@@ -1068,9 +1083,15 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			chunkChan <- PetChatStreamChunk{Type: "chunk", Text: fallback}
 		} else {
 			modelStarted := time.Now()
-			textChan, usage, onlyLabel, err := s.streamPetChatAnswer(ctx, llm, comp, estimate.Question, historyMessages, input.EnableThinking, images)
-			labelUsage, labelOnly = usage, onlyLabel
-			if err != nil {
+			answer, err := s.streamPetChatAnswer(ctx, llm, comp, estimate.Question, historyMessages, input.EnableThinking, images)
+			textChan := answer.Chunks
+			labelUsage, labelOnly = answer.Usage, answer.LabelOnly
+			if answer.LLM.Model != "" {
+				model = answer.LLM.Model
+			}
+			if isPetChatSafetyRefusal(err) {
+				safetyRefused = true
+			} else if err != nil {
 				streamErr = err
 			} else {
 				logger.Info(ctx, "宠物对话模型流已建立",
@@ -1103,10 +1124,31 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 					slog.String("model", model),
 					slog.Int64("model_total_duration_ms", time.Since(modelStarted).Milliseconds()),
 				)
+				if answer.Outcome.refused() {
+					safetyRefused, refusedAfterText = true, fullAnswer.Len() > 0
+				}
+			}
+			if safetyRefused {
+				logger.Warn(ctx, "宠物对话内容未通过模型安全审核",
+					logger.UserID(userID),
+					slog.String("session_id", session.ID),
+					slog.String("model", model),
+					slog.Bool("after_text", refusedAfterText),
+				)
+				fullAnswer.Reset()
+				fullAnswer.WriteString(petChatSafetyRefusalText)
+				if !refusedAfterText {
+					chunkChan <- PetChatStreamChunk{Type: "chunk", Text: petChatSafetyRefusalText}
+				}
 			}
 		}
 
 		content := sanitizePetChatAnswerText(fullAnswer.String())
+		if streamErr == nil && content == "" && apiKey != "" && isPetChatDeepSeekModel(model) {
+			// Thinking used up the token budget, or the stream broke before any text: fail
+			// the turn (free, with a retry) instead of saving and charging an empty answer.
+			streamErr = fmt.Errorf("DeepSeek 宠物对话没有返回回答内容")
+		}
 		if streamErr != nil {
 			logger.Warn(ctx, "宠物对话大模型流式生成失败",
 				logger.UserID(userID),
@@ -1129,7 +1171,10 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 				billingStatus = "actual_usage_charged"
 			}
 		}
-		if apiKey != "" && s.creditGuard != nil && strings.TrimSpace(userID) != "" && !petChatHomeIncluded(input) {
+		if safetyRefused {
+			billingStatus = "safety_refused" // a refused turn costs the user nothing
+		}
+		if apiKey != "" && !safetyRefused && s.creditGuard != nil && strings.TrimSpace(userID) != "" && !petChatHomeIncluded(input) {
 			sourceKey := fmt.Sprintf("pet_chat:%s:%s:%d", estimate.Range, session.ID, time.Now().UnixNano())
 			usage := labelUsage
 			if !labelOnly {
@@ -1176,6 +1221,12 @@ func (s *StatsService) GeneratePetChatStream(ctx context.Context, userID string,
 			slog.Int("answer_length", len([]rune(content))),
 			slog.Int64("total_duration_ms", time.Since(requestStarted).Milliseconds()),
 		)
+		if refusedAfterText {
+			// A stream cannot take back text it already sent. On an error the clients reload
+			// the saved exchange, which shows the refusal in place of the partial answer.
+			chunkChan <- PetChatStreamChunk{Type: "error", Error: petChatSafetyRefusalText}
+			return
+		}
 		chunkChan <- PetChatStreamChunk{
 			Type: "done",
 			Meta: &PetChatStreamMeta{
@@ -1469,6 +1520,14 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 		return statsInsightGeneration{Content: fallbackPetChatAnswer(comp, question), Model: model}, nil
 	}
 	label, err := s.readPetChatLabel(ctx, llm, question, images)
+	if fallback, ok := s.petChatRetryLLM(ctx, llm, err); ok {
+		llm, apiKey, baseURL, model = fallback, fallback.APIKey, fallback.BaseURL, fallback.Model
+		label, err = s.readPetChatLabel(ctx, llm, question, images)
+	}
+	if isPetChatSafetyRefusal(err) {
+		// No pricing: a refused turn is free.
+		return statsInsightGeneration{Content: petChatSafetyRefusalText, Model: model, SafetyRefused: true}, nil
+	}
 	if err != nil {
 		return statsInsightGeneration{}, err
 	}
@@ -1489,10 +1548,15 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 	var lastErr error
 	var retryFeedback string
 	for attempt := 0; attempt < statsInsightMaxAttempts; attempt++ {
-		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens, map[string]any{
-			"enable_thinking":                enableThinking,
-			petChatImageURLsRequestOptionKey: images.URLs,
-		})
+		options := map[string]any{"enable_thinking": enableThinking, petChatImageURLsRequestOptionKey: images.URLs}
+		generation, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens, options)
+		if fallback, ok := s.petChatRetryLLM(ctx, llm, err); ok {
+			llm, apiKey, baseURL, model = fallback, fallback.APIKey, fallback.BaseURL, fallback.Model
+			generation, err = s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback, petChatMaxTokens, options)
+		}
+		if isPetChatSafetyRefusal(err) {
+			return statsInsightGeneration{Content: petChatSafetyRefusalText, Model: model, SafetyRefused: true}, nil
+		}
 		if err != nil {
 			lastErr = err
 			break
@@ -1826,6 +1890,10 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 		}
 		applyQwen38ThinkingOptions(body, enableThinking)
 	}
+	if isPetChatDeepSeekModel(model) {
+		enableThinking, _ := body["enable_thinking"].(bool)
+		applyDeepSeekPetChatOptions(body, enableThinking)
+	}
 	bodyBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
@@ -1840,6 +1908,9 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if isPetChatDeepSeekModel(model) && deepSeekContentRiskResponse(resp.StatusCode, respBody) {
+			return statsInsightGeneration{}, errPetChatSafetyRefused
+		}
 		return statsInsightGeneration{}, fmt.Errorf("文本模型 API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
 	}
 	var parsed struct {
@@ -1862,6 +1933,9 @@ func (s *StatsService) requestNutritionInsightOnce(ctx context.Context, baseURL,
 	}
 	if len(parsed.Choices) == 0 {
 		return statsInsightGeneration{}, fmt.Errorf("文本模型返回了空响应")
+	}
+	if isPetChatDeepSeekModel(model) && isContentFilterFinish(parsed.Choices[0].FinishReason) {
+		return statsInsightGeneration{}, errPetChatSafetyRefused
 	}
 	if strings.EqualFold(strings.TrimSpace(parsed.Choices[0].FinishReason), "length") {
 		return statsInsightGeneration{}, fmt.Errorf("文本模型输出因 max_tokens 截断")
@@ -1920,6 +1994,13 @@ func isTransientStatsInsightError(err error) bool {
 }
 
 func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int, enableThinking bool, imageURLs ...string) (<-chan string, error) {
+	chunks, _, err := s.streamNutritionInsightWithOutcome(ctx, baseURL, apiKey, model, prompt, maxTokens, enableThinking, imageURLs)
+	return chunks, err
+}
+
+// streamNutritionInsightWithOutcome also reports, once the channel is drained, whether the
+// model's safety check cut the answer off.
+func (s *StatsService) streamNutritionInsightWithOutcome(ctx context.Context, baseURL, apiKey, model, prompt string, maxTokens int, enableThinking bool, imageURLs []string) (<-chan string, *petChatStreamOutcome, error) {
 	body := map[string]any{
 		"model":           model,
 		"messages":        buildStatsInsightMessages(prompt, "", imageURLs),
@@ -1934,13 +2015,16 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 	if strings.EqualFold(strings.TrimSpace(model), statsInsightPreferredModel) {
 		applyQwen38ThinkingOptions(body, enableThinking)
 	}
+	if isPetChatDeepSeekModel(model) {
+		applyDeepSeekPetChatOptions(body, enableThinking)
+	}
 	bodyBytes, _ := json.Marshal(body)
 	var resp *http.Response
 	var lastErr error
 	for attempt := 1; attempt <= statsInsightNetworkMaxAttempts; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 		req.Header.Set("Content-Type", "application/json")
@@ -1951,6 +2035,9 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 			respBody, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()
 			err = fmt.Errorf("文本模型 API 错误: %d %s", resp.StatusCode, extractDeepSeekError(respBody))
+			if isPetChatDeepSeekModel(model) && deepSeekContentRiskResponse(resp.StatusCode, respBody) {
+				err = errPetChatSafetyRefused
+			}
 			resp = nil
 		}
 		if err == nil {
@@ -1958,7 +2045,7 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 		}
 		lastErr = err
 		if attempt == statsInsightNetworkMaxAttempts || !isTransientStatsInsightError(err) {
-			return nil, err
+			return nil, nil, err
 		}
 
 		logger.Warn(ctx, "宠物对话流式大模型调用失败，准备重试",
@@ -1972,14 +2059,15 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 			if !timer.Stop() {
 				<-timer.C
 			}
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		case <-timer.C:
 		}
 	}
 	if resp == nil {
-		return nil, lastErr
+		return nil, nil, lastErr
 	}
 
+	outcome := &petChatStreamOutcome{}
 	textChan := make(chan string, 32)
 	go func() {
 		defer close(textChan)
@@ -2018,12 +2106,16 @@ func (s *StatsService) streamNutritionInsight(ctx context.Context, baseURL, apiK
 			if text := parsed.Choices[0].Delta.Content; text != "" {
 				textChan <- text
 			}
+			if isPetChatDeepSeekModel(model) && isContentFilterFinish(parsed.Choices[0].FinishReason) {
+				outcome.safetyRefused.Store(true)
+				return
+			}
 			if strings.EqualFold(strings.TrimSpace(parsed.Choices[0].FinishReason), "length") {
 				return
 			}
 		}
 	}()
-	return textChan, nil
+	return textChan, outcome, nil
 }
 
 func buildStatsInsightMessages(prompt, retryFeedback string, imageURLs []string) []map[string]any {
