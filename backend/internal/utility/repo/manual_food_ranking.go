@@ -206,7 +206,10 @@ func manualSourceRank(item domain.ManualFoodResult, packagedIntent bool) (group 
 // It keeps one canteen row per dish name and, for packaged queries, shows the
 // best generic food at position 4 so a user without the package still finds
 // it on the first screen.
-func rankManualFoodResults(items []domain.ManualFoodResult, query string, packagedIntent bool) []domain.ManualFoodResult {
+//
+// personalized is false for guests: their "frequent foods" come from every
+// user's records, so a usage count there is not their own history.
+func rankManualFoodResults(items []domain.ManualFoodResult, query string, packagedIntent bool, personalized bool) []domain.ManualFoodResult {
 	type keyed struct {
 		item     domain.ManualFoodResult
 		tier     int
@@ -224,7 +227,7 @@ func rankManualFoodResults(items []domain.ManualFoodResult, query string, packag
 			relevant = 0
 		}
 		personal := 1
-		if isPersonalManualResult(item) {
+		if personalized && isPersonalManualResult(item) {
 			personal = 0
 		}
 		group, rank := manualSourceRank(item, packagedIntent)

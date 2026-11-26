@@ -69,7 +69,7 @@ func TestRankManualFoodResultsPackagedQueryLeadsWithProducts(t *testing.T) {
 		{ID: "p4", Source: "packaged_food", Title: "娃哈哈 桂圆八宝粥", SearchName: "桂圆八宝粥", SearchOrder: 3},
 		{ID: "m1", Source: "nutrition_library", Title: "八宝粥罐头外包装"},
 	}
-	got := manualTitles(rankManualFoodResults(items, "八宝粥", true))
+	got := manualTitles(rankManualFoodResults(items, "八宝粥", true, true))
 	require.Equal(t, []string{
 		"银鹭 桂圆莲子八宝粥", "娃哈哈 木糖醇八宝粥", "百草味 坚果八宝粥",
 		"八宝粥", // the generic food stays on the first screen
@@ -91,8 +91,24 @@ func TestRankManualFoodResultsUnpackagedQueryLeadsWithStandardFood(t *testing.T)
 		{ID: "s4", Source: "nutrition_library", Title: "Basmati 米饭"},
 		{ID: "m1", Source: "nutrition_library", Title: "米饭蛋糕"},
 	}
-	got := manualTitles(rankManualFoodResults(items, "米饭", false))
+	got := manualTitles(rankManualFoodResults(items, "米饭", false, true))
 	require.Equal(t, []string{"白米饭", "米饭", "米饭(含番茄蛋汁)", "温州糯米饭", "Basmati 米饭", "自热米饭", "米饭蛋糕"}, got)
+}
+
+func TestRankManualFoodResultsGuestFrequentFoodsAreNotPersonal(t *testing.T) {
+	items := []domain.ManualFoodResult{
+		{ID: "catalog:牛奶", Source: "nutrition_library", SourceLabel: "常用食物", Title: "牛奶", UsageCount: 120},
+		{ID: "catalog:牛奶片", Source: "nutrition_library", SourceLabel: "常用食物", Title: "牛奶片", UsageCount: 40},
+		{ID: "p1", Source: "packaged_food", Title: "蒙牛 纯牛奶", SearchName: "纯牛奶", SearchOrder: 0},
+		{ID: "p2", Source: "packaged_food", Title: "伊利 纯牛奶", SearchName: "纯牛奶", SearchOrder: 1},
+		{ID: "p3", Source: "packaged_food", Title: "光明 鲜牛奶", SearchName: "鲜牛奶", SearchOrder: 2},
+		{ID: "p4", Source: "packaged_food", Title: "特仑苏 纯牛奶", SearchName: "纯牛奶", SearchOrder: 3},
+	}
+	guest := manualTitles(rankManualFoodResults(items, "牛奶", true, false))
+	require.Equal(t, []string{"蒙牛 纯牛奶", "伊利 纯牛奶", "光明 鲜牛奶", "牛奶", "特仑苏 纯牛奶", "牛奶片"}, guest,
+		"a guest's frequent foods come from everyone's records and do not jump the queue")
+	user := rankManualFoodResults(items, "牛奶", true, true)
+	require.Equal(t, "catalog:牛奶", user[0].ID, "for a signed-in user the same row is their own history")
 }
 
 func TestRankManualFoodResultsKeepsOwnFoodsFirst(t *testing.T) {
@@ -102,7 +118,7 @@ func TestRankManualFoodResultsKeepsOwnFoodsFirst(t *testing.T) {
 		{ID: "shared", Source: "custom", CanEdit: false, Title: "别人的米饭"},
 		{ID: "recent", Source: "nutrition_library", Title: "糙米饭", UsageCount: 3},
 	}
-	got := rankManualFoodResults(items, "米饭", false)
+	got := rankManualFoodResults(items, "米饭", false, true)
 	require.Equal(t, "recent", got[0].ID, "foods the user logged come first, most used first")
 	require.Equal(t, "own", got[1].ID)
 	require.Equal(t, "s1", got[2].ID)
