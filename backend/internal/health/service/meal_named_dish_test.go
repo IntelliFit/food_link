@@ -41,6 +41,11 @@ func TestNamedDishIsReadFromTheRequest(t *testing.T) {
 	assert.InDelta(t, 1.0, mealDishSimilarity("猪肉炖粉条", "猪肉白菜炖粉条"), 0.01)
 	assert.GreaterOrEqual(t, mealDishSimilarity("猪肉炖粉条", "酸菜炖粉条"), 0.6)
 	assert.Zero(t, mealDishSimilarity("猪肉炖粉条", "猪肉大葱包子"), "sharing one ingredient is not the same dish")
+	// Replay 2026-11-26 on the merged code: these two were offered as "最接近".
+	assert.Zero(t, mealDishSimilarity("猪肉炖粉条", "酱肉粉条煎饺"))
+	assert.Zero(t, mealDishSimilarity("猪肉炖粉条", "瀑布芝士猪肉酱薯条"))
+	assert.Equal(t, 1.0, mealDishSimilarity("酸菜鱼", "老坛酸菜鱼"))
+	assert.Zero(t, mealDishSimilarity("酸菜鱼", "酸菜炖粉条"))
 	assert.Zero(t, mealDishSimilarity("猪肉炖粉条", "番茄牛腩饭"))
 }
 

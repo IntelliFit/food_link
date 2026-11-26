@@ -24,6 +24,13 @@ var (
 // same or a closely related dish.
 const mealDishSimilarityFloor = 0.6
 
+// mealDishSimilarityClose is the share at which two characters in a row are enough, and how
+// far below the best match another dish may be and still be offered beside it.
+const (
+	mealDishSimilarityClose = 0.75
+	mealDishSimilaritySpan  = 0.2
+)
+
 // mealNamedDish is the dish a request names, or "" when it describes a wish instead
 // ("想吃清淡", "想吃便宜点的").
 func mealNamedDish(question string) string {
@@ -39,8 +46,9 @@ func mealNamedDish(question string) string {
 }
 
 // mealDishSimilarity is the share of the named dish found, in order, in a title: 0.8 for
-// 猪肉炖粉条 and 红烧肉炖粉条. Below mealDishSimilarityFloor, or with no two characters in a
-// row in common, it is 0: one shared ingredient is not the same dish.
+// 猪肉炖粉条 and 红烧肉炖粉条. It is 0 unless the title shares most of the name
+// (mealDishSimilarityClose) or a good part of it with three characters in a row
+// (酸菜炖粉条): scattered characters are not the same dish (酱肉粉条煎饺, 猪肉酱薯条).
 func mealDishSimilarity(name, title string) float64 {
 	a, b := []rune(name), []rune(title)
 	if len(a) == 0 || len(b) == 0 {
@@ -64,10 +72,10 @@ func mealDishSimilarity(name, title string) float64 {
 		}
 	}
 	share := float64(subsequence[len(a)][len(b)]) / float64(len(a))
-	if longestRun < 2 || share < mealDishSimilarityFloor {
-		return 0
+	if longestRun >= 2 && share >= mealDishSimilarityClose || longestRun >= 3 && share >= mealDishSimilarityFloor {
+		return share
 	}
-	return share
+	return 0
 }
 
 // mealNamedDishShare is how well an option matches the named dish: by its title, or by one
@@ -141,6 +149,10 @@ func mealNamedDishChoices(state *campusDietAgentRunState) (picks []DietRecommend
 	})
 	seen := []string{}
 	for _, row := range rows {
+		// Only dishes about as close as the best match are offered beside it.
+		if row.share < rows[0].share-mealDishSimilaritySpan {
+			break
+		}
 		if key := mealFingerprint(row.c); !slices.Contains(seen, key) && len(picks) < 3 {
 			seen = append(seen, key)
 			picks = append(picks, row.c)

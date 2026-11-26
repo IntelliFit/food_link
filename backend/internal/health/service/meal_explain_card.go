@@ -31,7 +31,7 @@ var (
 
 const mealExplainPrompt = `你是用户的饮食伙伴。用户在追问刚才那张推荐卡片：为什么推荐这几份，或者这几份适不适合他现在的情况。
 只解释卡片上这几份，不推荐新的菜，也不要说会再去找。要结合用户在对话里说过的情况（作息、睡眠、精力、训练、身体不适、之后的安排），说清楚这几份为什么合适、哪一份最合适、吃的时候注意什么（例如吃到七八分饱、少油少汤、配不配饮品）。
-数字只能用给出的数据，不编造；不做医疗承诺。用2到4句自然口语。只输出JSON：{"reply":"回答"}`
+数字和远近只能用给出的数据（distance_km是直线距离，没有就不提远近），不编造；不做医疗承诺。用2到4句自然口语。只输出JSON：{"reply":"回答"}`
 
 // explainActiveMeals answers a question about the meals already on the card.
 func (s *StatsService) explainActiveMeals(ctx context.Context, state *campusDietAgentRunState) *CampusDietAgentResult {
@@ -83,6 +83,8 @@ func (s *StatsService) mealExplainWords(ctx context.Context, state *campusDietAg
 			"title": o.Title, "where": strings.TrimSpace(strings.Join(compactDietStrings(o.SchoolName, defaultIfEmpty(o.CanteenName, o.MerchantName)), " ")),
 			"calories": o.Calories, "protein": o.Protein, "carbs": o.Carbs, "fat": o.Fat,
 			"recorded_reason": trimStatsRunes(defaultIfEmpty(o.SelectionReason, o.Reason), 160),
+			// Replay 2026-11-26: without the distance the model said the farther shop was nearer.
+			"distance_km": o.DistanceKM,
 		})
 	}
 	said := []string{}
