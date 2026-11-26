@@ -14,7 +14,23 @@ export type RoutinePreset = {
   wakeHour: number
 }
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i)
+const HOURS_PER_DAY = 24
+/** 滚轮重复几轮 24 小时，让 23 点往下滑接着是 0 点、1 点（首尾相接）。 */
+const WHEEL_CYCLES = 5
+const MIDDLE_CYCLE = Math.floor(WHEEL_CYCLES / 2)
+const WHEEL_HOURS = Array.from({ length: HOURS_PER_DAY * WHEEL_CYCLES }, (_, i) => i % HOURS_PER_DAY)
+
+/** 小时 → 滚轮中间那一轮的下标；每次停下都回到中间，两头永远还有整天可滑。 */
+export function hourToWheelIndex(hour: number): number {
+  return MIDDLE_CYCLE * HOURS_PER_DAY + clampHour(hour, 0)
+}
+
+/** 滚轮下标 → 小时（0–23）。 */
+export function wheelIndexToHour(index: number): number {
+  const n = Math.round(Number(index))
+  if (!Number.isFinite(n)) return 0
+  return ((n % HOURS_PER_DAY) + HOURS_PER_DAY) % HOURS_PER_DAY
+}
 
 export const DEFAULT_ROUTINE_HOURS: RoutineHours = {
   sleepHour: 23,
@@ -97,13 +113,13 @@ export default function RoutineHourPicker({
   compact = false,
 }: RoutineHourPickerProps) {
   const normalized = normalizeRoutineHours(value)
-  const [sleepPick, setSleepPick] = useState<number[]>([normalized.sleepHour])
-  const [wakePick, setWakePick] = useState<number[]>([normalized.wakeHour])
+  const [sleepPick, setSleepPick] = useState<number[]>([hourToWheelIndex(normalized.sleepHour)])
+  const [wakePick, setWakePick] = useState<number[]>([hourToWheelIndex(normalized.wakeHour)])
 
   useEffect(() => {
     const next = normalizeRoutineHours(value)
-    setSleepPick([next.sleepHour])
-    setWakePick([next.wakeHour])
+    setSleepPick([hourToWheelIndex(next.sleepHour)])
+    setWakePick([hourToWheelIndex(next.wakeHour)])
   }, [value.sleepHour, value.wakeHour])
 
   const applyChange = (patch: Partial<RoutineHours>) => {
@@ -141,16 +157,17 @@ export default function RoutineHourPicker({
               style={{ width: '100%', height: '100%' }}
               value={sleepPick}
               onChange={(e) => {
-                const hour = Number(e.detail.value?.[0] ?? normalized.sleepHour)
-                setSleepPick([hour])
+                const raw = e.detail.value?.[0]
+                const hour = raw == null ? normalized.sleepHour : wheelIndexToHour(Number(raw))
+                setSleepPick([hourToWheelIndex(hour)])
                 applyChange({ sleepHour: hour })
               }}
             >
               <PickerViewColumn>
-                {HOURS.map(hour => {
+                {WHEEL_HOURS.map((hour, index) => {
                   const isSelected = hour === normalized.sleepHour
                   return (
-                    <View key={hour} className='routine-wheel-item'>
+                    <View key={index} className='routine-wheel-item'>
                       <Text
                         className='routine-wheel-hour'
                         style={{
@@ -181,16 +198,17 @@ export default function RoutineHourPicker({
               style={{ width: '100%', height: '100%' }}
               value={wakePick}
               onChange={(e) => {
-                const hour = Number(e.detail.value?.[0] ?? normalized.wakeHour)
-                setWakePick([hour])
+                const raw = e.detail.value?.[0]
+                const hour = raw == null ? normalized.wakeHour : wheelIndexToHour(Number(raw))
+                setWakePick([hourToWheelIndex(hour)])
                 applyChange({ wakeHour: hour })
               }}
             >
               <PickerViewColumn>
-                {HOURS.map(hour => {
+                {WHEEL_HOURS.map((hour, index) => {
                   const isSelected = hour === normalized.wakeHour
                   return (
-                    <View key={hour} className='routine-wheel-item'>
+                    <View key={index} className='routine-wheel-item'>
                       <Text
                         className='routine-wheel-hour'
                         style={{

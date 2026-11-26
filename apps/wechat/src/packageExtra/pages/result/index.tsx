@@ -2389,8 +2389,8 @@ export function ResultPage() {
       // @ts-ignore
       placeholderText: '请输入收藏名称',
       success: async (res) => {
-        if (res.confirm && (res as any).content) {
-          const recipeName = (res as any).content.trim()
+        if (res.confirm) {
+          const recipeName = String((res as any).content || '').trim()
         if (!recipeName) {
             Taro.showToast({ title: '请输入食谱名称', icon: 'none' })
           return
