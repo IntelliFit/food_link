@@ -166,6 +166,26 @@ func TestSmartNutritionRecomputesDishFromIngredients(t *testing.T) {
 	require.Len(t, got["component_nutrition"], 3)
 }
 
+func TestSmartNutritionDishComponentsRecordLibraryRowIDs(t *testing.T) {
+	dish := smartItem("香蕉番茄拼盘", "熟制", 200, 110, map[string]any{
+		"isComposite": true,
+		"components": []any{
+			map[string]any{"name": "香蕉", "grams": 100, "foodState": "生"},
+			map[string]any{"name": "番茄", "grams": 100, "foodState": "生"},
+		},
+	})
+	items := runSmart(t, newSmartLibrary(), dish)
+	require.Equal(t, "component_library", items[0]["nutrition_source"])
+	breakdown := map[string]map[string]any{}
+	for _, entry := range items[0]["component_nutrition"].([]map[string]any) {
+		breakdown[stringFromAny(entry["name"])] = entry
+	}
+	require.Equal(t, "library", breakdown["香蕉"]["component_source"])
+	require.Equal(t, "id-香蕉", breakdown["香蕉"]["matched_food_id"], "a library component keeps its row id for tracing")
+	require.Equal(t, "reference_table", breakdown["番茄"]["component_source"])
+	require.Nil(t, breakdown["番茄"]["matched_food_id"], "table values are not library rows")
+}
+
 func TestSmartNutritionKeepsDishEstimateWhenSplitIsUnreliable(t *testing.T) {
 	lowCoverage := smartItem("咖喱牛肉饭", "熟制", 400, 700, map[string]any{
 		"isComposite": true,
