@@ -366,7 +366,7 @@ func (s *StatsService) preparePetDietEvidence(ctx context.Context, comp *statsCo
 		if round == 0 {
 			choice = "required"
 		}
-		completion, err := s.requestCampusDietAgentCompletion(queryCtx, llm, messages, dietRecordToolDefinitions(), choice)
+		completion, err := s.requestPetChatCompletion(queryCtx, &llm, messages, dietRecordToolDefinitions(), choice)
 		if err != nil {
 			logger.Warn(ctx, "饮食明细查询规划未完成", logger.UserID(state.UserID), logger.Err(err))
 			state.Results = append(state.Results, map[string]any{"status": "query_plan_incomplete", "note": "仅能引用已返回的真实记录，不能把尚未查询的日期说成没有记录。"})

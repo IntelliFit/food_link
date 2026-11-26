@@ -179,7 +179,7 @@ func (s *StatsService) mealAcknowledgementWords(ctx context.Context, userID, que
 	if s == nil || s.mealRouterOff || s.cfg == nil {
 		return fallback
 	}
-	llm := s.preferredTextLLM()
+	llm := s.preferredPetChatLLM(false)
 	if strings.TrimSpace(llm.APIKey) == "" {
 		return fallback
 	}
@@ -194,7 +194,7 @@ func (s *StatsService) mealAcknowledgementWords(ctx context.Context, userID, que
 	payload, _ := json.Marshal(map[string]any{"recommendations": options, "user_reply": question})
 	wordsCtx, cancel := context.WithTimeout(ctx, mealAcknowledgementTimeout)
 	defer cancel()
-	completion, err := s.requestCampusDietAgentCompletion(wordsCtx, llm, []map[string]any{{"role": "system", "content": mealAcknowledgementPrompt}, {"role": "user", "content": string(payload)}}, nil, "none", false)
+	completion, err := s.requestPetChatCompletion(wordsCtx, &llm, []map[string]any{{"role": "system", "content": mealAcknowledgementPrompt}, {"role": "user", "content": string(payload)}}, nil, "none", false)
 	if err != nil {
 		logger.Warn(ctx, "确认回复生成失败，使用固定回复", logger.UserID(userID), logger.Err(err))
 		return fallback

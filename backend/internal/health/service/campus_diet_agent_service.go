@@ -777,7 +777,7 @@ func (s *StatsService) runCampusDietAgent(ctx context.Context, state *campusDiet
 		}
 		return mealHarnessEmptyResult(state, "needs_location")
 	}
-	llm := s.preferredTextLLM()
+	llm := s.preferredPetChatLLM(false)
 	if llm.Provider == "qwen" {
 		llm.Model = campusDietAgentModel
 	}
@@ -871,8 +871,11 @@ func (s *StatsService) runCampusDietAgent(ctx context.Context, state *campusDiet
 		if deadline, ok := ctx.Deadline(); ok && !finalTurn {
 			modelCtx, cancelModel = context.WithDeadline(ctx, deadline.Add(-campusDietAgentFinalReserve))
 		}
-		completion, err := s.requestCampusDietAgentCompletion(modelCtx, llm, messages, tools, choice, state.EnableThinking)
+		completion, err := s.requestPetChatCompletion(modelCtx, &llm, messages, tools, choice, state.EnableThinking)
 		cancelModel()
+		if isPetChatSafetyRefusal(err) {
+			return petChatAgentRefusal(ctx, state)
+		}
 		if err != nil {
 			logger.Warn(ctx, "餐食Agent模型调用失败，进入失败处理",
 				logger.UserID(state.UserID), slog.String("agent_run_id", state.RunID),
@@ -974,7 +977,10 @@ func (s *StatsService) runCampusDietAgent(ctx context.Context, state *campusDiet
 	// argument in the final retrieval must not discard all previously read data.
 	if state.MealContextLoaded && ctx.Err() == nil {
 		messages = mealAppendEvidence(messages, state)
-		completion, err := s.requestCampusDietAgentCompletion(ctx, llm, messages, nil, "none", state.EnableThinking)
+		completion, err := s.requestPetChatCompletion(ctx, &llm, messages, nil, "none", state.EnableThinking)
+		if isPetChatSafetyRefusal(err) {
+			return petChatAgentRefusal(ctx, state)
+		}
 		if err == nil && len(completion.Message.ToolCalls) == 0 {
 			usage = addCampusDietAgentUsage(usage, completion.Usage)
 			content := strings.TrimSpace(campusDietAgentFencePattern.ReplaceAllString(completion.Message.Content, ""))
@@ -1111,6 +1117,11 @@ func (s *StatsService) requestCampusDietAgentCompletion(ctx context.Context, llm
 		body["enable_thinking"] = len(thinking) > 0 && thinking[0]
 		body["preserve_thinking"] = false
 	}
+	if isPetChatDeepSeekModel(llm.Model) {
+		// Agent rounds never think on DeepSeek: it rejects a forced tool choice while thinking,
+		// and tool rounds would have to echo their reasoning back. The tools do the work.
+		applyDeepSeekPetChatOptions(body, false)
+	}
 	encoded, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(llm.BaseURL, "/")+"/chat/completions", bytes.NewReader(encoded))
 	if err != nil {
@@ -1125,6 +1136,12 @@ func (s *StatsService) requestCampusDietAgentCompletion(ctx context.Context, llm
 	defer resp.Body.Close()
 	responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if isPetChatDeepSeekModel(llm.Model) && deepSeekContentRiskResponse(resp.StatusCode, responseBody) {
+			return campusDietAgentCompletion{}, errPetChatSafetyRefused
+		}
+		if isPetChatDeepSeekModel(llm.Model) {
+			return campusDietAgentCompletion{}, fmt.Errorf("campus diet agent model status %d %s", resp.StatusCode, extractDeepSeekError(responseBody))
+		}
 		return campusDietAgentCompletion{}, fmt.Errorf("campus diet agent model status %d", resp.StatusCode)
 	}
 	var parsed struct {
@@ -1134,6 +1151,7 @@ func (s *StatsService) requestCampusDietAgentCompletion(ctx context.Context, llm
 				Content   string                    `json:"content"`
 				ToolCalls []campusDietAgentToolCall `json:"tool_calls"`
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 		Usage struct {
 			PromptTokens          int `json:"prompt_tokens"`
@@ -1145,6 +1163,9 @@ func (s *StatsService) requestCampusDietAgentCompletion(ctx context.Context, llm
 	}
 	if err := json.Unmarshal(responseBody, &parsed); err != nil || len(parsed.Choices) == 0 {
 		return campusDietAgentCompletion{}, fmt.Errorf("invalid campus diet agent response")
+	}
+	if isPetChatDeepSeekModel(llm.Model) && isContentFilterFinish(parsed.Choices[0].FinishReason) {
+		return campusDietAgentCompletion{}, errPetChatSafetyRefused
 	}
 	result := campusDietAgentCompletion{}
 	result.Message = parsed.Choices[0].Message

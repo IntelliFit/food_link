@@ -33,7 +33,7 @@ func (s *StatsService) mealRouterSaysMeal(ctx context.Context, userID, question 
 	if s == nil || s.mealRouterOff || s.cfg == nil || !mealContext && !mealRouterFoodSignal.MatchString(question) {
 		return false
 	}
-	llm := s.preferredTextLLM()
+	llm := s.preferredPetChatLLM(false)
 	if strings.TrimSpace(llm.APIKey) == "" {
 		return false
 	}
@@ -41,7 +41,7 @@ func (s *StatsService) mealRouterSaysMeal(ctx context.Context, userID, question 
 	routeCtx, cancel := context.WithTimeout(ctx, mealRouterTimeout)
 	defer cancel()
 	started := time.Now()
-	completion, err := s.requestCampusDietAgentCompletion(routeCtx, llm, []map[string]any{{"role": "system", "content": mealRouterPrompt}, {"role": "user", "content": string(payload)}}, nil, "none", false)
+	completion, err := s.requestPetChatCompletion(routeCtx, &llm, []map[string]any{{"role": "system", "content": mealRouterPrompt}, {"role": "user", "content": string(payload)}}, nil, "none", false)
 	if err != nil {
 		logger.Warn(ctx, "伙伴对话模型分流失败，沿用规则结果", logger.UserID(userID), logger.Err(err))
 		return false
