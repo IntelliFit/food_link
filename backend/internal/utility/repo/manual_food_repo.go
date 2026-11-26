@@ -413,7 +413,7 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 	}
 	results = appendInSourceOrder(results, nutritionRows)
 
-	results = rankManualFoodResults(results, query, r.detectPackagedIntent(ctx, query))
+	results = rankManualFoodResults(results, query, r.detectPackagedIntent(ctx, query), strings.TrimSpace(userID) != "")
 	results = dedupeManualFoodResults(results)
 	results = r.enrichManualFoodResultsWithNutritionLibrary(ctx, results)
 	results = dedupeManualFoodResults(results)
