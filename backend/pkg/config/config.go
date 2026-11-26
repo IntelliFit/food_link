@@ -197,6 +197,13 @@ type VisionRoutingConfig struct {
 	// channel before a second channel starts; 0 keeps the adaptive delay. At
 	// response_wait_seconds or more the second channel runs only on failure.
 	OrdinaryHedgeSeconds int `mapstructure:"ordinary_hedge_seconds"`
+	// PrecisionFlow routes single and dual-angle precision photos: "legacy"
+	// keeps the split plan/estimate/aggregate pipeline, "ordinary" runs the
+	// one-call ordinary flow led by PrecisionOrdinaryModel on A6 with the
+	// ordinary channels behind it. Video and split-item precision stay legacy.
+	PrecisionFlow                 string `mapstructure:"precision_flow"`
+	PrecisionOrdinaryModel        string `mapstructure:"precision_ordinary_model"`
+	PrecisionOrdinaryHedgeSeconds int    `mapstructure:"precision_ordinary_hedge_seconds"`
 }
 
 type AppAuthConfig struct {
@@ -1716,6 +1723,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("external.vision_routing.uncertain_review_enabled", false)
 	v.SetDefault("external.vision_routing.ordinary_image_model", "gemini-3-flash-preview")
 	v.SetDefault("external.vision_routing.ordinary_hedge_seconds", 0)
+	v.SetDefault("external.vision_routing.precision_flow", "legacy")
+	v.SetDefault("external.vision_routing.precision_ordinary_model", "gemini-4-hydrogen")
+	v.SetDefault("external.vision_routing.precision_ordinary_hedge_seconds", 45)
 	v.SetDefault("external.openlux_ordinary_gemini_traffic_percent", 50)
 	v.SetDefault("external.openlux_precision_gemini_traffic_percent", 50)
 	v.SetDefault("external.nutrition_embedding_base_url", "https://yunwu.ai/v1")

@@ -34,6 +34,7 @@ type TaskService struct {
 	recordRepo      *foodrecordrepo.FoodRecordRepo
 	autoRecorder    AutoRecordExecutor
 	contentSecurity *contentsecurity.Service
+	precisionFlow   string
 }
 
 const (
@@ -428,7 +429,9 @@ func (s *TaskService) createAndEnqueueAnalyzeTask(ctx context.Context, userID st
 	if err := s.startContentSecurity(ctx, userID, input, payload); err != nil {
 		return "", err
 	}
-	if shouldUsePrecisionSession(mode, input) {
+	if s.precisionOrdinaryEligible(mode, input) {
+		payload["precision_flow"] = precisionFlowOrdinary
+	} else if shouldUsePrecisionSession(mode, input) {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
@@ -863,6 +866,20 @@ func analyzeImageLimitMessage(input SubmitTaskInput) string {
 		return "视频模式最多支持 5 个关键帧"
 	}
 	return "最多支持 5 张图片"
+}
+
+// ConfigurePrecisionFlow selects how precision photos run (see precision_ordinary.go).
+func (s *TaskService) ConfigurePrecisionFlow(flow string) {
+	s.precisionFlow = strings.ToLower(strings.TrimSpace(flow))
+}
+
+// precisionOrdinaryEligible keeps video capture, split-item mode and
+// continued sessions on the legacy pipeline; plain and dual-angle precision
+// photos run the ordinary flow when the switch is on.
+func (s *TaskService) precisionOrdinaryEligible(mode string, input SubmitTaskInput) bool {
+	return s.precisionFlow == precisionFlowOrdinary && mode == precisionExecutionMode &&
+		!hasPrecisionSessionID(input) && !isVideoKeyframeCapture(input) &&
+		(strings.TrimSpace(input.ImageURL) != "" || len(input.ImageURLs) > 0)
 }
 
 func shouldUsePrecisionSession(mode string, input SubmitTaskInput) bool {
