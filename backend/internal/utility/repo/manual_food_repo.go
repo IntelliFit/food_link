@@ -381,41 +381,39 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 	if err != nil {
 		return nil, err
 	}
-	results = append(results, customRows...)
+	results = appendInSourceOrder(results, customRows)
 
 	catalogRows, err := r.searchCatalogItems(ctx, userID, query, limit)
 	if err != nil {
 		return nil, err
 	}
-	results = append(results, catalogRows...)
+	results = appendInSourceOrder(results, catalogRows)
 
 	recentRows, err := r.searchRecentItems(ctx, userID, query, limit)
 	if err != nil {
 		return nil, err
 	}
-	results = append(results, recentRows...)
+	results = appendInSourceOrder(results, recentRows)
 
 	publicRows, err := r.searchPublicLibrary(ctx, userID, query, limit)
 	if err != nil {
 		return nil, err
 	}
-	results = append(results, publicRows...)
+	results = appendInSourceOrder(results, publicRows)
 
 	packagedRows, err := r.searchPackagedLibrary(ctx, query, limit)
 	if err != nil {
 		return nil, err
 	}
-	results = append(results, packagedRows...)
+	results = appendInSourceOrder(results, packagedRows)
 
 	nutritionRows, err := r.searchNutritionLibrary(ctx, query, limit)
 	if err != nil {
 		return nil, err
 	}
-	results = append(results, nutritionRows...)
+	results = appendInSourceOrder(results, nutritionRows)
 
-	sort.SliceStable(results, func(i, j int) bool {
-		return manualFoodResultLess(results[i], results[j], query)
-	})
+	results = rankManualFoodResults(results, query, r.detectPackagedIntent(ctx, query))
 	results = dedupeManualFoodResults(results)
 	results = r.enrichManualFoodResultsWithNutritionLibrary(ctx, results)
 	results = dedupeManualFoodResults(results)
@@ -1063,7 +1061,7 @@ func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string,
 	}
 	args = append(args,
 		normalizedQuery,
-		normalizedQuery+"%",
+		"%"+normalizedQuery, // head noun: the dish is that food
 		"%"+normalizedQuery+"%",
 		limit,
 	)
@@ -1159,7 +1157,12 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
 		score := computeMatchScore(query, packagedDisplayName(row), row.SearchText, row.ProductName, row.Brand, stringPtrValue(row.FlavorText), stringPtrValue(row.SpecText), stringPtrValue(row.Barcode)) + 0.18
-		results = append(results, r.manualFoodResultFromPackaged(row, score))
+		result := r.manualFoodResultFromPackaged(row, score)
+		result.SearchName = strings.TrimSpace(row.ProductName)
+		if result.SearchName == "" {
+			result.SearchName = strings.TrimSpace(row.DisplayName)
+		}
+		results = append(results, result)
 	}
 	return results, nil
 }
@@ -1179,26 +1182,45 @@ func (r *ManualFoodRepo) queryPackagedLibrary(ctx context.Context, where string,
 		}
 		specRank = "CASE WHEN " + strings.Join(parts, " OR ") + " THEN 0 ELSE 1 END,"
 	}
-	all := append(append([]any{}, args...), specArgs...)
-	all = append(all, normalizedQuery, normalizedQuery+"%", "%"+normalizedQuery+"%", limit)
+	// name_rank 1 is "the product name (without brand) ends with the query":
+	// 纯牛奶 for 牛奶, not 牛奶巧克力 (a chocolate) or 可口可乐 蜜桃味汽水.
+	nameArgs := []any{normalizedQuery, "%" + normalizedQuery, "%" + normalizedQuery + "%", "%" + normalizedQuery + "%"}
+	all := append(append([]any{}, nameArgs...), args...)
+	all = append(all, specArgs...)
+	all = append(all, limit)
 	var rows []fooddomain.PackagedFood
+	// Within each name rank the first product of every brand comes before any
+	// brand's second one, and brands with more matching products (蒙牛, 伊利 for
+	// 牛奶) go first, so one brand does not fill the whole page.
 	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
-		SELECT *
-		FROM packaged_food_library f
-		WHERE is_active = TRUE
-			AND kcal_per_100g > 0
-			AND COALESCE(NULLIF(review_status, ''), 'active') = 'active'
-			AND (%s)
+		SELECT ranked.*
+		FROM (
+			SELECT m.*,
+				ROW_NUMBER() OVER (PARTITION BY m.brand_key ORDER BY m.name_rank, m.updated_at DESC NULLS LAST, m.id) AS brand_pos,
+				CASE WHEN m.brand_key LIKE 'id:%%' THEN 0 ELSE count(*) OVER (PARTITION BY m.brand_key) END AS brand_size
+			FROM (
+				SELECT f.*,
+					CASE WHEN COALESCE(TRIM(f.brand), '') = '' THEN 'id:' || f.id::text ELSE LOWER(TRIM(f.brand)) END AS brand_key,
+					CASE
+						WHEN LOWER(COALESCE(NULLIF(f.product_name, ''), f.display_name, '')) = ? THEN 0
+						WHEN LOWER(COALESCE(NULLIF(f.product_name, ''), f.display_name, '')) LIKE ? THEN 1
+						WHEN LOWER(COALESCE(f.product_name, '')) LIKE ? OR LOWER(COALESCE(f.display_name, '')) LIKE ? THEN 2
+						ELSE 3
+					END AS name_rank
+				FROM packaged_food_library f
+				WHERE f.is_active = TRUE
+					AND f.kcal_per_100g > 0
+					AND COALESCE(NULLIF(f.review_status, ''), 'active') = 'active'
+					AND (%s)
+			) m
+		) ranked
 		ORDER BY
 			%s
-			CASE
-				WHEN LOWER(COALESCE(NULLIF(display_name, ''), product_name, '')) = ? THEN 0
-				WHEN LOWER(COALESCE(NULLIF(display_name, ''), product_name, '')) LIKE ? THEN 1
-				WHEN LOWER(COALESCE(NULLIF(display_name, ''), product_name, '')) LIKE ? THEN 2
-				ELSE 3
-			END,
-			updated_at DESC NULLS LAST,
-			product_name ASC
+			ranked.name_rank,
+			ranked.brand_pos,
+			ranked.brand_size DESC,
+			ranked.updated_at DESC NULLS LAST,
+			ranked.product_name ASC
 		LIMIT ?
 	`, where, specRank), all...).Scan(&rows).Error
 	return rows, err
@@ -1270,15 +1292,21 @@ func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query strin
 	normalizedQuery := strings.ToLower(strings.TrimSpace(query))
 	type row struct {
 		fooddomain.FoodNutrition
-		MatchSource string `gorm:"column:match_source"`
+		MatchSource    string `gorm:"column:match_source"`
+		QueryMatchRank int    `gorm:"column:query_match_rank"`
 	}
 	conditions := make([]string, 0, len(terms))
 	args := []any{
 		"%" + normalizedQuery + "%",
 		normalizedQuery,
 		normalizedQuery,
-		normalizedQuery + "%",
-		normalizedQuery + "%",
+		// Rank 2 fetches names that end with the query (head noun) or add one
+		// form character (燕麦片, 燕麦片（干）) ahead of plain "contains" rows.
+		"%" + normalizedQuery,
+		normalizedQuery + "_",
+		normalizedQuery + "_（%",
+		normalizedQuery + "_(%",
+		"%" + normalizedQuery,
 		"%" + normalizedQuery + "%",
 		"%" + normalizedQuery + "%",
 	}
@@ -1304,7 +1332,8 @@ func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query strin
 				CASE
 					WHEN LOWER(f.canonical_name) = ? THEN 0
 					WHEN LOWER(COALESCE(a.alias_name, '')) = ? THEN 1
-					WHEN LOWER(f.canonical_name) LIKE ? THEN 2
+					WHEN LOWER(f.canonical_name) LIKE ? OR LOWER(f.canonical_name) LIKE ?
+						OR LOWER(f.canonical_name) LIKE ? OR LOWER(f.canonical_name) LIKE ? THEN 2
 					WHEN LOWER(COALESCE(a.alias_name, '')) LIKE ? THEN 3
 					WHEN LOWER(f.canonical_name) LIKE ? THEN 4
 					WHEN LOWER(COALESCE(a.alias_name, '')) LIKE ? THEN 5
@@ -1330,7 +1359,11 @@ func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query strin
 		if row.MatchSource == "canonical" {
 			score += 0.1
 		}
-		results = append(results, r.manualFoodResultFromNutrition(row.FoodNutrition, score))
+		result := r.manualFoodResultFromNutrition(row.FoodNutrition, score)
+		// Rank 0/1: the canonical name or an approved alias equals the query
+		// ("米饭" is an approved alias of 白米饭).
+		result.SearchExact = row.QueryMatchRank <= 1
+		results = append(results, result)
 	}
 	return results, nil
 }
@@ -2213,26 +2246,11 @@ func manualFoodDisplayScore(item domain.ManualFoodResult, query string) float64 
 	return score
 }
 
-func manualFoodTitleMatchRank(title string, query string) int {
-	title = strings.ToLower(strings.TrimSpace(title))
-	query = strings.ToLower(strings.TrimSpace(query))
-	switch {
-	case query == "":
-		return 3
-	case title == query:
-		return 0
-	case strings.HasPrefix(title, query):
-		return 1
-	case strings.Contains(title, query):
-		return 2
-	default:
-		return 3
-	}
-}
-
+// manualFoodResultLess orders a single-source list (packaged-only search):
+// exact name, then head-noun match, then modifier, then display score.
 func manualFoodResultLess(left domain.ManualFoodResult, right domain.ManualFoodResult, query string) bool {
-	leftRank := manualFoodTitleMatchRank(left.Title, query)
-	rightRank := manualFoodTitleMatchRank(right.Title, query)
+	leftRank := manualTitleTier(left.Title, query)
+	rightRank := manualTitleTier(right.Title, query)
 	if leftRank != rightRank {
 		return leftRank < rightRank
 	}

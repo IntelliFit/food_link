@@ -111,6 +111,14 @@ type ManualFoodResult struct {
 	LikeCount           int                       `json:"like_count,omitempty"`
 	CollectionCount     int                       `json:"collection_count,omitempty"`
 	MatchScore          float64                   `json:"match_score,omitempty"`
+	// SearchExact marks a row whose own name or approved alias equals the
+	// query; SearchOrder is its position in its source's own ranking. Both are
+	// only used to order merged search results and are not sent to clients.
+	SearchExact bool `json:"-"`
+	SearchOrder int  `json:"-"`
+	// SearchName is the name to match the query against when the title also
+	// carries a brand (packaged products), so "可口可乐 蜜桃味汽水" is not a 可乐.
+	SearchName string `json:"-"`
 }
 
 type ManualFoodBrowseStats struct {
