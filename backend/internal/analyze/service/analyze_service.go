@@ -1213,6 +1213,13 @@ func ValidateResolvedNutritionItems(items []map[string]any) error {
 			!strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", item["resolve_status"])), "unresolved") &&
 			!strings.EqualFold(strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source"])), "unresolved") {
 			n := mapFromAny(item["nutrients"])
+			if measuredWithoutMass(item) {
+				// 按毫升、个或份计量且没有克数的条目与记录入口一致：不做按克的边界校验。
+				if err := foodrecorddomain.ValidateUnweighedFoodNutritionValues(stringFromAny(item["name"]), numberFromAny(n["calories"]), numberFromAny(n["protein"]), numberFromAny(n["carbs"]), numberFromAny(n["fat"])); err != nil {
+					return err
+				}
+				continue
+			}
 			if err := foodrecorddomain.ValidateFoodNutritionValues(stringFromAny(item["name"]), nutritionWeightFromItem(item), numberFromAny(n["calories"]), numberFromAny(n["protein"]), numberFromAny(n["carbs"]), numberFromAny(n["fat"])); err != nil {
 				return err
 			}

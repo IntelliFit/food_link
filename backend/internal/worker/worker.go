@@ -1466,13 +1466,22 @@ func (r *Runner) processFoodText(ctx context.Context, task *domain.AnalysisTask)
 	return err
 }
 
-func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.AnalysisTask, sessionID string, roundIndex int, latestInputs map[string]any) (bool, error) {
-	if _, single := task.Payload["correction_target_index"]; single {
-		return true, r.completeSingleItemCorrection(ctx, task)
-	}
+// correctionOutcome is what a list correction produces before anything is stored.
+type correctionOutcome struct {
+	result   map[string]any
+	input    analyzeservice.AnalyzeInput
+	items    []map[string]any // the correction rows after the note and the photo re-estimate
+	disputes []map[string]any
+}
+
+// resolveCorrectionTask runs the three correction steps on a task without
+// touching storage: read the user's note, look at the photo again for the
+// rows the note flags, then merge row by row with the original meal. It
+// returns nil when the task carries no correction rows.
+func (r *Runner) resolveCorrectionTask(ctx context.Context, task *domain.AnalysisTask, sessionID string, latestInputs map[string]any) (*correctionOutcome, error) {
 	correctionItems := extractItems(firstNonNil(task.Payload["correctionItems"], latestInputs["correctionItems"]))
 	if len(correctionItems) == 0 {
-		return false, nil
+		return nil, nil
 	}
 
 	input := analyzeInputFromTask(task)
@@ -1481,26 +1490,25 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 	if len(input.PreviousResult) == 0 {
 		input.PreviousResult = mapFromAny(firstNonNil(task.Payload["previousResult"], latestInputs["previousResult"]))
 	}
-	if resolver, ok := r.analyze.(interface {
+	resolver, ok := r.analyze.(interface {
 		ResolveCorrectionInstructions(context.Context, string, analyzeservice.AnalyzeInput) ([]map[string]any, error)
-	}); ok {
-		resolved, err := resolver.ResolveCorrectionInstructions(ctx, task.UserID, input)
-		if err != nil {
-			return true, err
-		}
-		input.CorrectionItems = resolved
-	} else {
-		return true, fmt.Errorf("纠错说明解析服务不可用，请稍后重试")
+	})
+	if !ok {
+		return nil, fmt.Errorf("纠错说明解析服务不可用，请稍后重试")
 	}
+	resolved, err := resolver.ResolveCorrectionInstructions(ctx, task.UserID, input)
+	if err != nil {
+		return nil, err
+	}
+	input.CorrectionItems = resolved
 	modelName := selectPrecisionModel(r.analyze, sessionID)
 	reestimated, nutritionDisputes, err := r.reestimateCorrectionItems(ctx, input, modelName)
 	if err != nil {
-		return true, err
+		return nil, err
 	}
 	input.CorrectionItems = reestimated
-	correctionItems = input.CorrectionItems
 	contextOverrides := map[int]correctionContextOverride{}
-	for index, item := range correctionItems {
+	for index, item := range reestimated {
 		if calories, ok := floatFromAny(item["correctionCalories"]); ok && calories > 0 {
 			contextOverrides[index] = correctionContextOverride{Index: index, Calories: &calories}
 		}
@@ -1512,8 +1520,23 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 
 	result, err := r.resolveScopedCorrection(ctx, task.UserID, input, contextOverrides)
 	if err != nil {
+		return nil, err
+	}
+	return &correctionOutcome{result: result, input: input, items: reestimated, disputes: nutritionDisputes}, nil
+}
+
+func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.AnalysisTask, sessionID string, roundIndex int, latestInputs map[string]any) (bool, error) {
+	if _, single := task.Payload["correction_target_index"]; single {
+		return true, r.completeSingleItemCorrection(ctx, task)
+	}
+	outcome, err := r.resolveCorrectionTask(ctx, task, sessionID, latestInputs)
+	if err != nil {
 		return true, err
 	}
+	if outcome == nil {
+		return false, nil
+	}
+	result, input, correctionItems, nutritionDisputes := outcome.result, outcome.input, outcome.items, outcome.disputes
 	result["correctionApplied"] = true
 	if sessionID != "" {
 		result["precisionSessionId"] = sessionID

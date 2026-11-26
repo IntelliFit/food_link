@@ -48,18 +48,24 @@ func validateMeasuredFoodItem(item FoodItem) error {
 	if item.Weight > 0 {
 		return ValidateFoodNutritionValues(item.Name, item.Weight, n.Calories, n.Protein, n.Carbs, n.Fat)
 	}
-	// Without a measured mass there is no valid kcal/g or macro-mass bound.
-	// Still enforce the same identity, finite-value and missing-energy boundary.
-	if strings.TrimSpace(item.Name) == "" || strings.TrimSpace(item.Name) == "未知食物" {
+	return ValidateUnweighedFoodNutritionValues(item.Name, n.Calories, n.Protein, n.Carbs, n.Fat)
+}
+
+// ValidateUnweighedFoodNutritionValues checks a food counted by volume, pieces
+// or servings whose mass is unknown. Without a measured mass there is no valid
+// kcal/g or macro-mass bound; identity, finite values and missing energy are
+// still enforced, as in ValidateFoodNutritionValues.
+func ValidateUnweighedFoodNutritionValues(name string, calories, protein, carbs, fat float64) error {
+	if strings.TrimSpace(name) == "" || strings.TrimSpace(name) == "未知食物" {
 		return fmt.Errorf("食物名称无效，请补充食物名称")
 	}
-	for _, value := range []float64{n.Calories, n.Protein, n.Carbs, n.Fat} {
+	for _, value := range []float64{calories, protein, carbs, fat} {
 		if value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
 			return fmt.Errorf("食物营养数据无效，请重新分析")
 		}
 	}
-	if n.Calories == 0 && !ZeroEnergyFood(item.Name) {
-		return fmt.Errorf("食物「%s」缺少有效热量，请重新分析", item.Name)
+	if calories == 0 && !ZeroEnergyFood(name) {
+		return fmt.Errorf("食物「%s」缺少有效热量，请重新分析", name)
 	}
 	return nil
 }

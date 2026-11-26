@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"food_link/backend/internal/foodmeasure"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 	apm "food_link/backend/pkg/trace"
@@ -31,6 +32,7 @@ const (
 
 const correctionInstructionPrompt = `你负责理解用户对一餐食物的纠错说明，把它转换成对当前清单的修改计划。只返回 JSON。
 数据中 instructions 是用户说明；items 是当前清单（index、菜名、重量克数；name_edited/weight_edited 为 true 表示用户已在清单里手动改过该字段）。之后系统会对照原照片重估你标出的菜。
+带 unit 字段的条目不按克计量（毫升、个或份）：它的 weight_grams 是该单位下的数量（unit 为毫升、weight_grams 为 250 表示 250 毫升）；修改这类条目的分量时，weight_grams 也按同一单位填写，不要换算成克。
 按用户的真实意图修改，理解正常口语、指代（“这个”“那碗”）、简称和省略，不要求固定句式：
 - 改名：用户指出菜不对或给出新菜名时输出 name。只更正原料时保留仍适用的做法和形态（例如“羊肉锅”说“这是牛肉”→“牛肉锅”）；给出完整新菜名时用新菜名。名称只写食物名，不带重量、热量或语气词。
 - 改重量：用户给出具体重量（克、斤、两、公斤等）时换算成克填 weight_grams 并原样使用。用户没给数字、但说明分量不对（如“没有这么多”“只吃了一半”“可食部分没这么多”“汤没喝”“多算了一倍”）时，填 reestimate_weight=true，hint 写用户对这道菜分量的原话要点，并在 weight_grams 填一个按常见情况估的新克数（必须与原重量不同，仅在没有照片时使用）。“不是X克”“没有X克”里的 X 是旧值，不是新值。
@@ -69,10 +71,7 @@ func (s *AnalyzeService) ResolveCorrectionInstructions(ctx context.Context, user
 	}
 	rows := make([]map[string]any, 0, len(items))
 	for index, item := range items {
-		rows = append(rows, map[string]any{
-			"index": index, "name": item["name"], "source_name": item["sourceName"],
-			"weight_grams": correctionItemWeight(item), "name_edited": item["nameEdited"], "weight_edited": item["weightEdited"],
-		})
+		rows = append(rows, correctionInstructionRow(index, item))
 	}
 	data, err := json.Marshal(map[string]any{"instructions": text, "items": rows})
 	if err != nil {
@@ -111,6 +110,20 @@ func (s *AnalyzeService) ResolveCorrectionInstructions(ctx context.Context, user
 	metrics.ObserveAlgorithmGate(ctx, "standard", input.AnalysisEngine, "correction_instructions", "passed")
 	logger.Info(ctx, "食物纠错说明已转换为定向修改", slog.String("user_id", userID), slog.Int("item_count", len(resolved)))
 	return resolved, nil
+}
+
+// correctionInstructionRow is one line of the list the model reads. Rows not
+// measured in grams carry their unit so the model never sees them as "0 克".
+func correctionInstructionRow(index int, item map[string]any) map[string]any {
+	amount, unit := CorrectionItemAmount(item)
+	row := map[string]any{
+		"index": index, "name": item["name"], "source_name": item["sourceName"],
+		"weight_grams": amount, "name_edited": item["nameEdited"], "weight_edited": item["weightEdited"],
+	}
+	if unit != foodmeasure.Gram {
+		row["unit"] = unit.Label()
+	}
+	return row
 }
 
 func correctionInstructionText(text string, originalTexts ...string) string {
@@ -332,8 +345,10 @@ func applyCorrectionEdit(item, edit map[string]any) error {
 		if !valid || weight <= 0 || weight > 100000 {
 			return fmt.Errorf("weight_grams")
 		}
-		if math.Abs(weight-correctionItemWeight(item)) > 0.001 {
-			item["weight"], item["estimatedWeightGrams"], item["weightEdited"] = weight, weight, true
+		// weight_grams 与清单里给模型看的数量同单位：克，或该条目声明的毫升、个、份。
+		if current, _ := CorrectionItemAmount(item); math.Abs(weight-current) > 0.001 {
+			SetCorrectionItemAmount(item, weight)
+			item["weightEdited"] = true
 		}
 	}
 	if raw, exists := edit["calories"]; exists {

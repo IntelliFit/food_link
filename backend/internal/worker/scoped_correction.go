@@ -30,22 +30,21 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 	used := map[int]bool{}
 	recalculated := 0
 	for correctionIndex, correction := range input.CorrectionItems {
-		name := strings.TrimSpace(firstNonEmptyString(correction, "name"))
-		weight, valid := firstPositiveFloat(correction, "weight", "estimatedWeightGrams")
-		if name == "" || !valid || weight > 100000 || math.IsNaN(weight) || math.IsInf(weight, 0) {
-			return nil, fmt.Errorf("请填写有效食物名称和重量")
+		row, err := readScopedCorrectionRow(correction, previous)
+		if err != nil {
+			return nil, err
 		}
-		originalIndex := scopedPreviousIndex(correction, previous)
+		name, weight, renamed, explicitNutrition := row.name, row.weight, row.renamed, row.explicitNutrition
 		var original map[string]any
-		if originalIndex >= 0 {
-			if used[originalIndex] {
+		if row.originalIndex >= 0 {
+			if used[row.originalIndex] {
 				return nil, fmt.Errorf("纠错清单包含重复食物标识")
 			}
-			used[originalIndex] = true
-			original = previous[originalIndex]
+			used[row.originalIndex] = true
+			original = previous[row.originalIndex]
 		}
-		renamed := original == nil || normalizeScopedName(name) != normalizeScopedName(firstNonEmptyString(original, "name"))
-		explicitNutrition, _ := explicitCorrectionNutritionEdited(correction)
+		// 计量信息（数量和营养标示）与原餐完全相同的条目没有被改动，原样保留。
+		untouched := row.measurement != nil && original != nil && !renamed && identicalScopedMeasurement(original, row.measurement)
 		var next map[string]any
 		if renamed && !explicitNutrition {
 			target, ok := resolvedTargets[correctionIndex]
@@ -57,7 +56,8 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 			recalculated++
 		} else if original != nil && !renamed {
 			oldWeight, _ := firstPositiveFloat(original, "estimatedWeightGrams", "weight")
-			if math.Abs(oldWeight-weight) >= 0.01 {
+			// 带计量信息的条目按声明的数量换算，不按克数比例缩放。
+			if row.measurement == nil && math.Abs(oldWeight-weight) >= 0.01 {
 				next = scaleScopedItem(original, weight)
 			} else {
 				next = copyAnyMap(original)
@@ -67,7 +67,11 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 			next["estimatedWeightGrams"], next["originalWeightGrams"] = weight, weight
 			next["grossWeightGrams"], next["ediblePortionRatio"] = weight, 100
 		}
-		if explicitNutrition {
+		if explicitNutrition && !untouched {
+			if row.measurement == nil {
+				// 营养由用户填写而清单里没有计量信息：原条目的营养标示不再适用。
+				delete(next, "measurement")
+			}
 			next["nutrients"] = copyAnyMap(mapFromAny(next["nutrients"]))
 			applyNutritionOverridesToCorrectionItem(next, correctionNutrientOverrideValues(correction))
 			// 食物库来源与图片随其营养快照保留。
@@ -75,6 +79,12 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 				if value, ok := correction[key]; ok {
 					next[key] = value
 				}
+			}
+		}
+		// 数量或营养有变化、或是新加的计量条目，以提交的计量信息为准换算营养和克数。
+		if row.measurement != nil && !untouched {
+			if err := applyScopedMeasurement(next, row.measurement); err != nil {
+				return nil, err
 			}
 		}
 		if original != nil {
@@ -105,6 +115,7 @@ func (r *Runner) resolveScopedCorrection(ctx context.Context, userID string, inp
 		if override, ok := overrides[correctionIndex]; ok && override.Calories != nil {
 			next["nutrients"] = copyAnyMap(mapFromAny(next["nutrients"]))
 			applyCorrectionOverrideToItem(next, correctionContextOverride{Calories: override.Calories})
+			rewriteCorrectionMeasurementNutrients(next, mapFromAny(next["nutrients"]), "calories")
 		}
 		items = append(items, next)
 	}
@@ -158,6 +169,10 @@ func scopedCorrectionChanged(previous, current []map[string]any) bool {
 		if math.Abs(weight-oldWeight) > 0.001 || !reflect.DeepEqual(mapFromAny(item["nutrients"]), mapFromAny(old["nutrients"])) {
 			return true
 		}
+		// 零热量饮品改了毫升数时克数和营养都不变，只能从计量数量看出改动。
+		if scopedMeasurementChanged(old, item) {
+			return true
+		}
 	}
 	return false
 }
@@ -170,23 +185,20 @@ func (r *Runner) resolveScopedCorrectionTargets(ctx context.Context, input analy
 	targets := []map[string]any{}
 	seen := map[int]bool{}
 	for index, correction := range input.CorrectionItems {
-		name := strings.TrimSpace(firstNonEmptyString(correction, "name"))
-		weight, valid := firstPositiveFloat(correction, "weight", "estimatedWeightGrams")
-		if name == "" || !valid || weight > 100000 || math.IsNaN(weight) || math.IsInf(weight, 0) {
-			return nil, fmt.Errorf("请填写有效食物名称和重量")
+		row, err := readScopedCorrectionRow(correction, previous)
+		if err != nil {
+			return nil, err
 		}
-		originalIndex := scopedPreviousIndex(correction, previous)
-		if originalIndex >= 0 {
-			if seen[originalIndex] {
+		if row.originalIndex >= 0 {
+			if seen[row.originalIndex] {
 				return nil, fmt.Errorf("纠错清单包含重复食物标识")
 			}
-			seen[originalIndex] = true
+			seen[row.originalIndex] = true
 		}
-		renamed := originalIndex < 0 || normalizeScopedName(name) != normalizeScopedName(firstNonEmptyString(previous[originalIndex], "name"))
-		explicitNutrition, _ := explicitCorrectionNutritionEdited(correction)
-		if !renamed || explicitNutrition {
+		if !row.renamed || row.explicitNutrition {
 			continue
 		}
+		name, weight := row.name, row.weight
 		target := map[string]any{"name": name, "type": "normal", "estimatedWeightGrams": weight, "grossWeightGrams": weight, "ediblePortionRatio": 100.0, "weight_method": "user_explicit_weight", "needs_user_confirmation": false}
 		for _, key := range []string{"type", "foodState", "weightBasis", "basisEvidence"} {
 			if value, ok := correction[key]; ok {
@@ -266,6 +278,8 @@ func scopedItemNames(items []map[string]any) string {
 
 func scaleScopedItem(item map[string]any, weight float64) map[string]any {
 	next := copyAnyMap(item)
+	// 按克数缩放后，原有的计量信息（数量和标示）不再与条目一致，不能留给结果页重算。
+	delete(next, "measurement")
 	oldWeight, _ := firstPositiveFloat(item, "estimatedWeightGrams", "weight")
 	nutrients := copyAnyMap(mapFromAny(item["nutrients"]))
 	if oldWeight > 0 {

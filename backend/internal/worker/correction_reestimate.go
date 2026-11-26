@@ -109,14 +109,17 @@ func correctionReestimateTargets(items []map[string]any) []correctionReestimateT
 func buildCorrectionReestimatePrompt(items []map[string]any, targets []correctionReestimateTarget, hasImage bool) string {
 	var meal, tasks []string
 	for index, item := range items {
-		weight, _ := firstPositiveFloat(item, "weight", "estimatedWeightGrams")
-		meal = append(meal, fmt.Sprintf("- index %d：%s，当前 %.0fg", index, firstNonEmptyString(item, "name"), weight))
+		meal = append(meal, fmt.Sprintf("- index %d：%s，当前 %s", index, firstNonEmptyString(item, "name"), correctionAmountLabel(item)))
 	}
 	for _, target := range targets {
 		item := items[target.index]
 		var asks []string
 		if target.weight && hasImage {
-			asks = append(asks, "重新估算可食部分重量 weight_grams")
+			if measurement, native := nativeCorrectionMeasurement(item); native {
+				asks = append(asks, fmt.Sprintf("重新估算实际吃下的数量（单位：%s，不要换算成克），填在 weight_grams", measurement.Unit.Label()))
+			} else {
+				asks = append(asks, "重新估算可食部分重量 weight_grams")
+			}
 		}
 		if target.nutrition {
 			asks = append(asks, "重新估算这一份的营养总量")
@@ -163,7 +166,9 @@ func applyCorrectionReestimate(items, previous []map[string]any, targets []corre
 		row := rows[target.index]
 		if target.weight && hasImage {
 			if weight, ok := floatFromAny(row["weight_grams"]); ok && weight > 0 && weight <= 100000 {
-				item["weight"], item["estimatedWeightGrams"], item["weightEdited"] = round2(weight), round2(weight), true
+				// 与提示词里给出的当前数量同单位：克，或该条目声明的毫升、个、份。
+				analyzeservice.SetCorrectionItemAmount(item, round2(weight))
+				item["weightEdited"] = true
 			}
 		}
 		if !target.nutrition {
@@ -198,7 +203,8 @@ func correctionEstimatedNutrients(row, item map[string]any) (map[string]any, boo
 		return nil, false
 	}
 	nutrients := map[string]any{"calories": round2(calories), "protein": round2(values["protein"]), "carbs": round2(values["carbs"]), "fat": round2(values["fat"])}
-	if fiber, ok := floatFromAny(row["fiber"]); ok && fiber >= 0 && fiber <= weight {
+	// 没有克数的条目（按毫升、个、份计量）无法用重量给膳食纤维设上限。
+	if fiber, ok := floatFromAny(row["fiber"]); ok && fiber >= 0 && (weight <= 0 || fiber <= weight) {
 		nutrients["fiber"] = round2(fiber)
 	}
 	return nutrients, true
@@ -207,14 +213,14 @@ func correctionEstimatedNutrients(row, item map[string]any) (map[string]any, boo
 // 质疑营养的菜：微量营养沿用原记录并按新重量缩放，热量和三大营养素换成重估值，
 // 交给下游“用户填写营养”的同一路径处理。改了名的菜不沿用原菜的微量营养。
 func applyCorrectionEstimatedNutrients(item map[string]any, previous []map[string]any, estimated map[string]any) {
-	weight, _ := firstPositiveFloat(item, "weight", "estimatedWeightGrams")
 	nutrients := map[string]any{}
 	if original := correctionOriginalItem(item, previous); original != nil &&
 		normalizeScopedName(firstNonEmptyString(original, "name")) == normalizeScopedName(firstNonEmptyString(item, "name")) {
-		oldWeight, _ := firstPositiveFloat(original, "estimatedWeightGrams", "weight")
-		for key, value := range mapFromAny(original["nutrients"]) {
-			if number, ok := floatFromAny(value); ok && oldWeight > 0 && weight > 0 {
-				nutrients[key] = round2(number * weight / oldWeight)
+		if amount, oldAmount, scalable := correctionAmountChange(item, original); scalable {
+			for key, value := range mapFromAny(original["nutrients"]) {
+				if number, ok := floatFromAny(value); ok {
+					nutrients[key] = round2(number * amount / oldAmount)
+				}
 			}
 		}
 	}
@@ -224,6 +230,7 @@ func applyCorrectionEstimatedNutrients(item map[string]any, previous []map[strin
 	item["nutrients"] = nutrients
 	item["calorie"], item["protein"], item["carbs"], item["fat"] = estimated["calories"], estimated["protein"], estimated["carbs"], estimated["fat"]
 	item["nutritionEdited"] = true
+	rewriteCorrectionMeasurementNutrients(item, nutrients)
 }
 
 func correctionOriginalItem(item map[string]any, previous []map[string]any) map[string]any {
