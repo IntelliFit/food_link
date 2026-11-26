@@ -16,7 +16,17 @@ func nutrientValues(n *domain.ManualFoodNutrients) map[string]float64 {
 		return values
 	}
 	encoded, _ := json.Marshal(n)
-	_ = json.Unmarshal(encoded, &values)
+	var raw map[string]json.RawMessage
+	_ = json.Unmarshal(encoded, &raw)
+	for key, token := range raw {
+		if string(token) == "null" || key == "unknown_fields" {
+			continue
+		}
+		var value float64
+		if json.Unmarshal(token, &value) == nil {
+			values[key] = value
+		}
+	}
 	return values
 }
 
@@ -51,6 +61,7 @@ func applyMeasuredFoodResult(result *domain.ManualFoodResult) bool {
 	result.TotalCalories, result.TotalProtein = totals["calories"], totals["protein"]
 	result.TotalCarbs, result.TotalFat = totals["carbs"], totals["fat"]
 	extra := manualFoodNutrientsFromMap(nutrientAny(totals))
+	extra.UnknownFields = measuredUnknownFields(m.NutrientsPerBasis)
 	result.ExtraNutrients = &extra
 	result.DefaultWeightGrams = 0
 	result.NutrientsPer100g = nil
@@ -61,6 +72,7 @@ func applyMeasuredFoodResult(result *domain.ManualFoodResult) bool {
 		result.DefaultWeightGrams = grams
 		if per100, scaleErr := m.Scale(100, foodmeasure.Gram); scaleErr == nil {
 			n := manualFoodNutrientsFromMap(nutrientAny(per100))
+			n.UnknownFields = measuredUnknownFields(m.NutrientsPerBasis)
 			result.NutrientsPer100g = &n
 		}
 	}

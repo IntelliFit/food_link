@@ -28,7 +28,7 @@ func TestApplyNutritionQualityReviewPromotesWithoutAliasRows(t *testing.T) {
 	food := migrationdo.FoodNutritionDO{
 		ID: "41000000-0000-4000-8000-000000000001", CanonicalName: "鸡胸肉", NormalizedName: "鸡胸肉",
 		Source: &source, IsActive: false, QualityTier: "plausible",
-		KcalPer100g: 156, ProteinPer100g: 30, CarbsPer100g: 0, FatPer100g: 4,
+		KcalPer100g: nutritionTestNumber(156), ProteinPer100g: nutritionTestNumber(30), CarbsPer100g: nutritionTestNumber(0), FatPer100g: nutritionTestNumber(4),
 	}
 	require.NoError(t, db.Create(&food).Error)
 	reviewed := NutritionReviewValues{Kcal: 133, Protein: 26, Carbs: 0, Fat: 3.2222}
@@ -52,14 +52,14 @@ func TestApplyNutritionQualityReviewPromotesWithoutAliasRows(t *testing.T) {
 	var current migrationdo.FoodNutritionDO
 	require.NoError(t, db.First(&current, "id=?", food.ID).Error)
 	require.False(t, current.IsActive)
-	require.Equal(t, 156.0, current.KcalPer100g)
+	require.Equal(t, 156.0, *current.KcalPer100g)
 
 	_, err = ApplyNutritionQualityReview(ctx, db, "", path, true)
 	require.NoError(t, err)
 	require.NoError(t, db.First(&current, "id=?", food.ID).Error)
 	require.True(t, current.IsActive)
 	require.Equal(t, "reviewed_estimate", current.QualityTier)
-	require.InDelta(t, reviewed.Kcal, current.KcalPer100g, 0.0001)
+	require.InDelta(t, reviewed.Kcal, *current.KcalPer100g, 0.0001)
 	require.Equal(t, "temp-food-review-test", current.QualityEvidence["batch_id"])
 
 	// Re-running the same batch is a no-op that only checks the final state.
@@ -74,7 +74,7 @@ func TestApplyNutritionQualityReviewRejectsChangedSnapshot(t *testing.T) {
 	food := migrationdo.FoodNutritionDO{
 		ID: "41000000-0000-4000-8000-000000000002", CanonicalName: "豆浆", NormalizedName: "豆浆",
 		Source: &source, IsActive: false, QualityTier: "plausible",
-		KcalPer100g: 32, ProteinPer100g: 3, CarbsPer100g: 1.2, FatPer100g: 1.6,
+		KcalPer100g: nutritionTestNumber(32), ProteinPer100g: nutritionTestNumber(3), CarbsPer100g: nutritionTestNumber(1.2), FatPer100g: nutritionTestNumber(1.6),
 	}
 	require.NoError(t, db.Create(&food).Error)
 	path := writeNutritionReviewArtifact(t, NutritionQualityReviewArtifact{

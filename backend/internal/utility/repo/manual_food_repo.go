@@ -1531,6 +1531,8 @@ func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64)
 		NutritionHighlights: highlights,
 		MatchScore:          score,
 	}
+	result.NutrientsPer100g.UnknownFields = manualUnknownFields(item)
+	result.ExtraNutrients.UnknownFields = manualUnknownFields(item)
 	applyManualFoodServingProfile(&result)
 	attachNutritionMeasurement(&result)
 	result.MissingNutrients = manualMissingNutrients(map[string]any(item.QualityEvidence))
@@ -1907,6 +1909,7 @@ func sumManualFoodNutrients(a, b domain.ManualFoodNutrients) domain.ManualFoodNu
 
 func scaleManualFoodNutrients(n domain.ManualFoodNutrients, scale float64) domain.ManualFoodNutrients {
 	return domain.ManualFoodNutrients{
+		UnknownFields:  append([]string(nil), n.UnknownFields...),
 		Calories:       n.Calories * scale,
 		Protein:        n.Protein * scale,
 		Carbs:          n.Carbs * scale,
@@ -2356,6 +2359,7 @@ func preferNutritionRowWithImage(current, candidate fooddomain.FoodNutrition) fo
 
 func nutrientsFromFoodNutritionRow(row fooddomain.FoodNutrition) *domain.ManualFoodNutrients {
 	return &domain.ManualFoodNutrients{
+		UnknownFields:  manualUnknownFields(row),
 		Calories:       row.KcalPer100g,
 		Protein:        row.ProteinPer100g,
 		Carbs:          row.CarbsPer100g,

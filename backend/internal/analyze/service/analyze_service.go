@@ -7770,33 +7770,7 @@ func capItemWaterMlToWeight(item map[string]any) {
 }
 
 func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
-	unit := map[string]any{
-		"calories":       food.KcalPer100g,
-		"protein":        food.ProteinPer100g,
-		"carbs":          food.CarbsPer100g,
-		"fat":            food.FatPer100g,
-		"fiber":          food.FiberPer100g,
-		"sugar":          food.SugarPer100g,
-		"saturatedFat":   food.SaturatedFatPer100g,
-		"cholesterolMg":  food.CholesterolMgPer100g,
-		"sodiumMg":       food.SodiumMgPer100g,
-		"potassiumMg":    food.PotassiumMgPer100g,
-		"calciumMg":      food.CalciumMgPer100g,
-		"ironMg":         food.IronMgPer100g,
-		"magnesiumMg":    food.MagnesiumMgPer100g,
-		"zincMg":         food.ZincMgPer100g,
-		"vitaminARaeMcg": food.VitaminARaeMcgPer100g,
-		"vitaminCMg":     food.VitaminCMgPer100g,
-		"vitaminDMcg":    food.VitaminDMcgPer100g,
-		"vitaminEMg":     food.VitaminEMgPer100g,
-		"vitaminKMcg":    food.VitaminKMcgPer100g,
-		"thiaminMg":      food.ThiaminMgPer100g,
-		"riboflavinMg":   food.RiboflavinMgPer100g,
-		"niacinMg":       food.NiacinMgPer100g,
-		"vitaminB6Mg":    food.VitaminB6MgPer100g,
-		"folateMcg":      food.FolateMcgPer100g,
-		"vitaminB12Mcg":  food.VitaminB12McgPer100g,
-	}
+	unit := food.UnitNutritionPer100g()
 	if foodrecorddomain.IsAIGeneratedNutritionSource(food.Source) {
 		unit["calories"] = foodrecorddomain.MacroCalories(food.ProteinPer100g, food.CarbsPer100g, food.FatPer100g)
 	}

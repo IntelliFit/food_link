@@ -413,31 +413,31 @@ type FoodNutritionDO struct {
 	PreparationMethod     string            `gorm:"column:preparation_method;type:text;not null;default:''"`
 	YieldFactor           *float64          `gorm:"column:yield_factor;type:numeric"`
 	StateTags             []string          `gorm:"column:state_tags;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	KcalPer100g           float64           `gorm:"column:kcal_per_100g;type:numeric;not null;default:0"`
-	ProteinPer100g        float64           `gorm:"column:protein_per_100g;type:numeric;not null;default:0"`
-	CarbsPer100g          float64           `gorm:"column:carbs_per_100g;type:numeric;not null;default:0"`
-	FatPer100g            float64           `gorm:"column:fat_per_100g;type:numeric;not null;default:0"`
-	FiberPer100g          float64           `gorm:"column:fiber_per_100g;type:numeric;not null;default:0"`
-	SugarPer100g          float64           `gorm:"column:sugar_per_100g;type:numeric;not null;default:0"`
-	SaturatedFatPer100g   float64           `gorm:"column:saturated_fat_per_100g;type:numeric;not null;default:0"`
-	CholesterolMgPer100g  float64           `gorm:"column:cholesterol_mg_per_100g;type:numeric;not null;default:0"`
-	SodiumMgPer100g       float64           `gorm:"column:sodium_mg_per_100g;type:numeric;not null;default:0"`
-	PotassiumMgPer100g    float64           `gorm:"column:potassium_mg_per_100g;type:numeric;not null;default:0"`
-	CalciumMgPer100g      float64           `gorm:"column:calcium_mg_per_100g;type:numeric;not null;default:0"`
-	IronMgPer100g         float64           `gorm:"column:iron_mg_per_100g;type:numeric;not null;default:0"`
-	MagnesiumMgPer100g    float64           `gorm:"column:magnesium_mg_per_100g;type:numeric;not null;default:0"`
-	ZincMgPer100g         float64           `gorm:"column:zinc_mg_per_100g;type:numeric;not null;default:0"`
-	VitaminARaeMcgPer100g float64           `gorm:"column:vitamin_a_rae_mcg_per_100g;type:numeric;not null;default:0"`
-	VitaminCMgPer100g     float64           `gorm:"column:vitamin_c_mg_per_100g;type:numeric;not null;default:0"`
-	VitaminDMcgPer100g    float64           `gorm:"column:vitamin_d_mcg_per_100g;type:numeric;not null;default:0"`
-	VitaminEMgPer100g     float64           `gorm:"column:vitamin_e_mg_per_100g;type:numeric;not null;default:0"`
-	VitaminKMcgPer100g    float64           `gorm:"column:vitamin_k_mcg_per_100g;type:numeric;not null;default:0"`
-	ThiaminMgPer100g      float64           `gorm:"column:thiamin_mg_per_100g;type:numeric;not null;default:0"`
-	RiboflavinMgPer100g   float64           `gorm:"column:riboflavin_mg_per_100g;type:numeric;not null;default:0"`
-	NiacinMgPer100g       float64           `gorm:"column:niacin_mg_per_100g;type:numeric;not null;default:0"`
-	VitaminB6MgPer100g    float64           `gorm:"column:vitamin_b6_mg_per_100g;type:numeric;not null;default:0"`
-	FolateMcgPer100g      float64           `gorm:"column:folate_mcg_per_100g;type:numeric;not null;default:0"`
-	VitaminB12McgPer100g  float64           `gorm:"column:vitamin_b12_mcg_per_100g;type:numeric;not null;default:0"`
+	KcalPer100g           *float64          `gorm:"column:kcal_per_100g;type:numeric"`
+	ProteinPer100g        *float64          `gorm:"column:protein_per_100g;type:numeric"`
+	CarbsPer100g          *float64          `gorm:"column:carbs_per_100g;type:numeric"`
+	FatPer100g            *float64          `gorm:"column:fat_per_100g;type:numeric"`
+	FiberPer100g          *float64          `gorm:"column:fiber_per_100g;type:numeric"`
+	SugarPer100g          *float64          `gorm:"column:sugar_per_100g;type:numeric"`
+	SaturatedFatPer100g   *float64          `gorm:"column:saturated_fat_per_100g;type:numeric"`
+	CholesterolMgPer100g  *float64          `gorm:"column:cholesterol_mg_per_100g;type:numeric"`
+	SodiumMgPer100g       *float64          `gorm:"column:sodium_mg_per_100g;type:numeric"`
+	PotassiumMgPer100g    *float64          `gorm:"column:potassium_mg_per_100g;type:numeric"`
+	CalciumMgPer100g      *float64          `gorm:"column:calcium_mg_per_100g;type:numeric"`
+	IronMgPer100g         *float64          `gorm:"column:iron_mg_per_100g;type:numeric"`
+	MagnesiumMgPer100g    *float64          `gorm:"column:magnesium_mg_per_100g;type:numeric"`
+	ZincMgPer100g         *float64          `gorm:"column:zinc_mg_per_100g;type:numeric"`
+	VitaminARaeMcgPer100g *float64          `gorm:"column:vitamin_a_rae_mcg_per_100g;type:numeric"`
+	VitaminCMgPer100g     *float64          `gorm:"column:vitamin_c_mg_per_100g;type:numeric"`
+	VitaminDMcgPer100g    *float64          `gorm:"column:vitamin_d_mcg_per_100g;type:numeric"`
+	VitaminEMgPer100g     *float64          `gorm:"column:vitamin_e_mg_per_100g;type:numeric"`
+	VitaminKMcgPer100g    *float64          `gorm:"column:vitamin_k_mcg_per_100g;type:numeric"`
+	ThiaminMgPer100g      *float64          `gorm:"column:thiamin_mg_per_100g;type:numeric"`
+	RiboflavinMgPer100g   *float64          `gorm:"column:riboflavin_mg_per_100g;type:numeric"`
+	NiacinMgPer100g       *float64          `gorm:"column:niacin_mg_per_100g;type:numeric"`
+	VitaminB6MgPer100g    *float64          `gorm:"column:vitamin_b6_mg_per_100g;type:numeric"`
+	FolateMcgPer100g      *float64          `gorm:"column:folate_mcg_per_100g;type:numeric"`
+	VitaminB12McgPer100g  *float64          `gorm:"column:vitamin_b12_mcg_per_100g;type:numeric"`
 	ImagePath             *string           `gorm:"column:image_path;type:text"`
 	ImagePaths            []string          `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	ImageSourceURL        *string           `gorm:"column:image_source_url;type:text"`

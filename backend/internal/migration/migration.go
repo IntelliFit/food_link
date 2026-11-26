@@ -209,6 +209,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensurePushConstraints(ctx, db); err != nil {
 		return err
 	}
+	if err := MigrateNullableNutrition(ctx, db, schema); err != nil {
+		return err
+	}
 	if err := ensureOnboardingStatus(ctx, db); err != nil {
 		return err
 	}
@@ -629,7 +632,7 @@ func ensureCommonFoodStateSeed(ctx context.Context, db *gorm.DB) error {
 				ID: seed.ID, CanonicalName: seed.CanonicalName, NormalizedName: seed.NormalizedName,
 				BaseFoodKey: seed.BaseFoodKey, FoodState: seed.FoodState, WeightBasis: seed.WeightBasis,
 				PreparationMethod: seed.PreparationMethod, StateTags: seed.StateTags,
-				KcalPer100g: seed.Kcal, ProteinPer100g: seed.Protein, CarbsPer100g: seed.Carbs, FatPer100g: seed.Fat,
+				KcalPer100g: &seed.Kcal, ProteinPer100g: &seed.Protein, CarbsPer100g: &seed.Carbs, FatPer100g: &seed.Fat,
 				IsActive: true, Source: &source, QualityTier: "authoritative",
 				QualityEvidence: commonFoodStateQualityEvidence(seed),
 			}
@@ -652,10 +655,10 @@ func ensureCommonFoodStateSeed(ctx context.Context, db *gorm.DB) error {
 				fields := []string{"base_food_key", "food_state", "weight_basis", "preparation_method", "state_tags"}
 				if shouldUpgradeCommonFoodStateSeed(persisted) {
 					metadata.CanonicalName = seed.CanonicalName
-					metadata.KcalPer100g = seed.Kcal
-					metadata.ProteinPer100g = seed.Protein
-					metadata.CarbsPer100g = seed.Carbs
-					metadata.FatPer100g = seed.Fat
+					metadata.KcalPer100g = &seed.Kcal
+					metadata.ProteinPer100g = &seed.Protein
+					metadata.CarbsPer100g = &seed.Carbs
+					metadata.FatPer100g = &seed.Fat
 					metadata.IsActive = true
 					metadata.Source = &source
 					metadata.QualityTier = "authoritative"

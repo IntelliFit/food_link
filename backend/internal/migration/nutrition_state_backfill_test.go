@@ -13,7 +13,7 @@ func TestNutritionStateBackfillIsIdempotentAndPreservesNutrition(t *testing.T) {
 	db := testdb.New(t)
 	require.NoError(t, db.AutoMigrate(&migrationdo.FoodNutritionDO{}))
 	source := "美国农业部食物数据中心（SR Legacy）"
-	food := migrationdo.FoodNutritionDO{ID: "40000000-0000-4000-8000-000000000001", CanonicalName: "Rice, white, cooked", NormalizedName: "ricewhitecooked", Source: &source, IsActive: true, KcalPer100g: 130, ProteinPer100g: 2.69, CarbsPer100g: 28.17, FatPer100g: .28}
+	food := migrationdo.FoodNutritionDO{ID: "40000000-0000-4000-8000-000000000001", CanonicalName: "Rice, white, cooked", NormalizedName: "ricewhitecooked", Source: &source, IsActive: true, KcalPer100g: nutritionTestNumber(130), ProteinPer100g: nutritionTestNumber(2.69), CarbsPer100g: nutritionTestNumber(28.17), FatPer100g: nutritionTestNumber(.28)}
 	require.NoError(t, db.Create(&food).Error)
 	ctx := context.Background()
 	plan, err := PlanNutritionStateBackfill(ctx, db)

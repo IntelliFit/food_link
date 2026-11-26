@@ -61,7 +61,7 @@ func TestEnsureCommonFoodStateSeedIsIdempotentAndAliasesUsePersistedFoodID(t *te
 	source := "existing"
 	require.NoError(t, db.Create(&migrationdo.FoodNutritionDO{
 		ID: existingID, CanonicalName: "已有生土豆", NormalizedName: "土豆生带皮可食部",
-		KcalPer100g: 88, ProteinPer100g: 2.2, CarbsPer100g: 18, FatPer100g: 0.2,
+		KcalPer100g: nutritionTestNumber(88), ProteinPer100g: nutritionTestNumber(2.2), CarbsPer100g: nutritionTestNumber(18), FatPer100g: nutritionTestNumber(0.2),
 		IsActive: true, Source: &source, QualityTier: "authoritative", ImagePaths: []string{}, StateTags: []string{},
 	}).Error)
 	require.NoError(t, db.Create(&migrationdo.FoodNutritionDO{
@@ -94,7 +94,7 @@ func TestEnsureCommonFoodStateSeedIsIdempotentAndAliasesUsePersistedFoodID(t *te
 	var preserved migrationdo.FoodNutritionDO
 	require.NoError(t, db.Where("id = ?", existingID).Take(&preserved).Error)
 	assert.Equal(t, "已有生土豆", preserved.CanonicalName)
-	assert.Equal(t, 88.0, preserved.KcalPer100g)
+	assert.Equal(t, 88.0, *preserved.KcalPer100g)
 	assert.Equal(t, "existing", *preserved.Source)
 	assert.Equal(t, "authoritative", preserved.QualityTier)
 	assert.Equal(t, "raw", preserved.FoodState)
@@ -108,7 +108,7 @@ func TestEnsureCommonFoodStateSeedUpgradesWeakConflictingRow(t *testing.T) {
 	source := "legacy_ai"
 	require.NoError(t, db.Create(&migrationdo.FoodNutritionDO{
 		ID: existingID, CanonicalName: "旧意面干", NormalizedName: "意大利面干",
-		KcalPer100g: 999, ProteinPer100g: 1, CarbsPer100g: 1, FatPer100g: 50,
+		KcalPer100g: nutritionTestNumber(999), ProteinPer100g: nutritionTestNumber(1), CarbsPer100g: nutritionTestNumber(1), FatPer100g: nutritionTestNumber(50),
 		IsActive: false, Source: &source, QualityTier: "unreviewed", ImagePaths: []string{}, StateTags: []string{},
 	}).Error)
 
@@ -117,10 +117,10 @@ func TestEnsureCommonFoodStateSeedUpgradesWeakConflictingRow(t *testing.T) {
 	var upgraded migrationdo.FoodNutritionDO
 	require.NoError(t, db.Where("id = ?", existingID).Take(&upgraded).Error)
 	assert.Equal(t, "意大利面（干）", upgraded.CanonicalName)
-	assert.Equal(t, 371.0, upgraded.KcalPer100g)
-	assert.Equal(t, 13.0, upgraded.ProteinPer100g)
-	assert.Equal(t, 74.7, upgraded.CarbsPer100g)
-	assert.Equal(t, 1.51, upgraded.FatPer100g)
+	assert.Equal(t, 371.0, *upgraded.KcalPer100g)
+	assert.Equal(t, 13.0, *upgraded.ProteinPer100g)
+	assert.Equal(t, 74.7, *upgraded.CarbsPer100g)
+	assert.Equal(t, 1.51, *upgraded.FatPer100g)
 	assert.True(t, upgraded.IsActive)
 	assert.Equal(t, "authoritative", upgraded.QualityTier)
 	require.NotNil(t, upgraded.Source)

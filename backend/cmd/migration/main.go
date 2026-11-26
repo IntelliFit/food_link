@@ -73,6 +73,7 @@ func main() {
 	onlyPushReminders := flag.Bool("only-push-reminders", false, "only migrate the three push reminder tables and constraints")
 	onlyAnalytics := flag.Bool("only-analytics", false, "only migrate admin roles and isolated analytics tables")
 	printTarget := flag.Bool("print-target", false, "print resolved database target without credentials; do not connect or migrate")
+	onlyNullableNutrition := flag.Bool("only-nullable-nutrition", false, "only allow unknown ordinary-food nutrients as NULL, without guessing historical zeros")
 	flag.Parse()
 	if (*restoreFeedPublicApply || *restoreFeedPublicExclude != "") && !*restoreFeedPublic {
 		log.Fatal("--restore-feed-public-apply 和 --restore-feed-public-exclude 须与 --restore-feed-public 一起使用")
@@ -90,6 +91,9 @@ func main() {
 		log.Fatal("补剂恢复参数须与 --restore-supplement-feed 一起使用")
 	}
 	selectedOnlyModes := 0
+	if *onlyNullableNutrition {
+		selectedOnlyModes++
+	}
 	if *onlyCanteenCollectors {
 		selectedOnlyModes++
 	}
@@ -304,6 +308,13 @@ func main() {
 		return
 	}
 	var migrateErr error
+	if *onlyNullableNutrition {
+		if err := migration.MigrateNullableNutrition(ctx, db, cfg.Database.Schema); err != nil {
+			log.Fatal("未知营养迁移失败")
+		}
+		log.Print("未知营养迁移完成")
+		return
+	}
 	if *onlyAnalytics {
 		migrateErr = migration.MigrateAnalytics(ctx, db, cfg.Database.Schema)
 	} else if *onlyPushReminders {

@@ -40,67 +40,69 @@ type ListFoodNutritionInput struct {
 }
 
 type CreateFoodNutritionInput struct {
-	CanonicalName         string   `json:"canonical_name" binding:"required"`
-	Source                string   `json:"source"`
-	ImagePaths            []string `json:"image_paths"`
-	KcalPer100g           float64  `json:"kcal_per_100g"`
-	ProteinPer100g        float64  `json:"protein_per_100g"`
-	CarbsPer100g          float64  `json:"carbs_per_100g"`
-	FatPer100g            float64  `json:"fat_per_100g"`
-	FiberPer100g          float64  `json:"fiber_per_100g"`
-	SugarPer100g          float64  `json:"sugar_per_100g"`
-	SaturatedFatPer100g   float64  `json:"saturated_fat_per_100g"`
-	CholesterolMgPer100g  float64  `json:"cholesterol_mg_per_100g"`
-	SodiumMgPer100g       float64  `json:"sodium_mg_per_100g"`
-	PotassiumMgPer100g    float64  `json:"potassium_mg_per_100g"`
-	CalciumMgPer100g      float64  `json:"calcium_mg_per_100g"`
-	IronMgPer100g         float64  `json:"iron_mg_per_100g"`
-	MagnesiumMgPer100g    float64  `json:"magnesium_mg_per_100g"`
-	ZincMgPer100g         float64  `json:"zinc_mg_per_100g"`
-	VitaminARaeMcgPer100g float64  `json:"vitamin_a_rae_mcg_per_100g"`
-	VitaminCMgPer100g     float64  `json:"vitamin_c_mg_per_100g"`
-	VitaminDMcgPer100g    float64  `json:"vitamin_d_mcg_per_100g"`
-	VitaminEMgPer100g     float64  `json:"vitamin_e_mg_per_100g"`
-	VitaminKMcgPer100g    float64  `json:"vitamin_k_mcg_per_100g"`
-	ThiaminMgPer100g      float64  `json:"thiamin_mg_per_100g"`
-	RiboflavinMgPer100g   float64  `json:"riboflavin_mg_per_100g"`
-	NiacinMgPer100g       float64  `json:"niacin_mg_per_100g"`
-	VitaminB6MgPer100g    float64  `json:"vitamin_b6_mg_per_100g"`
-	FolateMcgPer100g      float64  `json:"folate_mcg_per_100g"`
-	VitaminB12McgPer100g  float64  `json:"vitamin_b12_mcg_per_100g"`
-	IsActive              bool     `json:"is_active"`
+	UnknownNutritionFields []string `json:"-"`
+	CanonicalName          string   `json:"canonical_name" binding:"required"`
+	Source                 string   `json:"source"`
+	ImagePaths             []string `json:"image_paths"`
+	KcalPer100g            float64  `json:"kcal_per_100g"`
+	ProteinPer100g         float64  `json:"protein_per_100g"`
+	CarbsPer100g           float64  `json:"carbs_per_100g"`
+	FatPer100g             float64  `json:"fat_per_100g"`
+	FiberPer100g           float64  `json:"fiber_per_100g"`
+	SugarPer100g           float64  `json:"sugar_per_100g"`
+	SaturatedFatPer100g    float64  `json:"saturated_fat_per_100g"`
+	CholesterolMgPer100g   float64  `json:"cholesterol_mg_per_100g"`
+	SodiumMgPer100g        float64  `json:"sodium_mg_per_100g"`
+	PotassiumMgPer100g     float64  `json:"potassium_mg_per_100g"`
+	CalciumMgPer100g       float64  `json:"calcium_mg_per_100g"`
+	IronMgPer100g          float64  `json:"iron_mg_per_100g"`
+	MagnesiumMgPer100g     float64  `json:"magnesium_mg_per_100g"`
+	ZincMgPer100g          float64  `json:"zinc_mg_per_100g"`
+	VitaminARaeMcgPer100g  float64  `json:"vitamin_a_rae_mcg_per_100g"`
+	VitaminCMgPer100g      float64  `json:"vitamin_c_mg_per_100g"`
+	VitaminDMcgPer100g     float64  `json:"vitamin_d_mcg_per_100g"`
+	VitaminEMgPer100g      float64  `json:"vitamin_e_mg_per_100g"`
+	VitaminKMcgPer100g     float64  `json:"vitamin_k_mcg_per_100g"`
+	ThiaminMgPer100g       float64  `json:"thiamin_mg_per_100g"`
+	RiboflavinMgPer100g    float64  `json:"riboflavin_mg_per_100g"`
+	NiacinMgPer100g        float64  `json:"niacin_mg_per_100g"`
+	VitaminB6MgPer100g     float64  `json:"vitamin_b6_mg_per_100g"`
+	FolateMcgPer100g       float64  `json:"folate_mcg_per_100g"`
+	VitaminB12McgPer100g   float64  `json:"vitamin_b12_mcg_per_100g"`
+	IsActive               bool     `json:"is_active"`
 }
 
 type UpdateFoodNutritionInput struct {
-	CanonicalName         *string   `json:"canonical_name,omitempty"`
-	Source                *string   `json:"source,omitempty"`
-	ImagePaths            *[]string `json:"image_paths,omitempty"`
-	KcalPer100g           *float64  `json:"kcal_per_100g,omitempty"`
-	ProteinPer100g        *float64  `json:"protein_per_100g,omitempty"`
-	CarbsPer100g          *float64  `json:"carbs_per_100g,omitempty"`
-	FatPer100g            *float64  `json:"fat_per_100g,omitempty"`
-	FiberPer100g          *float64  `json:"fiber_per_100g,omitempty"`
-	SugarPer100g          *float64  `json:"sugar_per_100g,omitempty"`
-	SaturatedFatPer100g   *float64  `json:"saturated_fat_per_100g,omitempty"`
-	CholesterolMgPer100g  *float64  `json:"cholesterol_mg_per_100g,omitempty"`
-	SodiumMgPer100g       *float64  `json:"sodium_mg_per_100g,omitempty"`
-	PotassiumMgPer100g    *float64  `json:"potassium_mg_per_100g,omitempty"`
-	CalciumMgPer100g      *float64  `json:"calcium_mg_per_100g,omitempty"`
-	IronMgPer100g         *float64  `json:"iron_mg_per_100g,omitempty"`
-	MagnesiumMgPer100g    *float64  `json:"magnesium_mg_per_100g,omitempty"`
-	ZincMgPer100g         *float64  `json:"zinc_mg_per_100g,omitempty"`
-	VitaminARaeMcgPer100g *float64  `json:"vitamin_a_rae_mcg_per_100g,omitempty"`
-	VitaminCMgPer100g     *float64  `json:"vitamin_c_mg_per_100g,omitempty"`
-	VitaminDMcgPer100g    *float64  `json:"vitamin_d_mcg_per_100g,omitempty"`
-	VitaminEMgPer100g     *float64  `json:"vitamin_e_mg_per_100g,omitempty"`
-	VitaminKMcgPer100g    *float64  `json:"vitamin_k_mcg_per_100g,omitempty"`
-	ThiaminMgPer100g      *float64  `json:"thiamin_mg_per_100g,omitempty"`
-	RiboflavinMgPer100g   *float64  `json:"riboflavin_mg_per_100g,omitempty"`
-	NiacinMgPer100g       *float64  `json:"niacin_mg_per_100g,omitempty"`
-	VitaminB6MgPer100g    *float64  `json:"vitamin_b6_mg_per_100g,omitempty"`
-	FolateMcgPer100g      *float64  `json:"folate_mcg_per_100g,omitempty"`
-	VitaminB12McgPer100g  *float64  `json:"vitamin_b12_mcg_per_100g,omitempty"`
-	IsActive              *bool     `json:"is_active,omitempty"`
+	UnknownNutritionFields []string  `json:"-"`
+	CanonicalName          *string   `json:"canonical_name,omitempty"`
+	Source                 *string   `json:"source,omitempty"`
+	ImagePaths             *[]string `json:"image_paths,omitempty"`
+	KcalPer100g            *float64  `json:"kcal_per_100g,omitempty"`
+	ProteinPer100g         *float64  `json:"protein_per_100g,omitempty"`
+	CarbsPer100g           *float64  `json:"carbs_per_100g,omitempty"`
+	FatPer100g             *float64  `json:"fat_per_100g,omitempty"`
+	FiberPer100g           *float64  `json:"fiber_per_100g,omitempty"`
+	SugarPer100g           *float64  `json:"sugar_per_100g,omitempty"`
+	SaturatedFatPer100g    *float64  `json:"saturated_fat_per_100g,omitempty"`
+	CholesterolMgPer100g   *float64  `json:"cholesterol_mg_per_100g,omitempty"`
+	SodiumMgPer100g        *float64  `json:"sodium_mg_per_100g,omitempty"`
+	PotassiumMgPer100g     *float64  `json:"potassium_mg_per_100g,omitempty"`
+	CalciumMgPer100g       *float64  `json:"calcium_mg_per_100g,omitempty"`
+	IronMgPer100g          *float64  `json:"iron_mg_per_100g,omitempty"`
+	MagnesiumMgPer100g     *float64  `json:"magnesium_mg_per_100g,omitempty"`
+	ZincMgPer100g          *float64  `json:"zinc_mg_per_100g,omitempty"`
+	VitaminARaeMcgPer100g  *float64  `json:"vitamin_a_rae_mcg_per_100g,omitempty"`
+	VitaminCMgPer100g      *float64  `json:"vitamin_c_mg_per_100g,omitempty"`
+	VitaminDMcgPer100g     *float64  `json:"vitamin_d_mcg_per_100g,omitempty"`
+	VitaminEMgPer100g      *float64  `json:"vitamin_e_mg_per_100g,omitempty"`
+	VitaminKMcgPer100g     *float64  `json:"vitamin_k_mcg_per_100g,omitempty"`
+	ThiaminMgPer100g       *float64  `json:"thiamin_mg_per_100g,omitempty"`
+	RiboflavinMgPer100g    *float64  `json:"riboflavin_mg_per_100g,omitempty"`
+	NiacinMgPer100g        *float64  `json:"niacin_mg_per_100g,omitempty"`
+	VitaminB6MgPer100g     *float64  `json:"vitamin_b6_mg_per_100g,omitempty"`
+	FolateMcgPer100g       *float64  `json:"folate_mcg_per_100g,omitempty"`
+	VitaminB12McgPer100g   *float64  `json:"vitamin_b12_mcg_per_100g,omitempty"`
+	IsActive               *bool     `json:"is_active,omitempty"`
 }
 
 func (s *FoodNutritionService) List(ctx context.Context, input ListFoodNutritionInput) (*repo.ListFoodNutritionResult, error) {
@@ -185,6 +187,7 @@ func (s *FoodNutritionService) Create(ctx context.Context, input CreateFoodNutri
 		VitaminB12McgPer100g:  input.VitaminB12McgPer100g,
 		IsActive:              input.IsActive,
 	}
+	item.UnknownNutritionFields = append([]string(nil), input.UnknownNutritionFields...)
 	if item.Source == "" {
 		item.Source = "admin_manual"
 	}
@@ -239,6 +242,9 @@ func (s *FoodNutritionService) Update(ctx context.Context, id string, input Upda
 	setFloatPtr(patch, "folate_mcg_per_100g", input.FolateMcgPer100g)
 	setFloatPtr(patch, "vitamin_b12_mcg_per_100g", input.VitaminB12McgPer100g)
 	setBoolPtr(patch, "is_active", input.IsActive)
+	for _, field := range input.UnknownNutritionFields {
+		patch[field] = nil
+	}
 	if len(patch) == 0 {
 		s.normalizeImages(current)
 		current.Category = foodcategory.Infer(current.CanonicalName)

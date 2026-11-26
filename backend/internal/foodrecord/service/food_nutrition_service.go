@@ -294,20 +294,12 @@ func (s *FoodNutritionService) Search(ctx context.Context, query string, limit i
 			matchSource = "alias"
 		}
 		items = append(items, map[string]any{
-			"food_id":        f.ID,
-			"canonical_name": f.CanonicalName,
-			"match_source":   matchSource,
-			"score":          0,
-			"source":         "nutrition_library",
-			"unit_nutrition_per_100g": map[string]any{
-				"calories": f.KcalPer100g,
-				"protein":  f.ProteinPer100g,
-				"carbs":    f.CarbsPer100g,
-				"fat":      f.FatPer100g,
-				"fiber":    f.FiberPer100g,
-				"sugar":    f.SugarPer100g,
-				"sodiumMg": f.SodiumMgPer100g,
-			},
+			"food_id":                 f.ID,
+			"canonical_name":          f.CanonicalName,
+			"match_source":            matchSource,
+			"score":                   0,
+			"source":                  "nutrition_library",
+			"unit_nutrition_per_100g": f.UnitNutritionPer100g(),
 		})
 	}
 	return items, nil

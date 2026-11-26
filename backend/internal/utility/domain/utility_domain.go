@@ -46,31 +46,32 @@ type UserCustomFood struct {
 func (UserCustomFood) TableName() string { return "user_custom_foods" }
 
 type ManualFoodNutrients struct {
-	Calories       float64 `json:"calories"`
-	Protein        float64 `json:"protein"`
-	Carbs          float64 `json:"carbs"`
-	Fat            float64 `json:"fat"`
-	Fiber          float64 `json:"fiber"`
-	Sugar          float64 `json:"sugar"`
-	SaturatedFat   float64 `json:"saturatedFat,omitempty"`
-	CholesterolMg  float64 `json:"cholesterolMg,omitempty"`
-	SodiumMg       float64 `json:"sodium_mg,omitempty"`
-	PotassiumMg    float64 `json:"potassiumMg,omitempty"`
-	CalciumMg      float64 `json:"calciumMg,omitempty"`
-	IronMg         float64 `json:"ironMg,omitempty"`
-	MagnesiumMg    float64 `json:"magnesiumMg,omitempty"`
-	ZincMg         float64 `json:"zincMg,omitempty"`
-	VitaminARaeMcg float64 `json:"vitaminARaeMcg,omitempty"`
-	VitaminCMg     float64 `json:"vitaminCMg,omitempty"`
-	VitaminDMcg    float64 `json:"vitaminDMcg,omitempty"`
-	VitaminEMg     float64 `json:"vitaminEMg,omitempty"`
-	VitaminKMcg    float64 `json:"vitaminKMcg,omitempty"`
-	ThiaminMg      float64 `json:"thiaminMg,omitempty"`
-	RiboflavinMg   float64 `json:"riboflavinMg,omitempty"`
-	NiacinMg       float64 `json:"niacinMg,omitempty"`
-	VitaminB6Mg    float64 `json:"vitaminB6Mg,omitempty"`
-	FolateMcg      float64 `json:"folateMcg,omitempty"`
-	VitaminB12Mcg  float64 `json:"vitaminB12Mcg,omitempty"`
+	UnknownFields  []string `json:"unknown_fields,omitempty"`
+	Calories       float64  `json:"calories"`
+	Protein        float64  `json:"protein"`
+	Carbs          float64  `json:"carbs"`
+	Fat            float64  `json:"fat"`
+	Fiber          float64  `json:"fiber"`
+	Sugar          float64  `json:"sugar"`
+	SaturatedFat   float64  `json:"saturatedFat,omitempty"`
+	CholesterolMg  float64  `json:"cholesterolMg,omitempty"`
+	SodiumMg       float64  `json:"sodium_mg,omitempty"`
+	PotassiumMg    float64  `json:"potassiumMg,omitempty"`
+	CalciumMg      float64  `json:"calciumMg,omitempty"`
+	IronMg         float64  `json:"ironMg,omitempty"`
+	MagnesiumMg    float64  `json:"magnesiumMg,omitempty"`
+	ZincMg         float64  `json:"zincMg,omitempty"`
+	VitaminARaeMcg float64  `json:"vitaminARaeMcg,omitempty"`
+	VitaminCMg     float64  `json:"vitaminCMg,omitempty"`
+	VitaminDMcg    float64  `json:"vitaminDMcg,omitempty"`
+	VitaminEMg     float64  `json:"vitaminEMg,omitempty"`
+	VitaminKMcg    float64  `json:"vitaminKMcg,omitempty"`
+	ThiaminMg      float64  `json:"thiaminMg,omitempty"`
+	RiboflavinMg   float64  `json:"riboflavinMg,omitempty"`
+	NiacinMg       float64  `json:"niacinMg,omitempty"`
+	VitaminB6Mg    float64  `json:"vitaminB6Mg,omitempty"`
+	FolateMcg      float64  `json:"folateMcg,omitempty"`
+	VitaminB12Mcg  float64  `json:"vitaminB12Mcg,omitempty"`
 }
 
 type ManualFoodServingPreset struct {

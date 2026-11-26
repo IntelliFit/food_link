@@ -61,6 +61,11 @@ func EffectiveNutritionQualityTier(food FoodNutrition) string {
 // IsNutritionExactMatchEligible allows reviewed estimates only through an
 // exact canonical name or an explicitly approved exact alias.
 func IsNutritionExactMatchEligible(food FoodNutrition) bool {
+	for _, field := range []string{"kcal_per_100g", "protein_per_100g", "carbs_per_100g", "fat_per_100g"} {
+		if food.NutritionUnknown(field) {
+			return false
+		}
+	}
 	if !food.IsActive {
 		return false
 	}
@@ -76,6 +81,11 @@ func IsNutritionExactMatchEligible(food FoodNutrition) bool {
 // matching. A reviewed estimate cannot become a fuzzy Top5 source because the
 // identity model does not independently validate its nutrition values.
 func IsNutritionCandidateMatchEligible(food FoodNutrition) bool {
+	for _, field := range []string{"kcal_per_100g", "protein_per_100g", "carbs_per_100g", "fat_per_100g"} {
+		if food.NutritionUnknown(field) {
+			return false
+		}
+	}
 	if !food.IsActive {
 		return false
 	}
