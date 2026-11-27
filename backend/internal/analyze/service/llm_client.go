@@ -474,6 +474,7 @@ func (c *OfoxAIClient) downloadGeminiInlineImages(ctx context.Context, imageURLs
 }
 
 func (c *OfoxAIClient) doGeminiNativePreparedRequest(ctx context.Context, model string, body []byte) (map[string]any, map[string]any, error) {
+	body = geminiBodyForModel(model, body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, geminiNativeEndpoint(c.BaseURL, model), bytes.NewReader(body))
 	if err != nil {
 		return nil, nil, err

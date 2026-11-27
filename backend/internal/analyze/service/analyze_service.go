@@ -1535,7 +1535,10 @@ func (s *AnalyzeService) ConfigureStorage(storageClient *storage.Client) {
 
 // AnalyzeInput holds all possible inputs for analysis.
 type AnalyzeInput struct {
-	Base64Image           string           `json:"base64Image"`
+	Base64Image string `json:"base64Image"`
+	// PrecisionFlow is set by task submission when a precision photo should
+	// run the ordinary flow (see precision_ordinary.go).
+	PrecisionFlow         string           `json:"precision_flow,omitempty"`
 	ImageURL              string           `json:"image_url"`
 	ImageURLs             []string         `json:"image_urls"`
 	Text                  string           `json:"text"`
@@ -2824,6 +2827,9 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	input.PreciseMicronutrients = true
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
+	if input.PrecisionFlow == precisionFlowOrdinary && s.precisionOrdinaryEnabled() && isPrecisionLikeExecutionMode(executionMode) {
+		return s.analyzePrecisionViaOrdinary(ctx, userID, input)
+	}
 	if _, ok := ctx.Value(visionRequestKey{}).(*visionRequest); !ok {
 		ctx = WithVisionRequest(ctx, executionMode, foodImageModelRoutingKey(userID, input), true)
 	}

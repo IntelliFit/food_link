@@ -394,6 +394,10 @@ func (s *AnalyzeService) runBalancedGeminiChannels(ctx context.Context, stage, p
 		fallbackDelay = balancedHedgeDelayPrecision
 	}
 	plans := s.orderedBalancedPlans(req.mode, precision, image)
+	lead, precisionLead := s.precisionOrdinaryLead(ctx, image)
+	if precisionLead {
+		plans = append([]channelPlan{lead}, plans...)
+	}
 	wait := time.Duration(r.config.ResponseWaitSeconds) * time.Second
 	outcome := geminiVisionHedgeOutcome{upstream: primaryUpstream, model: primaryModel, primaryUpstream: primaryUpstream, primaryModel: primaryModel}
 	hedgeCtx, cancelAll := context.WithCancel(ctx)
@@ -427,10 +431,18 @@ func (s *AnalyzeService) runBalancedGeminiChannels(ctx context.Context, stage, p
 			logger.Info(ctx, "餐照渠道请求启动", slog.String("task_id", req.taskID), slog.String("execution_mode", req.mode),
 				slog.String("stage", stage), slog.String("upstream", p.upstream), slog.String("model", p.model),
 				slog.String("reason", reason), slog.Int("attempt", started), slog.Duration("response_wait", wait))
+			callWait := wait
+			delay := s.balancedHedgeDelayFor(key, fallbackDelay, precision, image, time.Now())
+			if precisionLead && started == 1 {
+				// The slower precision model keeps running after the hedge starts
+				// the ordinary channels, so a late but valid answer still counts.
+				delay = s.precisionOrdinaryHedge()
+				callWait = 2 * delay
+			}
 			go func() {
-				results <- s.callBalancedVisionChannel(hedgeCtx, req, stage, p, key, wait, prompt, imageURLs, temperature, validate, payloadCheck)
+				results <- s.callBalancedVisionChannel(hedgeCtx, req, stage, p, key, callWait, prompt, imageURLs, temperature, validate, payloadCheck)
 			}()
-			resetTimer(timer, s.balancedHedgeDelayFor(key, fallbackDelay, precision, image, time.Now()))
+			resetTimer(timer, delay)
 			return true
 		}
 		return false

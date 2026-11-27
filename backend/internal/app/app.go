@@ -368,6 +368,7 @@ func New(cfg *config.Config) (*App, error) {
 	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
 
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
+	analyzeTaskSvc.ConfigurePrecisionFlow(cfg.External.VisionRouting.PrecisionFlow)
 	analyzeTaskSvc.ConfigureTaskPublisher(taskQueue)
 	analyzeTaskSvc.ConfigureRecordRepo(frRepo)
 	analyzeTaskSvc.ConfigureContentSecurity(contentSecurity)

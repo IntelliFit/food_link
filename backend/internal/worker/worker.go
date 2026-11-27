@@ -5819,6 +5819,7 @@ func analyzeInputFromTask(task *domain.AnalysisTask) analyzeservice.AnalyzeInput
 		IsMultiView:           boolFromAny(payload["is_multi_view"]),
 		PreviousResult:        mapFromAny(payload["previousResult"]),
 		CorrectionItems:       extractItems(payload["correctionItems"]),
+		PrecisionFlow:         stringFromMap(payload, "precision_flow"),
 	}
 	if task.ImageURL != nil {
 		input.ImageURL = *task.ImageURL
