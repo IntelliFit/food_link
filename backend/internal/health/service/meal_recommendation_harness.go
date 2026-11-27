@@ -277,6 +277,10 @@ func mealHarnessEmptyResult(state *campusDietAgentRunState, reason string) *Camp
 	if gap := mealOrderingGap(state); gap != "" && state.SearchAttempted {
 		answer = gap
 	}
+	title := "补充这餐的需求"
+	if closed := mealClosedNowAnswer(state); closed != "" {
+		answer, title = closed, "这个点食堂不供餐"
+	}
 	if state.RetrievalFailed {
 		answer = "餐食数据暂时查询失败，请稍后再试；这次没有生成方案，不扣积分。"
 	}
@@ -287,7 +291,7 @@ func mealHarnessEmptyResult(state *campusDietAgentRunState, reason string) *Camp
 		answer = "这次只在" + state.Constraints.CanteenName + "内选餐。已收录资料暂时不足以给出符合条件的完整一餐；我会保留这个地点，不换到其他食堂。你可以发一下现场菜单，我再按同层菜品搭配。"
 	}
 	answer = mealConstraintConfirmation(state) + answer
-	recommendation := DietRecommendationResult{Scene: "eat_out", Title: "补充这餐的需求", Summary: answer, Recommendations: []DietRecommendationOption{}, HarnessVersion: mealHarnessVersion, SearchScope: mealHarnessScope(state), NeedsClarification: true, DataNotes: mealHarnessNotes(state), AgentConstraints: &state.Constraints}
+	recommendation := DietRecommendationResult{Scene: "eat_out", Title: title, Summary: answer, Recommendations: []DietRecommendationOption{}, HarnessVersion: mealHarnessVersion, SearchScope: mealHarnessScope(state), NeedsClarification: true, DataNotes: mealHarnessNotes(state), AgentConstraints: &state.Constraints}
 	if state.School.ID != "" {
 		recommendation.ResolvedSchool = &state.School
 	}
@@ -360,8 +364,9 @@ func mealHarnessRank(state *campusDietAgentRunState, candidates []DietRecommenda
 			score = 35 // Missing macros must never score as a zero-calorie meal.
 		}
 		if candidate.DistanceKM != nil {
-			score -= math.Min(15, *candidate.DistanceKM*2)
+			score -= mealDistancePenalty(*candidate.DistanceKM)
 		}
+		score += mealOwnSchoolBonus(state, candidate)
 		for _, f := range state.PersonalContext.FoodFrequency {
 			if f.RecentCount > 0 && strings.Contains(text, normalizeDietDecisionToken(f.Name)) {
 				score -= math.Min(18, float64(f.RecentCount)*6)

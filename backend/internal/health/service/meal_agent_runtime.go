@@ -252,6 +252,13 @@ func mealRequestsHistoryExplanation(question string) bool {
 	return regexp.MustCompile(`(?:结合|参考|根据|考虑|按|我的).{0,24}(?:历史|以前常吃|以前吃|常吃的|吃过的)|(?:历史口味|历史习惯)`).MatchString(question)
 }
 
+// mealAnswerWantsRecordSummary is true when the user asks about their own history or records.
+// Prod 2026-11-13: "晚上吃什么好？" was answered "近30天你有29天、96条饮食记录，其中香蕉 6 条…"
+// whenever the model was down.
+func mealAnswerWantsRecordSummary(question string) bool {
+	return mealRequestsHistoryExplanation(question) || strings.Contains(question, "历史") || strings.Contains(question, "记录")
+}
+
 func mealHasGroundedHistoryExplanation(state *campusDietAgentRunState, text string) bool {
 	if !regexp.MustCompile(`历史|记录|以前|近期|最近|常吃|吃过`).MatchString(text) {
 		return false

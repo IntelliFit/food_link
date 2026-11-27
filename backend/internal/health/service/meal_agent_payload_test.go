@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,4 +90,44 @@ func TestOptionsDoNotRepeatAMainDish(t *testing.T) {
 	kept := fillModelPicks([]groundedMeal{bowl}, []groundedMeal{{candidate: plus}, {candidate: b}}, 2)
 	require.Len(t, kept, 2)
 	assert.Equal(t, b.Title, kept[1].candidate.Title)
+}
+
+// Prod 2026-11-13/18: with the model down, "晚上吃什么好？" was answered "近30天你有29天、96条
+// 饮食记录，其中香蕉 6 条…" before the options. The count of past records answers a question
+// about history, not a request for a meal.
+func TestRuleChosenAnswerLeavesOutRecordStatisticsUnlessAsked(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"余额不足"}`, http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	candidates := campusDietAgentTestCandidates(4)
+	distance := 0.8
+	for i := range candidates {
+		candidates[i].DistanceKM = &distance
+		candidates[i].Carbs = 60
+	}
+	ask := func(question string) *CampusDietAgentResult {
+		records := []domain.FoodRecord{}
+		for day := 1; day <= 3; day++ {
+			at := mealClock().AddDate(0, 0, -day)
+			records = append(records, domain.FoodRecord{ID: fmt.Sprintf("r%d", day), UserID: "user-1", RecordTime: &at, MealType: "lunch", TotalCalories: 300, Items: []map[string]any{{"name": "香蕉", "weight": 120.0}}})
+		}
+		svc := newCampusDietAgentTestService(&mockStatsRepo{candidates: candidates, records: records}, server.URL)
+		state := newCampusDietAgentTestState("initial", nil)
+		state.School = domain.DietRecommendationSchool{}
+		state.Constraints = CampusDietRecommendationConstraints{CompleteMeal: true, MealType: "lunch"}
+		state.Location = &domain.DietLocation{Latitude: 39.99, Longitude: 116.33, AccuracyM: 30, CoordinateType: "gcj02", CapturedAt: time.Now().UnixMilli()}
+		state.Question = question
+		return svc.runCampusDietAgent(context.Background(), state)
+	}
+	plain := ask("晚上吃什么好？")
+	require.NotEmpty(t, plain.Recommendation.Recommendations, plain.Answer)
+	assert.NotContains(t, plain.Answer, "近30天你有")
+	assert.NotContains(t, plain.Answer, "香蕉")
+	assert.Contains(t, plain.Answer, "AI 解读暂不可用")
+
+	// Asked about history or records, the summary is still given.
+	for question, want := range map[string]bool{"晚上吃什么好？": false, "帮我推荐附近的餐食": false, "结合我的历史口味推荐一下午餐": true, "按我的饮食记录推荐": true} {
+		assert.Equal(t, want, mealAnswerWantsRecordSummary(question), question)
+	}
 }

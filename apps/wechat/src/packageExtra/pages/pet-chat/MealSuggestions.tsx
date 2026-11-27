@@ -14,6 +14,7 @@ export function MealSuggestions({ result, onOpen, onSaveSchool, savedSchoolIDs }
   const [expanded, setExpanded] = useState<string>()
   return (
     <View className='meal-suggestions'>
+      {!!result.venue_notice && <Text className='meal-suggestions__note'>{result.venue_notice}</Text>}
       {(result.recommendations || []).slice(0, 3).map((option, index) => {
         const id = option.source_id || String(index)
         const open = expanded === id

@@ -25,12 +25,12 @@ func acceptNearBestPicks(pool []groundedMeal, ids []string, limit int) (kept []g
 			continue
 		}
 		byID[m.candidate.SourceID] = m
-		best = math.Max(best, m.evaluation.Scores.HealthFit)
+		best = math.Max(best, mealReachFit(m))
 	}
 	floor := best - mealModelPickTolerance
 	freshInBand, kinds := false, map[string]bool{}
 	for _, m := range byID {
-		if m.evaluation.Scores.HealthFit >= floor {
+		if mealReachFit(m) >= floor {
 			freshInBand = freshInBand || !m.recentRepeat
 			kinds[mealStapleKind(m.candidate)] = true
 		}
@@ -45,7 +45,7 @@ func acceptNearBestPicks(pool []groundedMeal, ids []string, limit int) (kept []g
 			reason = "不满足本餐条件"
 		case len(kept) >= limit:
 			reason = "超出要给的数量"
-		case m.evaluation.Scores.HealthFit < floor:
+		case mealReachFit(m) < floor:
 			reason = "营养上明显不如其他可选的"
 		case m.recentRepeat && freshInBand:
 			reason = "最近刚推荐过，有新的同样合适的选择"
@@ -142,7 +142,7 @@ func mealNearBestFloor(decision dietDecisionContext, states ...*campusDietAgentR
 	best := math.Inf(-1)
 	for _, c := range mealFeasibleChoices(state, pool) {
 		if e := evaluateDietDecisionCandidate(decision, c); e.Feasible {
-			best = math.Max(best, e.Scores.HealthFit)
+			best = math.Max(best, e.Scores.HealthFit-mealReachDiscount(c.DistanceKM))
 		}
 	}
 	return best - mealModelPickTolerance
@@ -154,7 +154,7 @@ func mealPickRepairRequest(state *campusDietAgentRunState, pool []groundedMeal, 
 	best := math.Inf(-1)
 	for _, m := range pool {
 		if m.evaluation.Feasible {
-			best = math.Max(best, m.evaluation.Scores.HealthFit)
+			best = math.Max(best, mealReachFit(m))
 		}
 	}
 	taken := map[string]bool{}
@@ -175,7 +175,7 @@ func mealPickRepairRequest(state *campusDietAgentRunState, pool []groundedMeal, 
 	alternatives := []string{}
 	for _, m := range pool {
 		c := m.candidate
-		if len(alternatives) >= 8 || !m.evaluation.Feasible || m.evaluation.Scores.HealthFit < best-mealModelPickTolerance || taken[c.SourceID] || taken[mealFingerprint(c)] {
+		if len(alternatives) >= 8 || !m.evaluation.Feasible || mealReachFit(m) < best-mealModelPickTolerance || taken[c.SourceID] || taken[mealFingerprint(c)] {
 			continue
 		}
 		alternatives = append(alternatives, c.SourceID+"「"+c.Title+"」"+mealVenueCore(c))
@@ -192,12 +192,12 @@ func mealNearBestIDs(pool []groundedMeal) map[string]bool {
 	best := math.Inf(-1)
 	for _, m := range pool {
 		if m.evaluation.Feasible {
-			best = math.Max(best, m.evaluation.Scores.HealthFit)
+			best = math.Max(best, mealReachFit(m))
 		}
 	}
 	ids := map[string]bool{}
 	for _, m := range pool {
-		if m.evaluation.Feasible && m.evaluation.Scores.HealthFit >= best-mealModelPickTolerance {
+		if m.evaluation.Feasible && mealReachFit(m) >= best-mealModelPickTolerance {
 			ids[m.candidate.SourceID] = true
 		}
 	}

@@ -101,6 +101,9 @@ type DietRecommendationResult struct {
 	MealType  string `json:"meal_type,omitempty"`
 	MealDate  string `json:"meal_date,omitempty"`
 	MealLabel string `json:"meal_label,omitempty"`
+	// VenueNotice says in one sentence why canteens the user would expect are missing
+	// (not serving at this time, or their hours were never collected).
+	VenueNotice string `json:"venue_notice,omitempty"`
 	// ExplainsPrevious marks an answer about the card already shown; it is not a new card.
 	ExplainsPrevious bool `json:"explains_previous,omitempty"`
 }

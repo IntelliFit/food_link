@@ -83,6 +83,7 @@ func (s *StatsService) retrievePreviewCandidates(ctx context.Context, state *cam
 		}
 		mealAnnotateServiceHours(state, rows)
 		total = count
+		f.KnownTotal = count
 		added := 0
 		for _, row := range rows {
 			if !seen[row.SourceID] {

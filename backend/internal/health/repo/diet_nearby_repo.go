@@ -126,9 +126,13 @@ func (r *StatsRepo) searchNearbyDietCandidates(ctx context.Context, f domain.Cam
 		Select("located.*, "+distance+" AS distance_squared", lat, lat, lon, lon, lonScale, lonScale).
 		Where("food_lat IS NOT NULL AND food_lon IS NOT NULL")
 	q := r.db.WithContext(ctx).Table("(?) nearby", measured).Where("distance_squared <= ?", radius*radius)
-	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
+	// A later page of a scan carries the first page's total: counting joins the whole
+	// catalog again (about 0.44 s on prod, 2026-11-25) for a number already known.
+	total := f.KnownTotal
+	if !(f.ScanCatalog && f.AfterID != "" && f.KnownTotal > 0) {
+		if err := q.Count(&total).Error; err != nil {
+			return nil, 0, err
+		}
 	}
 	if f.ScanCatalog && f.AfterID != "" {
 		q = q.Where("id > ?", f.AfterID)

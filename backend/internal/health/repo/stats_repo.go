@@ -338,9 +338,12 @@ func (r *StatsRepo) SearchCampusDietCandidates(ctx context.Context, filter domai
 			AND COALESCE(price_unit, '') !~* '(两|克|千克|公斤|斤|kg|/g|每|只|个|串|枚|片|粒)'`)
 	}
 
-	var total int64
-	if err := base.Count(&total).Error; err != nil {
-		return nil, 0, err
+	// A later page of a scan carries the first page's total instead of counting again.
+	total := filter.KnownTotal
+	if !(filter.ScanCatalog && filter.AfterID != "" && filter.KnownTotal > 0) {
+		if err := base.Count(&total).Error; err != nil {
+			return nil, 0, err
+		}
 	}
 	if filter.ScanCatalog && filter.AfterID != "" {
 		base = base.Where("id > ?", filter.AfterID)
